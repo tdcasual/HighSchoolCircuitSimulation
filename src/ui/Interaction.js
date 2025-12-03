@@ -35,6 +35,12 @@ export class InteractionManager {
         this.wireStart = null;
         this.tempWire = null;
         
+        // 画布平移状态
+        this.isPanning = false;
+        this.panStart = { x: 0, y: 0 };
+        this.viewOffset = { x: 0, y: 0 };
+        this.scale = 1;
+        
         // 绑定事件
         this.bindEvents();
     }
@@ -57,6 +63,22 @@ export class InteractionManager {
         
         // 键盘事件
         this.bindKeyboardEvents();
+        
+        // 缩放显示点击重置
+        this.bindZoomEvents();
+    }
+
+    /**
+     * 缩放控制事件
+     */
+    bindZoomEvents() {
+        const zoomLevel = document.getElementById('zoom-level');
+        if (zoomLevel) {
+            zoomLevel.addEventListener('click', () => {
+                this.resetView();
+            });
+            zoomLevel.title = '点击重置视图 (快捷键: H)';
+        }
     }
 
     /**
@@ -123,10 +145,15 @@ export class InteractionManager {
                 return;
             }
             
-            // 计算相对于SVG的位置
+            // 计算相对于SVG的位置（考虑缩放和平移）
             const rect = this.svg.getBoundingClientRect();
-            const x = Math.round((e.clientX - rect.left) / 20) * 20;
-            const y = Math.round((e.clientY - rect.top) / 20) * 20;
+            const screenX = e.clientX - rect.left;
+            const screenY = e.clientY - rect.top;
+            // 转换为画布坐标
+            const canvasX = (screenX - this.viewOffset.x) / this.scale;
+            const canvasY = (screenY - this.viewOffset.y) / this.scale;
+            const x = Math.round(canvasX / 20) * 20;
+            const y = Math.round(canvasY / 20) * 20;
             
             this.addComponent(type, x, y);
         };
@@ -152,11 +179,48 @@ export class InteractionManager {
         // 鼠标离开
         this.svg.addEventListener('mouseleave', (e) => this.onMouseLeave(e));
         
-        // 右键菜单
-        this.svg.addEventListener('contextmenu', (e) => this.onContextMenu(e));
+        // 右键菜单 - 禁用默认菜单
+        this.svg.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            this.onContextMenu(e);
+        });
         
         // 双击编辑
         this.svg.addEventListener('dblclick', (e) => this.onDoubleClick(e));
+        
+        // 滚轮缩放
+        this.svg.addEventListener('wheel', (e) => this.onWheel(e), { passive: false });
+    }
+    
+    /**
+     * 滚轮缩放处理
+     */
+    onWheel(e) {
+        e.preventDefault();
+        
+        const rect = this.svg.getBoundingClientRect();
+        // 鼠标在SVG中的位置
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+        
+        // 缩放因子
+        const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
+        const newScale = Math.min(Math.max(this.scale * zoomFactor, 0.25), 4); // 限制缩放范围 0.25x - 4x
+        
+        if (newScale === this.scale) return;
+        
+        // 计算缩放前鼠标位置对应的画布坐标
+        const canvasX = (mouseX - this.viewOffset.x) / this.scale;
+        const canvasY = (mouseY - this.viewOffset.y) / this.scale;
+        
+        // 更新缩放
+        this.scale = newScale;
+        
+        // 调整偏移，使鼠标位置保持不变
+        this.viewOffset.x = mouseX - canvasX * this.scale;
+        this.viewOffset.y = mouseY - canvasY * this.scale;
+        
+        this.updateViewTransform();
     }
 
     /**
@@ -300,6 +364,12 @@ export class InteractionManager {
         e.preventDefault();
         e.stopPropagation();
         
+        // 右键或中键 - 直接开始拖动画布
+        if (e.button === 1 || e.button === 2) {
+            this.startPanning(e);
+            return;
+        }
+        
         const target = e.target;
         
         // 检查是否点击了端子
@@ -376,8 +446,53 @@ export class InteractionManager {
             return;
         }
         
-        // 点击空白处取消选择
+        // 左键点击空白处取消选择
         this.clearSelection();
+    }
+    
+    /**
+     * 开始画布平移
+     */
+    startPanning(e) {
+        this.isPanning = true;
+        this.panStart = {
+            x: e.clientX - this.viewOffset.x,
+            y: e.clientY - this.viewOffset.y
+        };
+        this.svg.style.cursor = 'grabbing';
+    }
+    
+    /**
+     * 更新画布视图变换
+     */
+    updateViewTransform() {
+        const contentGroup = this.svg.querySelector('#layer-grid').parentElement;
+        // 应用变换到所有图层的父容器，或者直接应用到各图层
+        const layers = ['#layer-grid', '#layer-wires', '#layer-components', '#layer-ui'];
+        layers.forEach(selector => {
+            const layer = this.svg.querySelector(selector);
+            if (layer) {
+                layer.setAttribute('transform', 
+                    `translate(${this.viewOffset.x}, ${this.viewOffset.y}) scale(${this.scale})`
+                );
+            }
+        });
+        
+        // 更新缩放百分比显示
+        const zoomLevel = document.getElementById('zoom-level');
+        if (zoomLevel) {
+            zoomLevel.textContent = `${Math.round(this.scale * 100)}%`;
+        }
+    }
+    
+    /**
+     * 重置视图
+     */
+    resetView() {
+        this.viewOffset = { x: 0, y: 0 };
+        this.scale = 1;
+        this.updateViewTransform();
+        this.updateStatus('视图已重置');
     }
 
     /**
@@ -388,13 +503,26 @@ export class InteractionManager {
         const x = e.clientX - rect.left;
         const y = e.clientY - rect.top;
         
-        // 拖动元器件
+        // 画布平移
+        if (this.isPanning) {
+            this.viewOffset = {
+                x: e.clientX - this.panStart.x,
+                y: e.clientY - this.panStart.y
+            };
+            this.updateViewTransform();
+            return;
+        }
+        
+        // 拖动元器件 - 需要考虑视图偏移
         if (this.isDragging && this.dragTarget) {
             const comp = this.circuit.getComponent(this.dragTarget);
             if (comp) {
+                // 将屏幕坐标转换为画布坐标（考虑平移和缩放）
+                const canvasX = (x - this.viewOffset.x) / this.scale;
+                const canvasY = (y - this.viewOffset.y) / this.scale;
                 // 对齐到网格
-                comp.x = Math.round((x - this.dragOffset.x) / 20) * 20;
-                comp.y = Math.round((y - this.dragOffset.y) / 20) * 20;
+                comp.x = Math.round((canvasX - this.dragOffset.x) / 20) * 20;
+                comp.y = Math.round((canvasY - this.dragOffset.y) / 20) * 20;
                 this.renderer.updateComponentPosition(comp);
             }
         }
@@ -406,7 +534,10 @@ export class InteractionManager {
                 this.wireStart.terminalIndex
             );
             if (startPos) {
-                this.renderer.updateTempWire(this.tempWire, startPos.x, startPos.y, x, y);
+                // 将屏幕坐标转换为画布坐标
+                const canvasX = (x - this.viewOffset.x) / this.scale;
+                const canvasY = (y - this.viewOffset.y) / this.scale;
+                this.renderer.updateTempWire(this.tempWire, startPos.x, startPos.y, canvasX, canvasY);
             }
         }
     }
@@ -415,6 +546,13 @@ export class InteractionManager {
      * 鼠标释放事件
      */
     onMouseUp(e) {
+        // 结束画布平移
+        if (this.isPanning) {
+            this.isPanning = false;
+            this.svg.style.cursor = '';
+            return;
+        }
+        
         // 结束拖动
         if (this.isDragging) {
             this.isDragging = false;

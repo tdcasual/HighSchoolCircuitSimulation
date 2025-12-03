@@ -592,35 +592,38 @@ export const SVGRenderer = {
     addValueDisplay(g, comp) {
         const valueGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
         valueGroup.setAttribute('class', 'value-display-group');
-        valueGroup.setAttribute('transform', 'translate(0, -25)');
+        valueGroup.setAttribute('transform', 'translate(0, -30)');
         
-        // 电流显示
+        // 电流显示（最下方）
         const currentText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
         currentText.setAttribute('class', 'value-display current-display');
         currentText.setAttribute('x', 0);
         currentText.setAttribute('y', 0);
         currentText.setAttribute('text-anchor', 'middle');
-        currentText.setAttribute('fill', '#E91E63');
+        currentText.setAttribute('font-size', '13');
+        currentText.setAttribute('font-weight', '600');
         currentText.textContent = '';
         valueGroup.appendChild(currentText);
         
-        // 电压显示
+        // 电压显示（中间）
         const voltageText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
         voltageText.setAttribute('class', 'value-display voltage-display');
         voltageText.setAttribute('x', 0);
-        voltageText.setAttribute('y', -12);
+        voltageText.setAttribute('y', -16);
         voltageText.setAttribute('text-anchor', 'middle');
-        voltageText.setAttribute('fill', '#2196F3');
+        voltageText.setAttribute('font-size', '13');
+        voltageText.setAttribute('font-weight', '600');
         voltageText.textContent = '';
         valueGroup.appendChild(voltageText);
         
-        // 功率显示
+        // 功率显示（最上方）
         const powerText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
         powerText.setAttribute('class', 'value-display power-display');
         powerText.setAttribute('x', 0);
-        powerText.setAttribute('y', -24);
+        powerText.setAttribute('y', -32);
         powerText.setAttribute('text-anchor', 'middle');
-        powerText.setAttribute('fill', '#4CAF50');
+        powerText.setAttribute('font-size', '13');
+        powerText.setAttribute('font-weight', '600');
         powerText.textContent = '';
         valueGroup.appendChild(powerText);
         
@@ -637,11 +640,12 @@ export const SVGRenderer = {
         
         // 电表显示读数而非 I/U/P 格式
         if (comp.type === 'Ammeter') {
-            // 电流表：显示电流读数
+            // 电流表：显示电流读数，更大更醒目
             if (currentDisplay) {
                 const reading = Math.abs(comp.currentValue || 0);
                 currentDisplay.textContent = `${reading.toFixed(3)} A`;
-                currentDisplay.setAttribute('fill', '#c00');
+                currentDisplay.setAttribute('font-size', '14');
+                currentDisplay.setAttribute('font-weight', '700');
             }
             if (voltageDisplay) voltageDisplay.textContent = '';
             if (powerDisplay) powerDisplay.textContent = '';
@@ -649,11 +653,12 @@ export const SVGRenderer = {
         }
         
         if (comp.type === 'Voltmeter') {
-            // 电压表：显示电压读数
+            // 电压表：显示电压读数，更大更醒目
             if (voltageDisplay) {
                 const reading = Math.abs(comp.voltageValue || 0);
                 voltageDisplay.textContent = `${reading.toFixed(3)} V`;
-                voltageDisplay.setAttribute('fill', '#00c');
+                voltageDisplay.setAttribute('font-size', '14');
+                voltageDisplay.setAttribute('font-weight', '700');
             }
             if (currentDisplay) currentDisplay.textContent = '';
             if (powerDisplay) powerDisplay.textContent = '';
@@ -671,17 +676,17 @@ export const SVGRenderer = {
         // 其他元器件正常显示
         if (currentDisplay) {
             currentDisplay.textContent = showCurrent ? 
-                `I=${this.formatValue(comp.currentValue, 'A')}` : '';
+                `I = ${this.formatValue(comp.currentValue, 'A')}` : '';
         }
         
         if (voltageDisplay) {
             voltageDisplay.textContent = showVoltage ? 
-                `U=${this.formatValue(comp.voltageValue, 'V')}` : '';
+                `U = ${this.formatValue(comp.voltageValue, 'V')}` : '';
         }
         
         if (powerDisplay) {
             powerDisplay.textContent = showPower ? 
-                `P=${this.formatValue(comp.powerValue, 'W')}` : '';
+                `P = ${this.formatValue(comp.powerValue, 'W')}` : '';
         }
         
         // 更新灯泡亮度
@@ -700,22 +705,22 @@ export const SVGRenderer = {
     },
 
     /**
-     * 格式化数值
+     * 格式化数值 - 更清晰的显示
      */
     formatValue(value, unit) {
-        if (value === undefined || value === null || isNaN(value)) return '0' + unit;
+        if (value === undefined || value === null || isNaN(value)) return '0 ' + unit;
         
         const absValue = Math.abs(value);
         if (absValue >= 1000) {
-            return (value / 1000).toFixed(2) + 'k' + unit;
+            return (value / 1000).toFixed(2) + ' k' + unit;
         } else if (absValue >= 1) {
-            return value.toFixed(2) + unit;
+            return value.toFixed(3) + ' ' + unit;
         } else if (absValue >= 0.001) {
-            return (value * 1000).toFixed(2) + 'm' + unit;
+            return (value * 1000).toFixed(2) + ' m' + unit;
         } else if (absValue >= 0.000001) {
-            return (value * 1000000).toFixed(2) + 'μ' + unit;
+            return (value * 1000000).toFixed(2) + ' μ' + unit;
         } else {
-            return '0' + unit;
+            return '0 ' + unit;
         }
     },
 

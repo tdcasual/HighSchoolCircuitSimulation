@@ -160,6 +160,19 @@ body {
     color: var(--text-light);
 }
 
+#zoom-level {
+    padding: 2px 8px;
+    background: var(--bg-light);
+    border-radius: 3px;
+    font-weight: 500;
+    cursor: pointer;
+    user-select: none;
+}
+
+#zoom-level:hover {
+    background: var(--border-color);
+}
+
 #simulation-status {
     color: var(--danger-color);
 }
@@ -360,17 +373,45 @@ body {
 }
 
 .component .label {
-    font-size: 11px;
+    font-size: 12px;
     fill: #333;
+    font-weight: 500;
     pointer-events: none;
     user-select: none;
 }
 
 .component .value-display {
-    font-size: 10px;
-    fill: #1976D2;
+    font-size: 13px;
+    font-weight: 600;
     pointer-events: none;
     user-select: none;
+    paint-order: stroke fill;
+    stroke: white;
+    stroke-width: 3px;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+/* 电流显示 */
+.component .current-display {
+    fill: #E91E63;
+}
+
+/* 电压显示 */
+.component .voltage-display {
+    fill: #2196F3;
+}
+
+/* 功率显示 */
+.component .power-display {
+    fill: #4CAF50;
+}
+
+/* 数值显示背景 */
+.component .value-display-bg {
+    fill: rgba(255, 255, 255, 0.85);
+    rx: 3;
+    ry: 3;
 }
 
 /* 灯泡发光效果 */
@@ -750,14 +791,29 @@ body {
 }
 
 .prop-row.reading {
-    background: #f9f9f9;
-    margin: 4px -10px;
-    padding: 8px 10px;
-    border-radius: 4px;
+    background: linear-gradient(135deg, #f5f5f5 0%, #e8e8e8 100%);
+    margin: 8px -10px;
+    padding: 12px 10px;
+    border-radius: 6px;
+    border: 1px solid #ddd;
+}
+
+.prop-row.reading .label {
+    font-weight: 600;
 }
 
 .prop-row.reading .value {
-    font-size: 16px;
+    font-size: 18px;
+    font-weight: 700;
+}
+
+/* 仪表 SVG 读数显示 */
+.component .meter-reading {
+    font-size: 15px;
+    font-weight: 700;
+    paint-order: stroke fill;
+    stroke: white;
+    stroke-width: 4px;
 }
 
 /* ==========================================
