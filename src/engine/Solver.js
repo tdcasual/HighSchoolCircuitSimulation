@@ -1,0 +1,429 @@
+/**
+ * Solver.js - MNA（改进节点分析法）求解器
+ * 实现电路的稳态和瞬态分析
+ */
+
+import { Matrix } from './Matrix.js';
+
+export class MNASolver {
+    constructor() {
+        this.nodes = [];           // 节点列表
+        this.components = [];       // 元器件列表
+        this.groundNode = 0;        // 接地节点（参考节点）
+        this.voltageSourceCount = 0; // 电压源数量（用于扩展矩阵）
+        this.dt = 0.001;            // 时间步长（秒）
+    }
+
+    /**
+     * 设置电路数据
+     * @param {Object[]} components - 元器件数组
+     * @param {Object[]} nodes - 节点数组
+     */
+    setCircuit(components, nodes) {
+        this.components = components;
+        this.nodes = nodes;
+        this.voltageSourceCount = 0;
+        
+        // 统计电压源数量
+        // 注意：有内阻的电源使用诺顿等效，不计入电压源
+        for (const comp of components) {
+            if (comp.type === 'PowerSource') {
+                // 只有零内阻的电源才使用电压源模型
+                if (!comp.internalResistance || comp.internalResistance < 1e-9) {
+                    comp.vsIndex = this.voltageSourceCount++;
+                }
+            } else if (comp.type === 'Motor') {
+                comp.vsIndex = this.voltageSourceCount++;
+            } else if (comp.type === 'Ammeter') {
+                // 理想电流表使用电压源（V=0）来测量电流
+                if (!comp.resistance || comp.resistance <= 0) {
+                    comp.vsIndex = this.voltageSourceCount++;
+                }
+            }
+        }
+    }
+
+    /**
+     * 求解电路
+     * @param {number} dt - 时间步长
+     * @returns {Object} 解结果，包含节点电压和支路电流
+     */
+    solve(dt = 0.001) {
+        this.dt = dt;
+        
+        const nodeCount = this.nodes.length;
+        if (nodeCount < 2) {
+            return { voltages: [], currents: new Map(), valid: false };
+        }
+
+        // 矩阵大小：节点数-1（去掉地节点）+ 电压源数
+        const n = nodeCount - 1 + this.voltageSourceCount;
+        
+        if (n <= 0) {
+            return { voltages: [], currents: new Map(), valid: false };
+        }
+
+        // 创建MNA矩阵和向量
+        const A = Matrix.zeros(n, n);
+        const z = Matrix.zeroVector(n);
+
+        // 为每个元器件添加印记（stamp）
+        for (const comp of this.components) {
+            this.stampComponent(comp, A, z, nodeCount);
+        }
+
+        // 求解
+        const x = Matrix.solve(A, z);
+        
+        if (!x) {
+            return { voltages: [], currents: new Map(), valid: false };
+        }
+
+        // 提取节点电压（添加地节点的0电压）
+        const voltages = [0]; // 节点0是地
+        for (let i = 0; i < nodeCount - 1; i++) {
+            voltages.push(x[i] || 0);
+        }
+
+        // 计算各元器件的电流
+        const currents = new Map();
+        for (const comp of this.components) {
+            const current = this.calculateCurrent(comp, voltages, x, nodeCount);
+            currents.set(comp.id, current);
+        }
+
+        return { voltages, currents, valid: true };
+    }
+
+    /**
+     * 为元器件添加MNA印记
+     * @param {Object} comp - 元器件
+     * @param {number[][]} A - 系数矩阵
+     * @param {number[]} z - 常数向量
+     * @param {number} nodeCount - 节点数量
+     */
+    stampComponent(comp, A, z, nodeCount) {
+        const n1 = comp.nodes[0]; // 正极节点
+        const n2 = comp.nodes[1]; // 负极节点
+        
+        // 将节点索引转换为矩阵索引（去掉地节点0）
+        const i1 = n1 - 1;
+        const i2 = n2 - 1;
+
+        switch (comp.type) {
+            case 'Resistor':
+            case 'Bulb':
+                this.stampResistor(A, i1, i2, comp.resistance);
+                break;
+                
+            case 'Rheostat':
+                // 滑动变阻器三端子模型：
+                // 端子0(左) -- R1 -- 端子2(滑动触点) -- R2 -- 端子1(右)
+                // 总电阻 = maxR，按位置分配
+                // R1 = 左端到滑块的电阻 = position * maxR
+                // R2 = 滑块到右端的电阻 = (1 - position) * maxR
+                // 确保 R1 + R2 = maxR
+                const totalR = comp.maxResistance;
+                const R1 = Math.max(comp.minResistance, totalR * comp.position);
+                const R2 = Math.max(comp.minResistance, totalR * (1 - comp.position));
+                
+                // 获取三个节点
+                const n_left = comp.nodes[0];
+                const n_right = comp.nodes[1];
+                const n_slider = comp.nodes[2];
+                
+                // 转换为矩阵索引
+                const i_left = n_left - 1;
+                const i_right = n_right - 1;
+                const i_slider = n_slider !== undefined ? n_slider - 1 : -1;
+                
+                if (i_slider >= 0) {
+                    // 三端子连接：左-滑动触点-右
+                    // 左端到滑动触点的电阻
+                    this.stampResistor(A, i_left, i_slider, Math.max(R1, 1e-9));
+                    // 滑动触点到右端的电阻
+                    this.stampResistor(A, i_slider, i_right, Math.max(R2, 1e-9));
+                } else {
+                    // 如果滑动触点未连接，按两端子处理
+                    // 使用与三端子一致的公式：position * maxR
+                    const actualR = Math.max(comp.minResistance, comp.maxResistance * comp.position);
+                    this.stampResistor(A, i1, i2, Math.max(actualR, 1e-9));
+                }
+                break;
+                
+            case 'PowerSource':
+                // 电源模型：电动势 E 串联内阻 r
+                // 使用戴维南等效：
+                // 理想电压源 E 串联电阻 r 可以等效为：
+                // 在节点间放置电阻 r，并添加一个电流源 I = E/r
+                // 或者更简单：使用电压源的扩展MNA模型
+                
+                // 方法：使用带内阻的电压源模型
+                // 在 MNA 中，理想电压源会强制两节点间电压为 V
+                // 内阻串联需要引入额外节点，这里用简化方法：
+                // 将电源建模为 E 串联 r，使用诺顿等效
+                // 诺顿等效电流源 I_N = E / r，并联电阻 r
+                
+                if (comp.internalResistance > 1e-9) {
+                    // 使用诺顿等效电路：电流源 I = E/r 并联电阻 r
+                    const I_norton = comp.voltage / comp.internalResistance;
+                    const G = 1 / comp.internalResistance;
+                    
+                    // 添加并联电导
+                    if (i1 >= 0) A[i1][i1] += G;
+                    if (i2 >= 0) A[i2][i2] += G;
+                    if (i1 >= 0 && i2 >= 0) {
+                        A[i1][i2] -= G;
+                        A[i2][i1] -= G;
+                    }
+                    
+                    // 添加电流源 (从i2流向i1，即正极是i1)
+                    if (i1 >= 0) z[i1] += I_norton;
+                    if (i2 >= 0) z[i2] -= I_norton;
+                    
+                    // 仍然需要记录电压源以便计算电流
+                    // 但不再添加到矩阵中
+                    comp._nortonModel = true;
+                } else {
+                    // 内阻为0时，使用理想电压源
+                    this.stampVoltageSource(A, z, i1, i2, comp.voltage, comp.vsIndex, nodeCount);
+                    comp._nortonModel = false;
+                }
+                break;
+                
+            case 'Capacitor':
+                // 使用后向欧拉法处理电容
+                // 等效电阻 Req = dt / C
+                // 等效电流源 Ieq = C * v_prev / dt
+                const Req = this.dt / comp.capacitance;
+                const G = 1 / Req;
+                this.stampResistor(A, i1, i2, Req);
+                
+                // 添加等效电流源
+                const Ieq = comp.capacitance * (comp.prevVoltage || 0) / this.dt;
+                if (i1 >= 0) z[i1] += Ieq;
+                if (i2 >= 0) z[i2] -= Ieq;
+                break;
+                
+            case 'Motor':
+                // 电动机模型：电阻串联反电动势
+                // 简化模型：电阻串联一个电压源
+                this.stampResistor(A, i1, i2, comp.resistance);
+                // 反电动势作为电压源处理
+                const backEmf = comp.backEmf || 0;
+                this.stampVoltageSource(A, z, i1, i2, -backEmf, comp.vsIndex, nodeCount);
+                break;
+                
+            case 'Switch':
+                // 开关模型
+                if (comp.closed) {
+                    // 闭合状态：理想导线（极小电阻）
+                    this.stampResistor(A, i1, i2, 1e-9);
+                } else {
+                    // 断开状态：极大电阻（相当于开路）
+                    this.stampResistor(A, i1, i2, 1e12);
+                }
+                break;
+                
+            case 'Ammeter':
+                // 电流表模型
+                if (comp.resistance > 0) {
+                    // 有内阻的电流表
+                    this.stampResistor(A, i1, i2, comp.resistance);
+                } else {
+                    // 理想电流表：使用电压源（V=0）来测量电流
+                    this.stampVoltageSource(A, z, i1, i2, 0, comp.vsIndex, nodeCount);
+                }
+                break;
+                
+            case 'Voltmeter':
+                // 电压表模型
+                if (comp.resistance !== Infinity && comp.resistance > 0) {
+                    // 有内阻的电压表
+                    this.stampResistor(A, i1, i2, comp.resistance);
+                }
+                // 理想电压表：不连入电路（无穷大电阻），仅测量电压
+                // 不需要添加任何印记
+                break;
+        }
+    }
+
+    /**
+     * 电阻印记
+     * @param {number[][]} A - 系数矩阵
+     * @param {number} i1 - 节点1的矩阵索引
+     * @param {number} i2 - 节点2的矩阵索引
+     * @param {number} R - 电阻值
+     */
+    stampResistor(A, i1, i2, R) {
+        if (R <= 0) R = 1e-9; // 避免除零
+        const G = 1 / R;
+        
+        if (i1 >= 0) A[i1][i1] += G;
+        if (i2 >= 0) A[i2][i2] += G;
+        if (i1 >= 0 && i2 >= 0) {
+            A[i1][i2] -= G;
+            A[i2][i1] -= G;
+        }
+    }
+
+    /**
+     * 电压源印记
+     * @param {number[][]} A - 系数矩阵
+     * @param {number[]} z - 常数向量
+     * @param {number} i1 - 正极节点的矩阵索引
+     * @param {number} i2 - 负极节点的矩阵索引
+     * @param {number} V - 电压值
+     * @param {number} vsIndex - 电压源索引
+     * @param {number} nodeCount - 节点数量
+     */
+    stampVoltageSource(A, z, i1, i2, V, vsIndex, nodeCount) {
+        const k = nodeCount - 1 + vsIndex; // 电流变量在矩阵中的位置
+        
+        // 电压约束行
+        if (i1 >= 0) A[k][i1] = 1;
+        if (i2 >= 0) A[k][i2] = -1;
+        
+        // KCL贡献列
+        if (i1 >= 0) A[i1][k] = 1;
+        if (i2 >= 0) A[i2][k] = -1;
+        
+        // 电压值
+        z[k] = V;
+    }
+
+    /**
+     * 计算元器件电流
+     * @param {Object} comp - 元器件
+     * @param {number[]} voltages - 节点电压数组
+     * @param {number[]} x - 解向量
+     * @param {number} nodeCount - 节点数量
+     * @returns {number} 电流值
+     */
+    calculateCurrent(comp, voltages, x, nodeCount) {
+        const v1 = voltages[comp.nodes[0]] || 0;
+        const v2 = voltages[comp.nodes[1]] || 0;
+        const dV = v1 - v2;
+
+        switch (comp.type) {
+            case 'Resistor':
+            case 'Bulb':
+                return comp.resistance > 0 ? dV / comp.resistance : 0;
+                
+            case 'Rheostat': {
+                // 滑动变阻器电流计算
+                // 如果使用三端子，需要根据连接方式计算
+                const v_left = voltages[comp.nodes[0]] || 0;
+                const v_right = voltages[comp.nodes[1]] || 0;
+                const v_slider = comp.nodes[2] !== undefined ? (voltages[comp.nodes[2]] || 0) : null;
+                
+                if (v_slider !== null && comp.nodes[2] !== comp.nodes[0] && comp.nodes[2] !== comp.nodes[1]) {
+                    // 三端子连接，计算通过滑动触点的电流
+                    const totalR = comp.maxResistance;
+                    const R1 = Math.max(comp.minResistance, totalR * comp.position);
+                    const R2 = Math.max(comp.minResistance, totalR * (1 - comp.position));
+                    
+                    // 通过左侧电阻的电流
+                    const I1 = R1 > 1e-9 ? (v_left - v_slider) / R1 : 0;
+                    // 通过右侧电阻的电流
+                    const I2 = R2 > 1e-9 ? (v_slider - v_right) / R2 : 0;
+                    
+                    // 根据连接模式返回合适的电流
+                    if (comp.connectionMode === 'left-slider') return I1;
+                    if (comp.connectionMode === 'right-slider') return I2;
+                    return Math.abs(I1) > Math.abs(I2) ? I1 : I2; // 返回较大值
+                } else {
+                    // 两端子连接
+                    const actualR = Math.max(comp.minResistance, comp.maxResistance * comp.position);
+                    return actualR > 0 ? dV / actualR : 0;
+                }
+            }
+                
+            case 'PowerSource':
+                // 电源电流计算
+                if (comp._nortonModel) {
+                    // 诺顿模型：电流 = (E - V_端子) / r = (E - (v1-v2)) / r
+                    // 其中 v1-v2 是端子电压
+                    const terminalVoltage = v1 - v2;
+                    const current = (comp.voltage - terminalVoltage) / comp.internalResistance;
+                    return current; // 正值表示从正极流出
+                } else {
+                    // 理想电压源模型：从MNA解向量获取
+                    const sourceCurrent = x[nodeCount - 1 + comp.vsIndex] || 0;
+                    return -sourceCurrent;
+                }
+                
+            case 'Motor':
+                // 电动机电流从MNA解向量中获取
+                const motorCurrent = x[nodeCount - 1 + comp.vsIndex] || 0;
+                return -motorCurrent;
+                
+            case 'Capacitor':
+                // 电容电流 = C * dV/dt
+                const prevV = comp.prevVoltage || 0;
+                return comp.capacitance * (dV - prevV) / this.dt;
+                
+            case 'Switch':
+                // 开关电流
+                if (comp.closed) {
+                    // 闭合时电流很大（短路），但实际电流受外部电路限制
+                    // 用极小电阻计算
+                    return dV / 1e-9;
+                }
+                return 0; // 断开时无电流
+                
+            case 'Ammeter':
+                // 电流表电流
+                if (comp.resistance > 0) {
+                    // 有内阻时通过电阻计算
+                    return dV / comp.resistance;
+                } else {
+                    // 理想电流表：从MNA解向量获取
+                    const ammeterCurrent = x[nodeCount - 1 + comp.vsIndex] || 0;
+                    return -ammeterCurrent;
+                }
+                
+            case 'Voltmeter':
+                // 电压表电流
+                if (comp.resistance !== Infinity && comp.resistance > 0) {
+                    return dV / comp.resistance;
+                }
+                return 0; // 理想电压表无电流
+                
+            default:
+                return 0;
+        }
+    }
+
+    /**
+     * 更新动态元器件状态（用于瞬态分析）
+     * @param {number[]} voltages - 当前节点电压
+     */
+    updateDynamicComponents(voltages) {
+        for (const comp of this.components) {
+            if (comp.type === 'Capacitor') {
+                const v1 = voltages[comp.nodes[0]] || 0;
+                const v2 = voltages[comp.nodes[1]] || 0;
+                comp.prevVoltage = v1 - v2;
+            }
+            
+            if (comp.type === 'Motor') {
+                // 更新电机转速和反电动势
+                // 简化模型：反电动势与转速成正比
+                const v1 = voltages[comp.nodes[0]] || 0;
+                const v2 = voltages[comp.nodes[1]] || 0;
+                const voltage = v1 - v2;
+                const current = (voltage - (comp.backEmf || 0)) / comp.resistance;
+                
+                // 电磁转矩产生加速度，更新转速
+                const torque = comp.torqueConstant * current;
+                const acceleration = (torque - comp.loadTorque) / comp.inertia;
+                comp.speed = (comp.speed || 0) + acceleration * this.dt;
+                comp.speed = Math.max(0, comp.speed); // 转速不能为负
+                
+                // 更新反电动势
+                comp.backEmf = comp.emfConstant * comp.speed;
+            }
+        }
+    }
+}

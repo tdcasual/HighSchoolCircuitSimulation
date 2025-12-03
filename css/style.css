@@ -1,0 +1,777 @@
+/* ==========================================
+   电路模拟器 - 主样式表
+   ========================================== */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+:root {
+    --primary-color: #2196F3;
+    --primary-dark: #1976D2;
+    --secondary-color: #4CAF50;
+    --danger-color: #f44336;
+    --warning-color: #ff9800;
+    --bg-color: #f5f5f5;
+    --panel-bg: #ffffff;
+    --border-color: #ddd;
+    --text-color: #333;
+    --text-light: #666;
+    --shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+body {
+    font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+    background: var(--bg-color);
+    color: var(--text-color);
+    overflow: hidden;
+}
+
+#app {
+    display: flex;
+    height: 100vh;
+    width: 100vw;
+}
+
+/* ==========================================
+   左侧工具箱
+   ========================================== */
+#toolbox {
+    width: 180px;
+    background: var(--panel-bg);
+    border-right: 1px solid var(--border-color);
+    padding: 15px;
+    overflow-y: auto;
+    box-shadow: var(--shadow);
+    z-index: 10;
+}
+
+#toolbox h2 {
+    font-size: 18px;
+    margin-bottom: 15px;
+    color: var(--primary-color);
+    border-bottom: 2px solid var(--primary-color);
+    padding-bottom: 8px;
+}
+
+.tool-category {
+    margin-bottom: 20px;
+}
+
+.tool-category h3 {
+    font-size: 13px;
+    color: var(--text-light);
+    margin-bottom: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.tool-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px;
+    margin-bottom: 5px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    cursor: grab;
+    transition: all 0.2s ease;
+    background: #fafafa;
+}
+
+.tool-item:hover {
+    border-color: var(--primary-color);
+    background: #e3f2fd;
+    transform: translateX(3px);
+}
+
+.tool-item:active {
+    cursor: grabbing;
+}
+
+.tool-item.dragging {
+    opacity: 0.5;
+    border-color: var(--primary-color);
+    background: #bbdefb;
+}
+
+.tool-item svg {
+    flex-shrink: 0;
+}
+
+.tool-item span {
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+.action-btn {
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 8px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: all 0.2s ease;
+    background: var(--primary-color);
+    color: white;
+}
+
+.action-btn:hover {
+    background: var(--primary-dark);
+    transform: translateY(-1px);
+}
+
+.action-btn:active {
+    transform: translateY(0);
+}
+
+/* ==========================================
+   主画布区域
+   ========================================== */
+#canvas-container {
+    flex: 1;
+    position: relative;
+    background: #fff;
+    overflow: hidden;
+}
+
+#circuit-canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+#status-bar {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 30px;
+    background: rgba(255,255,255,0.95);
+    border-top: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 15px;
+    font-size: 12px;
+    color: var(--text-light);
+}
+
+#simulation-status {
+    color: var(--danger-color);
+}
+
+#simulation-status.running {
+    color: var(--secondary-color);
+}
+
+/* ==========================================
+   右侧属性面板
+   ========================================== */
+#property-panel {
+    width: 220px;
+    background: var(--panel-bg);
+    border-left: 1px solid var(--border-color);
+    padding: 15px;
+    overflow-y: auto;
+    box-shadow: var(--shadow);
+    z-index: 10;
+}
+
+#property-panel h2 {
+    font-size: 18px;
+    margin-bottom: 15px;
+    color: var(--primary-color);
+    border-bottom: 2px solid var(--primary-color);
+    padding-bottom: 8px;
+}
+
+#property-panel h3 {
+    font-size: 13px;
+    color: var(--text-light);
+    margin: 15px 0 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+#property-content {
+    min-height: 150px;
+}
+
+#property-content .hint {
+    color: var(--text-light);
+    font-size: 13px;
+    font-style: italic;
+}
+
+#property-content .prop-group {
+    margin-bottom: 12px;
+}
+
+#property-content .prop-group label {
+    display: block;
+    font-size: 12px;
+    color: var(--text-light);
+    margin-bottom: 4px;
+}
+
+#property-content .prop-group input,
+#property-content .prop-group select {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+#property-content .prop-group input:focus,
+#property-content .prop-group select:focus {
+    outline: none;
+    border-color: var(--primary-color);
+}
+
+#property-content .prop-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 0;
+    border-bottom: 1px dashed #eee;
+    font-size: 13px;
+}
+
+#property-content .prop-row .label {
+    color: var(--text-light);
+}
+
+#property-content .prop-row .value {
+    font-weight: 500;
+    color: var(--primary-dark);
+}
+
+#display-settings label {
+    display: block;
+    margin-bottom: 8px;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+#display-settings input[type="checkbox"] {
+    margin-right: 8px;
+}
+
+#simulation-controls {
+    margin-top: 20px;
+}
+
+.control-btn {
+    width: 100%;
+    padding: 12px;
+    margin-bottom: 8px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+.control-btn.run {
+    background: var(--secondary-color);
+    color: white;
+}
+
+.control-btn.run:hover:not(:disabled) {
+    background: #43A047;
+}
+
+.control-btn.stop {
+    background: var(--danger-color);
+    color: white;
+}
+
+.control-btn.stop:hover:not(:disabled) {
+    background: #E53935;
+}
+
+.control-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* ==========================================
+   SVG 元器件样式
+   ========================================== */
+
+/* 禁止SVG元素原生拖放，防止触发drop事件创建重复元器件 */
+#circuit-canvas,
+#circuit-canvas * {
+    -webkit-user-drag: none;
+    user-drag: none;
+    -webkit-user-select: none;
+    user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+}
+
+.component {
+    cursor: move;
+    transition: filter 0.2s ease;
+}
+
+.component:hover {
+    filter: drop-shadow(0 0 4px rgba(33, 150, 243, 0.5));
+}
+
+.component.selected {
+    filter: drop-shadow(0 0 6px rgba(33, 150, 243, 0.8));
+}
+
+.component .body {
+    fill: #fff;
+    stroke: #333;
+    stroke-width: 2;
+}
+
+.component .terminal {
+    fill: #2196F3;
+    stroke: #1565C0;
+    stroke-width: 1;
+    cursor: crosshair;
+    transition: all 0.15s ease;
+    pointer-events: all !important;
+}
+
+.component .terminal:hover {
+    fill: #FF5722;
+    r: 7;
+}
+
+.component .terminal.connected {
+    fill: #4CAF50;
+}
+
+/* 端子延长引出线 */
+.component .terminal-extension {
+    stroke: #333;
+    stroke-width: 2;
+    pointer-events: none;
+}
+
+.component .label {
+    font-size: 11px;
+    fill: #333;
+    pointer-events: none;
+    user-select: none;
+}
+
+.component .value-display {
+    font-size: 10px;
+    fill: #1976D2;
+    pointer-events: none;
+    user-select: none;
+}
+
+/* 灯泡发光效果 */
+.component.bulb .glow {
+    fill: rgba(255, 235, 59, 0);
+    transition: fill 0.3s ease;
+}
+
+.component.bulb.on .glow {
+    fill: rgba(255, 235, 59, 0.8);
+}
+
+/* 导线样式 */
+.wire-group {
+    cursor: pointer;
+}
+
+.wire {
+    fill: none;
+    stroke: #333;
+    stroke-width: 2;
+    cursor: pointer;
+    transition: stroke 0.2s ease;
+}
+
+.wire-group:hover .wire {
+    stroke: #2196F3;
+    stroke-width: 3;
+}
+
+.wire-group.selected .wire {
+    stroke: #FF5722;
+    stroke-width: 3;
+}
+
+/* 导线控制点 */
+.wire-control-point {
+    fill: #FF5722;
+    stroke: white;
+    stroke-width: 2;
+    cursor: move;
+    opacity: 0.9;
+}
+
+.wire-control-point:hover {
+    fill: #E64A19;
+    r: 8;
+}
+
+/* 添加控制点的按钮（中点） */
+.wire-add-point {
+    fill: #2196F3;
+    stroke: white;
+    stroke-width: 1.5;
+    cursor: pointer;
+    opacity: 0.6;
+}
+
+.wire-add-point:hover {
+    fill: #1976D2;
+    opacity: 1;
+    r: 6;
+}
+
+.wire-temp {
+    fill: none;
+    stroke: #2196F3;
+    stroke-width: 2;
+    stroke-dasharray: 5, 5;
+    pointer-events: none;
+}
+
+/* 电流动画 */
+@keyframes current-flow {
+    from { stroke-dashoffset: 20; }
+    to { stroke-dashoffset: 0; }
+}
+
+.wire.flowing {
+    stroke-dasharray: 4, 4;
+    animation: current-flow 0.5s linear infinite;
+}
+
+/* 节点样式 */
+.node-marker {
+    fill: #333;
+    stroke: none;
+}
+
+/* ==========================================
+   对话框样式
+   ========================================== */
+#dialog-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+#dialog-overlay.hidden {
+    display: none;
+}
+
+#property-dialog {
+    background: var(--panel-bg);
+    border-radius: 12px;
+    padding: 24px;
+    min-width: 320px;
+    max-width: 450px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+}
+
+#property-dialog h3 {
+    margin-bottom: 20px;
+    color: var(--primary-color);
+    font-size: 18px;
+}
+
+#dialog-content .form-group {
+    margin-bottom: 16px;
+}
+
+#dialog-content .form-group label {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 13px;
+    color: var(--text-light);
+}
+
+#dialog-content .form-group input,
+#dialog-content .form-group select {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    font-size: 14px;
+}
+
+#dialog-content .form-group input:focus,
+#dialog-content .form-group select:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.1);
+}
+
+#dialog-content .form-group .input-with-unit {
+    display: flex;
+    align-items: center;
+}
+
+#dialog-content .form-group .input-with-unit input {
+    border-radius: 6px 0 0 6px;
+}
+
+#dialog-content .form-group .input-with-unit .unit {
+    padding: 10px 12px;
+    background: #f5f5f5;
+    border: 1px solid var(--border-color);
+    border-left: none;
+    border-radius: 0 6px 6px 0;
+    font-size: 13px;
+    color: var(--text-light);
+}
+
+#dialog-content .slider-group {
+    margin-top: 8px;
+}
+
+#dialog-content .slider-group input[type="range"] {
+    width: 100%;
+    margin-top: 5px;
+}
+
+.dialog-buttons {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    margin-top: 24px;
+}
+
+.dialog-buttons button {
+    padding: 10px 24px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s ease;
+}
+
+#dialog-cancel {
+    background: #e0e0e0;
+    color: var(--text-color);
+}
+
+#dialog-cancel:hover {
+    background: #d0d0d0;
+}
+
+#dialog-ok {
+    background: var(--primary-color);
+    color: white;
+}
+
+#dialog-ok:hover {
+    background: var(--primary-dark);
+}
+
+/* ==========================================
+   滑动变阻器滑块
+   ========================================== */
+.rheostat-slider {
+    cursor: ew-resize;
+    /* 滑块不应该阻挡对端子的点击 */
+    pointer-events: auto;
+}
+
+.rheostat-slider:hover {
+    fill: #FF5722;
+}
+
+/* ==========================================
+   响应式调整
+   ========================================== */
+@media (max-width: 900px) {
+    #toolbox {
+        width: 150px;
+        padding: 10px;
+    }
+    
+    #property-panel {
+        width: 180px;
+        padding: 10px;
+    }
+    
+    .tool-item span {
+        display: none;
+    }
+}
+
+/* ==========================================
+   上下文菜单
+   ========================================== */
+.context-menu {
+    position: fixed;
+    background: white;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+    padding: 4px 0;
+    min-width: 160px;
+    z-index: 10000;
+    animation: contextMenuFadeIn 0.15s ease-out;
+}
+
+@keyframes contextMenuFadeIn {
+    from {
+        opacity: 0;
+        transform: scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.context-menu-item {
+    padding: 10px 16px;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--text-color);
+    transition: background 0.15s ease;
+}
+
+.context-menu-item:hover {
+    background: var(--bg-color);
+}
+
+.context-menu-item.danger {
+    color: var(--danger-color);
+}
+
+.context-menu-item.danger:hover {
+    background: rgba(244, 67, 54, 0.1);
+}
+
+/* ==========================================
+   滚动条美化
+   ========================================== */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #a1a1a1;
+}
+
+/* ==========================================
+   开关切换按钮样式
+   ========================================== */
+.switch-toggle {
+    display: flex;
+    gap: 4px;
+    margin-top: 8px;
+}
+
+.switch-toggle button {
+    flex: 1;
+    padding: 8px 12px;
+    border: 1px solid var(--border-color);
+    background: #f5f5f5;
+    color: var(--text-color);
+    font-size: 13px;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+}
+
+.switch-toggle button:first-child {
+    border-radius: 4px 0 0 4px;
+}
+
+.switch-toggle button:last-child {
+    border-radius: 0 4px 4px 0;
+}
+
+.switch-toggle button.active {
+    background: var(--primary-color);
+    color: white;
+    border-color: var(--primary-color);
+}
+
+.switch-toggle button:hover:not(.active) {
+    background: #e0e0e0;
+}
+
+/* ==========================================
+   仪表样式
+   ========================================== */
+.ammeter-body {
+    fill: #fff;
+    stroke: #c00;
+}
+
+.voltmeter-body {
+    fill: #fff;
+    stroke: #00c;
+}
+
+.meter-label {
+    font-weight: bold;
+}
+
+.ammeter-reading {
+    color: #c00;
+    font-weight: bold;
+}
+
+.voltmeter-reading {
+    color: #00c;
+    font-weight: bold;
+}
+
+.prop-row.reading {
+    background: #f9f9f9;
+    margin: 4px -10px;
+    padding: 8px 10px;
+    border-radius: 4px;
+}
+
+.prop-row.reading .value {
+    font-size: 16px;
+}
+
+/* ==========================================
+   开关元器件样式
+   ========================================== */
+.switch-blade {
+    cursor: pointer;
+    transition: transform 0.15s ease;
+}
+
+.switch-touch {
+    cursor: pointer;
+}
+
+.component.switch:hover .switch-blade {
+    stroke: var(--primary-color);
+}
