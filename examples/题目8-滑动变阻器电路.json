@@ -1,0 +1,178 @@
+{
+  "version": "1.0",
+  "name": "题目8-滑动变阻器电路",
+  "description": "电源电动势3V，内阻2Ω，R1=8Ω，滑动变阻器R2最大阻值8Ω，R3=8Ω，电容600μF，理想电表",
+  "components": [
+    {
+      "id": "power-1",
+      "type": "PowerSource",
+      "x": 120,
+      "y": 280,
+      "rotation": 0,
+      "properties": {
+        "voltage": 3,
+        "internalResistance": 2
+      }
+    },
+    {
+      "id": "voltmeter-1",
+      "type": "Voltmeter",
+      "x": 120,
+      "y": 160,
+      "rotation": 0,
+      "properties": {
+        "internalResistance": 10000000
+      }
+    },
+    {
+      "id": "resistor-1",
+      "type": "Resistor",
+      "x": 280,
+      "y": 160,
+      "rotation": 0,
+      "properties": {
+        "resistance": 8
+      }
+    },
+    {
+      "id": "rheostat-1",
+      "type": "Rheostat",
+      "x": 440,
+      "y": 220,
+      "rotation": 0,
+      "properties": {
+        "maxResistance": 8,
+        "position": 1
+      }
+    },
+    {
+      "id": "resistor-2",
+      "type": "Resistor",
+      "x": 600,
+      "y": 220,
+      "rotation": 90,
+      "properties": {
+        "resistance": 8
+      }
+    },
+    {
+      "id": "capacitor-1",
+      "type": "Capacitor",
+      "x": 680,
+      "y": 220,
+      "rotation": 90,
+      "properties": {
+        "capacitance": 0.0006
+      }
+    },
+    {
+      "id": "voltmeter-2",
+      "type": "Voltmeter",
+      "x": 760,
+      "y": 220,
+      "rotation": 90,
+      "properties": {
+        "internalResistance": 10000000
+      }
+    },
+    {
+      "id": "ammeter-1",
+      "type": "Ammeter",
+      "x": 280,
+      "y": 400,
+      "rotation": 0,
+      "properties": {
+        "internalResistance": 0.0001
+      }
+    }
+  ],
+  "wires": [
+    {
+      "id": "wire-1",
+      "start": { "componentId": "power-1", "terminalIndex": 0 },
+      "end": { "componentId": "voltmeter-1", "terminalIndex": 0 },
+      "controlPoints": []
+    },
+    {
+      "id": "wire-2",
+      "start": { "componentId": "voltmeter-1", "terminalIndex": 1 },
+      "end": { "componentId": "resistor-1", "terminalIndex": 0 },
+      "controlPoints": []
+    },
+    {
+      "id": "wire-3",
+      "start": { "componentId": "resistor-1", "terminalIndex": 1 },
+      "end": { "componentId": "rheostat-1", "terminalIndex": 0 },
+      "controlPoints": [
+        { "x": 360, "y": 160 },
+        { "x": 360, "y": 220 }
+      ]
+    },
+    {
+      "id": "wire-4",
+      "start": { "componentId": "rheostat-1", "terminalIndex": 2 },
+      "end": { "componentId": "resistor-2", "terminalIndex": 0 },
+      "controlPoints": [
+        { "x": 520, "y": 160 },
+        { "x": 600, "y": 160 }
+      ]
+    },
+    {
+      "id": "wire-5",
+      "start": { "componentId": "resistor-2", "terminalIndex": 0 },
+      "end": { "componentId": "capacitor-1", "terminalIndex": 0 },
+      "controlPoints": [
+        { "x": 680, "y": 160 }
+      ]
+    },
+    {
+      "id": "wire-6",
+      "start": { "componentId": "capacitor-1", "terminalIndex": 0 },
+      "end": { "componentId": "voltmeter-2", "terminalIndex": 0 },
+      "controlPoints": [
+        { "x": 760, "y": 160 }
+      ]
+    },
+    {
+      "id": "wire-7",
+      "start": { "componentId": "resistor-2", "terminalIndex": 1 },
+      "end": { "componentId": "capacitor-1", "terminalIndex": 1 },
+      "controlPoints": [
+        { "x": 680, "y": 280 }
+      ]
+    },
+    {
+      "id": "wire-8",
+      "start": { "componentId": "capacitor-1", "terminalIndex": 1 },
+      "end": { "componentId": "voltmeter-2", "terminalIndex": 1 },
+      "controlPoints": [
+        { "x": 760, "y": 280 }
+      ]
+    },
+    {
+      "id": "wire-9",
+      "start": { "componentId": "voltmeter-2", "terminalIndex": 1 },
+      "end": { "componentId": "ammeter-1", "terminalIndex": 1 },
+      "controlPoints": [
+        { "x": 760, "y": 400 }
+      ]
+    },
+    {
+      "id": "wire-10",
+      "start": { "componentId": "ammeter-1", "terminalIndex": 0 },
+      "end": { "componentId": "power-1", "terminalIndex": 1 },
+      "controlPoints": [
+        { "x": 120, "y": 400 }
+      ]
+    },
+    {
+      "id": "wire-11",
+      "start": { "componentId": "rheostat-1", "terminalIndex": 1 },
+      "end": { "componentId": "ammeter-1", "terminalIndex": 1 },
+      "controlPoints": [
+        { "x": 520, "y": 220 },
+        { "x": 520, "y": 400 }
+      ]
+    }
+  ]
+}

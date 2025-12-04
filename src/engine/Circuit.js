@@ -116,13 +116,39 @@ export class Circuit {
         for (const [wireId, wire] of this.wires) {
             const key1 = `${wire.startComponentId}:${wire.startTerminalIndex}`;
             const key2 = `${wire.endComponentId}:${wire.endTerminalIndex}`;
+            
+            // 检查导线端点是否有效
+            if (!parent.has(key1)) {
+                console.warn(`Wire ${wireId}: start terminal ${key1} not found in components`);
+                continue;
+            }
+            if (!parent.has(key2)) {
+                console.warn(`Wire ${wireId}: end terminal ${key2} not found in components`);
+                continue;
+            }
+            
             union(key1, key2);
         }
 
         // 生成节点映射
+        // 重要：电源的负极应该是节点0（参考地）
         const nodeMap = new Map(); // root -> nodeIndex
         let nodeIndex = 0;
         
+        // 首先，找到电源的负极端点，确保它是节点0
+        for (const [id, comp] of this.components) {
+            if (comp.type === 'PowerSource') {
+                // 端点1是负极
+                const negativeKey = `${id}:1`;
+                const root = find(negativeKey);
+                if (!nodeMap.has(root)) {
+                    nodeMap.set(root, nodeIndex++);
+                }
+                break; // 只需要找到一个电源
+            }
+        }
+        
+        // 然后分配其他节点
         for (const t of terminals) {
             const key = getTerminalKey(t);
             const root = find(key);
@@ -308,6 +334,15 @@ export class Circuit {
 
         // 求解
         this.lastResults = this.solver.solve(this.dt);
+        
+        // 调试输出
+        if (this.debugMode) {
+            console.log('Nodes:', this.nodes.length);
+            console.log('Voltages:', this.lastResults.voltages);
+            for (const [id, comp] of this.components) {
+                console.log(`${comp.type} ${id}: nodes=[${comp.nodes}]`);
+            }
+        }
 
         if (this.lastResults.valid) {
             // 更新动态元器件
@@ -404,11 +439,14 @@ export class Circuit {
             })),
             wires: Array.from(this.wires.values()).map(wire => ({
                 id: wire.id,
-                startComponentId: wire.startComponentId,
-                startTerminalIndex: wire.startTerminalIndex,
-                endComponentId: wire.endComponentId,
-                endTerminalIndex: wire.endTerminalIndex,
-                points: wire.points || [],
+                start: {
+                    componentId: wire.startComponentId,
+                    terminalIndex: wire.startTerminalIndex
+                },
+                end: {
+                    componentId: wire.endComponentId,
+                    terminalIndex: wire.endTerminalIndex
+                },
                 controlPoints: wire.controlPoints || []
             }))
         };
@@ -497,10 +535,30 @@ export class Circuit {
 
         // 导入导线
         for (const wireData of json.wires) {
-            const wire = { ...wireData };
-            // 确保 controlPoints 存在
-            if (!wire.controlPoints) {
-                wire.controlPoints = [];
+            // 支持两种格式：
+            // 新格式: { start: { componentId, terminalIndex }, end: { componentId, terminalIndex } }
+            // 旧格式: { startComponentId, startTerminalIndex, endComponentId, endTerminalIndex }
+            let wire;
+            if (wireData.start && wireData.end) {
+                // 新格式
+                wire = {
+                    id: wireData.id,
+                    startComponentId: wireData.start.componentId,
+                    startTerminalIndex: wireData.start.terminalIndex,
+                    endComponentId: wireData.end.componentId,
+                    endTerminalIndex: wireData.end.terminalIndex,
+                    controlPoints: wireData.controlPoints || []
+                };
+            } else {
+                // 旧格式
+                wire = {
+                    id: wireData.id,
+                    startComponentId: wireData.startComponentId,
+                    startTerminalIndex: wireData.startTerminalIndex,
+                    endComponentId: wireData.endComponentId,
+                    endTerminalIndex: wireData.endTerminalIndex,
+                    controlPoints: wireData.controlPoints || []
+                };
             }
             this.wires.set(wire.id, wire);
         }

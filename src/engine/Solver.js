@@ -72,11 +72,25 @@ export class MNASolver {
             this.stampComponent(comp, A, z, nodeCount);
         }
 
+        // 调试输出矩阵
+        if (this.debugMode) {
+            console.log('MNA Matrix A:');
+            for (let i = 0; i < n; i++) {
+                console.log(`  [${A[i].map(v => v.toFixed(4)).join(', ')}]`);
+            }
+            console.log('Vector z:', z.map(v => v.toFixed(4)));
+        }
+
         // 求解
         const x = Matrix.solve(A, z);
         
         if (!x) {
+            console.warn('Matrix solve failed');
             return { voltages: [], currents: new Map(), valid: false };
+        }
+
+        if (this.debugMode) {
+            console.log('Solution x:', x.map(v => v.toFixed(4)));
         }
 
         // 提取节点电压（添加地节点的0电压）
@@ -90,6 +104,10 @@ export class MNASolver {
         for (const comp of this.components) {
             const current = this.calculateCurrent(comp, voltages, x, nodeCount);
             currents.set(comp.id, current);
+            
+            if (this.debugMode) {
+                console.log(`Current for ${comp.id}: ${current.toFixed(6)}A`);
+            }
         }
 
         return { voltages, currents, valid: true };
@@ -103,12 +121,28 @@ export class MNASolver {
      * @param {number} nodeCount - 节点数量
      */
     stampComponent(comp, A, z, nodeCount) {
+        // 安全检查：确保 nodes 数组存在且有效
+        if (!comp.nodes || comp.nodes.length < 2) {
+            console.warn(`Component ${comp.id} has no valid nodes array`);
+            return;
+        }
+        
         const n1 = comp.nodes[0]; // 正极节点
         const n2 = comp.nodes[1]; // 负极节点
+        
+        // 检查节点是否有效
+        if (n1 === undefined || n2 === undefined) {
+            console.warn(`Component ${comp.id} has undefined nodes: [${n1}, ${n2}]`);
+            return;
+        }
         
         // 将节点索引转换为矩阵索引（去掉地节点0）
         const i1 = n1 - 1;
         const i2 = n2 - 1;
+        
+        if (this.debugMode) {
+            console.log(`Stamp ${comp.type} ${comp.id}: nodes=[${n1},${n2}], matrix idx=[${i1},${i2}]`);
+        }
 
         switch (comp.type) {
             case 'Resistor':
@@ -238,9 +272,12 @@ export class MNASolver {
                 
             case 'Voltmeter':
                 // 电压表模型
-                if (comp.resistance !== Infinity && comp.resistance > 0) {
+                // resistance 可能是 null, undefined, Infinity 或正数
+                const vmResistance = comp.resistance;
+                if (vmResistance !== null && vmResistance !== undefined && 
+                    vmResistance !== Infinity && vmResistance > 0) {
                     // 有内阻的电压表
-                    this.stampResistor(A, i1, i2, comp.resistance);
+                    this.stampResistor(A, i1, i2, vmResistance);
                 }
                 // 理想电压表：不连入电路（无穷大电阻），仅测量电压
                 // 不需要添加任何印记

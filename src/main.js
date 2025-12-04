@@ -28,6 +28,78 @@ class CircuitSimulatorApp {
         // 初始化完成
         this.updateStatus('电路模拟器已就绪');
         console.log('Circuit Simulator initialized');
+        
+        // 暴露调试接口到全局
+        window.debugCircuit = () => this.debugCircuit();
+    }
+    
+    /**
+     * 调试电路状态
+     */
+    debugCircuit() {
+        // 启用 solver 调试模式
+        this.circuit.solver.debugMode = true;
+        
+        console.log('=== Circuit Debug Info ===');
+        console.log('Components:', this.circuit.components.size);
+        console.log('Wires:', this.circuit.wires.size);
+        console.log('Nodes:', this.circuit.nodes.length);
+        
+        console.log('\n--- Components ---');
+        for (const [id, comp] of this.circuit.components) {
+            console.log(`${id} (${comp.type}): nodes=[${comp.nodes}], V=${comp.voltageValue?.toFixed(3)}, I=${comp.currentValue?.toFixed(3)}, R=${comp.resistance || comp.maxResistance || 'N/A'}`);
+        }
+        
+        console.log('\n--- Wires ---');
+        for (const [id, wire] of this.circuit.wires) {
+            console.log(`${id}: ${wire.startComponentId}:${wire.startTerminalIndex} -> ${wire.endComponentId}:${wire.endTerminalIndex}`);
+        }
+        
+        console.log('\n--- Node Connections ---');
+        // 分析每个节点连接了哪些端子
+        const nodeConnections = {};
+        for (const [id, comp] of this.circuit.components) {
+            comp.nodes.forEach((node, termIdx) => {
+                if (!nodeConnections[node]) nodeConnections[node] = [];
+                nodeConnections[node].push(`${id}:${termIdx}`);
+            });
+        }
+        for (const [node, terminals] of Object.entries(nodeConnections)) {
+            console.log(`Node ${node}: ${terminals.join(', ')}`);
+        }
+        
+        // 强制运行一次求解
+        console.log('\n--- Running Solve ---');
+        this.circuit.rebuildNodes();
+        
+        console.log('\n--- After rebuildNodes ---');
+        console.log('Total nodes:', this.circuit.nodes.length);
+        for (const [id, comp] of this.circuit.components) {
+            console.log(`  ${id}: nodes = [${comp.nodes}]`);
+        }
+        
+        this.circuit.solver.setCircuit(
+            Array.from(this.circuit.components.values()),
+            this.circuit.nodes
+        );
+        
+        console.log('VoltageSourceCount:', this.circuit.solver.voltageSourceCount);
+        
+        const results = this.circuit.solver.solve(this.circuit.dt);
+        
+        console.log('\n--- Solve Results ---');
+        console.log('Valid:', results.valid);
+        console.log('Voltages:', results.voltages);
+        if (results.currents instanceof Map) {
+            console.log('Currents:', Object.fromEntries(results.currents));
+        } else {
+            console.log('Currents:', results.currents);
+        }
+        
+        // 禁用调试模式
+        this.circuit.solver.debugMode = false;
+        
+        return { circuit: this.circuit, results };
     }
 
     /**

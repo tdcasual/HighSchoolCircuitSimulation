@@ -46,6 +46,21 @@ export class InteractionManager {
     }
 
     /**
+     * 将屏幕坐标转换为画布坐标（考虑平移和缩放）
+     */
+    screenToCanvas(clientX, clientY) {
+        const rect = this.svg.getBoundingClientRect();
+        const screenX = clientX - rect.left;
+        const screenY = clientY - rect.top;
+        
+        // 应用逆变换：先减去平移，再除以缩放
+        const canvasX = (screenX - this.viewOffset.x) / this.scale;
+        const canvasY = (screenY - this.viewOffset.y) / this.scale;
+        
+        return { x: canvasX, y: canvasY };
+    }
+
+    /**
      * 绑定所有事件
      */
     bindEvents() {
@@ -499,11 +514,7 @@ export class InteractionManager {
      * 鼠标移动事件
      */
     onMouseMove(e) {
-        const rect = this.svg.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
-        
-        // 画布平移
+        // 画布平移（使用屏幕坐标）
         if (this.isPanning) {
             this.viewOffset = {
                 x: e.clientX - this.panStart.x,
@@ -513,14 +524,16 @@ export class InteractionManager {
             return;
         }
         
-        // 拖动元器件 - 需要考虑视图偏移
+        // 其他操作使用画布坐标
+        const canvasCoords = this.screenToCanvas(e.clientX, e.clientY);
+        const canvasX = canvasCoords.x;
+        const canvasY = canvasCoords.y;
+        
+        // 拖动元器件
         if (this.isDragging && this.dragTarget) {
             const comp = this.circuit.getComponent(this.dragTarget);
             if (comp) {
-                // 将屏幕坐标转换为画布坐标（考虑平移和缩放）
-                const canvasX = (x - this.viewOffset.x) / this.scale;
-                const canvasY = (y - this.viewOffset.y) / this.scale;
-                // 对齐到网格
+                // 计算新位置并对齐到网格
                 comp.x = Math.round((canvasX - this.dragOffset.x) / 20) * 20;
                 comp.y = Math.round((canvasY - this.dragOffset.y) / 20) * 20;
                 this.renderer.updateComponentPosition(comp);
@@ -534,9 +547,6 @@ export class InteractionManager {
                 this.wireStart.terminalIndex
             );
             if (startPos) {
-                // 将屏幕坐标转换为画布坐标
-                const canvasX = (x - this.viewOffset.x) / this.scale;
-                const canvasY = (y - this.viewOffset.y) / this.scale;
                 this.renderer.updateTempWire(this.tempWire, startPos.x, startPos.y, canvasX, canvasY);
             }
         }
@@ -716,10 +726,11 @@ export class InteractionManager {
         this.dragTarget = id;
         this.isDraggingComponent = true; // 标记正在拖动元器件
         
-        const rect = this.svg.getBoundingClientRect();
+        // 使用统一的坐标转换，计算鼠标相对于元器件中心的偏移
+        const canvasCoords = this.screenToCanvas(e.clientX, e.clientY);
         this.dragOffset = {
-            x: e.clientX - rect.left - comp.x,
-            y: e.clientY - rect.top - comp.y
+            x: canvasCoords.x - comp.x,
+            y: canvasCoords.y - comp.y
         };
         
         this.selectComponent(id);
@@ -737,10 +748,9 @@ export class InteractionManager {
         
         const startPos = this.renderer.getTerminalPosition(componentId, terminalIndex);
         if (startPos) {
-            const rect = this.svg.getBoundingClientRect();
-            const x = e.clientX - rect.left;
-            const y = e.clientY - rect.top;
-            this.renderer.updateTempWire(this.tempWire, startPos.x, startPos.y, x, y);
+            // 使用统一的坐标转换
+            const canvasCoords = this.screenToCanvas(e.clientX, e.clientY);
+            this.renderer.updateTempWire(this.tempWire, startPos.x, startPos.y, canvasCoords.x, canvasCoords.y);
         }
     }
 
@@ -959,16 +969,14 @@ export class InteractionManager {
         const wire = this.circuit.getWire(wireId);
         if (!wire || !wire.controlPoints || !wire.controlPoints[pointIndex]) return;
         
-        const rect = this.svg.getBoundingClientRect();
-        
         const onMove = (moveE) => {
-            const x = moveE.clientX - rect.left;
-            const y = moveE.clientY - rect.top;
+            // 使用统一的坐标转换
+            const canvasCoords = this.screenToCanvas(moveE.clientX, moveE.clientY);
             
             // 对齐到网格
             wire.controlPoints[pointIndex] = {
-                x: Math.round(x / 20) * 20,
-                y: Math.round(y / 20) * 20
+                x: Math.round(canvasCoords.x / 20) * 20,
+                y: Math.round(canvasCoords.y / 20) * 20
             };
             
             this.renderer.refreshWire(wireId);
@@ -994,9 +1002,10 @@ export class InteractionManager {
             wire.controlPoints = [];
         }
         
-        const rect = this.svg.getBoundingClientRect();
-        const x = Math.round((e.clientX - rect.left) / 20) * 20;
-        const y = Math.round((e.clientY - rect.top) / 20) * 20;
+        // 使用统一的坐标转换
+        const canvasCoords = this.screenToCanvas(e.clientX, e.clientY);
+        const x = Math.round(canvasCoords.x / 20) * 20;
+        const y = Math.round(canvasCoords.y / 20) * 20;
         
         // 在指定段插入新控制点
         wire.controlPoints.splice(segmentIndex, 0, { x, y });
