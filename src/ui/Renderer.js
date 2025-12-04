@@ -340,6 +340,34 @@ export class Renderer {
     }
 
     /**
+     * 高亮端点（用于连接预览）
+     */
+    highlightTerminal(componentId, terminalIndex) {
+        this.clearTerminalHighlight();
+        
+        const pos = this.getTerminalPosition(componentId, terminalIndex);
+        if (!pos) return;
+        
+        const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        circle.setAttribute('cx', pos.x);
+        circle.setAttribute('cy', pos.y);
+        circle.setAttribute('r', 12);
+        circle.setAttribute('class', 'terminal-highlight');
+        circle.setAttribute('id', 'terminal-highlight');
+        this.uiLayer.appendChild(circle);
+    }
+
+    /**
+     * 清除端点高亮
+     */
+    clearTerminalHighlight() {
+        const existing = this.uiLayer.querySelector('#terminal-highlight');
+        if (existing) {
+            existing.remove();
+        }
+    }
+
+    /**
      * 清空所有渲染
      */
     clear() {

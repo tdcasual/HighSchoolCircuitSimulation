@@ -732,6 +732,12 @@ export const SVGRenderer = {
         g.setAttribute('class', 'wire-group');
         g.setAttribute('data-id', wire.id);
         
+        // 不可见的点击区域（更粗，便于点击）
+        const hitArea = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        hitArea.setAttribute('class', 'wire-hit-area');
+        hitArea.setAttribute('data-id', wire.id);
+        g.appendChild(hitArea);
+        
         // 主导线路径
         const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
         path.setAttribute('class', 'wire');
@@ -771,6 +777,7 @@ export const SVGRenderer = {
      */
     updateWirePathWithGroup(g, wire, getTerminalPosition) {
         const path = g.querySelector('path.wire');
+        const hitArea = g.querySelector('path.wire-hit-area');
         if (!path) return;
         
         const start = getTerminalPosition(wire.startComponentId, wire.startTerminalIndex);
@@ -784,39 +791,27 @@ export const SVGRenderer = {
         const d = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
         path.setAttribute('d', d);
         
-        // 移除旧的控制点和添加点圆圈
-        g.querySelectorAll('.wire-control-point, .wire-add-point').forEach(el => el.remove());
+        // 更新点击区域
+        if (hitArea) {
+            hitArea.setAttribute('d', d);
+        }
+        
+        // 移除旧的控制点圆圈
+        g.querySelectorAll('.wire-control-point, .wire-add-point, .wire-node-point').forEach(el => el.remove());
         
         // 如果导线被选中，显示控制点
         if (g.classList.contains('selected')) {
-            // 显示现有控制点（橙色大圆）
+            // 显示现有控制点（蓝色大圆，可拖动和连接）
             controlPoints.forEach((cp, i) => {
                 const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
                 circle.setAttribute('cx', cp.x);
                 circle.setAttribute('cy', cp.y);
-                circle.setAttribute('r', 6);
-                circle.setAttribute('class', 'wire-control-point');
+                circle.setAttribute('r', 7);
+                circle.setAttribute('class', 'wire-node-point');
                 circle.setAttribute('data-index', i);
                 circle.style.cursor = 'move';
                 g.appendChild(circle);
             });
-            
-            // 在每段导线中间显示可添加控制点的位置（蓝色小圆）
-            for (let i = 0; i < points.length - 1; i++) {
-                const p1 = points[i];
-                const p2 = points[i + 1];
-                const midX = (p1.x + p2.x) / 2;
-                const midY = (p1.y + p2.y) / 2;
-                
-                const addCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-                addCircle.setAttribute('cx', midX);
-                addCircle.setAttribute('cy', midY);
-                addCircle.setAttribute('r', 4);
-                addCircle.setAttribute('class', 'wire-add-point');
-                addCircle.setAttribute('data-segment', i);
-                addCircle.style.cursor = 'pointer';
-                g.appendChild(addCircle);
-            }
         }
     }
 };

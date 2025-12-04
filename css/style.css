@@ -429,6 +429,14 @@ body {
     cursor: pointer;
 }
 
+/* 不可见的点击区域 */
+.wire-hit-area {
+    fill: none;
+    stroke: transparent;
+    stroke-width: 12;
+    cursor: pointer;
+}
+
 .wire {
     fill: none;
     stroke: #333;
@@ -461,6 +469,21 @@ body {
     r: 8;
 }
 
+/* 导线节点点（蓝色，可拖动和连接） */
+.wire-node-point {
+    fill: #2196F3;
+    stroke: white;
+    stroke-width: 2;
+    cursor: move;
+    opacity: 0.9;
+    transition: r 0.15s ease;
+}
+
+.wire-node-point:hover {
+    fill: #1565C0;
+    r: 9 !important;
+}
+
 /* 添加控制点的按钮（中点） */
 .wire-add-point {
     fill: #2196F3;
@@ -474,6 +497,29 @@ body {
     fill: #1976D2;
     opacity: 1;
     r: 6;
+}
+
+/* 对齐辅助线 */
+.alignment-guide {
+    stroke: #2196F3;
+    stroke-width: 1;
+    stroke-dasharray: 6, 4;
+    pointer-events: none;
+    opacity: 0.8;
+}
+
+/* 端点高亮（连接预览） */
+.terminal-highlight {
+    fill: rgba(76, 175, 80, 0.3);
+    stroke: #4CAF50;
+    stroke-width: 2;
+    pointer-events: none;
+    animation: terminal-pulse 0.8s ease-in-out infinite;
+}
+
+@keyframes terminal-pulse {
+    0%, 100% { r: 12; opacity: 0.8; }
+    50% { r: 15; opacity: 1; }
 }
 
 .wire-temp {

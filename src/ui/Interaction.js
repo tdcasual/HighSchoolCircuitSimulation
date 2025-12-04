@@ -41,6 +41,10 @@ export class InteractionManager {
         this.viewOffset = { x: 0, y: 0 };
         this.scale = 1;
         
+        // 对齐辅助线
+        this.alignmentGuides = null;
+        this.snapThreshold = 10; // 吸附阈值（像素）
+        
         // 绑定事件
         this.bindEvents();
     }
@@ -424,24 +428,13 @@ export class InteractionManager {
             }
         }
         
-        // 检查是否点击了导线控制点（拖动控制点）
-        if (target.classList.contains('wire-control-point')) {
+        // 检查是否点击了导线控制点/节点（拖动）
+        if (target.classList.contains('wire-control-point') || target.classList.contains('wire-node-point')) {
             const wireGroup = target.closest('.wire-group');
             if (wireGroup) {
                 const wireId = wireGroup.dataset.id;
                 const pointIndex = parseInt(target.dataset.index, 10);
                 this.startControlPointDrag(wireId, pointIndex, e);
-                return;
-            }
-        }
-        
-        // 检查是否点击了添加控制点的位置
-        if (target.classList.contains('wire-add-point')) {
-            const wireGroup = target.closest('.wire-group');
-            if (wireGroup) {
-                const wireId = wireGroup.dataset.id;
-                const segmentIndex = parseInt(target.dataset.segment, 10);
-                this.addWireControlPoint(wireId, segmentIndex, e);
                 return;
             }
         }
@@ -454,10 +447,15 @@ export class InteractionManager {
         }
         
         // 检查是否点击了导线或导线组
-        if (target.classList.contains('wire')) {
+        if (target.classList.contains('wire') || target.classList.contains('wire-hit-area')) {
             const wireGroup = target.closest('.wire-group');
             const wireId = wireGroup ? wireGroup.dataset.id : target.dataset.id;
-            this.selectWire(wireId);
+            
+            // 获取点击位置
+            const canvasCoords = this.screenToCanvas(e.clientX, e.clientY);
+            
+            // 在点击位置添加控制点并开始拖动
+            this.addWireNodeAtPosition(wireId, canvasCoords.x, canvasCoords.y, e);
             return;
         }
         
@@ -492,6 +490,14 @@ export class InteractionManager {
                 );
             }
         });
+        
+        // 更新对齐辅助线组的变换
+        const guidesGroup = this.svg.querySelector('#alignment-guides');
+        if (guidesGroup) {
+            guidesGroup.setAttribute('transform', 
+                `translate(${this.viewOffset.x}, ${this.viewOffset.y}) scale(${this.scale})`
+            );
+        }
         
         // 更新缩放百分比显示
         const zoomLevel = document.getElementById('zoom-level');
@@ -529,14 +535,32 @@ export class InteractionManager {
         const canvasX = canvasCoords.x;
         const canvasY = canvasCoords.y;
         
-        // 拖动元器件
+        // 拖动元器件（平滑移动 + 对齐辅助）
         if (this.isDragging && this.dragTarget) {
             const comp = this.circuit.getComponent(this.dragTarget);
             if (comp) {
-                // 计算新位置并对齐到网格
-                comp.x = Math.round((canvasX - this.dragOffset.x) / 20) * 20;
-                comp.y = Math.round((canvasY - this.dragOffset.y) / 20) * 20;
+                // 计算新位置（不强制对齐网格，实现平滑移动）
+                let newX = canvasX - this.dragOffset.x;
+                let newY = canvasY - this.dragOffset.y;
+                
+                // 检测与其他元器件的对齐
+                const alignment = this.detectAlignment(comp.id, newX, newY);
+                
+                // 应用吸附
+                if (alignment.snapX !== null) {
+                    newX = alignment.snapX;
+                }
+                if (alignment.snapY !== null) {
+                    newY = alignment.snapY;
+                }
+                
+                // 更新位置
+                comp.x = newX;
+                comp.y = newY;
                 this.renderer.updateComponentPosition(comp);
+                
+                // 显示对齐辅助线
+                this.showAlignmentGuides(alignment);
             }
         }
         
@@ -568,6 +592,7 @@ export class InteractionManager {
             this.isDragging = false;
             this.dragTarget = null;
             this.isDraggingComponent = false; // 清除拖动标志
+            this.hideAlignmentGuides(); // 隐藏对齐辅助线
             this.circuit.rebuildNodes();
         }
         
@@ -622,7 +647,7 @@ export class InteractionManager {
      */
     onDoubleClick(e) {
         // 双击控制点删除它
-        if (e.target.classList.contains('wire-control-point')) {
+        if (e.target.classList.contains('wire-control-point') || e.target.classList.contains('wire-node-point')) {
             const wireGroup = e.target.closest('.wire-group');
             if (wireGroup) {
                 const wireId = wireGroup.dataset.id;
@@ -811,7 +836,7 @@ export class InteractionManager {
     }
 
     /**
-     * 端子延长拖动
+     * 端子延长拖动（平滑移动，支持对齐）
      */
     startTerminalExtend(componentId, terminalIndex, e) {
         const comp = this.circuit.getComponent(componentId);
@@ -832,9 +857,9 @@ export class InteractionManager {
         const rotation = (comp.rotation || 0) * Math.PI / 180;
         
         const onMove = (moveE) => {
-            // 计算鼠标移动向量（屏幕坐标）
-            const dx = moveE.clientX - startX;
-            const dy = moveE.clientY - startY;
+            // 计算鼠标移动向量（屏幕坐标，考虑缩放）
+            const dx = (moveE.clientX - startX) / this.scale;
+            const dy = (moveE.clientY - startY) / this.scale;
             
             // 将移动向量转换到元器件本地坐标系
             const cos = Math.cos(-rotation);
@@ -842,11 +867,33 @@ export class InteractionManager {
             const localDx = dx * cos - dy * sin;
             const localDy = dx * sin + dy * cos;
             
-            // 更新延长偏移（对齐到网格）
-            comp.terminalExtensions[terminalIndex] = {
-                x: Math.round((startExtX + localDx) / 20) * 20,
-                y: Math.round((startExtY + localDy) / 20) * 20
-            };
+            // 计算新的延长偏移（平滑移动，不强制对齐网格）
+            let newExtX = startExtX + localDx;
+            let newExtY = startExtY + localDy;
+            
+            // 检测对齐（可选：与网格对齐）
+            const snapThreshold = 8;
+            const gridX = Math.round(newExtX / 20) * 20;
+            const gridY = Math.round(newExtY / 20) * 20;
+            
+            let guideLines = [];
+            if (Math.abs(newExtX - gridX) < snapThreshold) {
+                newExtX = gridX;
+            }
+            if (Math.abs(newExtY - gridY) < snapThreshold) {
+                newExtY = gridY;
+            }
+            
+            // 检测与水平/垂直方向的对齐
+            if (Math.abs(newExtY) < snapThreshold) {
+                newExtY = 0;
+                // 可以添加水平辅助线
+            }
+            if (Math.abs(newExtX) < snapThreshold) {
+                newExtX = 0;
+            }
+            
+            comp.terminalExtensions[terminalIndex] = { x: newExtX, y: newExtY };
             
             // 重新渲染元器件
             this.renderer.refreshComponent(comp);
@@ -859,6 +906,7 @@ export class InteractionManager {
         const onUp = () => {
             document.removeEventListener('mousemove', onMove);
             document.removeEventListener('mouseup', onUp);
+            this.hideAlignmentGuides();
             this.updateStatus('端子位置已调整');
         };
         
@@ -955,40 +1003,325 @@ export class InteractionManager {
         content.appendChild(createPropertyRow('类型', '导线'));
         content.appendChild(createPropertyRow('控制点', `${controlPointCount} 个`));
         content.appendChild(createHintParagraph([
-            '点击蓝色圆点添加转折点',
-            '拖动橙色圆点调整形状',
-            '双击橙色圆点删除控制点',
+            '点击导线任意位置添加蓝色节点',
+            '拖动节点到元器件端点可创建新连接',
+            '双击节点删除该节点',
             '按 Delete 键删除导线'
         ]));
     }
 
     /**
-     * 拖动导线控制点
+     * 拖动导线控制点（平滑移动，可选网格吸附，支持连接到端点）
      */
     startControlPointDrag(wireId, pointIndex, e) {
         const wire = this.circuit.getWire(wireId);
         if (!wire || !wire.controlPoints || !wire.controlPoints[pointIndex]) return;
         
+        // 选中该导线
+        this.selectWire(wireId);
+        
+        let nearbyTerminal = null; // 记录附近的端点
+        
         const onMove = (moveE) => {
             // 使用统一的坐标转换
             const canvasCoords = this.screenToCanvas(moveE.clientX, moveE.clientY);
             
-            // 对齐到网格
-            wire.controlPoints[pointIndex] = {
-                x: Math.round(canvasCoords.x / 20) * 20,
-                y: Math.round(canvasCoords.y / 20) * 20
-            };
+            let x = canvasCoords.x;
+            let y = canvasCoords.y;
             
+            // 检测附近的端点（用于连接）
+            nearbyTerminal = this.findNearbyTerminal(x, y, 20);
+            
+            // 如果有附近的端点，吸附到它并高亮
+            if (nearbyTerminal) {
+                const termPos = this.renderer.getTerminalPosition(
+                    nearbyTerminal.componentId, 
+                    nearbyTerminal.terminalIndex
+                );
+                if (termPos) {
+                    x = termPos.x;
+                    y = termPos.y;
+                }
+                // 高亮端点
+                this.renderer.highlightTerminal(nearbyTerminal.componentId, nearbyTerminal.terminalIndex);
+                this.hideAlignmentGuides();
+            } else {
+                // 清除端点高亮
+                this.renderer.clearTerminalHighlight();
+                
+                // 检测与其他点的对齐（水平/垂直）
+                const otherPoints = this.getWireAlignmentPoints(wire, pointIndex);
+                const snapThreshold = 8;
+                
+                let snapInfo = { guideLines: [] };
+                
+                for (const p of otherPoints) {
+                    // 水平对齐
+                    if (Math.abs(y - p.y) < snapThreshold) {
+                        y = p.y;
+                        snapInfo.guideLines.push({
+                            type: 'horizontal',
+                            y: p.y,
+                            x1: Math.min(x, p.x) - 20,
+                            x2: Math.max(x, p.x) + 20
+                        });
+                    }
+                    // 垂直对齐
+                    if (Math.abs(x - p.x) < snapThreshold) {
+                        x = p.x;
+                        snapInfo.guideLines.push({
+                            type: 'vertical',
+                            x: p.x,
+                            y1: Math.min(y, p.y) - 20,
+                            y2: Math.max(y, p.y) + 20
+                        });
+                    }
+                }
+                this.showAlignmentGuides(snapInfo);
+            }
+            
+            wire.controlPoints[pointIndex] = { x, y };
             this.renderer.refreshWire(wireId);
         };
         
-        const onUp = () => {
+        const onUp = (upE) => {
             document.removeEventListener('mousemove', onMove);
             document.removeEventListener('mouseup', onUp);
+            this.hideAlignmentGuides();
+            this.renderer.clearTerminalHighlight();
+            
+            // 如果释放时在端点附近，创建新的连接
+            if (nearbyTerminal) {
+                this.splitWireAtNode(wireId, pointIndex, nearbyTerminal);
+            }
         };
         
         document.addEventListener('mousemove', onMove);
         document.addEventListener('mouseup', onUp);
+    }
+
+    /**
+     * 查找附近的端点
+     * @param {number} x - x坐标
+     * @param {number} y - y坐标  
+     * @param {number} threshold - 距离阈值
+     * @returns {Object|null} 端点信息 {componentId, terminalIndex} 或 null
+     */
+    findNearbyTerminal(x, y, threshold) {
+        for (const [id, comp] of this.circuit.components) {
+            // 检查每个端点
+            const terminalCount = comp.type === 'Rheostat' ? 3 : 2;
+            for (let ti = 0; ti < terminalCount; ti++) {
+                const pos = this.renderer.getTerminalPosition(id, ti);
+                if (pos) {
+                    const dist = Math.sqrt((x - pos.x) ** 2 + (y - pos.y) ** 2);
+                    if (dist < threshold) {
+                        return { componentId: id, terminalIndex: ti };
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 在导线节点处分割导线并连接到新端点
+     * @param {string} wireId - 原导线ID
+     * @param {number} nodeIndex - 节点索引
+     * @param {Object} terminal - 目标端点 {componentId, terminalIndex}
+     */
+    splitWireAtNode(wireId, nodeIndex, terminal) {
+        const wire = this.circuit.getWire(wireId);
+        if (!wire || !wire.controlPoints) return;
+        
+        // 获取节点位置
+        const nodePos = wire.controlPoints[nodeIndex];
+        if (!nodePos) return;
+        
+        // 创建一个新的临时元器件作为连接点（或者直接创建分支导线）
+        // 更简单的方案：创建一条新导线从该节点到目标端点
+        
+        // 由于导线节点不是真正的电气节点，我们需要用一种方式让它成为可连接的点
+        // 这里我们用一个简单的方案：
+        // 1. 将原导线在节点处分成两段
+        // 2. 创建第三条导线连接到目标端点
+        
+        // 但这需要一个"连接点"元器件，让我们用更简单的方案：
+        // 直接创建一条从原导线起点/终点到目标端点的新导线
+        
+        // 获取节点前后的路径点
+        const startPos = this.renderer.getTerminalPosition(wire.startComponentId, wire.startTerminalIndex);
+        const endPos = this.renderer.getTerminalPosition(wire.endComponentId, wire.endTerminalIndex);
+        
+        if (!startPos || !endPos) return;
+        
+        // 创建两条新导线代替原来的一条
+        // 导线1: 原起点 -> 目标端点（经过节点之前的控制点）
+        // 导线2: 目标端点 -> 原终点（经过节点之后的控制点）
+        
+        const controlPointsBefore = wire.controlPoints.slice(0, nodeIndex);
+        const controlPointsAfter = wire.controlPoints.slice(nodeIndex + 1);
+        
+        // 删除节点（不分割导线，只是移除该节点）
+        wire.controlPoints.splice(nodeIndex, 1);
+        
+        // 创建新导线连接节点位置到目标端点
+        // 我们需要找到离节点最近的已有端点
+        // 简化方案：创建一条从目标端点到...的导线
+        // 实际上，我们需要在该位置创建一个"节点标记"
+        
+        // 更实际的方案：提示用户这个功能需要手动连接
+        // 或者：直接删除这个节点，让用户重新连线
+        
+        // 最简单有效的方案：创建一条新导线，从最近的现有端点连接到目标端点
+        // 找到离节点最近的端点（起点或终点）
+        const distToStart = Math.sqrt((nodePos.x - startPos.x) ** 2 + (nodePos.y - startPos.y) ** 2);
+        const distToEnd = Math.sqrt((nodePos.x - endPos.x) ** 2 + (nodePos.y - endPos.y) ** 2);
+        
+        let fromComponent, fromTerminal;
+        if (distToStart < distToEnd) {
+            fromComponent = wire.startComponentId;
+            fromTerminal = wire.startTerminalIndex;
+        } else {
+            fromComponent = wire.endComponentId;
+            fromTerminal = wire.endTerminalIndex;
+        }
+        
+        // 检查是否已经有这个连接
+        let alreadyConnected = false;
+        for (const existingWire of this.circuit.getAllWires()) {
+            if ((existingWire.startComponentId === fromComponent && 
+                 existingWire.startTerminalIndex === fromTerminal &&
+                 existingWire.endComponentId === terminal.componentId &&
+                 existingWire.endTerminalIndex === terminal.terminalIndex) ||
+                (existingWire.endComponentId === fromComponent && 
+                 existingWire.endTerminalIndex === fromTerminal &&
+                 existingWire.startComponentId === terminal.componentId &&
+                 existingWire.startTerminalIndex === terminal.terminalIndex)) {
+                alreadyConnected = true;
+                break;
+            }
+        }
+        
+        if (!alreadyConnected) {
+            // 创建新导线
+            const newWire = {
+                id: `wire_${Date.now()}`,
+                startComponentId: fromComponent,
+                startTerminalIndex: fromTerminal,
+                endComponentId: terminal.componentId,
+                endTerminalIndex: terminal.terminalIndex,
+                controlPoints: [nodePos] // 经过原节点位置
+            };
+            
+            this.circuit.addWire(newWire);
+            this.renderer.addWire(newWire);
+            this.updateStatus('已创建新连接');
+        }
+        
+        // 刷新原导线显示
+        this.renderer.refreshWire(wireId);
+        this.circuit.rebuildNodes();
+    }
+
+    /**
+     * 获取导线上用于对齐的所有点（排除当前拖动的点）
+     */
+    getWireAlignmentPoints(wire, excludeIndex) {
+        const points = [];
+        
+        // 添加起点和终点
+        const startPos = this.renderer.getTerminalPosition(wire.startComponentId, wire.startTerminalIndex);
+        const endPos = this.renderer.getTerminalPosition(wire.endComponentId, wire.endTerminalIndex);
+        
+        if (startPos) points.push(startPos);
+        if (endPos) points.push(endPos);
+        
+        // 添加其他控制点
+        if (wire.controlPoints) {
+            wire.controlPoints.forEach((cp, i) => {
+                if (i !== excludeIndex) {
+                    points.push(cp);
+                }
+            });
+        }
+        
+        return points;
+    }
+
+    /**
+     * 在导线上的任意位置添加节点
+     * @param {string} wireId - 导线ID
+     * @param {number} clickX - 点击的x坐标
+     * @param {number} clickY - 点击的y坐标
+     * @param {MouseEvent} e - 鼠标事件
+     */
+    addWireNodeAtPosition(wireId, clickX, clickY, e) {
+        const wire = this.circuit.getWire(wireId);
+        if (!wire) return;
+        
+        // 获取导线的所有路径点
+        const startPos = this.renderer.getTerminalPosition(wire.startComponentId, wire.startTerminalIndex);
+        const endPos = this.renderer.getTerminalPosition(wire.endComponentId, wire.endTerminalIndex);
+        
+        if (!startPos || !endPos) return;
+        
+        const controlPoints = wire.controlPoints || [];
+        const allPoints = [startPos, ...controlPoints, endPos];
+        
+        // 找到点击位置最近的线段
+        let bestSegment = 0;
+        let minDist = Infinity;
+        
+        for (let i = 0; i < allPoints.length - 1; i++) {
+            const p1 = allPoints[i];
+            const p2 = allPoints[i + 1];
+            const dist = this.pointToSegmentDistance(clickX, clickY, p1.x, p1.y, p2.x, p2.y);
+            if (dist < minDist) {
+                minDist = dist;
+                bestSegment = i;
+            }
+        }
+        
+        // 初始化控制点数组
+        if (!wire.controlPoints) {
+            wire.controlPoints = [];
+        }
+        
+        // 在最近的线段位置插入新控制点（使用点击位置，不吸附到网格）
+        const newPoint = { x: clickX, y: clickY };
+        wire.controlPoints.splice(bestSegment, 0, newPoint);
+        
+        // 选中导线并刷新显示
+        this.selectWire(wireId);
+        this.renderer.refreshWire(wireId);
+        
+        // 立即开始拖动新控制点
+        this.startControlPointDrag(wireId, bestSegment, e);
+    }
+
+    /**
+     * 计算点到线段的距离
+     */
+    pointToSegmentDistance(px, py, x1, y1, x2, y2) {
+        const dx = x2 - x1;
+        const dy = y2 - y1;
+        const len2 = dx * dx + dy * dy;
+        
+        if (len2 === 0) {
+            // 线段退化为点
+            return Math.sqrt((px - x1) ** 2 + (py - y1) ** 2);
+        }
+        
+        // 投影参数 t，限制在 [0, 1] 范围内
+        let t = ((px - x1) * dx + (py - y1) * dy) / len2;
+        t = Math.max(0, Math.min(1, t));
+        
+        // 最近点
+        const nearestX = x1 + t * dx;
+        const nearestY = y1 + t * dy;
+        
+        return Math.sqrt((px - nearestX) ** 2 + (py - nearestY) ** 2);
     }
 
     /**
@@ -1594,5 +1927,112 @@ export class InteractionManager {
      */
     updateStatus(text) {
         document.getElementById('status-text').textContent = text;
+    }
+
+    /**
+     * 检测与其他元器件的对齐
+     * @param {string} draggedId - 正在拖动的元器件ID
+     * @param {number} x - 当前x坐标
+     * @param {number} y - 当前y坐标
+     * @returns {Object} 对齐信息
+     */
+    detectAlignment(draggedId, x, y) {
+        const result = {
+            snapX: null,
+            snapY: null,
+            guideLines: []
+        };
+        
+        const threshold = this.snapThreshold;
+        
+        // 收集所有其他元器件的位置
+        const otherPositions = [];
+        for (const [id, comp] of this.circuit.components) {
+            if (id !== draggedId) {
+                otherPositions.push({ x: comp.x, y: comp.y, id });
+            }
+        }
+        
+        // 检测水平对齐（y相同）
+        for (const other of otherPositions) {
+            const diffY = Math.abs(y - other.y);
+            if (diffY < threshold) {
+                result.snapY = other.y;
+                result.guideLines.push({
+                    type: 'horizontal',
+                    y: other.y,
+                    x1: Math.min(x, other.x) - 50,
+                    x2: Math.max(x, other.x) + 50
+                });
+                break;
+            }
+        }
+        
+        // 检测垂直对齐（x相同）
+        for (const other of otherPositions) {
+            const diffX = Math.abs(x - other.x);
+            if (diffX < threshold) {
+                result.snapX = other.x;
+                result.guideLines.push({
+                    type: 'vertical',
+                    x: other.x,
+                    y1: Math.min(y, other.y) - 50,
+                    y2: Math.max(y, other.y) + 50
+                });
+                break;
+            }
+        }
+        
+        return result;
+    }
+
+    /**
+     * 显示对齐辅助线
+     */
+    showAlignmentGuides(alignment) {
+        // 获取或创建辅助线容器
+        let guidesGroup = this.svg.querySelector('#alignment-guides');
+        if (!guidesGroup) {
+            guidesGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            guidesGroup.id = 'alignment-guides';
+            // 应用与其他图层相同的变换
+            guidesGroup.setAttribute('transform', 
+                `translate(${this.viewOffset.x}, ${this.viewOffset.y}) scale(${this.scale})`
+            );
+            this.svg.appendChild(guidesGroup);
+        }
+        
+        // 清除旧的辅助线
+        guidesGroup.innerHTML = '';
+        
+        // 绘制新的辅助线
+        for (const guide of alignment.guideLines) {
+            const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            line.setAttribute('class', 'alignment-guide');
+            
+            if (guide.type === 'horizontal') {
+                line.setAttribute('x1', guide.x1);
+                line.setAttribute('y1', guide.y);
+                line.setAttribute('x2', guide.x2);
+                line.setAttribute('y2', guide.y);
+            } else {
+                line.setAttribute('x1', guide.x);
+                line.setAttribute('y1', guide.y1);
+                line.setAttribute('x2', guide.x);
+                line.setAttribute('y2', guide.y2);
+            }
+            
+            guidesGroup.appendChild(line);
+        }
+    }
+
+    /**
+     * 隐藏对齐辅助线
+     */
+    hideAlignmentGuides() {
+        const guidesGroup = this.svg.querySelector('#alignment-guides');
+        if (guidesGroup) {
+            guidesGroup.innerHTML = '';
+        }
     }
 }
