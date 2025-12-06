@@ -273,6 +273,38 @@ export class Circuit {
     }
 
     /**
+     * 检查元器件是否真正连接到电路中
+     * 对于双端子元器件，需要两个端子都有导线连接
+     * @param {string} componentId - 元器件ID
+     * @returns {boolean} 是否连接
+     */
+    isComponentConnected(componentId) {
+        const comp = this.components.get(componentId);
+        if (!comp) return false;
+        
+        const terminalCount = comp.type === 'Rheostat' ? 3 : 2;
+        const terminalConnected = new Array(terminalCount).fill(false);
+        
+        for (const [wireId, wire] of this.wires) {
+            if (wire.startComponentId === componentId) {
+                terminalConnected[wire.startTerminalIndex] = true;
+            }
+            if (wire.endComponentId === componentId) {
+                terminalConnected[wire.endTerminalIndex] = true;
+            }
+        }
+        
+        // 对于普通双端子元器件，需要两个端子都连接
+        if (comp.type !== 'Rheostat') {
+            return terminalConnected[0] && terminalConnected[1];
+        }
+        
+        // 对于滑动变阻器，至少需要两个端子连接才能形成回路
+        const connectedCount = terminalConnected.filter(x => x).length;
+        return connectedCount >= 2;
+    }
+
+    /**
      * 开始模拟
      */
     startSimulation() {
@@ -353,6 +385,20 @@ export class Circuit {
                 const current = this.lastResults.currents.get(id) || 0;
                 const v1 = this.lastResults.voltages[comp.nodes[0]] || 0;
                 const v2 = this.lastResults.voltages[comp.nodes[1]] || 0;
+                
+                // 检查元器件是否真正连接到电路（两个端子都有导线连接）
+                const isConnected = this.isComponentConnected(id);
+                
+                // 如果元器件未连接，所有值都应该为0
+                if (!isConnected) {
+                    comp.currentValue = 0;
+                    comp.voltageValue = 0;
+                    comp.powerValue = 0;
+                    if (comp.type === 'Bulb') {
+                        comp.brightness = 0;
+                    }
+                    continue;
+                }
                 
                 comp.currentValue = current;
                 

@@ -391,6 +391,13 @@ export class InteractionManager {
         
         const target = e.target;
         
+        // 如果正在连线模式，点击非端子/非节点的地方应该取消连线
+        // 点击端子或节点会在 onMouseUp 中处理
+        if (this.isWiring) {
+            // 连线模式下的 mousedown 不做特殊处理，让 mouseup 来处理
+            return;
+        }
+        
         // 检查是否点击了端子
         if (target.classList.contains('terminal')) {
             const componentG = target.closest('.component');
@@ -428,13 +435,14 @@ export class InteractionManager {
             }
         }
         
-        // 检查是否点击了导线控制点/节点（拖动）
+        // 检查是否点击了导线控制点/节点（拖动移动，或点击后开始连线）
         if (target.classList.contains('wire-control-point') || target.classList.contains('wire-node-point')) {
             const wireGroup = target.closest('.wire-group');
             if (wireGroup) {
                 const wireId = wireGroup.dataset.id;
                 const pointIndex = parseInt(target.dataset.index, 10);
-                this.startControlPointDrag(wireId, pointIndex, e);
+                // 默认拖动移动节点；如果只是点击（没有移动），则在mouseup时开始连线
+                this.startControlPointDragOrWiring(wireId, pointIndex, e);
                 return;
             }
         }
@@ -446,16 +454,11 @@ export class InteractionManager {
             return;
         }
         
-        // 检查是否点击了导线或导线组
+        // 检查是否点击了导线或导线组（单击只选中，双击添加节点）
         if (target.classList.contains('wire') || target.classList.contains('wire-hit-area')) {
             const wireGroup = target.closest('.wire-group');
             const wireId = wireGroup ? wireGroup.dataset.id : target.dataset.id;
-            
-            // 获取点击位置
-            const canvasCoords = this.screenToCanvas(e.clientX, e.clientY);
-            
-            // 在点击位置添加控制点并开始拖动
-            this.addWireNodeAtPosition(wireId, canvasCoords.x, canvasCoords.y, e);
+            this.selectWire(wireId);
             return;
         }
         
@@ -566,10 +569,17 @@ export class InteractionManager {
         
         // 连线预览
         if (this.isWiring && this.wireStart && this.tempWire) {
-            const startPos = this.renderer.getTerminalPosition(
-                this.wireStart.componentId, 
-                this.wireStart.terminalIndex
-            );
+            let startPos;
+            if (this.wireStart.isWireNode) {
+                // 从导线节点开始
+                startPos = this.wireStart.position;
+            } else {
+                // 从端子开始
+                startPos = this.renderer.getTerminalPosition(
+                    this.wireStart.componentId, 
+                    this.wireStart.terminalIndex
+                );
+            }
             if (startPos) {
                 this.renderer.updateTempWire(this.tempWire, startPos.x, startPos.y, canvasX, canvasY);
             }
@@ -605,6 +615,14 @@ export class InteractionManager {
                     const componentId = componentG.dataset.id;
                     const terminalIndex = parseInt(target.dataset.terminal);
                     this.endWiring(componentId, terminalIndex);
+                }
+            } else if (target.classList.contains('wire-node-point')) {
+                // 连接到导线节点
+                const wireGroup = target.closest('.wire-group');
+                if (wireGroup) {
+                    const wireId = wireGroup.dataset.id;
+                    const nodeIndex = parseInt(target.dataset.index, 10);
+                    this.endWiringToNode(wireId, nodeIndex);
                 }
             } else {
                 this.cancelWiring();
@@ -655,6 +673,19 @@ export class InteractionManager {
                 this.removeWireControlPoint(wireId, pointIndex);
                 return;
             }
+        }
+        
+        // 双击导线添加节点
+        if (e.target.classList.contains('wire') || e.target.classList.contains('wire-hit-area')) {
+            const wireGroup = e.target.closest('.wire-group');
+            const wireId = wireGroup ? wireGroup.dataset.id : e.target.dataset.id;
+            
+            // 获取点击位置
+            const canvasCoords = this.screenToCanvas(e.clientX, e.clientY);
+            
+            // 在点击位置添加控制点
+            this.addWireNodeAtPosition(wireId, canvasCoords.x, canvasCoords.y, e);
+            return;
         }
         
         // 双击元器件打开属性编辑
@@ -780,10 +811,49 @@ export class InteractionManager {
     }
 
     /**
+     * 从导线节点开始连线
+     */
+    startWiringFromNode(wireId, nodeIndex, e) {
+        const wire = this.circuit.getWire(wireId);
+        if (!wire || !wire.controlPoints || !wire.controlPoints[nodeIndex]) return;
+        
+        // 确保清除任何残留的辅助线和高亮
+        this.hideAlignmentGuides();
+        this.renderer.clearTerminalHighlight();
+        
+        const nodePos = wire.controlPoints[nodeIndex];
+        
+        this.isWiring = true;
+        // 记录连线起点为导线节点
+        this.wireStart = { 
+            isWireNode: true,
+            wireId: wireId,
+            nodeIndex: nodeIndex,
+            position: nodePos
+        };
+        
+        // 选中该导线
+        this.selectWire(wireId);
+        
+        // 创建临时导线
+        this.tempWire = this.renderer.createTempWire();
+        
+        // 使用统一的坐标转换
+        const canvasCoords = this.screenToCanvas(e.clientX, e.clientY);
+        this.renderer.updateTempWire(this.tempWire, nodePos.x, nodePos.y, canvasCoords.x, canvasCoords.y);
+    }
+
+    /**
      * 结束连线
      */
     endWiring(componentId, terminalIndex) {
         if (!this.wireStart) return;
+        
+        // 如果是从导线节点开始的连线
+        if (this.wireStart.isWireNode) {
+            this.endWiringFromNodeToTerminal(componentId, terminalIndex);
+            return;
+        }
         
         // 不能连接到自己
         if (this.wireStart.componentId === componentId && 
@@ -824,6 +894,255 @@ export class InteractionManager {
     }
 
     /**
+     * 从导线节点开始连线到端子
+     * 所见即所得：从节点位置创建一条新导线连接到目标端子
+     */
+    endWiringFromNodeToTerminal(componentId, terminalIndex) {
+        const sourceWire = this.circuit.getWire(this.wireStart.wireId);
+        if (!sourceWire || !sourceWire.controlPoints) {
+            this.cancelWiring();
+            return;
+        }
+        
+        const nodePos = this.wireStart.position;
+        
+        // 找到离节点更近的那个端点作为"中转"
+        const startTerminalPos = this.renderer.getTerminalPosition(
+            sourceWire.startComponentId, 
+            sourceWire.startTerminalIndex
+        );
+        const endTerminalPos = this.renderer.getTerminalPosition(
+            sourceWire.endComponentId, 
+            sourceWire.endTerminalIndex
+        );
+        
+        let hubComponentId, hubTerminalIndex;
+        
+        if (startTerminalPos && endTerminalPos) {
+            const distToStart = Math.hypot(nodePos.x - startTerminalPos.x, nodePos.y - startTerminalPos.y);
+            const distToEnd = Math.hypot(nodePos.x - endTerminalPos.x, nodePos.y - endTerminalPos.y);
+            
+            if (distToStart <= distToEnd) {
+                hubComponentId = sourceWire.startComponentId;
+                hubTerminalIndex = sourceWire.startTerminalIndex;
+            } else {
+                hubComponentId = sourceWire.endComponentId;
+                hubTerminalIndex = sourceWire.endTerminalIndex;
+            }
+        } else {
+            // 回退：使用起始端点
+            hubComponentId = sourceWire.startComponentId;
+            hubTerminalIndex = sourceWire.startTerminalIndex;
+        }
+        
+        // 创建一条新导线：从源导线的较近端点连接到目标端点
+        // 控制点经过节点位置，实现视觉上"从节点连出"的效果
+        const newWire = {
+            id: `wire_${Date.now()}`,
+            startComponentId: hubComponentId,
+            startTerminalIndex: hubTerminalIndex,
+            endComponentId: componentId,
+            endTerminalIndex: terminalIndex,
+            controlPoints: [nodePos]  // 经过节点位置
+        };
+        
+        this.circuit.addWire(newWire);
+        this.renderer.addWire(newWire);
+        
+        // 重建节点
+        this.circuit.rebuildNodes();
+        
+        this.cancelWiring();
+        this.updateStatus('已添加连接');
+    }
+
+    /**
+     * 结束连线到导线节点
+     * 所见即所得：创建一条新导线连接两个端点，经过节点位置
+     */
+    endWiringToNode(targetWireId, nodeIndex) {
+        if (!this.wireStart) return;
+        
+        // 如果从导线节点开始连接到另一个节点
+        if (this.wireStart.isWireNode) {
+            this.endWiringNodeToNode(targetWireId, nodeIndex);
+            return;
+        }
+        
+        // 从端子连接到导线节点
+        const targetWire = this.circuit.getWire(targetWireId);
+        if (!targetWire || !targetWire.controlPoints) {
+            this.cancelWiring();
+            return;
+        }
+        
+        const nodePos = targetWire.controlPoints[nodeIndex];
+        if (!nodePos) {
+            this.cancelWiring();
+            return;
+        }
+        
+        // 找到离节点更近的那个端点作为"中转"
+        const startTerminalPos = this.renderer.getTerminalPosition(
+            targetWire.startComponentId, 
+            targetWire.startTerminalIndex
+        );
+        const endTerminalPos = this.renderer.getTerminalPosition(
+            targetWire.endComponentId, 
+            targetWire.endTerminalIndex
+        );
+        
+        let hubComponentId, hubTerminalIndex;
+        
+        if (startTerminalPos && endTerminalPos) {
+            const distToStart = Math.hypot(nodePos.x - startTerminalPos.x, nodePos.y - startTerminalPos.y);
+            const distToEnd = Math.hypot(nodePos.x - endTerminalPos.x, nodePos.y - endTerminalPos.y);
+            
+            if (distToStart <= distToEnd) {
+                hubComponentId = targetWire.startComponentId;
+                hubTerminalIndex = targetWire.startTerminalIndex;
+            } else {
+                hubComponentId = targetWire.endComponentId;
+                hubTerminalIndex = targetWire.endTerminalIndex;
+            }
+        } else {
+            // 回退：使用起始端点
+            hubComponentId = targetWire.startComponentId;
+            hubTerminalIndex = targetWire.startTerminalIndex;
+        }
+        
+        // 创建一条新导线：从起始端点连接到目标导线的较近端点
+        // 控制点经过节点位置，实现视觉上"连到节点"的效果
+        const newWire = {
+            id: `wire_${Date.now()}`,
+            startComponentId: this.wireStart.componentId,
+            startTerminalIndex: this.wireStart.terminalIndex,
+            endComponentId: hubComponentId,
+            endTerminalIndex: hubTerminalIndex,
+            controlPoints: [nodePos]  // 经过节点位置
+        };
+        
+        this.circuit.addWire(newWire);
+        this.renderer.addWire(newWire);
+        
+        // 重建节点
+        this.circuit.rebuildNodes();
+        
+        this.cancelWiring();
+        this.updateStatus('已添加连接');
+    }
+
+    /**
+     * 从导线节点连接到另一个导线节点
+     * 所见即所得：创建一条新导线连接两条导线的端点，经过两个节点位置
+     */
+    endWiringNodeToNode(targetWireId, targetNodeIndex) {
+        const sourceWireId = this.wireStart.wireId;
+        const sourceNodeIndex = this.wireStart.nodeIndex;
+        
+        // 不能连接同一条导线的同一个节点
+        if (sourceWireId === targetWireId && sourceNodeIndex === targetNodeIndex) {
+            this.cancelWiring();
+            return;
+        }
+        
+        const sourceWire = this.circuit.getWire(sourceWireId);
+        const targetWire = this.circuit.getWire(targetWireId);
+        
+        if (!sourceWire || !sourceWire.controlPoints || !targetWire || !targetWire.controlPoints) {
+            this.cancelWiring();
+            return;
+        }
+        
+        const sourceNodePos = this.wireStart.position;
+        const targetNodePos = targetWire.controlPoints[targetNodeIndex];
+        
+        if (!sourceNodePos || !targetNodePos) {
+            this.cancelWiring();
+            return;
+        }
+        
+        // 如果是同一条导线的不同节点，不需要创建新连接（已经连通）
+        if (sourceWireId === targetWireId) {
+            this.cancelWiring();
+            this.updateStatus('同一导线上的节点已连通');
+            return;
+        }
+        
+        // 找到源导线离节点更近的端点
+        const sourceStartPos = this.renderer.getTerminalPosition(
+            sourceWire.startComponentId, 
+            sourceWire.startTerminalIndex
+        );
+        const sourceEndPos = this.renderer.getTerminalPosition(
+            sourceWire.endComponentId, 
+            sourceWire.endTerminalIndex
+        );
+        
+        let sourceHubComponentId, sourceHubTerminalIndex;
+        if (sourceStartPos && sourceEndPos) {
+            const distToStart = Math.hypot(sourceNodePos.x - sourceStartPos.x, sourceNodePos.y - sourceStartPos.y);
+            const distToEnd = Math.hypot(sourceNodePos.x - sourceEndPos.x, sourceNodePos.y - sourceEndPos.y);
+            if (distToStart <= distToEnd) {
+                sourceHubComponentId = sourceWire.startComponentId;
+                sourceHubTerminalIndex = sourceWire.startTerminalIndex;
+            } else {
+                sourceHubComponentId = sourceWire.endComponentId;
+                sourceHubTerminalIndex = sourceWire.endTerminalIndex;
+            }
+        } else {
+            sourceHubComponentId = sourceWire.startComponentId;
+            sourceHubTerminalIndex = sourceWire.startTerminalIndex;
+        }
+        
+        // 找到目标导线离节点更近的端点
+        const targetStartPos = this.renderer.getTerminalPosition(
+            targetWire.startComponentId, 
+            targetWire.startTerminalIndex
+        );
+        const targetEndPos = this.renderer.getTerminalPosition(
+            targetWire.endComponentId, 
+            targetWire.endTerminalIndex
+        );
+        
+        let targetHubComponentId, targetHubTerminalIndex;
+        if (targetStartPos && targetEndPos) {
+            const distToStart = Math.hypot(targetNodePos.x - targetStartPos.x, targetNodePos.y - targetStartPos.y);
+            const distToEnd = Math.hypot(targetNodePos.x - targetEndPos.x, targetNodePos.y - targetEndPos.y);
+            if (distToStart <= distToEnd) {
+                targetHubComponentId = targetWire.startComponentId;
+                targetHubTerminalIndex = targetWire.startTerminalIndex;
+            } else {
+                targetHubComponentId = targetWire.endComponentId;
+                targetHubTerminalIndex = targetWire.endTerminalIndex;
+            }
+        } else {
+            targetHubComponentId = targetWire.startComponentId;
+            targetHubTerminalIndex = targetWire.startTerminalIndex;
+        }
+        
+        // 创建一条新导线连接两条导线的较近端点
+        // 控制点经过两个节点位置
+        const newWire = {
+            id: `wire_${Date.now()}`,
+            startComponentId: sourceHubComponentId,
+            startTerminalIndex: sourceHubTerminalIndex,
+            endComponentId: targetHubComponentId,
+            endTerminalIndex: targetHubTerminalIndex,
+            controlPoints: [sourceNodePos, targetNodePos]  // 经过两个节点位置
+        };
+        
+        this.circuit.addWire(newWire);
+        this.renderer.addWire(newWire);
+        
+        // 重建节点
+        this.circuit.rebuildNodes();
+        
+        this.cancelWiring();
+        this.updateStatus('已添加连接');
+    }
+
+    /**
      * 取消连线
      */
     cancelWiring() {
@@ -833,6 +1152,9 @@ export class InteractionManager {
             this.renderer.removeTempWire(this.tempWire);
             this.tempWire = null;
         }
+        // 确保清除辅助线和高亮
+        this.hideAlignmentGuides();
+        this.renderer.clearTerminalHighlight();
     }
 
     /**
@@ -985,13 +1307,32 @@ export class InteractionManager {
     }
 
     /**
-     * 选择导线
+     * 选择导线（3秒后自动取消选择隐藏节点）
      */
     selectWire(id) {
         this.clearSelection();
         this.selectedWire = id;
         this.selectedComponent = null;
         this.renderer.setWireSelected(id, true);
+        
+        // 清除之前的自动隐藏计时器
+        if (this.wireAutoHideTimer) {
+            clearTimeout(this.wireAutoHideTimer);
+            this.wireAutoHideTimer = null;
+        }
+        
+        // 设置10秒后自动取消选择
+        this.wireAutoHideTimer = setTimeout(() => {
+            if (this.selectedWire === id) {
+                this.renderer.setWireSelected(id, false);
+                this.selectedWire = null;
+                // 恢复属性面板
+                const content = document.getElementById('property-content');
+                clearElement(content);
+                const hint = createElement('p', { className: 'hint', textContent: '选择一个元器件查看和编辑属性' });
+                content.appendChild(hint);
+            }
+        }, 10000);
         
         const wire = this.circuit.getWire(id);
         const controlPointCount = wire && wire.controlPoints ? wire.controlPoints.length : 0;
@@ -1003,13 +1344,144 @@ export class InteractionManager {
         content.appendChild(createPropertyRow('类型', '导线'));
         content.appendChild(createPropertyRow('控制点', `${controlPointCount} 个`));
         content.appendChild(createHintParagraph([
-            '点击导线任意位置添加蓝色节点',
-            '拖动节点到元器件端点可创建新连接',
+            '双击导线添加蓝色节点',
+            '拖动节点到端点可创建连接',
             '双击节点删除该节点',
-            '按 Delete 键删除导线'
+            '3秒无操作节点自动隐藏'
         ]));
     }
-
+    
+    /**
+     * 处理导线节点的点击：拖动移动或点击连线
+     * 如果鼠标移动超过阈值，则是拖动移动节点
+     * 如果鼠标没有移动就释放，则开始从该节点连线
+     */
+    startControlPointDragOrWiring(wireId, pointIndex, e) {
+        const wire = this.circuit.getWire(wireId);
+        if (!wire || !wire.controlPoints || !wire.controlPoints[pointIndex]) return;
+        
+        const startX = e.clientX;
+        const startY = e.clientY;
+        const moveThreshold = 5; // 移动超过5像素才算拖动
+        let hasMoved = false;
+        let isDragging = false;
+        
+        // 选中该导线
+        this.selectWire(wireId);
+        
+        // 清除自动隐藏计时器
+        if (this.wireAutoHideTimer) {
+            clearTimeout(this.wireAutoHideTimer);
+            this.wireAutoHideTimer = null;
+        }
+        
+        const onMove = (moveE) => {
+            const dx = moveE.clientX - startX;
+            const dy = moveE.clientY - startY;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            if (distance > moveThreshold) {
+                hasMoved = true;
+                
+                // 第一次确认是拖动时，切换到拖动模式
+                if (!isDragging) {
+                    isDragging = true;
+                }
+                
+                // 执行拖动逻辑
+                const canvasCoords = this.screenToCanvas(moveE.clientX, moveE.clientY);
+                let x = canvasCoords.x;
+                let y = canvasCoords.y;
+                
+                // 检测附近的端点或其他导线节点（用于连接）
+                const nearbyTerminal = this.findNearbyTerminal(x, y, 20);
+                const nearbyWireNode = !nearbyTerminal ? this.findNearbyWireNode(x, y, 15, wireId, pointIndex) : null;
+                
+                if (nearbyTerminal) {
+                    const termPos = this.renderer.getTerminalPosition(
+                        nearbyTerminal.componentId, 
+                        nearbyTerminal.terminalIndex
+                    );
+                    if (termPos) {
+                        x = termPos.x;
+                        y = termPos.y;
+                    }
+                    this.renderer.highlightTerminal(nearbyTerminal.componentId, nearbyTerminal.terminalIndex);
+                    this.hideAlignmentGuides();
+                } else if (nearbyWireNode) {
+                    x = nearbyWireNode.x;
+                    y = nearbyWireNode.y;
+                    this.renderer.highlightWireNode(nearbyWireNode.x, nearbyWireNode.y);
+                    this.hideAlignmentGuides();
+                } else {
+                    this.renderer.clearTerminalHighlight();
+                    
+                    // 检测与其他点的对齐
+                    const otherPoints = this.getWireAlignmentPoints(wire, pointIndex);
+                    const snapThreshold = 8;
+                    let snapInfo = { guideLines: [] };
+                    
+                    for (const p of otherPoints) {
+                        if (Math.abs(y - p.y) < snapThreshold) {
+                            y = p.y;
+                            snapInfo.guideLines.push({
+                                type: 'horizontal',
+                                y: p.y,
+                                x1: Math.min(x, p.x) - 20,
+                                x2: Math.max(x, p.x) + 20
+                            });
+                        }
+                        if (Math.abs(x - p.x) < snapThreshold) {
+                            x = p.x;
+                            snapInfo.guideLines.push({
+                                type: 'vertical',
+                                x: p.x,
+                                y1: Math.min(y, p.y) - 20,
+                                y2: Math.max(y, p.y) + 20
+                            });
+                        }
+                    }
+                    this.showAlignmentGuides(snapInfo);
+                }
+                
+                wire.controlPoints[pointIndex] = { x, y };
+                this.renderer.refreshWire(wireId);
+            }
+        };
+        
+        const onUp = (upE) => {
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+            this.hideAlignmentGuides();
+            this.renderer.clearTerminalHighlight();
+            
+            if (hasMoved) {
+                // 是拖动操作，检查是否需要连接到端点
+                const finalPos = wire.controlPoints[pointIndex];
+                const nearbyTerminal = this.findNearbyTerminal(finalPos.x, finalPos.y, 20);
+                
+                if (nearbyTerminal) {
+                    this.createConnectionFromWireNode(wireId, pointIndex, nearbyTerminal);
+                } else {
+                    const nearbyNode = this.findNearbyWireNode(finalPos.x, finalPos.y, 15, wireId, pointIndex);
+                    if (nearbyNode) {
+                        wire.controlPoints[pointIndex] = { x: nearbyNode.x, y: nearbyNode.y };
+                        this.renderer.refreshWire(wireId);
+                    }
+                }
+            } else {
+                // 是点击操作（没有移动），开始从该节点连线
+                this.startWiringFromNode(wireId, pointIndex, upE);
+            }
+            
+            // 重新设置自动隐藏计时器
+            this.resetWireAutoHideTimer(wireId);
+        };
+        
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+    }
+    
     /**
      * 拖动导线控制点（平滑移动，可选网格吸附，支持连接到端点）
      */
@@ -1022,6 +1494,12 @@ export class InteractionManager {
         
         let nearbyTerminal = null; // 记录附近的端点
         
+        // 清除自动隐藏计时器（用户正在操作）
+        if (this.wireAutoHideTimer) {
+            clearTimeout(this.wireAutoHideTimer);
+            this.wireAutoHideTimer = null;
+        }
+        
         const onMove = (moveE) => {
             // 使用统一的坐标转换
             const canvasCoords = this.screenToCanvas(moveE.clientX, moveE.clientY);
@@ -1029,8 +1507,9 @@ export class InteractionManager {
             let x = canvasCoords.x;
             let y = canvasCoords.y;
             
-            // 检测附近的端点（用于连接）
+            // 检测附近的端点或其他导线节点（用于连接）
             nearbyTerminal = this.findNearbyTerminal(x, y, 20);
+            const nearbyWireNode = !nearbyTerminal ? this.findNearbyWireNode(x, y, 15, wireId, pointIndex) : null;
             
             // 如果有附近的端点，吸附到它并高亮
             if (nearbyTerminal) {
@@ -1045,8 +1524,14 @@ export class InteractionManager {
                 // 高亮端点
                 this.renderer.highlightTerminal(nearbyTerminal.componentId, nearbyTerminal.terminalIndex);
                 this.hideAlignmentGuides();
+            } else if (nearbyWireNode) {
+                // 吸附到其他导线节点
+                x = nearbyWireNode.x;
+                y = nearbyWireNode.y;
+                this.renderer.highlightWireNode(nearbyWireNode.x, nearbyWireNode.y);
+                this.hideAlignmentGuides();
             } else {
-                // 清除端点高亮
+                // 清除高亮
                 this.renderer.clearTerminalHighlight();
                 
                 // 检测与其他点的对齐（水平/垂直）
@@ -1090,14 +1575,68 @@ export class InteractionManager {
             this.hideAlignmentGuides();
             this.renderer.clearTerminalHighlight();
             
+            // 获取最终位置
+            const finalPos = wire.controlPoints[pointIndex];
+            
             // 如果释放时在端点附近，创建新的连接
             if (nearbyTerminal) {
-                this.splitWireAtNode(wireId, pointIndex, nearbyTerminal);
+                this.createConnectionFromWireNode(wireId, pointIndex, nearbyTerminal);
+            } else {
+                // 检查是否在其他导线节点附近
+                const nearbyNode = this.findNearbyWireNode(finalPos.x, finalPos.y, 15, wireId, pointIndex);
+                if (nearbyNode) {
+                    // 合并两个节点位置
+                    wire.controlPoints[pointIndex] = { x: nearbyNode.x, y: nearbyNode.y };
+                    this.renderer.refreshWire(wireId);
+                }
             }
+            
+            // 重新设置自动隐藏计时器
+            this.resetWireAutoHideTimer(wireId);
         };
         
         document.addEventListener('mousemove', onMove);
         document.addEventListener('mouseup', onUp);
+    }
+    
+    /**
+     * 重置导线自动隐藏计时器
+     */
+    resetWireAutoHideTimer(wireId) {
+        if (this.wireAutoHideTimer) {
+            clearTimeout(this.wireAutoHideTimer);
+        }
+        this.wireAutoHideTimer = setTimeout(() => {
+            if (this.selectedWire === wireId) {
+                this.renderer.setWireSelected(wireId, false);
+                this.selectedWire = null;
+                const content = document.getElementById('property-content');
+                clearElement(content);
+                const hint = createElement('p', { className: 'hint', textContent: '选择一个元器件查看和编辑属性' });
+                content.appendChild(hint);
+            }
+        }, 10000);
+    }
+    
+    /**
+     * 查找附近的导线节点
+     */
+    findNearbyWireNode(x, y, threshold, excludeWireId = null, excludePointIndex = null) {
+        for (const [wireId, wire] of this.circuit.wires) {
+            if (!wire.controlPoints) continue;
+            
+            for (let i = 0; i < wire.controlPoints.length; i++) {
+                // 排除当前正在拖动的节点
+                if (wireId === excludeWireId && i === excludePointIndex) continue;
+                
+                const cp = wire.controlPoints[i];
+                const dist = Math.sqrt((x - cp.x) ** 2 + (y - cp.y) ** 2);
+                if (dist < threshold) {
+                    return { wireId, pointIndex: i, x: cp.x, y: cp.y };
+                }
+            }
+        }
+        return null;
     }
 
     /**
@@ -1131,6 +1670,15 @@ export class InteractionManager {
      * @param {Object} terminal - 目标端点 {componentId, terminalIndex}
      */
     splitWireAtNode(wireId, nodeIndex, terminal) {
+        // 调用新的实现
+        this.createConnectionFromWireNode(wireId, nodeIndex, terminal);
+    }
+
+    /**
+     * 从导线节点创建到端点的连接
+     * 实现方式：将原导线分成两段，都连接到目标端点
+     */
+    createConnectionFromWireNode(wireId, nodeIndex, terminal) {
         const wire = this.circuit.getWire(wireId);
         if (!wire || !wire.controlPoints) return;
         
@@ -1138,90 +1686,55 @@ export class InteractionManager {
         const nodePos = wire.controlPoints[nodeIndex];
         if (!nodePos) return;
         
-        // 创建一个新的临时元器件作为连接点（或者直接创建分支导线）
-        // 更简单的方案：创建一条新导线从该节点到目标端点
+        // 保存原导线信息
+        const originalStart = {
+            componentId: wire.startComponentId,
+            terminalIndex: wire.startTerminalIndex
+        };
+        const originalEnd = {
+            componentId: wire.endComponentId,
+            terminalIndex: wire.endTerminalIndex
+        };
         
-        // 由于导线节点不是真正的电气节点，我们需要用一种方式让它成为可连接的点
-        // 这里我们用一个简单的方案：
-        // 1. 将原导线在节点处分成两段
-        // 2. 创建第三条导线连接到目标端点
-        
-        // 但这需要一个"连接点"元器件，让我们用更简单的方案：
-        // 直接创建一条从原导线起点/终点到目标端点的新导线
-        
-        // 获取节点前后的路径点
-        const startPos = this.renderer.getTerminalPosition(wire.startComponentId, wire.startTerminalIndex);
-        const endPos = this.renderer.getTerminalPosition(wire.endComponentId, wire.endTerminalIndex);
-        
-        if (!startPos || !endPos) return;
-        
-        // 创建两条新导线代替原来的一条
-        // 导线1: 原起点 -> 目标端点（经过节点之前的控制点）
-        // 导线2: 目标端点 -> 原终点（经过节点之后的控制点）
-        
+        // 分割控制点
         const controlPointsBefore = wire.controlPoints.slice(0, nodeIndex);
         const controlPointsAfter = wire.controlPoints.slice(nodeIndex + 1);
         
-        // 删除节点（不分割导线，只是移除该节点）
-        wire.controlPoints.splice(nodeIndex, 1);
+        // 删除原导线
+        this.circuit.removeWire(wireId);
+        this.renderer.removeWire(wireId);
         
-        // 创建新导线连接节点位置到目标端点
-        // 我们需要找到离节点最近的已有端点
-        // 简化方案：创建一条从目标端点到...的导线
-        // 实际上，我们需要在该位置创建一个"节点标记"
+        // 创建导线1：原起点 -> 目标端点
+        const wire1 = {
+            id: `wire_${Date.now()}_1`,
+            startComponentId: originalStart.componentId,
+            startTerminalIndex: originalStart.terminalIndex,
+            endComponentId: terminal.componentId,
+            endTerminalIndex: terminal.terminalIndex,
+            controlPoints: [...controlPointsBefore, nodePos]
+        };
+        this.circuit.addWire(wire1);
+        this.renderer.addWire(wire1);
         
-        // 更实际的方案：提示用户这个功能需要手动连接
-        // 或者：直接删除这个节点，让用户重新连线
+        // 创建导线2：目标端点 -> 原终点
+        const wire2 = {
+            id: `wire_${Date.now()}_2`,
+            startComponentId: terminal.componentId,
+            startTerminalIndex: terminal.terminalIndex,
+            endComponentId: originalEnd.componentId,
+            endTerminalIndex: originalEnd.terminalIndex,
+            controlPoints: [...controlPointsAfter]
+        };
+        this.circuit.addWire(wire2);
+        this.renderer.addWire(wire2);
         
-        // 最简单有效的方案：创建一条新导线，从最近的现有端点连接到目标端点
-        // 找到离节点最近的端点（起点或终点）
-        const distToStart = Math.sqrt((nodePos.x - startPos.x) ** 2 + (nodePos.y - startPos.y) ** 2);
-        const distToEnd = Math.sqrt((nodePos.x - endPos.x) ** 2 + (nodePos.y - endPos.y) ** 2);
-        
-        let fromComponent, fromTerminal;
-        if (distToStart < distToEnd) {
-            fromComponent = wire.startComponentId;
-            fromTerminal = wire.startTerminalIndex;
-        } else {
-            fromComponent = wire.endComponentId;
-            fromTerminal = wire.endTerminalIndex;
-        }
-        
-        // 检查是否已经有这个连接
-        let alreadyConnected = false;
-        for (const existingWire of this.circuit.getAllWires()) {
-            if ((existingWire.startComponentId === fromComponent && 
-                 existingWire.startTerminalIndex === fromTerminal &&
-                 existingWire.endComponentId === terminal.componentId &&
-                 existingWire.endTerminalIndex === terminal.terminalIndex) ||
-                (existingWire.endComponentId === fromComponent && 
-                 existingWire.endTerminalIndex === fromTerminal &&
-                 existingWire.startComponentId === terminal.componentId &&
-                 existingWire.startTerminalIndex === terminal.terminalIndex)) {
-                alreadyConnected = true;
-                break;
-            }
-        }
-        
-        if (!alreadyConnected) {
-            // 创建新导线
-            const newWire = {
-                id: `wire_${Date.now()}`,
-                startComponentId: fromComponent,
-                startTerminalIndex: fromTerminal,
-                endComponentId: terminal.componentId,
-                endTerminalIndex: terminal.terminalIndex,
-                controlPoints: [nodePos] // 经过原节点位置
-            };
-            
-            this.circuit.addWire(newWire);
-            this.renderer.addWire(newWire);
-            this.updateStatus('已创建新连接');
-        }
-        
-        // 刷新原导线显示
-        this.renderer.refreshWire(wireId);
+        // 重建节点
         this.circuit.rebuildNodes();
+        
+        // 选中新创建的第一条导线
+        this.selectWire(wire1.id);
+        
+        this.updateStatus('已连接到端点');
     }
 
     /**
@@ -1366,6 +1879,12 @@ export class InteractionManager {
      * 清除选择
      */
     clearSelection() {
+        // 清除自动隐藏计时器
+        if (this.wireAutoHideTimer) {
+            clearTimeout(this.wireAutoHideTimer);
+            this.wireAutoHideTimer = null;
+        }
+        
         this.renderer.clearSelection();
         this.selectedComponent = null;
         this.selectedWire = null;

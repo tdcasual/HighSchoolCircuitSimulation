@@ -358,6 +358,21 @@ export class Renderer {
     }
 
     /**
+     * 高亮导线节点（用于连接预览）
+     */
+    highlightWireNode(x, y) {
+        this.clearTerminalHighlight();
+        
+        const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        circle.setAttribute('cx', x);
+        circle.setAttribute('cy', y);
+        circle.setAttribute('r', 10);
+        circle.setAttribute('class', 'wire-node-highlight');
+        circle.setAttribute('id', 'terminal-highlight');
+        this.uiLayer.appendChild(circle);
+    }
+
+    /**
      * 清除端点高亮
      */
     clearTerminalHighlight() {
