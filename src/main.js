@@ -6,6 +6,7 @@
 import { Circuit } from './engine/Circuit.js';
 import { Renderer } from './ui/Renderer.js';
 import { InteractionManager } from './ui/Interaction.js';
+import { AIPanel } from './ui/AIPanel.js';
 import { resetIdCounter, updateIdCounterFromExisting } from './components/Component.js';
 
 class CircuitSimulatorApp {
@@ -22,8 +23,14 @@ class CircuitSimulatorApp {
         // 初始化交互管理器
         this.interaction = new InteractionManager(this);
         
-        // 设置电路更新回调
-        this.circuit.onUpdate = (results) => this.onCircuitUpdate(results);
+        // 初始化 AI 助手面板
+        this.aiPanel = new AIPanel(this);
+        
+        // 尝试从 localStorage 恢复电路
+        this.loadCircuitFromStorage();
+        
+        // 设置电路更新回调（包括自动保存）
+        this.setupAutoSave();
         
         // 初始化完成
         this.updateStatus('电路模拟器已就绪');
@@ -190,6 +197,10 @@ class CircuitSimulatorApp {
         this.renderer.clear();
         resetIdCounter();
         this.interaction.clearSelection();
+            
+        // 清除缓存
+        localStorage.removeItem('saved_circuit');
+        
         this.updateStatus('电路已清空');
     }
 
@@ -258,6 +269,57 @@ class CircuitSimulatorApp {
      */
     updateStatus(text) {
         document.getElementById('status-text').textContent = text;
+    }
+    
+    /**
+     * 设置自动保存
+     */
+    setupAutoSave() {
+        // 监听电路变化并自动保存
+        const saveCircuit = () => {
+            if (this.circuit.components.size > 0) {
+                try {
+                    const circuitJSON = this.circuit.toJSON();
+                    localStorage.setItem('saved_circuit', JSON.stringify(circuitJSON));
+                } catch (e) {
+                    console.error('Auto-save failed:', e);
+                }
+            }
+        };
+        
+        // 使用防抖，避免频繁保存
+        let saveTimeout;
+        this.circuit.onUpdate = (results) => {
+            this.onCircuitUpdate(results);
+            
+            clearTimeout(saveTimeout);
+            saveTimeout = setTimeout(saveCircuit, 1000);
+        };
+    }
+    
+    /**
+     * 从 localStorage 加载电路
+     */
+    loadCircuitFromStorage() {
+        try {
+            const saved = localStorage.getItem('saved_circuit');
+            if (saved) {
+                const circuitJSON = JSON.parse(saved);
+                this.circuit.fromJSON(circuitJSON);
+                
+                // 更新 ID 计数器
+                const allIds = [
+                    ...circuitJSON.components.map(c => c.id),
+                    ...circuitJSON.wires.map(w => w.id)
+                ];
+                updateIdCounterFromExisting(allIds);
+                
+                this.renderer.render();
+                this.updateStatus(`已从缓存恢复电路 (${circuitJSON.components.length} 个元器件)`);
+            }
+        } catch (e) {
+            console.error('Failed to load saved circuit:', e);
+        }
     }
 }
 

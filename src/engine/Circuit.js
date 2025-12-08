@@ -461,6 +461,11 @@ export class Circuit {
                 
                 comp.currentValue = current;
                 
+                // 特殊处理：理想电压表必须强制电流为0
+                if (this.isIdealVoltmeter(comp)) {
+                    comp.currentValue = 0;
+                }
+                
                 // 对于电源，显示的电压应该是端子电压
                 if (comp.type === 'PowerSource') {
                     // 端子电压直接从节点电压差获取（诺顿模型下这就是正确的端子电压）
@@ -577,8 +582,13 @@ export class Circuit {
             const flows = this.getRheostatTerminalFlows(comp, results.voltages);
             return flows[terminalIndex] || 0;
         }
+        
+        // 理想电压表：内阻无穷大，不应该有电流
+        if (this.isIdealVoltmeter(comp)) {
+            return 0; // 理想电压表的端子不输出电流
+        }
 
-        // 判定为“主动”器件的列表（正电流表示端子0向外输出）
+        // 判定为"主动"器件的列表（正电流表示端子0向外输出）
         const isActiveSource = (
             comp.type === 'PowerSource' ||
             comp.type === 'Motor' ||
@@ -854,6 +864,17 @@ export class Circuit {
     }
 
     /**
+     * 检查元器件是否为理想电压表
+     * @param {Object} comp - 元器件对象
+     * @returns {boolean} 是否为理想电压表
+     */
+    isIdealVoltmeter(comp) {
+        if (!comp || comp.type !== 'Voltmeter') return false;
+        const r = comp.resistance;
+        return r === null || r === undefined || r === Infinity || r >= 1e10;
+    }
+
+    /**
      * 获取导线的电流信息
      * @param {Object} wire - 导线对象
      * @param {Object} results - 求解结果
@@ -899,7 +920,25 @@ export class Circuit {
         const endFlow = this.getTerminalCurrentFlow(endComp, wire.endTerminalIndex, results);
         const startMag = Math.abs(startFlow);
         const endMag = Math.abs(endFlow);
-        let current = Math.max(startMag, endMag);
+        
+        // CRITICAL: Handle ideal voltmeters robustly
+        // Wires connected to ideal voltmeters should show zero current
+        const startIsIdealV = this.isIdealVoltmeter(startComp);
+        const endIsIdealV = this.isIdealVoltmeter(endComp);
+        
+        let current;
+        if (startIsIdealV && endIsIdealV) {
+            // Both ends are ideal voltmeters - no current should flow
+            current = 0;
+        } else if (startIsIdealV || endIsIdealV) {
+            // One end is ideal voltmeter - wire to ideal voltmeter has no current
+            // This prevents current animation on wires directly connected to voltmeter terminals
+            current = 0;
+        } else {
+            // Normal case - use maximum current from either end
+            current = Math.max(startMag, endMag);
+        }
+        
         const eps = 1e-9;
 
         this.ensureWireFlowCache(results);
@@ -957,6 +996,7 @@ export class Circuit {
             components: Array.from(this.components.values()).map(comp => ({
                 id: comp.id,
                 type: comp.type,
+                label: comp.label || null,  // 包含自定义标签
                 x: comp.x,
                 y: comp.y,
                 rotation: comp.rotation || 0,
@@ -1049,6 +1089,9 @@ export class Circuit {
             
             // 恢复保存的属性
             comp.rotation = compData.rotation || 0;
+            if (compData.label) {
+                comp.label = compData.label;  // 恢复自定义标签
+            }
             Object.assign(comp, compData.properties);
             
             // 恢复端子延伸

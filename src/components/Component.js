@@ -122,9 +122,12 @@ export function createComponent(type, x, y, existingId = null) {
         terminalExtensions[i] = { x: 0, y: 0 }; // 相对于默认位置的偏移
     }
     
+    const id = existingId || generateId(type);
+    
     return {
-        id: existingId || generateId(type),
+        id: id,
         type: type,
+        label: null,           // 自定义标签 (如 V1, R1, R2 等)
         x: x,
         y: y,
         rotation: 0,
@@ -213,8 +216,9 @@ export const SVGRenderer = {
         this.addTerminal(g, -30, 0, 0, comp);
         this.addTerminal(g, 30, 0, 1, comp);
         
-        // 标签
-        this.addText(g, 0, 28, `${comp.voltage}V`, 10, 'label');
+        // 标签 - 优先显示自定义标签
+        const labelText = comp.label || `${comp.voltage}V`;
+        this.addText(g, 0, 28, labelText, 10, 'label');
     },
 
     /**
@@ -238,8 +242,9 @@ export const SVGRenderer = {
         this.addTerminal(g, -30, 0, 0, comp);
         this.addTerminal(g, 30, 0, 1, comp);
         
-        // 标签
-        this.addText(g, 0, 25, `${comp.resistance}Ω`, 10, 'label');
+        // 标签 - 优先显示自定义标签
+        const labelText = comp.label || `${comp.resistance}Ω`;
+        this.addText(g, 0, 25, labelText, 10, 'label');
     },
 
     /**
@@ -290,12 +295,16 @@ export const SVGRenderer = {
         term2.style.pointerEvents = 'all';
         term2.setAttribute('fill', '#FF5722'); // 不同颜色以区分
         
-        // 标签 - 显示接入电路的实际电阻
-        const displayR = comp.activeResistance !== undefined ? comp.activeResistance : 
-            (comp.minResistance + (comp.maxResistance - comp.minResistance) * comp.position);
-        const directionMark = comp.resistanceDirection === 'slider-right-increase' ? '→↑' :
-                              comp.resistanceDirection === 'slider-right-decrease' ? '→↓' : '';
-        this.addText(g, 0, 28, `${displayR.toFixed(1)}Ω ${directionMark}`, 10, 'label');
+        // 标签 - 显示接入电路的实际电阻，优先显示自定义标签
+        if (comp.label) {
+            this.addText(g, 0, 28, comp.label, 10, 'label');
+        } else {
+            const displayR = comp.activeResistance !== undefined ? comp.activeResistance : 
+                (comp.minResistance + (comp.maxResistance - comp.minResistance) * comp.position);
+            const directionMark = comp.resistanceDirection === 'slider-right-increase' ? '→↑' :
+                                  comp.resistanceDirection === 'slider-right-decrease' ? '→↓' : '';
+            this.addText(g, 0, 28, `${displayR.toFixed(1)}Ω ${directionMark}`, 10, 'label');
+        }
     },
 
     /**
@@ -331,8 +340,9 @@ export const SVGRenderer = {
         this.addTerminal(g, -30, 0, 0, comp);
         this.addTerminal(g, 30, 0, 1, comp);
         
-        // 标签
-        this.addText(g, 0, 28, `${comp.ratedPower}W`, 10, 'label');
+        // 标签 - 优先显示自定义标签
+        const labelText = comp.label || `${comp.ratedPower}W`;
+        this.addText(g, 0, 28, labelText, 10, 'label');
     },
 
     /**
@@ -351,11 +361,15 @@ export const SVGRenderer = {
         this.addTerminal(g, -30, 0, 0, comp);
         this.addTerminal(g, 30, 0, 1, comp);
         
-        // 标签 - 显示电容值
-        const capValue = comp.capacitance >= 0.001 
-            ? `${(comp.capacitance * 1000).toFixed(0)}mF`
-            : `${(comp.capacitance * 1000000).toFixed(0)}μF`;
-        this.addText(g, 0, 25, capValue, 10, 'label');
+        // 标签 - 显示电容值，优先显示自定义标签
+        if (comp.label) {
+            this.addText(g, 0, 25, comp.label, 10, 'label');
+        } else {
+            const capValue = comp.capacitance >= 0.001 
+                ? `${(comp.capacitance * 1000).toFixed(0)}mF`
+                : `${(comp.capacitance * 1000000).toFixed(0)}μF`;
+            this.addText(g, 0, 25, capValue, 10, 'label');
+        }
     },
 
     /**
@@ -381,8 +395,10 @@ export const SVGRenderer = {
         this.addTerminal(g, -35, 0, 0, comp);
         this.addTerminal(g, 35, 0, 1, comp);
         
-        // 显示转速
-        if (comp.speed !== undefined) {
+        // 显示自定义标签或转速
+        if (comp.label) {
+            this.addText(g, 0, 32, comp.label, 9, 'label');
+        } else if (comp.speed !== undefined) {
             this.addText(g, 0, 32, `${(comp.speed * 60 / (2 * Math.PI)).toFixed(0)} rpm`, 9, 'label');
         }
     },
@@ -445,8 +461,9 @@ export const SVGRenderer = {
         this.addTerminal(g, -30, 0, 0, comp);
         this.addTerminal(g, 30, 0, 1, comp);
         
-        // 状态标签
-        this.addText(g, 0, 22, comp.closed ? '闭合' : '断开', 9, 'label');
+        // 状态标签 - 优先显示自定义标签
+        const labelText = comp.label || (comp.closed ? '闭合' : '断开');
+        this.addText(g, 0, 22, labelText, 9, 'label');
     },
 
     /**
@@ -479,8 +496,9 @@ export const SVGRenderer = {
         this.addTerminal(g, -35, 0, 0, comp);
         this.addTerminal(g, 35, 0, 1, comp);
         
-        // 量程标签
-        this.addText(g, 0, 30, `${comp.range}A`, 9, 'label');
+        // 量程标签 - 优先显示自定义标签
+        const labelText = comp.label || `${comp.range}A`;
+        this.addText(g, 0, 30, labelText, 9, 'label');
     },
 
     /**
@@ -513,8 +531,9 @@ export const SVGRenderer = {
         this.addTerminal(g, -35, 0, 0, comp);
         this.addTerminal(g, 35, 0, 1, comp);
         
-        // 量程标签
-        this.addText(g, 0, 30, `${comp.range}V`, 9, 'label');
+        // 量程标签 - 优先显示自定义标签
+        const labelText = comp.label || `${comp.range}V`;
+        this.addText(g, 0, 30, labelText, 9, 'label');
     },
 
     /**
@@ -661,7 +680,12 @@ export const SVGRenderer = {
                 voltageDisplay.setAttribute('font-size', '14');
                 voltageDisplay.setAttribute('font-weight', '700');
             }
-            if (currentDisplay) currentDisplay.textContent = '';
+            // 理想电压表不显示电流，强制清空
+            if (currentDisplay) {
+                currentDisplay.textContent = '';
+                currentDisplay.setAttribute('font-size', '13');
+                currentDisplay.setAttribute('font-weight', '600');
+            }
             if (powerDisplay) powerDisplay.textContent = '';
             return;
         }

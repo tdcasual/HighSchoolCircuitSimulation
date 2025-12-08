@@ -548,8 +548,10 @@ export class MNASolver {
                 
             case 'Voltmeter':
                 // 电压表电流
-                if (comp.resistance !== Infinity && comp.resistance > 0) {
-                    return dV / comp.resistance;
+                const vmResistance = comp.resistance;
+                if (vmResistance !== null && vmResistance !== undefined && 
+                    vmResistance !== Infinity && vmResistance > 0) {
+                    return dV / vmResistance;
                 }
                 return 0; // 理想电压表无电流
                 

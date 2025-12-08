@@ -1906,6 +1906,23 @@ export class InteractionManager {
         content.appendChild(createPropertyRow('类型', ComponentNames[comp.type]));
         content.appendChild(createPropertyRow('ID', comp.id));
         
+        // 添加自定义标签编辑
+        const labelGroup = createFormGroup('标签 (例如 V1, R1)', {
+            id: 'comp-label',
+            type: 'text',
+            value: comp.label || '',
+            placeholder: '输入标签名称'
+        }, '自定义标签将显示在元器件上');
+        
+        const labelInput = labelGroup.querySelector('#comp-label');
+        labelInput.addEventListener('change', () => {
+            const newLabel = labelInput.value.trim();
+            comp.label = newLabel || null;
+            this.renderer.render();
+            this.app.updateStatus(`已更新标签: ${newLabel || '（空）'}`);
+        });
+        content.appendChild(labelGroup);
+        
         // 根据类型显示不同的属性
         switch (comp.type) {
             case 'PowerSource':
