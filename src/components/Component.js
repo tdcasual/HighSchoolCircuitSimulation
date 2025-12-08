@@ -128,7 +128,8 @@ export function createComponent(type, x, y, existingId = null) {
         x: x,
         y: y,
         rotation: 0,
-        nodes: [-1, -1],      // 连接的节点索引
+        // 节点数组长度与端子数一致，避免三端器件节点丢失
+        nodes: Array.from({ length: terminalCount }, () => -1),
         currentValue: 0,       // 当前电流
         voltageValue: 0,       // 当前电压
         powerValue: 0,         // 当前功率
@@ -680,8 +681,24 @@ export const SVGRenderer = {
         }
         
         if (voltageDisplay) {
-            voltageDisplay.textContent = showVoltage ? 
-                `U = ${this.formatValue(comp.voltageValue, 'V')}` : '';
+            if (comp.type === 'Rheostat' && showVoltage) {
+                // 当滑动变阻器两端与滑块同时接入时，显示左右两段电压
+                const parts = [];
+                if (comp.voltageSegLeft !== undefined && comp.voltageSegLeft !== null) {
+                    parts.push(`U₁=${this.formatValue(comp.voltageSegLeft, 'V')}`);
+                }
+                if (comp.voltageSegRight !== undefined && comp.voltageSegRight !== null) {
+                    parts.push(`U₂=${this.formatValue(comp.voltageSegRight, 'V')}`);
+                }
+                if (parts.length > 0) {
+                    voltageDisplay.textContent = parts.join('  ');
+                } else {
+                    voltageDisplay.textContent = `U = ${this.formatValue(comp.voltageValue, 'V')}`;
+                }
+            } else {
+                voltageDisplay.textContent = showVoltage ? 
+                    `U = ${this.formatValue(comp.voltageValue, 'V')}` : '';
+            }
         }
         
         if (powerDisplay) {

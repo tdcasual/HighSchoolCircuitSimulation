@@ -109,6 +109,9 @@ class CircuitSimulatorApp {
         if (results.valid) {
             this.renderer.updateValues();
             
+            // 更新导线电流动画
+            this.renderer.updateWireAnimations(this.circuit.isRunning, results);
+            
             // 更新选中元器件的属性面板
             if (this.interaction.selectedComponent) {
                 const comp = this.circuit.getComponent(this.interaction.selectedComponent);
@@ -116,6 +119,9 @@ class CircuitSimulatorApp {
                     this.interaction.updatePropertyPanel(comp);
                 }
             }
+        } else {
+            // 结果无效时也更新动画（清除动画）
+            this.renderer.updateWireAnimations(false, null);
         }
     }
 

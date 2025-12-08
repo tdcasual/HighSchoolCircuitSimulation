@@ -299,13 +299,57 @@ export class Renderer {
 
     /**
      * 更新导线电流动画
+     * @param {boolean} isRunning - 模拟是否运行中
+     * @param {Object} results - 求解结果（包含电压信息）
      */
-    updateWireAnimations(isRunning) {
-        for (const [id, path] of this.wireElements) {
-            if (isRunning) {
-                path.classList.add('flowing');
-            } else {
-                path.classList.remove('flowing');
+    updateWireAnimations(isRunning, results = null) {
+        for (const [id, wireGroup] of this.wireElements) {
+            const wire = this.circuit.getWire(id);
+            const wirePath = wireGroup.querySelector('path.wire');
+            if (!wirePath) continue;
+            
+            // 清除所有动画类
+            wirePath.classList.remove('flowing', 'flowing-forward', 'flowing-reverse', 
+                'current-low', 'current-medium', 'current-high', 'short-circuit');
+            
+            if (!isRunning || !results || !results.valid) {
+                continue;
+            }
+            
+            // 获取导线两端的电势
+            const wireInfo = this.circuit.getWireCurrentInfo(wire, results);
+            if (!wireInfo) continue;
+            
+            const { current, isShorted, flowDirection } = wireInfo;
+            
+            // 如果是短路
+            if (isShorted) {
+                wirePath.classList.add('short-circuit');
+                continue;
+            }
+            
+            // 如果有电流流过
+            if (Math.abs(current) > 1e-9 && flowDirection !== 0) {
+                wirePath.classList.add('flowing');
+                
+                // 根据电流强度设置样式
+                const absCurrent = Math.abs(current);
+                if (absCurrent < 0.1) {
+                    wirePath.classList.add('current-low');
+                } else if (absCurrent < 0.5) {
+                    wirePath.classList.add('current-medium');
+                } else {
+                    wirePath.classList.add('current-high');
+                }
+                
+                // 根据 flowDirection 决定动画方向
+                // flowDirection > 0: 从导线起点流向终点
+                // flowDirection < 0: 从导线终点流向起点
+                if (flowDirection > 0) {
+                    wirePath.classList.add('flowing-forward');
+                } else {
+                    wirePath.classList.add('flowing-reverse');
+                }
             }
         }
     }

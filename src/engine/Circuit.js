@@ -74,13 +74,26 @@ export class Circuit {
      * 使用并查集算法合并连接的端点
      */
     rebuildNodes() {
-        // 收集所有端点
+        // 首先检测哪些端子有导线连接
+        const connectedTerminals = new Set();
+        for (const [wireId, wire] of this.wires) {
+            connectedTerminals.add(`${wire.startComponentId}:${wire.startTerminalIndex}`);
+            connectedTerminals.add(`${wire.endComponentId}:${wire.endTerminalIndex}`);
+        }
+        
+        // 收集所有有导线连接的端点
+        // 只有实际连接了导线的端子才会被添加，避免产生孤立节点
         const terminals = [];
         for (const [id, comp] of this.components) {
-            terminals.push({ componentId: id, terminalIndex: 0 });
-            terminals.push({ componentId: id, terminalIndex: 1 });
-            // 滑动变阻器有第三个端子（滑动触点）
-            if (comp.type === 'Rheostat') {
+            // 只添加有导线连接的端子
+            if (connectedTerminals.has(`${id}:0`)) {
+                terminals.push({ componentId: id, terminalIndex: 0 });
+            }
+            if (connectedTerminals.has(`${id}:1`)) {
+                terminals.push({ componentId: id, terminalIndex: 1 });
+            }
+            // 滑动变阻器的第三个端子
+            if (comp.type === 'Rheostat' && connectedTerminals.has(`${id}:2`)) {
                 terminals.push({ componentId: id, terminalIndex: 2 });
             }
         }
@@ -158,28 +171,53 @@ export class Circuit {
         }
 
         // 更新元器件的节点引用
+        // 未连接导线的端子节点索引设为 -1
         for (const [id, comp] of this.components) {
             const key0 = `${id}:0`;
             const key1 = `${id}:1`;
             
+            // 检查端子是否有导线连接
+            const node0 = parent.has(key0) ? nodeMap.get(find(key0)) : undefined;
+            const node1 = parent.has(key1) ? nodeMap.get(find(key1)) : undefined;
+            
             if (comp.type === 'Rheostat') {
-                // 滑动变阻器有三个节点
+                // 滑动变阻器有三个节点，未连接的端子设为 -1
                 const key2 = `${id}:2`;
+                const node2 = parent.has(key2) ? nodeMap.get(find(key2)) : undefined;
                 comp.nodes = [
-                    nodeMap.get(find(key0)),
-                    nodeMap.get(find(key1)),
-                    nodeMap.get(find(key2))
+                    node0 !== undefined ? node0 : -1,
+                    node1 !== undefined ? node1 : -1,
+                    node2 !== undefined ? node2 : -1
                 ];
             } else {
                 comp.nodes = [
-                    nodeMap.get(find(key0)),
-                    nodeMap.get(find(key1))
+                    node0 !== undefined ? node0 : -1,
+                    node1 !== undefined ? node1 : -1
                 ];
             }
         }
 
         // 生成节点列表
         this.nodes = Array.from({ length: nodeIndex }, (_, i) => ({ id: i }));
+        
+        // 调试：打印节点与端子映射，帮助排查错误连接
+        console.warn('--- Node mapping ---');
+        const nodeTerminals = Array.from({ length: nodeIndex }, () => []);
+        for (const [id, comp] of this.components) {
+            const append = (node, terminalIdx) => {
+                if (node !== undefined && node >= 0) {
+                    nodeTerminals[node].push(`${id}:${terminalIdx}`);
+                }
+            };
+            append(comp.nodes[0], 0);
+            append(comp.nodes[1], 1);
+            if (comp.type === 'Rheostat') {
+                append(comp.nodes[2], 2);
+            }
+        }
+        nodeTerminals.forEach((ts, idx) => {
+            console.warn(`node ${idx}: ${ts.join(', ')}`);
+        });
         
         // 检测滑动变阻器的连接模式
         this.detectRheostatConnections();
@@ -205,6 +243,8 @@ export class Circuit {
                 }
             }
             
+            console.log(`Rheostat ${id}: terminals connected = [left:${terminalConnected[0]}, right:${terminalConnected[1]}, slider:${terminalConnected[2]}]`);
+            
             // 确定连接模式
             // connectionMode: 'left-slider' | 'right-slider' | 'left-right' | 'all' | 'none'
             const leftConnected = terminalConnected[0];
@@ -228,6 +268,8 @@ export class Circuit {
                     comp.connectionMode = 'none'; // 没有形成回路
                 }
             }
+            
+            console.log(`Rheostat ${id}: connectionMode = ${comp.connectionMode}`);
             
             // 计算接入电路的实际电阻
             this.calculateRheostatActiveResistance(comp);
@@ -394,6 +436,18 @@ export class Circuit {
                     comp.currentValue = 0;
                     comp.voltageValue = 0;
                     comp.powerValue = 0;
+                    comp._isShorted = false;
+                    if (comp.type === 'Bulb') {
+                        comp.brightness = 0;
+                    }
+                    continue;
+                }
+                
+                // 检查元器件是否被短路（两端节点相同）
+                if (comp._isShorted) {
+                    comp.currentValue = 0;
+                    comp.voltageValue = 0;
+                    comp.powerValue = 0;
                     if (comp.type === 'Bulb') {
                         comp.brightness = 0;
                     }
@@ -409,6 +463,51 @@ export class Circuit {
                     comp.voltageValue = terminalVoltage;
                     // 电源输出功率 = 端子电压 * 电流
                     comp.powerValue = Math.abs(terminalVoltage * current);
+                } else if (comp.type === 'Rheostat') {
+                    // 滑动变阻器根据连接模式计算电压
+                    // 安全获取电压值，未连接的端子电压视为0
+                    const getVoltage = (nodeIdx) => {
+                        if (nodeIdx === undefined || nodeIdx < 0) return 0;
+                        return this.lastResults.voltages[nodeIdx] || 0;
+                    };
+                    
+                    const v_left = getVoltage(comp.nodes[0]);
+                    const v_right = getVoltage(comp.nodes[1]);
+                    const v_slider = getVoltage(comp.nodes[2]);
+                    // 保存分段电压供 UI 显示
+                    comp.voltageSegLeft = 0;
+                    comp.voltageSegRight = 0;
+                    
+                    let voltage = 0;
+                    switch (comp.connectionMode) {
+                        case 'left-slider':
+                            voltage = Math.abs(v_left - v_slider);
+                            comp.voltageSegLeft = voltage;
+                            comp.voltageSegRight = undefined;
+                            break;
+                        case 'right-slider':
+                            voltage = Math.abs(v_slider - v_right);
+                            comp.voltageSegLeft = undefined;
+                            comp.voltageSegRight = voltage;
+                            break;
+                        case 'left-right':
+                            voltage = Math.abs(v_left - v_right);
+                            comp.voltageSegLeft = voltage;
+                            comp.voltageSegRight = undefined;
+                            break;
+                        case 'all':
+                            // 三端都连接时，显示左右两端的总电压
+                            voltage = Math.abs(v_left - v_right);
+                            comp.voltageSegLeft = Math.abs(v_left - v_slider);
+                            comp.voltageSegRight = Math.abs(v_slider - v_right);
+                            break;
+                        default:
+                            voltage = 0;
+                            comp.voltageSegLeft = undefined;
+                            comp.voltageSegRight = undefined;
+                    }
+                    comp.voltageValue = voltage;
+                    comp.powerValue = Math.abs(current * voltage);
                 } else {
                     comp.voltageValue = Math.abs(v1 - v2);
                     comp.powerValue = Math.abs(current * (v1 - v2));
@@ -450,6 +549,126 @@ export class Circuit {
      */
     getAllWires() {
         return Array.from(this.wires.values());
+    }
+
+    /**
+     * 获取导线的电流信息
+     * @param {Object} wire - 导线对象
+     * @param {Object} results - 求解结果
+     * @returns {Object} 包含电流、电势和短路信息
+     */
+    getWireCurrentInfo(wire, results) {
+        if (!wire || !results || !results.valid) return null;
+        
+        // 获取导线两端连接的元器件和端子
+        const startComp = this.components.get(wire.startComponentId);
+        const endComp = this.components.get(wire.endComponentId);
+        
+        if (!startComp || !endComp) return null;
+        
+        // 获取两端端子对应的节点
+        const startNode = startComp.nodes[wire.startTerminalIndex];
+        const endNode = endComp.nodes[wire.endTerminalIndex];
+        
+        // 安全获取电压
+        const getVoltage = (nodeIdx) => {
+            if (nodeIdx === undefined || nodeIdx < 0) return 0;
+            return results.voltages[nodeIdx] || 0;
+        };
+        
+        const voltage1 = getVoltage(startNode);
+        const voltage2 = getVoltage(endNode);
+        
+        const isShorted = false;
+        
+        // 获取连接元器件的电流
+        const startCurrent = results.currents.get(wire.startComponentId) || 0;
+        const endCurrent = results.currents.get(wire.endComponentId) || 0;
+        
+        // 取电流较大的那个作为导线电流（用于强度展示）
+        let current = Math.abs(startCurrent) > Math.abs(endCurrent) ? startCurrent : endCurrent;
+        
+        // 判断电流方向
+        // 核心逻辑：判断起点端子是"电流流出"还是"电流流入"
+        // - 如果起点端子是电流流出端，则导线电流从start流向end (flowDirection = 1)
+        // - 如果起点端子是电流流入端，则导线电流从end流向start (flowDirection = -1)
+        let flowDirection = 0;
+        
+        if (Math.abs(current) < 1e-9) {
+            flowDirection = 0;
+        } else {
+            // 使用更可靠的方法：基于元器件端子的电势来判断
+            // 电流从高电势流向低电势
+            
+            // 获取起点元器件两端的电势
+            const getVoltageForComp = (comp, termIdx) => {
+                const node = comp.nodes[termIdx];
+                if (node === undefined || node < 0) return 0;
+                return results.voltages[node] || 0;
+            };
+            
+            // 对于起点元器件，判断电流是流入还是流出该端子
+            const v0 = getVoltageForComp(startComp, 0);
+            const v1 = getVoltageForComp(startComp, 1);
+            const terminalVoltage = getVoltageForComp(startComp, wire.startTerminalIndex);
+            const otherVoltage = wire.startTerminalIndex === 0 ? v1 : v0;
+            
+            // 如果该端子电势高于另一端，电流从该端子流出
+            // 如果该端子电势低于另一端，电流流入该端子
+            let isFlowingOut;
+            
+            if (startComp.type === 'PowerSource') {
+                // 电源特殊处理：正极流出，负极流入
+                if (wire.startTerminalIndex === 0) {
+                    isFlowingOut = startCurrent > 0;
+                } else {
+                    isFlowingOut = startCurrent < 0;
+                }
+            } else if (startComp.type === 'Rheostat') {
+                // 滑动变阻器：根据该端子与其他端子的电势差判断
+                // 如果该端子电势高，电流流出
+                const v_left = getVoltageForComp(startComp, 0);
+                const v_right = getVoltageForComp(startComp, 1);
+                const v_slider = getVoltageForComp(startComp, 2);
+                const myV = getVoltageForComp(startComp, wire.startTerminalIndex);
+                
+                // 找到与该端子相连的最低电势点
+                let minV = Infinity;
+                if (wire.startTerminalIndex !== 0) minV = Math.min(minV, v_left);
+                if (wire.startTerminalIndex !== 1) minV = Math.min(minV, v_right);
+                if (wire.startTerminalIndex !== 2) minV = Math.min(minV, v_slider);
+                
+                isFlowingOut = myV > minV + 1e-6;
+            } else {
+                // 普通元器件：电流从高电势端流向低电势端
+                // 如果该端子电势高于另一端，电流从该端子流入元器件
+                // 所以该端子不是流出端
+                if (Math.abs(terminalVoltage - otherVoltage) > 1e-6) {
+                    isFlowingOut = terminalVoltage < otherVoltage;
+                } else {
+                    // 电压相同，用电流方向判断
+                    if (wire.startTerminalIndex === 0) {
+                        isFlowingOut = startCurrent < 0;
+                    } else {
+                        isFlowingOut = startCurrent > 0;
+                    }
+                }
+            }
+            
+            flowDirection = isFlowingOut ? 1 : -1;
+            
+            // 调试输出
+            console.log(`Wire ${wire.id}: start=${startComp.type}:${wire.startTerminalIndex}, I=${startCurrent.toFixed(4)}, flowOut=${isFlowingOut}, dir=${flowDirection}`);
+        }
+        
+        return {
+            current,
+            voltage1,
+            voltage2,
+            isShorted,
+            flowDirection,
+            voltageDiff: voltage1 - voltage2
+        };
     }
 
     /**

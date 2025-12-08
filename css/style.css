@@ -539,15 +539,87 @@ body {
     pointer-events: none;
 }
 
-/* 电流动画 */
-@keyframes current-flow {
-    from { stroke-dashoffset: 20; }
+/* 电流动画 - 流动效果 */
+@keyframes current-flow-forward {
+    from { stroke-dashoffset: 24; }
     to { stroke-dashoffset: 0; }
 }
 
+@keyframes current-flow-reverse {
+    from { stroke-dashoffset: 0; }
+    to { stroke-dashoffset: 24; }
+}
+
+/* 基础流动样式 */
 .wire.flowing {
+    stroke-dasharray: 6, 6;
+}
+
+.wire.flowing-forward {
+    animation: current-flow-forward 0.6s linear infinite;
+}
+
+.wire.flowing-reverse {
+    animation: current-flow-reverse 0.6s linear infinite;
+}
+
+/* 电流强度样式 - 影响颜色和速度 */
+.wire.current-low {
+    stroke: #FFA726;
+    stroke-width: 2;
+}
+
+.wire.current-low.flowing-forward {
+    animation-duration: 1s;
+}
+
+.wire.current-low.flowing-reverse {
+    animation-duration: 1s;
+}
+
+.wire.current-medium {
+    stroke: #FF9800;
+    stroke-width: 2.5;
+}
+
+.wire.current-medium.flowing-forward {
+    animation-duration: 0.5s;
+}
+
+.wire.current-medium.flowing-reverse {
+    animation-duration: 0.5s;
+}
+
+.wire.current-high {
+    stroke: #FF5722;
+    stroke-width: 3;
+}
+
+.wire.current-high.flowing-forward {
+    animation-duration: 0.3s;
+}
+
+.wire.current-high.flowing-reverse {
+    animation-duration: 0.3s;
+}
+
+/* 短路警告样式 */
+.wire.short-circuit {
+    stroke: #f44336 !important;
+    stroke-width: 3;
     stroke-dasharray: 4, 4;
-    animation: current-flow 0.5s linear infinite;
+    animation: short-circuit-pulse 0.5s ease-in-out infinite;
+}
+
+@keyframes short-circuit-pulse {
+    0%, 100% { 
+        stroke-opacity: 1;
+        filter: drop-shadow(0 0 3px #f44336);
+    }
+    50% { 
+        stroke-opacity: 0.6;
+        filter: drop-shadow(0 0 6px #ff0000);
+    }
 }
 
 /* 节点样式 */

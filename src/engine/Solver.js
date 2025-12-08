@@ -23,21 +23,47 @@ export class MNASolver {
         this.components = components;
         this.nodes = nodes;
         this.voltageSourceCount = 0;
+        this.shortCircuitDetected = false;
+        
+        // 检测并标记被短路的元器件（两端节点相同）
+        for (const comp of components) {
+            if (comp.nodes && comp.nodes.length >= 2) {
+                const n1 = comp.nodes[0];
+                const n2 = comp.nodes[1];
+                // 如果两端节点相同且有效，说明被短路了
+                comp._isShorted = (n1 === n2 && n1 >= 0);
+                
+                // 电源被短路是危险的
+                if (comp._isShorted && comp.type === 'PowerSource') {
+                    this.shortCircuitDetected = true;
+                    console.warn(`Power source ${comp.id} is short-circuited!`);
+                }
+            } else {
+                comp._isShorted = false;
+            }
+        }
         
         // 统计电压源数量
         // 注意：有内阻的电源使用诺顿等效，不计入电压源
+        // 被短路的电源不作为电压源处理
         for (const comp of components) {
             if (comp.type === 'PowerSource') {
-                // 只有零内阻的电源才使用电压源模型
+                // 只有零内阻且未被短路的电源才使用电压源模型
                 if (!comp.internalResistance || comp.internalResistance < 1e-9) {
-                    comp.vsIndex = this.voltageSourceCount++;
+                    if (!comp._isShorted) {
+                        comp.vsIndex = this.voltageSourceCount++;
+                    }
                 }
             } else if (comp.type === 'Motor') {
-                comp.vsIndex = this.voltageSourceCount++;
+                if (!comp._isShorted) {
+                    comp.vsIndex = this.voltageSourceCount++;
+                }
             } else if (comp.type === 'Ammeter') {
                 // 理想电流表使用电压源（V=0）来测量电流
                 if (!comp.resistance || comp.resistance <= 0) {
-                    comp.vsIndex = this.voltageSourceCount++;
+                    if (!comp._isShorted) {
+                        comp.vsIndex = this.voltageSourceCount++;
+                    }
                 }
             }
         }
@@ -127,6 +153,13 @@ export class MNASolver {
             return;
         }
         
+        // 如果元器件被短路，跳过stamp（除了特殊处理的情况）
+        if (comp._isShorted) {
+            // 被短路的元器件不参与电路计算
+            // 但需要记录状态以便显示
+            return;
+        }
+        
         const n1 = comp.nodes[0]; // 正极节点
         const n2 = comp.nodes[1]; // 负极节点
         
@@ -150,16 +183,15 @@ export class MNASolver {
                 this.stampResistor(A, i1, i2, comp.resistance);
                 break;
                 
-            case 'Rheostat':
-                // 滑动变阻器三端子模型：
-                // 端子0(左) -- R1 -- 端子2(滑动触点) -- R2 -- 端子1(右)
+            case 'Rheostat': {
+                // 滑动变阻器模型：根据连接模式决定如何stamp
+                // 内部结构：端子0(左) -- R1 -- 端子2(滑动触点) -- R2 -- 端子1(右)
                 // 总电阻 = maxR，按位置分配
-                // R1 = 左端到滑块的电阻 = position * maxR
-                // R2 = 滑块到右端的电阻 = (1 - position) * maxR
-                // 确保 R1 + R2 = maxR
-                const totalR = comp.maxResistance;
-                const R1 = Math.max(comp.minResistance, totalR * comp.position);
-                const R2 = Math.max(comp.minResistance, totalR * (1 - comp.position));
+                const totalR = comp.maxResistance || 100;
+                // R1 = 左端到滑块的电阻
+                const R1 = Math.max(1e-9, totalR * comp.position);
+                // R2 = 滑块到右端的电阻
+                const R2 = Math.max(1e-9, totalR * (1 - comp.position));
                 
                 // 获取三个节点
                 const n_left = comp.nodes[0];
@@ -167,23 +199,60 @@ export class MNASolver {
                 const n_slider = comp.nodes[2];
                 
                 // 转换为矩阵索引
-                const i_left = n_left - 1;
-                const i_right = n_right - 1;
-                const i_slider = n_slider !== undefined ? n_slider - 1 : -1;
+                const i_left = (n_left !== undefined && n_left >= 0) ? n_left - 1 : -1;
+                const i_right = (n_right !== undefined && n_right >= 0) ? n_right - 1 : -1;
+                const i_slider = (n_slider !== undefined && n_slider >= 0) ? n_slider - 1 : -1;
                 
-                if (i_slider >= 0) {
-                    // 三端子连接：左-滑动触点-右
-                    // 左端到滑动触点的电阻
-                    this.stampResistor(A, i_left, i_slider, Math.max(R1, 1e-9));
-                    // 滑动触点到右端的电阻
-                    this.stampResistor(A, i_slider, i_right, Math.max(R2, 1e-9));
-                } else {
-                    // 如果滑动触点未连接，按两端子处理
-                    // 使用与三端子一致的公式：position * maxR
-                    const actualR = Math.max(comp.minResistance, comp.maxResistance * comp.position);
-                    this.stampResistor(A, i1, i2, Math.max(actualR, 1e-9));
+                // 强制输出调试信息
+                console.warn(`[Rheostat] nodes=[${n_left},${n_right},${n_slider}], idx=[${i_left},${i_right},${i_slider}], mode=${comp.connectionMode}, R1=${R1.toFixed(2)}, R2=${R2.toFixed(2)}`);
+                
+                // 根据连接模式决定stamp方式
+                switch (comp.connectionMode) {
+                    case 'left-slider':
+                        console.warn('  -> left-slider mode');
+                        this.stampResistor(A, i_left, i_slider, R1);
+                        break;
+                    case 'right-slider':
+                        console.warn('  -> right-slider mode');
+                        this.stampResistor(A, i_slider, i_right, R2);
+                        break;
+                    case 'left-right':
+                        console.warn('  -> left-right mode');
+                        this.stampResistor(A, i_left, i_right, Math.max(1e-9, totalR));
+                        break;
+                    case 'all': {
+                        // 三端都接入：需要根据节点连接情况判断
+                        const leftEqSlider = (n_left === n_slider);
+                        const rightEqSlider = (n_right === n_slider);
+                        const leftEqRight = (n_left === n_right);
+                        
+                        console.warn(`  -> all mode: L=S:${leftEqSlider}, R=S:${rightEqSlider}, L=R:${leftEqRight}`);
+                        
+                        if (leftEqSlider && rightEqSlider) {
+                            console.warn('    => completely shorted');
+                        } else if (leftEqSlider) {
+                            console.warn('    => R1 shorted, stamp R2');
+                            this.stampResistor(A, i_slider, i_right, R2);
+                        } else if (rightEqSlider) {
+                            console.warn('    => R2 shorted, stamp R1');
+                            this.stampResistor(A, i_left, i_slider, R1);
+                        } else if (leftEqRight) {
+                            const R_parallel = (R1 * R2) / (R1 + R2);
+                            console.warn(`    => R1||R2 = ${R_parallel.toFixed(2)}`);
+                            this.stampResistor(A, i_left, i_slider, R_parallel);
+                        } else {
+                            console.warn('    => normal 3-terminal');
+                            this.stampResistor(A, i_left, i_slider, R1);
+                            this.stampResistor(A, i_slider, i_right, R2);
+                        }
+                        break;
+                    }
+                    default:
+                        console.warn('  -> disconnected');
+                        break;
                 }
                 break;
+            }
                 
             case 'PowerSource':
                 // 电源模型：电动势 E 串联内阻 r
@@ -338,6 +407,11 @@ export class MNASolver {
      * @returns {number} 电流值
      */
     calculateCurrent(comp, voltages, x, nodeCount) {
+        // 被短路的元器件电流为0（两端没有电势差）
+        if (comp._isShorted) {
+            return 0;
+        }
+        
         const v1 = voltages[comp.nodes[0]] || 0;
         const v2 = voltages[comp.nodes[1]] || 0;
         const dV = v1 - v2;
@@ -348,31 +422,63 @@ export class MNASolver {
                 return comp.resistance > 0 ? dV / comp.resistance : 0;
                 
             case 'Rheostat': {
-                // 滑动变阻器电流计算
-                // 如果使用三端子，需要根据连接方式计算
-                const v_left = voltages[comp.nodes[0]] || 0;
-                const v_right = voltages[comp.nodes[1]] || 0;
-                const v_slider = comp.nodes[2] !== undefined ? (voltages[comp.nodes[2]] || 0) : null;
+                // 滑动变阻器电流计算 - 根据连接模式
+                // 安全获取电压值，未连接的端子电压视为0
+                const getVoltage = (nodeIdx) => {
+                    if (nodeIdx === undefined || nodeIdx < 0) return 0;
+                    return voltages[nodeIdx] || 0;
+                };
                 
-                if (v_slider !== null && comp.nodes[2] !== comp.nodes[0] && comp.nodes[2] !== comp.nodes[1]) {
-                    // 三端子连接，计算通过滑动触点的电流
-                    const totalR = comp.maxResistance;
-                    const R1 = Math.max(comp.minResistance, totalR * comp.position);
-                    const R2 = Math.max(comp.minResistance, totalR * (1 - comp.position));
-                    
-                    // 通过左侧电阻的电流
-                    const I1 = R1 > 1e-9 ? (v_left - v_slider) / R1 : 0;
-                    // 通过右侧电阻的电流
-                    const I2 = R2 > 1e-9 ? (v_slider - v_right) / R2 : 0;
-                    
-                    // 根据连接模式返回合适的电流
-                    if (comp.connectionMode === 'left-slider') return I1;
-                    if (comp.connectionMode === 'right-slider') return I2;
-                    return Math.abs(I1) > Math.abs(I2) ? I1 : I2; // 返回较大值
-                } else {
-                    // 两端子连接
-                    const actualR = Math.max(comp.minResistance, comp.maxResistance * comp.position);
-                    return actualR > 0 ? dV / actualR : 0;
+                const v_left = getVoltage(comp.nodes[0]);
+                const v_right = getVoltage(comp.nodes[1]);
+                const v_slider = getVoltage(comp.nodes[2]);
+                
+                const totalR = comp.maxResistance || 100;
+                const R1 = Math.max(1e-9, totalR * comp.position);
+                const R2 = Math.max(1e-9, totalR * (1 - comp.position));
+                
+                switch (comp.connectionMode) {
+                    case 'left-slider':
+                        // 左端到滑块的电流
+                        return (v_left - v_slider) / R1;
+                    case 'right-slider':
+                        // 滑块到右端的电流
+                        return (v_slider - v_right) / R2;
+                    case 'left-right':
+                        // 全阻值
+                        return (v_left - v_right) / Math.max(1e-9, totalR);
+                    case 'all': {
+                        // 三端都连接，根据节点连接情况计算电流
+                        const n_left = comp.nodes[0];
+                        const n_right = comp.nodes[1];
+                        const n_slider = comp.nodes[2];
+                        
+                        const leftEqSlider = (n_left === n_slider);
+                        const rightEqSlider = (n_right === n_slider);
+                        const leftEqRight = (n_left === n_right);
+                        
+                        if (leftEqSlider && rightEqSlider) {
+                            // 完全短路
+                            return 0;
+                        } else if (leftEqSlider) {
+                            // R1短路，只有R2
+                            return (v_slider - v_right) / R2;
+                        } else if (rightEqSlider) {
+                            // R2短路，只有R1
+                            return (v_left - v_slider) / R1;
+                        } else if (leftEqRight) {
+                            // R1||R2 并联
+                            const R_parallel = (R1 * R2) / (R1 + R2);
+                            return (v_left - v_slider) / R_parallel;
+                        } else {
+                            // 正常三端连接，返回流经滑块的总电流
+                            const I1 = (v_left - v_slider) / R1;
+                            const I2 = (v_slider - v_right) / R2;
+                            return Math.abs(I1) > Math.abs(I2) ? I1 : I2;
+                        }
+                    }
+                    default:
+                        return 0;
                 }
             }
                 
