@@ -866,6 +866,22 @@ export class Circuit {
         const endComp = this.components.get(wire.endComponentId);
         if (!startComp || !endComp) return null;
         
+        // CRITICAL: Both components must be fully connected (both terminals wired) before showing current
+        // This prevents phantom current animations on incomplete connections
+        const startConnected = this.isComponentConnected(wire.startComponentId);
+        const endConnected = this.isComponentConnected(wire.endComponentId);
+        if (!startConnected || !endConnected) {
+            // Return zero current info if either component is not fully connected
+            return {
+                current: 0,
+                voltage1: 0,
+                voltage2: 0,
+                isShorted: false,
+                flowDirection: 0,
+                voltageDiff: 0
+            };
+        }
+        
         const startNode = startComp.nodes[wire.startTerminalIndex];
         const endNode = endComp.nodes[wire.endTerminalIndex];
         
