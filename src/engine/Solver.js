@@ -162,16 +162,17 @@ export class MNASolver {
         
         const n1 = comp.nodes[0]; // 正极节点
         const n2 = comp.nodes[1]; // 负极节点
+        const isValidNode = (nodeIdx) => nodeIdx !== undefined && nodeIdx >= 0;
         
-        // 检查节点是否有效
-        if (n1 === undefined || n2 === undefined) {
-            console.warn(`Component ${comp.id} has undefined nodes: [${n1}, ${n2}]`);
+        // 检查节点是否有效（滑动变阻器在后续分支中单独判断）
+        if (comp.type !== 'Rheostat' && (!isValidNode(n1) || !isValidNode(n2))) {
             return;
         }
         
         // 将节点索引转换为矩阵索引（去掉地节点0）
-        const i1 = n1 - 1;
-        const i2 = n2 - 1;
+        const toMatrixIndex = (nodeIdx) => (isValidNode(nodeIdx) ? nodeIdx - 1 : null);
+        const i1 = toMatrixIndex(n1);
+        const i2 = toMatrixIndex(n2);
         
         if (this.debugMode) {
             console.log(`Stamp ${comp.type} ${comp.id}: nodes=[${n1},${n2}], matrix idx=[${i1},${i2}]`);
@@ -198,10 +199,13 @@ export class MNASolver {
                 const n_right = comp.nodes[1];
                 const n_slider = comp.nodes[2];
                 
-                // 转换为矩阵索引
-                const i_left = (n_left !== undefined && n_left >= 0) ? n_left - 1 : -1;
-                const i_right = (n_right !== undefined && n_right >= 0) ? n_right - 1 : -1;
-                const i_slider = (n_slider !== undefined && n_slider >= 0) ? n_slider - 1 : -1;
+                // 转换为矩阵索引，仅对有效节点进行转换
+                const leftValid = isValidNode(n_left);
+                const rightValid = isValidNode(n_right);
+                const sliderValid = isValidNode(n_slider);
+                const i_left = leftValid ? n_left - 1 : null;
+                const i_right = rightValid ? n_right - 1 : null;
+                const i_slider = sliderValid ? n_slider - 1 : null;
                 
                 // 强制输出调试信息
                 console.warn(`[Rheostat] nodes=[${n_left},${n_right},${n_slider}], idx=[${i_left},${i_right},${i_slider}], mode=${comp.connectionMode}, R1=${R1.toFixed(2)}, R2=${R2.toFixed(2)}`);
@@ -210,15 +214,21 @@ export class MNASolver {
                 switch (comp.connectionMode) {
                     case 'left-slider':
                         console.warn('  -> left-slider mode');
-                        this.stampResistor(A, i_left, i_slider, R1);
+                        if (leftValid && sliderValid) {
+                            this.stampResistor(A, i_left, i_slider, R1);
+                        }
                         break;
                     case 'right-slider':
                         console.warn('  -> right-slider mode');
-                        this.stampResistor(A, i_slider, i_right, R2);
+                        if (sliderValid && rightValid) {
+                            this.stampResistor(A, i_slider, i_right, R2);
+                        }
                         break;
                     case 'left-right':
                         console.warn('  -> left-right mode');
-                        this.stampResistor(A, i_left, i_right, Math.max(1e-9, totalR));
+                        if (leftValid && rightValid) {
+                            this.stampResistor(A, i_left, i_right, Math.max(1e-9, totalR));
+                        }
                         break;
                     case 'all': {
                         // 三端都接入：需要根据节点连接情况判断
@@ -232,18 +242,28 @@ export class MNASolver {
                             console.warn('    => completely shorted');
                         } else if (leftEqSlider) {
                             console.warn('    => R1 shorted, stamp R2');
-                            this.stampResistor(A, i_slider, i_right, R2);
+                            if (sliderValid && rightValid) {
+                                this.stampResistor(A, i_slider, i_right, R2);
+                            }
                         } else if (rightEqSlider) {
                             console.warn('    => R2 shorted, stamp R1');
-                            this.stampResistor(A, i_left, i_slider, R1);
+                            if (leftValid && sliderValid) {
+                                this.stampResistor(A, i_left, i_slider, R1);
+                            }
                         } else if (leftEqRight) {
                             const R_parallel = (R1 * R2) / (R1 + R2);
                             console.warn(`    => R1||R2 = ${R_parallel.toFixed(2)}`);
-                            this.stampResistor(A, i_left, i_slider, R_parallel);
+                            if (leftValid && sliderValid) {
+                                this.stampResistor(A, i_left, i_slider, R_parallel);
+                            }
                         } else {
                             console.warn('    => normal 3-terminal');
-                            this.stampResistor(A, i_left, i_slider, R1);
-                            this.stampResistor(A, i_slider, i_right, R2);
+                            if (leftValid && sliderValid) {
+                                this.stampResistor(A, i_left, i_slider, R1);
+                            }
+                            if (sliderValid && rightValid) {
+                                this.stampResistor(A, i_slider, i_right, R2);
+                            }
                         }
                         break;
                     }
