@@ -301,12 +301,12 @@ export class Circuit {
                 comp.resistanceDirection = 'fixed';
                 break;
             case 'all':
-                // 三端都连接：并联模式
-                // R = (R_left_to_slider * R_slider_to_right) / (R_left_to_slider + R_slider_to_right)
-                const R1 = Math.max(R_left_to_slider, 1e-9);
-                const R2 = Math.max(R_slider_to_right, 1e-9);
-                comp.activeResistance = (R1 * R2) / (R1 + R2);
-                comp.resistanceDirection = 'parallel';
+                // 三端都连接：只显示左端到滑块的电阻（R1）
+                // 实际电路中两段是分开工作的，显示左侧电阻即可
+                comp.activeResistance = R_left_to_slider;
+                comp.resistanceDirection = 'slider-right-increase'; // 滑块右移增大
+                // 保存右侧电阻供需要时使用
+                comp.rightResistance = R_slider_to_right;
                 break;
             default:
                 comp.activeResistance = 0;
@@ -581,84 +581,123 @@ export class Circuit {
         
         const isShorted = false;
         
-        // 获取连接元器件的电流
+        // 计算该导线上的电流大小和方向
+        // 使用更可靠的方法：分析两端元器件的电流流向
+        
         const startCurrent = results.currents.get(wire.startComponentId) || 0;
         const endCurrent = results.currents.get(wire.endComponentId) || 0;
         
-        // 取电流较大的那个作为导线电流（用于强度展示）
-        let current = Math.abs(startCurrent) > Math.abs(endCurrent) ? startCurrent : endCurrent;
+        // 首先检查两端元器件是否都有电流
+        // 如果任一端的元器件电流为0，则导线上也没有电流
+        // 这可以正确处理断路情况
+        let current = 0;
+        if (Math.abs(startCurrent) > 1e-9 && Math.abs(endCurrent) > 1e-9) {
+            // 两端都有电流，取较小者（导线电流不会超过任一端器件电流）
+            current = Math.min(Math.abs(startCurrent), Math.abs(endCurrent));
+        } else if (Math.abs(startCurrent) > 1e-9 || Math.abs(endCurrent) > 1e-9) {
+            // 只有一端有电流
+            // 需要检查这条导线是否真的是电流路径的一部分
+            // 对于电源，即使开路也可能报告内部电流，需要特殊处理
+            if (startComp.type === 'PowerSource' && Math.abs(endCurrent) < 1e-9) {
+                current = 0; // 电源连接的对端无电流，说明是断路
+            } else if (endComp.type === 'PowerSource' && Math.abs(startCurrent) < 1e-9) {
+                current = 0; // 电源连接的对端无电流，说明是断路
+            } else {
+                current = Math.max(Math.abs(startCurrent), Math.abs(endCurrent));
+            }
+        }
         
         // 判断电流方向
-        // 核心逻辑：判断起点端子是"电流流出"还是"电流流入"
-        // - 如果起点端子是电流流出端，则导线电流从start流向end (flowDirection = 1)
-        // - 如果起点端子是电流流入端，则导线电流从end流向start (flowDirection = -1)
+        // 关键思路：分析起点元器件和终点元器件各自的电流流向，推断导线上的电流方向
         let flowDirection = 0;
         
-        if (Math.abs(current) < 1e-9) {
+        if (current < 1e-9) {
             flowDirection = 0;
         } else {
-            // 使用更可靠的方法：基于元器件端子的电势来判断
-            // 电流从高电势流向低电势
-            
-            // 获取起点元器件两端的电势
-            const getVoltageForComp = (comp, termIdx) => {
-                const node = comp.nodes[termIdx];
-                if (node === undefined || node < 0) return 0;
-                return results.voltages[node] || 0;
+            // 计算起点元器件在该端子上的电流流向
+            // 返回值：1 表示电流从该端子流出，-1 表示电流流入该端子
+            const getTerminalFlow = (comp, terminalIndex, compCurrent) => {
+                if (Math.abs(compCurrent) < 1e-9) return 0;
+                
+                // 获取元器件各端子的电压
+                const v0 = getVoltage(comp.nodes[0]);
+                const v1 = getVoltage(comp.nodes[1]);
+                
+                switch (comp.type) {
+                    case 'PowerSource':
+                        // 电源：电流从正极(端子0)流出，从负极(端子1)流入
+                        // 这是正电荷的传统方向
+                        if (terminalIndex === 0) {
+                            return 1; // 正极流出
+                        } else {
+                            return -1; // 负极流入
+                        }
+                        
+                    case 'Rheostat':
+                        // 滑动变阻器：三端器件，根据电压判断
+                        const v2 = getVoltage(comp.nodes[2]);
+                        const termV = getVoltage(comp.nodes[terminalIndex]);
+                        
+                        // 找该端子连接的另一端（内部）
+                        let otherV;
+                        if (terminalIndex === 0) {
+                            // 左端：内部连接到滑块
+                            otherV = v2;
+                        } else if (terminalIndex === 1) {
+                            // 右端：内部连接到滑块
+                            otherV = v2;
+                        } else {
+                            // 滑块：可能连接到左端或右端，取电压差最大的
+                            otherV = Math.abs(v0 - v2) > Math.abs(v1 - v2) ? v0 : v1;
+                        }
+                        
+                        // 电流从高电势流向低电势
+                        // 如果该端子电势 > 内部另一端，说明电流从外部流入该端子
+                        if (Math.abs(termV - otherV) < 1e-6) {
+                            return 0; // 无电流
+                        }
+                        return termV > otherV ? -1 : 1; // 高电势端流入，低电势端流出
+                        
+                    default:
+                        // 普通双端元器件（电阻、灯泡等）
+                        // 电流从高电势端流向低电势端
+                        // 即：高电势端是流入端，低电势端是流出端
+                        if (Math.abs(v0 - v1) < 1e-6) {
+                            return 0; // 短路或无电流
+                        }
+                        
+                        if (terminalIndex === 0) {
+                            // 端子0：如果电势高，则是流入端
+                            return v0 > v1 ? -1 : 1;
+                        } else {
+                            // 端子1：如果电势低，则是流出端
+                            return v1 < v0 ? 1 : -1;
+                        }
+                }
             };
             
-            // 对于起点元器件，判断电流是流入还是流出该端子
-            const v0 = getVoltageForComp(startComp, 0);
-            const v1 = getVoltageForComp(startComp, 1);
-            const terminalVoltage = getVoltageForComp(startComp, wire.startTerminalIndex);
-            const otherVoltage = wire.startTerminalIndex === 0 ? v1 : v0;
-            
-            // 如果该端子电势高于另一端，电流从该端子流出
-            // 如果该端子电势低于另一端，电流流入该端子
-            let isFlowingOut;
-            
-            if (startComp.type === 'PowerSource') {
-                // 电源特殊处理：正极流出，负极流入
-                if (wire.startTerminalIndex === 0) {
-                    isFlowingOut = startCurrent > 0;
-                } else {
-                    isFlowingOut = startCurrent < 0;
-                }
-            } else if (startComp.type === 'Rheostat') {
-                // 滑动变阻器：根据该端子与其他端子的电势差判断
-                // 如果该端子电势高，电流流出
-                const v_left = getVoltageForComp(startComp, 0);
-                const v_right = getVoltageForComp(startComp, 1);
-                const v_slider = getVoltageForComp(startComp, 2);
-                const myV = getVoltageForComp(startComp, wire.startTerminalIndex);
-                
-                // 找到与该端子相连的最低电势点
-                let minV = Infinity;
-                if (wire.startTerminalIndex !== 0) minV = Math.min(minV, v_left);
-                if (wire.startTerminalIndex !== 1) minV = Math.min(minV, v_right);
-                if (wire.startTerminalIndex !== 2) minV = Math.min(minV, v_slider);
-                
-                isFlowingOut = myV > minV + 1e-6;
-            } else {
-                // 普通元器件：电流从高电势端流向低电势端
-                // 如果该端子电势高于另一端，电流从该端子流入元器件
-                // 所以该端子不是流出端
-                if (Math.abs(terminalVoltage - otherVoltage) > 1e-6) {
-                    isFlowingOut = terminalVoltage < otherVoltage;
-                } else {
-                    // 电压相同，用电流方向判断
-                    if (wire.startTerminalIndex === 0) {
-                        isFlowingOut = startCurrent < 0;
-                    } else {
-                        isFlowingOut = startCurrent > 0;
-                    }
-                }
-            }
-            
-            flowDirection = isFlowingOut ? 1 : -1;
+            // 获取起点和终点的电流流向
+            const startFlow = getTerminalFlow(startComp, wire.startTerminalIndex, startCurrent);
+            const endFlow = getTerminalFlow(endComp, wire.endTerminalIndex, endCurrent);
             
             // 调试输出
-            console.log(`Wire ${wire.id}: start=${startComp.type}:${wire.startTerminalIndex}, I=${startCurrent.toFixed(4)}, flowOut=${isFlowingOut}, dir=${flowDirection}`);
+            console.log(`Wire: ${startComp.type}:${wire.startTerminalIndex} -> ${endComp.type}:${wire.endTerminalIndex}`);
+            console.log(`  V: start=${voltage1.toFixed(3)}, end=${voltage2.toFixed(3)}`);
+            console.log(`  Flow: start=${startFlow}, end=${endFlow}`);
+            
+            // 根据起点的流向决定导线电流方向
+            // 如果起点端子是流出端(1)，则导线电流从起点流向终点
+            // 如果起点端子是流入端(-1)，则导线电流从终点流向起点
+            if (startFlow !== 0) {
+                flowDirection = startFlow;
+            } else if (endFlow !== 0) {
+                // 如果终点是流出端，则导线电流从终点流向起点
+                flowDirection = -endFlow;
+            } else {
+                flowDirection = 0;
+            }
+            
+            console.log(`  Result: flowDirection=${flowDirection}`);
         }
         
         return {
