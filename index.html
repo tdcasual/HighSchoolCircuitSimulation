@@ -179,16 +179,16 @@
     <!-- AI助手面板 -->
     <div id="ai-assistant-panel" class="collapsed">
         <div id="ai-panel-header">
-            <h3>🤖 AI 助手</h3>
+            <h3>AI 助手</h3>
             <div id="ai-panel-actions">
-                <button id="ai-settings-btn" title="设置">⚙️</button>
+                <button id="ai-settings-btn" title="设置">设置</button>
                 <button id="ai-toggle-btn" title="展开/折叠">▲</button>
             </div>
         </div>
         <div id="ai-panel-content">
             <div id="ai-tabs">
-                <button class="ai-tab active" data-tab="image">📷 图片转电路</button>
-                <button class="ai-tab" data-tab="explain">📚 物理解释</button>
+                <button class="ai-tab active" data-tab="image">图片转电路</button>
+                <button class="ai-tab" data-tab="explain">物理解释</button>
             </div>
             
             <!-- 图片转电路 Tab -->
@@ -211,7 +211,7 @@
                         </div>
                     </div>
                 </div>
-                <button id="convert-circuit-btn" class="primary-btn" disabled>🔄 转换为JSON并加载</button>
+                <button id="convert-circuit-btn" class="primary-btn" disabled>转换为 JSON 并加载</button>
             </div>
             
             <!-- 物理解释 Tab -->
@@ -224,7 +224,7 @@
                 </div>
                 <div id="chat-input-area">
                     <input type="text" id="chat-input" placeholder="问一个关于电路的问题..." />
-                    <button id="chat-send-btn">💬</button>
+                    <button id="chat-send-btn">发送</button>
                 </div>
             </div>
         </div>
@@ -244,17 +244,22 @@
             </div>
             <div class="form-group">
                 <label>视觉模型 (图片转换)</label>
-                <input type="text" id="vision-model" placeholder="gpt-4-vision-preview" />
+                <input type="text" id="vision-model" list="model-list-vision" placeholder="gpt-4o-mini-vision" />
+                <datalist id="model-list-vision"></datalist>
             </div>
             <div class="form-group">
                 <label>文本模型 (物理解释)</label>
-                <input type="text" id="text-model" placeholder="gpt-4" />
+                <input type="text" id="text-model" list="model-list-text" placeholder="gpt-4o-mini" />
+                <datalist id="model-list-text"></datalist>
             </div>
             <div class="dialog-buttons">
+                <button id="settings-fetch-models-btn">获取模型</button>
+                <button id="settings-clear-key-btn">清除密钥</button>
                 <button id="settings-test-btn">测试连接</button>
                 <button id="settings-cancel-btn">取消</button>
                 <button id="settings-save-btn" class="primary-btn">保存</button>
             </div>
+            <div id="model-fetch-status" class="hint-text"></div>
         </div>
     </div>
 

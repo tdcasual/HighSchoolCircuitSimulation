@@ -340,6 +340,9 @@ export class AIPanel {
         const saveBtn = document.getElementById('settings-save-btn');
         const cancelBtn = document.getElementById('settings-cancel-btn');
         const testBtn = document.getElementById('settings-test-btn');
+        const clearKeyBtn = document.getElementById('settings-clear-key-btn');
+        const fetchModelsBtn = document.getElementById('settings-fetch-models-btn');
+        const fetchStatus = document.getElementById('model-fetch-status');
 
         cancelBtn.addEventListener('click', () => {
             dialog.classList.add('hidden');
@@ -365,6 +368,30 @@ export class AIPanel {
             } finally {
                 testBtn.disabled = false;
                 testBtn.textContent = '测试连接';
+            }
+        });
+
+        clearKeyBtn.addEventListener('click', () => {
+            this.aiClient.clearApiKey();
+            document.getElementById('api-key').value = '';
+            this.app.updateStatus('API 密钥已清除（仅会话存储）');
+        });
+
+        fetchModelsBtn.addEventListener('click', async () => {
+            if (this.isProcessing) return;
+            fetchStatus.textContent = '正在获取模型列表...';
+            fetchModelsBtn.disabled = true;
+            try {
+                this.isProcessing = true;
+                const models = await this.aiClient.listModels();
+                this.populateModelLists(models);
+                fetchStatus.textContent = `已加载 ${models.length} 个模型`;
+            } catch (e) {
+                console.error(e);
+                fetchStatus.textContent = `获取失败: ${e.message}`;
+            } finally {
+                this.isProcessing = false;
+                fetchModelsBtn.disabled = false;
             }
         });
     }
@@ -395,7 +422,8 @@ export class AIPanel {
         };
         
         this.aiClient.saveConfig(config);
-        this.app.updateStatus('AI 设置已保存');
+        const keyMsg = config.apiKey ? '（密钥仅保存在当前会话）' : '';
+        this.app.updateStatus(`AI 设置已保存${keyMsg}`);
     }
 
     /**
@@ -403,6 +431,27 @@ export class AIPanel {
      */
     loadSettings() {
         // 设置已在 OpenAIClient 构造函数中自动加载
+    }
+
+    populateModelLists(models = []) {
+        const visionList = document.getElementById('model-list-vision');
+        const textList = document.getElementById('model-list-text');
+        if (!visionList || !textList) return;
+
+        const toOption = (id) => {
+            const opt = document.createElement('option');
+            opt.value = id;
+            return opt;
+        };
+
+        const visionModels = models.filter(m => /vision|image/i.test(m));
+        const textModels = models.filter(m => !/vision|image/i.test(m));
+
+        visionList.innerHTML = '';
+        textList.innerHTML = '';
+
+        visionModels.forEach(id => visionList.appendChild(toOption(id)));
+        textModels.forEach(id => textList.appendChild(toOption(id)));
     }
 
     /**

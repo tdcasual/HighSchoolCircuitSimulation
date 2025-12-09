@@ -1,16 +1,18 @@
 # 电路图转JSON格式转换 Prompt
 
 ## 任务描述
-请仔细分析图片中的电路图,将其转换为精确的JSON格式。
+请仔细分析图片中的电路图，将其转换为精确的 JSON 格式。
+参考最新示例 `examples/circuit_2025-12-09.json`（对应截图：左右两块电压表、上方 R1=8Ω、竖直滑动变阻器 R2、右侧 200Ω+1mF 支路、串联电流表 3A），优先保持拓扑、元件类型、rotation 与标签的准确性。
 
 ---
 
 ## 重要规则:
-1. **准确识别元器件类型**:电源、电阻、滑动变阻器、灯泡、电容、电动机、开关、电流表、电压表
-2. **合理布局**:根据电路图的实际位置安排坐标(x, y),确保视觉上清晰美观
-3. **正确连接**:每根导线必须准确连接两个元器件的正确端子
-4. **标签命名**:所有元器件必须有易于理解的标签(如E1, E2, R1, R2, A1, V1等)
-5. **参数设置**:根据题目或常识设置合理的电压、电阻等参数值
+1. **准确识别元器件类型**：电源、电阻、滑动变阻器、灯泡、电容、电动机、开关、电流表、电压表
+2. **合理布局**：生成规整的矩形/正交布局（水平支路 rotation=0，竖直支路 rotation=90，电源推荐 rotation=270）
+3. **正确连接**：每根导线连接两个正确端子；并联/汇合处用多条导线
+4. **标签命名**：所有元器件必须有 label（E1/E2、R1/R2、A1、V1 等）；没有标注的也要给出合理 label
+5. **参数设置**：根据图中标注或常识设置属性（如 R1=8Ω、200Ω、1mF、电源电压/内阻等）
+6. **端子约定**：电源 0=负极 1=正极；电阻/电容 0=左或上，1=右或下；滑变 0=a 1=b 2=滑片；表头 0=负、1=正
 
 ---
 
@@ -356,130 +358,108 @@
 
 ---
 
-## 完整示例：典型物理实验电路
+## 真实示例：circuit_2025-12-09（对应提供的截图）
 
-电路描述：电源E(内阻r)串联R₁和电流表A，R₁后分出三条并联支路：电压表V、电阻R₃、以及R₂串联滑动变阻器R₄(a-b端)
+- 上支路：电源 E,r（竖直，正极在上，3V 内阻2Ω）→ R1=8Ω（水平）→ 竖直滑变 R2（max≈8Ω，position=1，rotation=90）→ 垂直 200Ω → 电容 1mF → 回路
+- 左侧：电压表 V1（竖直并联在电源两端）
+- 右侧：电压表 V（竖直并联在 200Ω+电容 支路两端）
+- 下方：电流表 A（理想，串联在回路）
+- 端子延长：示例中使用了 `terminalExtensions` 让端子对齐。
+
+简化后的 JSON 片段（坐标可按矩形排布保留拓扑与 rotation）：
 
 ```json
 {
   "meta": {
     "version": "1.0",
-    "timestamp": 1733400000000,
-    "name": "物理实验电路"
+    "timestamp": 1765240922753,
+    "name": "电路设计"
   },
   "components": [
     {
       "id": "PowerSource_1",
       "type": "PowerSource",
-      "x": 200,
-      "y": 350,
-      "rotation": 270,
-      "properties": { "voltage": 12, "internalResistance": 1 }
+      "label": "E,r",
+      "x": 340,
+      "y": 200,
+      "rotation": 90,
+      "properties": { "voltage": 3, "internalResistance": 2 }
     },
     {
       "id": "Resistor_R1",
       "type": "Resistor",
-      "x": 350,
-      "y": 100,
+      "label": "R1 8Ω",
+      "x": 435,
+      "y": 169,
       "rotation": 0,
-      "properties": { "resistance": 10 }
+      "properties": { "resistance": 8 }
     },
     {
       "id": "Ammeter_1",
       "type": "Ammeter",
-      "x": 250,
-      "y": 550,
+      "label": "A1",
+      "x": 461,
+      "y": 325,
       "rotation": 0,
       "properties": { "resistance": 0, "range": 3 }
     },
     {
       "id": "Voltmeter_1",
       "type": "Voltmeter",
-      "x": 500,
-      "y": 350,
+      "label": "V1",
+      "x": 240,
+      "y": 280,
       "rotation": 90,
       "properties": { "resistance": null, "range": 15 }
     },
     {
-      "id": "Resistor_R3",
-      "type": "Resistor",
-      "x": 620,
-      "y": 350,
-      "rotation": 90,
-      "properties": { "resistance": 20 }
-    },
-    {
-      "id": "Resistor_R2",
-      "type": "Resistor",
-      "x": 800,
-      "y": 100,
-      "rotation": 0,
-      "properties": { "resistance": 15 }
-    },
-    {
       "id": "Rheostat_R4",
       "type": "Rheostat",
-      "x": 900,
-      "y": 350,
+      "label": "R2",
+      "x": 523,
+      "y": 216,
       "rotation": 90,
-      "properties": { "minResistance": 0, "maxResistance": 20, "position": 0.5 }
+      "properties": { "minResistance": 0, "maxResistance": 8, "position": 1 }
+    },
+    {
+      "id": "Resistor_5",
+      "type": "Resistor",
+      "label": "R3 200Ω",
+      "x": 620,
+      "y": 200,
+      "rotation": 90,
+      "properties": { "resistance": 200 }
+    },
+    {
+      "id": "Capacitor_6",
+      "type": "Capacitor",
+      "label": "C1 1mF",
+      "x": 620,
+      "y": 296,
+      "rotation": 90,
+      "properties": { "capacitance": 0.001 }
+    },
+    {
+      "id": "Voltmeter_9",
+      "type": "Voltmeter",
+      "label": "V2",
+      "x": 740,
+      "y": 260,
+      "rotation": 90,
+      "properties": { "resistance": null, "range": 15 }
     }
   ],
   "wires": [
-    {
-      "id": "wire_1",
-      "start": { "componentId": "PowerSource_1", "terminalIndex": 1 },
-      "end": { "componentId": "Resistor_R1", "terminalIndex": 0 },
-      "controlPoints": [{ "x": 200, "y": 100 }]
-    },
-    {
-      "id": "wire_2",
-      "start": { "componentId": "Resistor_R1", "terminalIndex": 1 },
-      "end": { "componentId": "Voltmeter_1", "terminalIndex": 0 },
-      "controlPoints": [{ "x": 500, "y": 100 }]
-    },
-    {
-      "id": "wire_3",
-      "start": { "componentId": "Resistor_R1", "terminalIndex": 1 },
-      "end": { "componentId": "Resistor_R3", "terminalIndex": 0 },
-      "controlPoints": [{ "x": 620, "y": 100 }]
-    },
-    {
-      "id": "wire_4",
-      "start": { "componentId": "Resistor_R1", "terminalIndex": 1 },
-      "end": { "componentId": "Resistor_R2", "terminalIndex": 0 },
-      "controlPoints": []
-    },
-    {
-      "id": "wire_5",
-      "start": { "componentId": "Resistor_R2", "terminalIndex": 1 },
-      "end": { "componentId": "Rheostat_R4", "terminalIndex": 0 },
-      "controlPoints": [{ "x": 900, "y": 100 }]
-    },
-    {
-      "id": "wire_6",
-      "start": { "componentId": "PowerSource_1", "terminalIndex": 0 },
-      "end": { "componentId": "Ammeter_1", "terminalIndex": 0 },
-      "controlPoints": []
-    },
-    {
-      "id": "wire_7",
-      "start": { "componentId": "Ammeter_1", "terminalIndex": 1 },
-      "end": { "componentId": "Voltmeter_1", "terminalIndex": 1 },
-      "controlPoints": [{ "x": 500, "y": 550 }]
-    },
-    {
-      "id": "wire_8",
-      "start": { "componentId": "Ammeter_1", "terminalIndex": 1 },
-      "end": { "componentId": "Resistor_R3", "terminalIndex": 1 },
-      "controlPoints": [{ "x": 620, "y": 550 }]
-    },
-    {
-      "id": "wire_9",
-      "start": { "componentId": "Ammeter_1", "terminalIndex": 1 },
-      "end": { "componentId": "Rheostat_R4", "terminalIndex": 1 },
-      "controlPoints": [{ "x": 900, "y": 550 }]
-    }
+    { "id": "w1", "start": { "componentId": "PowerSource_1", "terminalIndex": 0 }, "end": { "componentId": "Resistor_R1", "terminalIndex": 0 }, "controlPoints": [] },
+    { "id": "w2", "start": { "componentId": "Resistor_R1", "terminalIndex": 1 }, "end": { "componentId": "Rheostat_R4", "terminalIndex": 0 }, "controlPoints": [] },
+    { "id": "w3", "start": { "componentId": "Rheostat_R4", "terminalIndex": 0 }, "end": { "componentId": "Resistor_5", "terminalIndex": 0 }, "controlPoints": [] },
+    { "id": "w4", "start": { "componentId": "Resistor_5", "terminalIndex": 1 }, "end": { "componentId": "Capacitor_6", "terminalIndex": 0 }, "controlPoints": [] },
+    { "id": "w5", "start": { "componentId": "PowerSource_1", "terminalIndex": 1 }, "end": { "componentId": "Ammeter_1", "terminalIndex": 0 }, "controlPoints": [] },
+    { "id": "w6", "start": { "componentId": "Ammeter_1", "terminalIndex": 1 }, "end": { "componentId": "Capacitor_6", "terminalIndex": 1 }, "controlPoints": [] },
+    { "id": "w7", "start": { "componentId": "Voltmeter_1", "terminalIndex": 1 }, "end": { "componentId": "PowerSource_1", "terminalIndex": 0 }, "controlPoints": [] },
+    { "id": "w8", "start": { "componentId": "Voltmeter_1", "terminalIndex": 0 }, "end": { "componentId": "Ammeter_1", "terminalIndex": 0 }, "controlPoints": [] },
+    { "id": "w9", "start": { "componentId": "Resistor_5", "terminalIndex": 0 }, "end": { "componentId": "Voltmeter_9", "terminalIndex": 0 }, "controlPoints": [{ "x": 740, "y": 170 }] },
+    { "id": "w10", "start": { "componentId": "Voltmeter_9", "terminalIndex": 1 }, "end": { "componentId": "Capacitor_6", "terminalIndex": 1 }, "controlPoints": [{ "x": 740, "y": 326 }] }
   ]
 }
 ```

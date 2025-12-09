@@ -6,6 +6,15 @@
 export class OpenAIClient {
     constructor() {
         this.config = this.loadConfig();
+        this.cachedPrompt = null;
+    }
+
+    get PUBLIC_CONFIG_KEY() {
+        return 'ai_config';
+    }
+
+    get SESSION_KEY_KEY() {
+        return 'ai_session_key';
     }
 
     /**
@@ -15,14 +24,19 @@ export class OpenAIClient {
         const defaultConfig = {
             apiEndpoint: 'https://api.openai.com/v1/chat/completions',
             apiKey: '',
-            visionModel: 'gpt-4-vision-preview',
-            textModel: 'gpt-4',
-            maxTokens: 2000
+            visionModel: 'gpt-4o-mini-vision',
+            textModel: 'gpt-4o-mini',
+            maxTokens: 2000,
+            requestTimeout: 20000,
+            retryAttempts: 2,
+            retryDelayMs: 600
         };
 
         try {
-            const saved = localStorage.getItem('ai_config');
-            return saved ? { ...defaultConfig, ...JSON.parse(saved) } : defaultConfig;
+            const savedPublic = localStorage.getItem(this.PUBLIC_CONFIG_KEY);
+            const sessionKey = sessionStorage.getItem(this.SESSION_KEY_KEY) || '';
+            const merged = savedPublic ? { ...defaultConfig, ...JSON.parse(savedPublic) } : defaultConfig;
+            return { ...merged, apiKey: sessionKey };
         } catch (e) {
             console.error('Failed to load AI config:', e);
             return defaultConfig;
@@ -33,8 +47,43 @@ export class OpenAIClient {
      * 保存配置到 localStorage
      */
     saveConfig(config) {
-        this.config = { ...this.config, ...config };
-        localStorage.setItem('ai_config', JSON.stringify(this.config));
+        const { apiKey, ...rest } = config;
+        this.config = { ...this.config, ...rest, apiKey: apiKey ?? this.config.apiKey };
+
+        try {
+            localStorage.setItem(this.PUBLIC_CONFIG_KEY, JSON.stringify({
+                apiEndpoint: this.config.apiEndpoint,
+                visionModel: this.config.visionModel,
+                textModel: this.config.textModel,
+                maxTokens: this.config.maxTokens,
+                requestTimeout: this.config.requestTimeout,
+                retryAttempts: this.config.retryAttempts,
+                retryDelayMs: this.config.retryDelayMs
+            }));
+        } catch (e) {
+            console.error('Failed to save AI public config:', e);
+        }
+
+        if (apiKey !== undefined) {
+            try {
+                if (apiKey) {
+                    sessionStorage.setItem(this.SESSION_KEY_KEY, apiKey);
+                } else {
+                    sessionStorage.removeItem(this.SESSION_KEY_KEY);
+                }
+            } catch (e) {
+                console.error('Failed to persist API key to session storage:', e);
+            }
+        }
+    }
+
+    clearApiKey() {
+        this.config.apiKey = '';
+        try {
+            sessionStorage.removeItem(this.SESSION_KEY_KEY);
+        } catch (e) {
+            console.error('Failed to clear API key from session storage:', e);
+        }
     }
 
     /**
@@ -116,16 +165,17 @@ export class OpenAIClient {
             throw new Error('请先在设置中配置 API 密钥');
         }
 
-        const systemPrompt = `你是一位经验丰富的高中物理老师，专门解释电路问题。
+        const systemPrompt = `你是一位耐心的高中物理老师，采用“学习模式”与学生互动讲解电路。
+要求：
+- 语言简洁、贴近高中课程，不引入超纲（大学/微积分/复阻抗）内容。
+- 使用欧姆定律、串并联规律、功率/能量守恒等基础知识。
+- 先给出核心回答，再用 3-5 步简明推理说明；每步点出物理依据。
+- 适度反问/小测验：给 1-2 个简短检查题（如“R1 电流如何变化？选 A/B”或“请代入公式算出电流约多少 A”），鼓励学生参与。
+- 如需要计算，给出关键中间值，数值保留 2-3 位有效数字；明确公式出处。
+- 发现题意不全时，先澄清再作答。
+- 不使用过于口语化的表情/Emoji。
 
-请用以下方式回答学生的问题：
-1. 使用高中生能理解的语言
-2. 引用欧姆定律、串并联电路规律等基础知识
-3. 结合电路中的具体数值进行计算说明
-4. 分步骤解释，每步都要有物理依据
-5. 用简洁清晰的中文回答，避免过于专业的术语
-
-当前电路状态：
+当前电路状态（供推理参考）：
 ${circuitState}`;
 
         const messages = [
@@ -142,9 +192,58 @@ ${circuitState}`;
     }
 
     /**
+     * 获取可用模型列表
+     */
+    async listModels() {
+        if (!this.config.apiKey) {
+            throw new Error('请先在设置中配置 API 密钥');
+        }
+
+        const apiEndpoint = this.config.apiEndpoint || '';
+        const base = apiEndpoint.includes('/v1/')
+            ? apiEndpoint.split('/v1/')[0] + '/v1/models'
+            : (apiEndpoint.endsWith('/') ? apiEndpoint + 'models' : apiEndpoint + '/models');
+
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), this.config.requestTimeout || 20000);
+
+        try {
+            const response = await fetch(base, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${this.config.apiKey}`
+                },
+                signal: controller.signal
+            });
+            clearTimeout(timer);
+
+            if (!response.ok) {
+                if (response.status === 401 || response.status === 403) {
+                    throw new Error('API 密钥无效或无访问权限');
+                }
+                throw new Error(`获取模型失败: HTTP ${response.status}`);
+            }
+            const data = await response.json();
+            const ids = (data.data || []).map(m => m.id).filter(Boolean);
+            return ids;
+        } catch (err) {
+            clearTimeout(timer);
+            if (err?.name === 'AbortError') {
+                throw new Error('请求超时');
+            }
+            throw err;
+        }
+    }
+
+    /**
      * 调用 OpenAI API
      */
     async callAPI(messages, model, maxTokens = null) {
+        const apiKey = this.config.apiKey;
+        if (!apiKey) {
+            throw new Error('请先在设置中配置 API 密钥');
+        }
+
         // Build request body - some APIs use max_tokens, others use max_completion_tokens
         const requestBody = {
             model: model,
@@ -158,245 +257,96 @@ ${circuitState}`;
             // Use max_tokens for broader compatibility with third-party APIs
             requestBody.max_tokens = tokenLimit;
         }
-        
-        const response = await fetch(this.config.apiEndpoint, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${this.config.apiKey}`
-            },
-            body: JSON.stringify(requestBody)
-        });
 
-        if (!response.ok) {
-            const error = await response.json().catch(() => ({ error: { message: 'Unknown error' } }));
-            throw new Error(error.error?.message || `HTTP ${response.status}: ${response.statusText}`);
+        const attempts = Math.max(1, this.config.retryAttempts || 1);
+        let delay = Math.max(200, this.config.retryDelayMs || 200);
+        let lastError;
+
+        for (let attempt = 0; attempt < attempts; attempt++) {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), this.config.requestTimeout || 20000);
+            try {
+                const response = await fetch(this.config.apiEndpoint, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${apiKey}`
+                    },
+                    body: JSON.stringify(requestBody),
+                    signal: controller.signal
+                });
+                clearTimeout(timer);
+
+                if (!response.ok) {
+                    if (response.status === 401 || response.status === 403) {
+                        throw new Error('API 密钥无效或无访问权限');
+                    }
+                    if (response.status === 429 || response.status >= 500) {
+                        // 适合重试的错误
+                        const errObj = await response.json().catch(() => ({}));
+                        lastError = new Error(errObj.error?.message || `HTTP ${response.status}`);
+                        if (attempt < attempts - 1) {
+                            await new Promise(res => setTimeout(res, delay));
+                            delay *= 2;
+                            continue;
+                        }
+                        throw lastError;
+                    }
+                    const error = await response.json().catch(() => ({ error: { message: response.statusText } }));
+                    throw new Error(error.error?.message || `HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                return data.choices[0].message.content;
+            } catch (error) {
+                clearTimeout(timer);
+                const isAbort = error?.name === 'AbortError';
+                const isNetwork = error?.message?.includes('fetch failed');
+                if ((isAbort || isNetwork) && attempt < attempts - 1) {
+                    lastError = error;
+                    await new Promise(res => setTimeout(res, delay));
+                    delay *= 2;
+                    continue;
+                }
+                throw lastError || error;
+            }
         }
 
-        const data = await response.json();
-        return data.choices[0].message.content;
+        throw lastError || new Error('未知错误');
     }
 
     /**
      * 获取电路转换 Prompt (从文件或内嵌)
      */
     async getCircuitConversionPrompt() {
-        return `请仔细分析图片中的电路图，将其转换为精确的JSON格式。
+        if (this.cachedPrompt) return this.cachedPrompt;
+
+        // 优先读取本地的提示文件，便于更新
+        try {
+            const resp = await fetch('电路图转JSON-Prompt.md');
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const text = await resp.text();
+            this.cachedPrompt = text;
+            return text;
+        } catch (err) {
+            console.warn('加载电路图转JSON提示失败，使用内置后备。', err);
+        }
+
+        // 后备内置提示（精简版）
+        const fallback = `请将电路图转换为规范 JSON：
 
 ## 重要规则：
-1. **理解电路拓扑**: 识别串联、并联关系，不要仅仅复制视觉位置
-2. **简化布局**: 生成的电路应该是规整的矩形布局，不需要复刻原图的复杂路径
-3. **准确识别元器件**: 电源(+/-)、电阻(矩形)、滑动变阻器(P标记)、开关(S)、电流表(A)、电压表(V)
-4. **标签命名**: 所有元器件必须有标签(如E1, R1, R2, P, A, V, S1)
-5. **参数设置**: 根据常识设置合理的电压、电阻值
-6. **规整坐标**: 使用简洁的矩形布局，水平/垂直对齐
+1. 识别类型：PowerSource, Resistor, Rheostat(3端), Capacitor, Bulb, Switch, Ammeter, Voltmeter, Motor
+2. 生成矩形/正交布局：x 递增表示从左到右，y 递增表示从上到下；rotation 0=水平，90=竖直，电源推荐 270（正极在上）
+3. 每个元件必须有 label（E1/R1/R2/A1/V1 等），并填写合理属性（voltage/resistance/position 等）
+4. wires 使用 {start:{componentId,terminalIndex},end:{...},controlPoints:[]} 连接正确端子
+5. 端子约定：电源 0=负极 1=正极；电阻/电容 0=左或上端 1=右或下端；滑变 0=a 1=b 2=滑片
 
-## 电路分析步骤：
-1. 找到电源的正负极
-2. 从正极出发，跟踪电流路径
-3. 识别串联部分(电流依次经过)
-4. 识别并联部分(电流分流)
-5. 绘制简化的矩形电路图
+6. rotation 只能是 0/90/180/270；坐标可取整数
 
-## 标准布局模板(推荐)：
+输出仅 JSON 代码块（\`\`\`json ...\`\`\`）。`;
 
-对于串联电路:
-  电源+ --- 元件1 --- 元件2 --- 元件3
-     |                              |
-     +------------------------------+
-  
-坐标建议:
-  电源: (150, 300), rotation=270
-  顶部元件: y=150, x依次递增(300, 450, 600...)
-  底部回路: y=450
-
-对于并联电路:
-  电源+ --- 分支点
-             ├--- 支路1 ---+
-             ├--- 支路2 ---+ 汇合点
-             └--- 支路3 ---+
-     |                      |
-     +----------------------+
-
-坐标建议:
-  电源: (150, 300)
-  各支路y坐标: 150, 250, 350
-  汇合点x: 700
-
-## 输出JSON格式：
-\`\`\`json
-{
-  "meta": {
-    "version": "1.0",
-    "timestamp": ${Date.now()},
-    "name": "电路设计",
-    "description": "从电路图转换而来"
-  },
-  "components": [
-    {
-      "id": "PowerSource_1",
-      "type": "PowerSource",
-      "label": "E1",
-      "x": 200,
-      "y": 200,
-      "rotation": 270,
-      "properties": {
-        "voltage": 12,
-        "internalResistance": 0.5
-      }
-    },
-    {
-      "id": "Resistor_R1",
-      "type": "Resistor",
-      "label": "R1",
-      "x": 400,
-      "y": 200,
-      "rotation": 0,
-      "properties": {
-        "resistance": 10
-      }
-    },
-    {
-      "id": "Ammeter_A1",
-      "type": "Ammeter",
-      "label": "A1",
-      "x": 300,
-      "y": 200,
-      "rotation": 0,
-      "properties": {
-        "resistance": 0,
-        "range": 3
-      }
-    },
-    {
-      "id": "Switch_S1",
-      "type": "Switch",
-      "label": "S1",
-      "x": 500,
-      "y": 200,
-      "rotation": 0,
-      "properties": {
-        "closed": true
-      }
-    }
-  ],
-  "wires": [
-    {
-      "id": "wire_1",
-      "start": { "componentId": "PowerSource_1", "terminalIndex": 1 },
-      "end": { "componentId": "Ammeter_A1", "terminalIndex": 0 },
-      "controlPoints": []
-    },
-    {
-      "id": "wire_2",
-      "start": { "componentId": "Ammeter_A1", "terminalIndex": 1 },
-      "end": { "componentId": "Resistor_R1", "terminalIndex": 0 },
-      "controlPoints": []
-    },
-    {
-      "id": "wire_3",
-      "start": { "componentId": "Resistor_R1", "terminalIndex": 1 },
-      "end": { "componentId": "Switch_S1", "terminalIndex": 0 },
-      "controlPoints": []
-    },
-    {
-      "id": "wire_4",
-      "start": { "componentId": "Switch_S1", "terminalIndex": 1 },
-      "end": { "componentId": "PowerSource_1", "terminalIndex": 0 },
-      "controlPoints": []
-    }
-  ]
-}
-\`\`\`
-
-## 元器件类型详解：
-
-### 1. PowerSource (电源)
-- **terminalIndex**: 0=负极, 1=正极
-- **rotation**: 电流从正极流出，通常设置270度（正极在上）或90度（正极在下）
-- **properties**: 
-  - voltage: 电动势(V)，典型值 1.5V, 3V, 6V, 9V, 12V
-  - internalResistance: 内阻(Ω)，通常 0.5-2Ω，理想电源设为0.1
-
-### 2. Resistor (定值电阻)
-- **terminalIndex**: 0=左端, 1=右端
-- **rotation**: 0度（水平）、90度（竖直）
-- **properties**:
-  - resistance: 电阻值(Ω)，常见 5Ω, 10Ω, 20Ω, 50Ω, 100Ω
-
-### 3. Rheostat (滑动变阻器)
-- **terminalIndex**: 0=左端, 1=右端, 2=滑片
-- **rotation**: 通常0度
-- **properties**:
-  - maxResistance: 最大阻值(Ω)，如 20Ω, 50Ω
-  - minResistance: 最小阻值(Ω)，通常0Ω
-  - position: 滑片位置(0-1)，0.5表示中间
-  - connectionMode: 连接方式，"left-slider"(左端和滑片) 或 "right-slider"(右端和滑片)
-
-### 4. Bulb (灯泡)
-- **terminalIndex**: 0=左端, 1=右端
-- **rotation**: 0度或90度
-- **properties**:
-  - resistance: 灯丝电阻(Ω)，典型 5-50Ω
-  - ratedPower: 额定功率(W)，如 2.5W, 5W, 10W
-
-### 5. Capacitor (电容)
-- **terminalIndex**: 0=负极, 1=正极
-- **rotation**: 0度或90度
-- **properties**:
-  - capacitance: 电容值(F)，常用 0.001F, 0.01F, 0.1F
-
-### 6. Motor (电动机)
-- **terminalIndex**: 0=左端, 1=右端
-- **rotation**: 0度
-- **properties**:
-  - resistance: 电枢电阻(Ω)，典型 5-10Ω
-  - torqueConstant: 转矩常数，默认0.1
-  - emfConstant: 反电动势常数，默认0.1
-
-### 7. Switch (开关)
-- **terminalIndex**: 0=左端, 1=右端
-- **rotation**: 0度或90度
-- **properties**:
-  - closed: true(闭合) 或 false(断开)
-
-### 8. Ammeter (电流表)
-- **terminalIndex**: 0=负接线柱, 1=正接线柱
-- **rotation**: 0度或90度
-- **properties**:
-  - resistance: 内阻(Ω)，理想电流表设为0
-  - range: 量程(A)，如 0.6A, 3A
-
-### 9. Voltmeter (电压表)
-- **terminalIndex**: 0=负接线柱, 1=正接线柱
-- **rotation**: 0度或90度
-- **properties**:
-  - resistance: 内阻(Ω)，理想电压表设为Infinity或极大值如1e12
-  - range: 量程(V)，如 3V, 15V
-
-## 坐标布局建议：
-- **画布中心**: 约(400, 300)
-- **水平间距**: 元器件之间间隔100-150像素
-- **竖直间距**: 上下分支间隔100-150像素
-- **串联电路**: 元器件沿同一水平线或竖直线排列
-- **并联电路**: 分支在不同的y坐标
-
-## 导线连接规则：
-- **terminalIndex**: 必须正确对应元器件的端子编号
-- **电源**: 负极(0)通常作为参考地，正极(1)输出电流
-- **电流表**: 串联在电路中，电流从负接线柱(0)流入，正接线柱(1)流出
-- **电压表**: 并联在待测元件两端
-- **闭合回路**: 确保电路形成完整的闭合回路
-
-## 输出要求：
-1. 只输出JSON代码块，使用 \`\`\`json ... \`\`\` 包裹
-2. 确保JSON格式正确，可以直接被JavaScript解析
-3. 所有字符串使用双引号
-4. 数值不加引号
-5. 布尔值使用 true/false
-6. 坐标值必须是整数
-7. rotation 只能是 0, 90, 180, 270
-
-现在请分析图片中的电路图并生成JSON：`;
+        this.cachedPrompt = fallback;
+        return fallback;
     }
 }

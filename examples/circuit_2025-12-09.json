@@ -1,0 +1,331 @@
+{
+  "meta": {
+    "version": "1.0",
+    "timestamp": 1765240922753,
+    "name": "电路设计"
+  },
+  "components": [
+    {
+      "id": "PowerSource_1",
+      "type": "PowerSource",
+      "label": "E,r",
+      "x": 340,
+      "y": 200,
+      "rotation": 90,
+      "properties": {
+        "voltage": 3,
+        "internalResistance": 2
+      },
+      "terminalExtensions": {
+        "0": {
+          "x": 0,
+          "y": 0
+        },
+        "1": {
+          "x": 0,
+          "y": 0
+        }
+      }
+    },
+    {
+      "id": "Resistor_2",
+      "type": "Resistor",
+      "label": "R1 8Ω",
+      "x": 435,
+      "y": 169,
+      "rotation": 0,
+      "properties": {
+        "resistance": 8
+      },
+      "terminalExtensions": {
+        "0": {
+          "x": 0,
+          "y": 0
+        },
+        "1": {
+          "x": 0,
+          "y": 0
+        }
+      }
+    },
+    {
+      "id": "Rheostat_4",
+      "type": "Rheostat",
+      "label": "R2",
+      "x": 523,
+      "y": 216,
+      "rotation": 90,
+      "properties": {
+        "minResistance": 0,
+        "maxResistance": 8,
+        "position": 1
+      },
+      "terminalExtensions": {
+        "0": {
+          "x": -12,
+          "y": 0
+        },
+        "1": {
+          "x": 0,
+          "y": 0
+        },
+        "2": {
+          "x": 0,
+          "y": 0
+        }
+      }
+    },
+    {
+      "id": "Resistor_5",
+      "type": "Resistor",
+      "label": null,
+      "x": 620,
+      "y": 200,
+      "rotation": 90,
+      "properties": {
+        "resistance": 1000
+      },
+      "terminalExtensions": {
+        "0": {
+          "x": 0,
+          "y": 0
+        },
+        "1": {
+          "x": 0,
+          "y": 0
+        }
+      }
+    },
+    {
+      "id": "Capacitor_6",
+      "type": "Capacitor",
+      "label": null,
+      "x": 620,
+      "y": 296,
+      "rotation": 90,
+      "properties": {
+        "capacitance": 0.001
+      },
+      "terminalExtensions": {
+        "0": {
+          "x": 0,
+          "y": 0
+        },
+        "1": {
+          "x": 0,
+          "y": 0
+        }
+      }
+    },
+    {
+      "id": "Ammeter_7",
+      "type": "Ammeter",
+      "label": null,
+      "x": 461,
+      "y": 325,
+      "rotation": 0,
+      "properties": {
+        "resistance": 0,
+        "range": 3
+      },
+      "terminalExtensions": {
+        "0": {
+          "x": -88,
+          "y": 0
+        },
+        "1": {
+          "x": 30,
+          "y": 0
+        }
+      }
+    },
+    {
+      "id": "Voltmeter_8",
+      "type": "Voltmeter",
+      "label": "V1",
+      "x": 240,
+      "y": 280,
+      "rotation": 270,
+      "properties": {
+        "resistance": null,
+        "range": 15
+      },
+      "terminalExtensions": {
+        "0": {
+          "x": -12,
+          "y": 0
+        },
+        "1": {
+          "x": 80,
+          "y": 0
+        }
+      }
+    },
+    {
+      "id": "Voltmeter_9",
+      "type": "Voltmeter",
+      "label": null,
+      "x": 740,
+      "y": 260,
+      "rotation": 90,
+      "properties": {
+        "resistance": null,
+        "range": 15
+      },
+      "terminalExtensions": {
+        "0": {
+          "x": 0,
+          "y": 0
+        },
+        "1": {
+          "x": 0,
+          "y": 0
+        }
+      }
+    }
+  ],
+  "wires": [
+    {
+      "id": "wire_1765237839201",
+      "start": {
+        "componentId": "PowerSource_1",
+        "terminalIndex": 0
+      },
+      "end": {
+        "componentId": "Resistor_2",
+        "terminalIndex": 0
+      },
+      "controlPoints": []
+    },
+    {
+      "id": "wire_1765237984750",
+      "start": {
+        "componentId": "Resistor_2",
+        "terminalIndex": 1
+      },
+      "end": {
+        "componentId": "Rheostat_4",
+        "terminalIndex": 0
+      },
+      "controlPoints": []
+    },
+    {
+      "id": "wire_1765238023895",
+      "start": {
+        "componentId": "Rheostat_4",
+        "terminalIndex": 0
+      },
+      "end": {
+        "componentId": "Resistor_5",
+        "terminalIndex": 0
+      },
+      "controlPoints": []
+    },
+    {
+      "id": "wire_1765238040368",
+      "start": {
+        "componentId": "Resistor_5",
+        "terminalIndex": 1
+      },
+      "end": {
+        "componentId": "Capacitor_6",
+        "terminalIndex": 0
+      },
+      "controlPoints": []
+    },
+    {
+      "id": "wire_1765238124086",
+      "start": {
+        "componentId": "Voltmeter_8",
+        "terminalIndex": 1
+      },
+      "end": {
+        "componentId": "PowerSource_1",
+        "terminalIndex": 0
+      },
+      "controlPoints": []
+    },
+    {
+      "id": "wire_1765238159573",
+      "start": {
+        "componentId": "Resistor_5",
+        "terminalIndex": 0
+      },
+      "end": {
+        "componentId": "Voltmeter_9",
+        "terminalIndex": 0
+      },
+      "controlPoints": [
+        {
+          "x": 740,
+          "y": 170
+        }
+      ]
+    },
+    {
+      "id": "wire_1765238161778",
+      "start": {
+        "componentId": "Voltmeter_9",
+        "terminalIndex": 1
+      },
+      "end": {
+        "componentId": "Capacitor_6",
+        "terminalIndex": 1
+      },
+      "controlPoints": [
+        {
+          "x": 740,
+          "y": 326
+        }
+      ]
+    },
+    {
+      "id": "wire_1765238853506",
+      "start": {
+        "componentId": "Rheostat_4",
+        "terminalIndex": 1
+      },
+      "end": {
+        "componentId": "Ammeter_7",
+        "terminalIndex": 1
+      },
+      "controlPoints": []
+    },
+    {
+      "id": "wire_1765238856044",
+      "start": {
+        "componentId": "Ammeter_7",
+        "terminalIndex": 1
+      },
+      "end": {
+        "componentId": "Capacitor_6",
+        "terminalIndex": 1
+      },
+      "controlPoints": []
+    },
+    {
+      "id": "wire_1765239147517",
+      "start": {
+        "componentId": "PowerSource_1",
+        "terminalIndex": 1
+      },
+      "end": {
+        "componentId": "Ammeter_7",
+        "terminalIndex": 0
+      },
+      "controlPoints": []
+    },
+    {
+      "id": "wire_1765239150205",
+      "start": {
+        "componentId": "Voltmeter_8",
+        "terminalIndex": 0
+      },
+      "end": {
+        "componentId": "Ammeter_7",
+        "terminalIndex": 0
+      },
+      "controlPoints": []
+    }
+  ]
+}
