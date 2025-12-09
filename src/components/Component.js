@@ -354,8 +354,23 @@ export const SVGRenderer = {
         this.addLine(g, 5, 0, 30, 0);
         
         // 两条平行线
-        this.addLine(g, -5, -12, -5, 12, 2);
-        this.addLine(g, 5, -12, 5, 12, 2);
+        const leftPlate = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        leftPlate.setAttribute('x1', -5);
+        leftPlate.setAttribute('y1', -12);
+        leftPlate.setAttribute('x2', -5);
+        leftPlate.setAttribute('y2', 12);
+        leftPlate.setAttribute('stroke-width', 2);
+        leftPlate.setAttribute('class', 'capacitor-plate');
+        g.appendChild(leftPlate);
+        
+        const rightPlate = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        rightPlate.setAttribute('x1', 5);
+        rightPlate.setAttribute('y1', -12);
+        rightPlate.setAttribute('x2', 5);
+        rightPlate.setAttribute('y2', 12);
+        rightPlate.setAttribute('stroke-width', 2);
+        rightPlate.setAttribute('class', 'capacitor-plate');
+        g.appendChild(rightPlate);
         
         // 端子（支持延长）
         this.addTerminal(g, -30, 0, 0, comp);
@@ -742,6 +757,20 @@ export const SVGRenderer = {
                     g.classList.remove('on');
                 }
             }
+        }
+        
+        // 更新电容器充电状态视觉指示
+        if (comp.type === 'Capacitor') {
+            const plates = g.querySelectorAll('.capacitor-plate');
+            const isCharged = Math.abs(comp.currentValue || 0) < 1e-6; // 电流极小，认为充电完成
+            
+            plates.forEach(plate => {
+                if (isCharged) {
+                    plate.classList.add('charged');
+                } else {
+                    plate.classList.remove('charged');
+                }
+            });
         }
     },
 

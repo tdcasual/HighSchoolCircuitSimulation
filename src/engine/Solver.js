@@ -524,7 +524,17 @@ export class MNASolver {
             case 'Capacitor':
                 // 电容电流 = C * dV/dt
                 const prevV = comp.prevVoltage || 0;
-                return comp.capacitance * (dV - prevV) / this.dt;
+                const capacitorCurrent = comp.capacitance * (dV - prevV) / this.dt;
+                
+                // 稳态检测：当电压变化极小时，认为充电完成，电流为0
+                const voltageChange = Math.abs(dV - prevV);
+                const steadyStateThreshold = 1e-6; // 1微V阈值
+                
+                if (voltageChange < steadyStateThreshold) {
+                    return 0; // 稳态，无电流
+                }
+                
+                return capacitorCurrent;
                 
             case 'Switch':
                 // 开关电流

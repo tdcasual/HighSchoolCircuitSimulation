@@ -955,6 +955,20 @@ body {
     cursor: pointer;
 }
 
+/* ==========================================
+   电容器样式
+   ========================================== */
+.capacitor-plate {
+    stroke: #333;
+    transition: stroke 0.3s ease, stroke-width 0.3s ease;
+}
+
+/* 充电状态 - 高亮显示 */
+.capacitor-plate.charged {
+    stroke: #2196F3;
+    stroke-width: 3;
+}
+
 .component.switch:hover .switch-blade {
     stroke: var(--primary-color);
 }

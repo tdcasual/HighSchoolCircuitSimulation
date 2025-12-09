@@ -864,6 +864,96 @@ export class Circuit {
     }
 
     /**
+     * 检查导线是否经过电气连接点（多条导线交汇的节点）
+     * @param {Object} wire - 导线对象
+     * @returns {boolean} 是否经过连接点
+     */
+    wirePassesThroughJunction(wire) {
+        // 如果没有控制点，则是直接连接，不经过连接点
+        if (!wire.controlPoints || wire.controlPoints.length === 0) {
+            return false;
+        }
+        
+        // 检查是否有其他导线的端点或控制点与该导线的控制点重合
+        const threshold = 5; // 位置阈值（像素）
+        
+        for (const cp of wire.controlPoints) {
+            // 检查所有其他导线
+            for (const [otherId, otherWire] of this.wires) {
+                if (otherId === wire.id) continue;
+                
+                // 收集其他导线的所有关键点（控制点）
+                const keyPoints = [];
+                
+                // 添加控制点
+                if (otherWire.controlPoints) {
+                    keyPoints.push(...otherWire.controlPoints);
+                }
+                
+                // 检查是否有任何关键点与当前控制点重合
+                for (const kp of keyPoints) {
+                    const dx = Math.abs(kp.x - cp.x);
+                    const dy = Math.abs(kp.y - cp.y);
+                    if (dx < threshold && dy < threshold) {
+                        // 找到交汇点！
+                        return true;
+                    }
+                }
+            }
+        }
+        
+        return false;
+    }
+
+    /**
+     * 检查元器件是否为稳态电容器（充电完成）
+     * @param {Object} comp - 元器件对象
+     * @returns {boolean} 是否为稳态电容器
+     */
+    isSteadyStateCapacitor(comp) {
+        if (!comp || comp.type !== 'Capacitor') return false;
+        // 电流极小时认为充电完成
+        return Math.abs(comp.currentValue || 0) < 1e-6;
+    }
+
+    /**
+     * 检查导线是否与稳态电容器串联
+     * 核心逻辑：只检查导线直接连接的两个组件，不检查节点上的其他组件
+     * @param {Object} wire - 导线对象
+     * @param {Object} results - 求解结果
+     * @returns {boolean} 是否与稳态电容器串联
+     */
+    wireInSeriesWithSteadyCapacitor(wire, results) {
+        const startComp = this.components.get(wire.startComponentId);
+        const endComp = this.components.get(wire.endComponentId);
+        if (!startComp || !endComp) return false;
+        
+        // 检查策略：
+        // 1. 如果导线直接连接到稳态电容器 -> 无电流
+        // 2. 如果导线两端的组件电流都接近0 -> 无电流
+        // 关键：不检查节点上的其他组件（如并联的滑动变阻器）
+        
+        // 直接检查：如果导线的任一端直接连接到稳态电容器
+        if (this.isSteadyStateCapacitor(startComp) || this.isSteadyStateCapacitor(endComp)) {
+            return true;
+        }
+        
+        // 检查导线两端直接连接的组件电流
+        // 如果两个组件的电流都接近0，说明这是一个零电流支路
+        const startCompCurrent = Math.abs(results.currents.get(wire.startComponentId) || 0);
+        const endCompCurrent = Math.abs(results.currents.get(wire.endComponentId) || 0);
+        
+        const currentThreshold = 1e-6;
+        
+        // 只有两端的组件电流都接近0，才认为是零电流支路
+        if (startCompCurrent < currentThreshold && endCompCurrent < currentThreshold) {
+            return true;
+        }
+        
+        return false;
+    }
+
+    /**
      * 检查元器件是否为理想电压表
      * @param {Object} comp - 元器件对象
      * @returns {boolean} 是否为理想电压表
@@ -923,17 +1013,37 @@ export class Circuit {
         
         // CRITICAL: Handle ideal voltmeters robustly
         // Wires connected to ideal voltmeters should show zero current
+        // UNLESS the wire passes through an electrical junction where other wires bring current
         const startIsIdealV = this.isIdealVoltmeter(startComp);
         const endIsIdealV = this.isIdealVoltmeter(endComp);
         
+        // CRITICAL: Handle steady-state capacitors
+        // wireInSeriesWithSteadyCapacitor() now includes node-level junction detection
+        // Returns true ONLY if wire is in true series with capacitor (no parallel connections)
+        const inSeriesWithCapacitor = this.wireInSeriesWithSteadyCapacitor(wire, results);
+        
         let current;
-        if (startIsIdealV && endIsIdealV) {
+        
+        // 优先检查稳态电容器
+        if (inSeriesWithCapacitor) {
+            // 真正的串联连接（已经排除并联连接点），强制电流为0
+            current = 0;
+        } else if (startIsIdealV && endIsIdealV) {
             // Both ends are ideal voltmeters - no current should flow
             current = 0;
         } else if (startIsIdealV || endIsIdealV) {
-            // One end is ideal voltmeter - wire to ideal voltmeter has no current
-            // This prevents current animation on wires directly connected to voltmeter terminals
-            current = 0;
+            // One end is ideal voltmeter
+            // Check if this wire passes through a junction where other wires meet
+            const hasJunction = this.wirePassesThroughJunction(wire);
+            
+            if (hasJunction) {
+                // Wire passes through a junction - may have current from other circuit paths
+                // Use normal calculation
+                current = Math.max(startMag, endMag);
+            } else {
+                // Direct connection to ideal voltmeter - no current
+                current = 0;
+            }
         } else {
             // Normal case - use maximum current from either end
             current = Math.max(startMag, endMag);
@@ -957,7 +1067,16 @@ export class Circuit {
         }
 
         if (cachedFlow && cachedFlow.currentMagnitude !== undefined) {
-            current = cachedFlow.currentMagnitude;
+            // 使用缓存的电流值，但要尊重特殊情况
+            // 优先检查稳态电容器（已包含节点级别的连接点检查）
+            if (inSeriesWithCapacitor) {
+                current = 0;
+            } else if ((startIsIdealV || endIsIdealV) && !this.wirePassesThroughJunction(wire)) {
+                // 如果是直接连接到理想电压表且没有连接点，强制为0
+                current = 0;
+            } else {
+                current = cachedFlow.currentMagnitude;
+            }
         }
         if (current < eps) current = 0;
         
