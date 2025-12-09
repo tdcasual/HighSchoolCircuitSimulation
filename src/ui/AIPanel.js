@@ -330,7 +330,7 @@ export class AIPanel {
             const loadingId = this.addChatMessage('assistant', '<div class="loading-indicator"><span></span><span></span><span></span></div>', { rawHtml: true });
 
             // 提取电路状态
-            const circuitState = this.explainer.extractCircuitState({ concise: true, includeTopology: true });
+            const circuitState = this.explainer.extractCircuitState({ concise: true, includeTopology: true, includeNodes: true });
 
             // 调用 AI
             const answer = await this.aiClient.explainCircuit(question, circuitState);
@@ -601,6 +601,8 @@ export class AIPanel {
             fetchStatus.textContent = '正在获取模型列表...';
             fetchModelsBtn.disabled = true;
             try {
+                // 先保存当前设置，确保使用最新端点/密钥
+                this.saveSettings();
                 this.isProcessing = true;
                 const models = await this.aiClient.listModels();
                 this.populateModelLists(models);

@@ -11,7 +11,7 @@ export class CircuitExplainer {
      * 提取当前电路状态为可读文本
      */
     extractCircuitState(options = {}) {
-        const { concise = false, includeTopology = true } = options;
+        const { concise = false, includeTopology = true, includeNodes = true } = options;
         const components = Array.from(this.circuit.components.values());
         const wires = Array.from(this.circuit.wires.values());
         
@@ -127,6 +127,25 @@ export class CircuitExplainer {
             for (const wire of wires) {
                 const wid = wire.id || 'wire';
                 state += `  ${wid}: ${wire.startComponentId}:${wire.startTerminalIndex} -> ${wire.endComponentId}:${wire.endTerminalIndex}\n`;
+            }
+        }
+
+        // 节点-端子映射
+        if (includeNodes) {
+            const nodeMap = {};
+            for (const comp of components) {
+                (comp.nodes || []).forEach((nodeIdx, termIdx) => {
+                    if (nodeIdx === undefined || nodeIdx === null || nodeIdx < 0) return;
+                    if (!nodeMap[nodeIdx]) nodeMap[nodeIdx] = [];
+                    nodeMap[nodeIdx].push(`${comp.id || comp.label || comp.type}:${termIdx}`);
+                });
+            }
+            const nodeIds = Object.keys(nodeMap).sort((a, b) => Number(a) - Number(b));
+            if (nodeIds.length > 0) {
+                state += '【节点映射】\n';
+                nodeIds.forEach(n => {
+                    state += `  节点 ${n}: ${nodeMap[n].join(', ')}\n`;
+                });
             }
         }
 
