@@ -4,6 +4,7 @@
 
 import { OpenAIClient } from '../ai/OpenAIClient.js';
 import { CircuitExplainer } from '../ai/CircuitExplainer.js';
+import { validateCircuitJSON } from '../utils/circuitSchema.js';
 
 export class AIPanel {
     constructor(app) {
@@ -191,13 +192,18 @@ export class AIPanel {
             const circuitJSON = await this.aiClient.convertImageToCircuit(base64);
 
             // 验证 JSON
-            this.validateCircuitJSON(circuitJSON);
+            validateCircuitJSON(circuitJSON);
 
             // 加载到电路
             this.app.stopSimulation();
             this.circuit.fromJSON(circuitJSON);
             this.app.renderer.render();
             this.app.interaction.clearSelection();
+
+            // 自动求解一次，提前暴露潜在问题
+            this.circuit.startSimulation();
+            this.circuit.step();
+            this.circuit.stopSimulation();
 
             // 保存到 localStorage
             this.saveCircuitToLocalStorage(circuitJSON);
@@ -291,7 +297,7 @@ export class AIPanel {
             const loadingId = this.addChatMessage('assistant', '<div class="loading-indicator"><span></span><span></span><span></span></div>');
 
             // 提取电路状态
-            const circuitState = this.explainer.extractCircuitState();
+            const circuitState = this.explainer.extractCircuitState({ concise: true });
 
             // 调用 AI
             const answer = await this.aiClient.explainCircuit(question, circuitState);
@@ -519,35 +525,4 @@ export class AIPanel {
         return false;
     }
 
-    /**
-     * 简单的电路 JSON 校验，若不合法抛出错误
-     */
-    validateCircuitJSON(data) {
-        if (!data || typeof data !== 'object') {
-            throw new Error('返回结果不是对象');
-        }
-        if (!Array.isArray(data.components) || data.components.length === 0) {
-            throw new Error('组件列表缺失或为空');
-        }
-        if (!Array.isArray(data.wires) || data.wires.length === 0) {
-            throw new Error('导线列表缺失或为空');
-        }
-        for (const comp of data.components) {
-            if (!comp.id || !comp.type) {
-                throw new Error(`组件缺少 id/type: ${JSON.stringify(comp)}`);
-            }
-        }
-        for (const wire of data.wires) {
-            if (!wire.start || !wire.end) {
-                throw new Error(`导线缺少端点: ${JSON.stringify(wire)}`);
-            }
-            if (wire.start.componentId === undefined || wire.end.componentId === undefined) {
-                throw new Error(`导线端点缺少 componentId: ${JSON.stringify(wire)}`);
-            }
-            if (wire.start.terminalIndex === undefined || wire.end.terminalIndex === undefined) {
-                throw new Error(`导线端点缺少 terminalIndex: ${JSON.stringify(wire)}`);
-            }
-        }
-        return true;
-    }
 }

@@ -32,13 +32,21 @@ export class OpenAIClient {
             retryDelayMs: 600
         };
 
+        const safeGet = (getter, fallback = null) => {
+            try {
+                return getter();
+            } catch (_) {
+                return fallback;
+            }
+        };
+
+        const savedPublic = safeGet(() => localStorage.getItem(this.PUBLIC_CONFIG_KEY));
+        const sessionKey = safeGet(() => sessionStorage.getItem(this.SESSION_KEY_KEY)) || '';
         try {
-            const savedPublic = localStorage.getItem(this.PUBLIC_CONFIG_KEY);
-            const sessionKey = sessionStorage.getItem(this.SESSION_KEY_KEY) || '';
             const merged = savedPublic ? { ...defaultConfig, ...JSON.parse(savedPublic) } : defaultConfig;
             return { ...merged, apiKey: sessionKey };
         } catch (e) {
-            console.error('Failed to load AI config:', e);
+            console.warn('Failed to load AI config, using defaults.', e);
             return defaultConfig;
         }
     }
@@ -50,30 +58,28 @@ export class OpenAIClient {
         const { apiKey, ...rest } = config;
         this.config = { ...this.config, ...rest, apiKey: apiKey ?? this.config.apiKey };
 
-        try {
-            localStorage.setItem(this.PUBLIC_CONFIG_KEY, JSON.stringify({
-                apiEndpoint: this.config.apiEndpoint,
-                visionModel: this.config.visionModel,
-                textModel: this.config.textModel,
-                maxTokens: this.config.maxTokens,
-                requestTimeout: this.config.requestTimeout,
-                retryAttempts: this.config.retryAttempts,
-                retryDelayMs: this.config.retryDelayMs
-            }));
-        } catch (e) {
-            console.error('Failed to save AI public config:', e);
-        }
+        const safeSet = (setter) => {
+            try { setter(); } catch (_) { /* ignore in non-browser */ }
+        };
+
+        safeSet(() => localStorage.setItem(this.PUBLIC_CONFIG_KEY, JSON.stringify({
+            apiEndpoint: this.config.apiEndpoint,
+            visionModel: this.config.visionModel,
+            textModel: this.config.textModel,
+            maxTokens: this.config.maxTokens,
+            requestTimeout: this.config.requestTimeout,
+            retryAttempts: this.config.retryAttempts,
+            retryDelayMs: this.config.retryDelayMs
+        })));
 
         if (apiKey !== undefined) {
-            try {
+            safeSet(() => {
                 if (apiKey) {
                     sessionStorage.setItem(this.SESSION_KEY_KEY, apiKey);
                 } else {
                     sessionStorage.removeItem(this.SESSION_KEY_KEY);
                 }
-            } catch (e) {
-                console.error('Failed to persist API key to session storage:', e);
-            }
+            });
         }
     }
 
@@ -81,8 +87,8 @@ export class OpenAIClient {
         this.config.apiKey = '';
         try {
             sessionStorage.removeItem(this.SESSION_KEY_KEY);
-        } catch (e) {
-            console.error('Failed to clear API key from session storage:', e);
+        } catch (_) {
+            // ignore
         }
     }
 
