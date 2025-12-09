@@ -18,6 +18,9 @@ export class Circuit {
         this.dt = 0.01;               // 10ms 时间步长
         this._wireFlowCache = { version: null, map: new Map() };
         this.terminalConnectionMap = new Map();
+        this.debugMode = false;
+        this.loadDebugFlag();
+        this.solver.debugMode = this.debugMode;
     }
 
     /**
@@ -381,6 +384,7 @@ export class Circuit {
             Array.from(this.components.values()),
             this.nodes
         );
+        this.solver.debugMode = this.debugMode;
 
         // 开始模拟循环
         this.simulationInterval = setInterval(() => {
@@ -410,6 +414,7 @@ export class Circuit {
             Array.from(this.components.values()),
             this.nodes
         );
+        this.solver.debugMode = this.debugMode;
 
         // 求解
         this.lastResults = this.solver.solve(this.dt);
@@ -1118,6 +1123,32 @@ export class Circuit {
         this.wires.clear();
         this.nodes = [];
         this.lastResults = null;
+    }
+
+    /**
+     * 加载/保存调试开关
+     */
+    loadDebugFlag() {
+        try {
+            if (typeof localStorage !== 'undefined') {
+                const flag = localStorage.getItem('solver_debug');
+                if (flag === 'true') this.debugMode = true;
+            }
+        } catch (e) {
+            // ignore in non-browser env
+        }
+    }
+
+    setDebugMode(flag) {
+        this.debugMode = !!flag;
+        try {
+            if (typeof localStorage !== 'undefined') {
+                localStorage.setItem('solver_debug', this.debugMode ? 'true' : 'false');
+            }
+        } catch (e) {
+            // ignore
+        }
+        this.solver.debugMode = this.debugMode;
     }
 
     /**

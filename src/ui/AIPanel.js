@@ -15,6 +15,7 @@ export class AIPanel {
         this.currentImage = null;
         this.messageHistory = [];
         this.isProcessing = false;
+        this.lastQuestion = '';
         
         this.initializeUI();
         this.loadSettings();
@@ -190,9 +191,7 @@ export class AIPanel {
             const circuitJSON = await this.aiClient.convertImageToCircuit(base64);
 
             // 验证 JSON
-            if (!circuitJSON.components || !circuitJSON.wires) {
-                throw new Error('AI 返回的 JSON 格式不完整');
-            }
+            this.validateCircuitJSON(circuitJSON);
 
             // 加载到电路
             this.app.stopSimulation();
@@ -231,6 +230,7 @@ export class AIPanel {
     initializeChat() {
         const input = document.getElementById('chat-input');
         const sendBtn = document.getElementById('chat-send-btn');
+        const followups = document.querySelectorAll('.followup-btn');
 
         // 发送消息
         const sendMessage = () => {
@@ -254,6 +254,13 @@ export class AIPanel {
                 this.askQuestion(question);
             });
         });
+
+        followups.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const mode = btn.dataset.mode;
+                this.triggerFollowup(mode);
+            });
+        });
     }
 
     /**
@@ -270,6 +277,7 @@ export class AIPanel {
 
         // 添加用户消息
         this.addChatMessage('user', question);
+        this.lastQuestion = question;
 
         const sendBtn = document.getElementById('chat-send-btn');
         const originalText = sendBtn.textContent;
@@ -300,6 +308,33 @@ export class AIPanel {
             sendBtn.disabled = false;
             sendBtn.textContent = originalText;
         }
+    }
+
+    /**
+     * 触发跟进提问（继续/简化/小测验）
+     */
+    triggerFollowup(mode) {
+        if (this.isProcessing) return;
+        if (!this.lastQuestion) {
+            this.addChatMessage('system', '请先提一个问题，再使用跟进按钮。');
+            return;
+        }
+        let prompt;
+        switch (mode) {
+            case 'continue':
+                prompt = '在上一个问题基础上，请继续深入讲解并补充1-2点与高中物理相关的要点。';
+                break;
+            case 'simplify':
+                prompt = '请用更简洁、更通俗的方式重述上一个问题的解释，控制在3-4句话，仍然保持高中物理范围。';
+                break;
+            case 'quiz':
+                prompt = '请基于上一个问题生成2道简短小测验（选择或填空），并在最后单独列出标准答案。';
+                break;
+            default:
+                prompt = '请继续讲解。';
+        }
+        const composite = `${this.lastQuestion}\n${prompt}`;
+        this.askQuestion(composite);
     }
 
     /**
@@ -482,5 +517,37 @@ export class AIPanel {
             console.error('Failed to load circuit:', e);
         }
         return false;
+    }
+
+    /**
+     * 简单的电路 JSON 校验，若不合法抛出错误
+     */
+    validateCircuitJSON(data) {
+        if (!data || typeof data !== 'object') {
+            throw new Error('返回结果不是对象');
+        }
+        if (!Array.isArray(data.components) || data.components.length === 0) {
+            throw new Error('组件列表缺失或为空');
+        }
+        if (!Array.isArray(data.wires) || data.wires.length === 0) {
+            throw new Error('导线列表缺失或为空');
+        }
+        for (const comp of data.components) {
+            if (!comp.id || !comp.type) {
+                throw new Error(`组件缺少 id/type: ${JSON.stringify(comp)}`);
+            }
+        }
+        for (const wire of data.wires) {
+            if (!wire.start || !wire.end) {
+                throw new Error(`导线缺少端点: ${JSON.stringify(wire)}`);
+            }
+            if (wire.start.componentId === undefined || wire.end.componentId === undefined) {
+                throw new Error(`导线端点缺少 componentId: ${JSON.stringify(wire)}`);
+            }
+            if (wire.start.terminalIndex === undefined || wire.end.terminalIndex === undefined) {
+                throw new Error(`导线端点缺少 terminalIndex: ${JSON.stringify(wire)}`);
+            }
+        }
+        return true;
     }
 }

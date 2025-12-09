@@ -1223,6 +1223,31 @@ body {
     max-height: 190px;
 }
 
+#followup-actions {
+    display: flex;
+    gap: 8px;
+    margin: 6px 0 10px;
+}
+
+.followup-btn {
+    flex: 1;
+    background: #f9fbff;
+    border: 1px solid #d0d0d0;
+    padding: 8px 10px;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-color);
+    transition: all 0.2s;
+}
+
+.followup-btn:hover {
+    background: #f0f6ff;
+    border-color: var(--primary-color);
+    color: var(--primary-dark);
+}
+
 #chat-messages::-webkit-scrollbar {
     width: 6px;
 }
