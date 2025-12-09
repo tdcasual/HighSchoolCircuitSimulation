@@ -5,6 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>电路模拟器 - Circuit Simulator</title>
     <link rel="stylesheet" href="css/style.css">
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$'], ['\\[', '\\]']]
+            },
+            svg: { fontCache: 'global' }
+        };
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/marked@12.0.0/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js" id="MathJax-script" async></script>
 </head>
 <body>
     <div id="app">
@@ -222,6 +233,13 @@
                     <button class="followup-btn" data-mode="simplify">换个说法</button>
                     <button class="followup-btn" data-mode="quiz">出道小测</button>
                 </div>
+                <div id="chat-controls">
+                    <button id="chat-undo-btn">回撤上一轮</button>
+                    <button id="chat-new-btn">新对话</button>
+                    <select id="chat-history-select">
+                        <option value="">历史记录</option>
+                    </select>
+                </div>
                 <div id="quick-questions">
                     <button class="quick-question-btn">为什么R1的电流增大了?</button>
                     <button class="quick-question-btn">滑动变阻器如何影响电路?</button>
@@ -250,12 +268,22 @@
             </div>
             <div class="form-group">
                 <label>视觉模型 (图片转换)</label>
-                <input type="text" id="vision-model" list="model-list-vision" placeholder="gpt-4o-mini-vision" />
+                <div class="model-input-row">
+                    <select id="vision-model-select">
+                        <option value="">从列表选择</option>
+                    </select>
+                    <input type="text" id="vision-model" list="model-list-vision" placeholder="gpt-4o-mini-vision" />
+                </div>
                 <datalist id="model-list-vision"></datalist>
             </div>
             <div class="form-group">
                 <label>文本模型 (物理解释)</label>
-                <input type="text" id="text-model" list="model-list-text" placeholder="gpt-4o-mini" />
+                <div class="model-input-row">
+                    <select id="text-model-select">
+                        <option value="">从列表选择</option>
+                    </select>
+                    <input type="text" id="text-model" list="model-list-text" placeholder="gpt-4o-mini" />
+                </div>
                 <datalist id="model-list-text"></datalist>
             </div>
             <div class="dialog-buttons">

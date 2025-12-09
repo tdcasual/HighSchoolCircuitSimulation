@@ -11,7 +11,7 @@ export class CircuitExplainer {
      * 提取当前电路状态为可读文本
      */
     extractCircuitState(options = {}) {
-        const { concise = false } = options;
+        const { concise = false, includeTopology = true } = options;
         const components = Array.from(this.circuit.components.values());
         const wires = Array.from(this.circuit.wires.values());
         
@@ -120,8 +120,15 @@ export class CircuitExplainer {
             state += '\n';
         }
 
-        // 连接关系（简化）
+        // 连接关系（拓扑）
         state += `电路共有 ${wires.length} 条导线连接。\n`;
+        if (includeTopology && wires.length > 0) {
+            state += '【连接拓扑】\n';
+            for (const wire of wires) {
+                const wid = wire.id || 'wire';
+                state += `  ${wid}: ${wire.startComponentId}:${wire.startTerminalIndex} -> ${wire.endComponentId}:${wire.endTerminalIndex}\n`;
+            }
+        }
 
         if (concise) {
             // 去掉多余空行，压缩长度

@@ -251,6 +251,9 @@ export class AIPanel {
         const input = document.getElementById('chat-input');
         const sendBtn = document.getElementById('chat-send-btn');
         const followups = document.querySelectorAll('.followup-btn');
+        const undoBtn = document.getElementById('chat-undo-btn');
+        const newChatBtn = document.getElementById('chat-new-btn');
+        const historySelect = document.getElementById('chat-history-select');
 
         // 发送消息
         const sendMessage = () => {
@@ -281,6 +284,22 @@ export class AIPanel {
                 this.triggerFollowup(mode);
             });
         });
+
+        if (undoBtn) {
+            undoBtn.addEventListener('click', () => this.undoLastExchange());
+        }
+
+        if (newChatBtn) {
+            newChatBtn.addEventListener('click', () => this.startNewConversation());
+        }
+
+        if (historySelect) {
+            historySelect.addEventListener('change', (e) => {
+                const id = e.target.value;
+                if (id) this.loadConversationFromHistory(id);
+            });
+            this.refreshHistorySelect();
+        }
     }
 
     /**
@@ -308,17 +327,17 @@ export class AIPanel {
             sendBtn.textContent = '⏳';
 
             // 添加加载提示
-            const loadingId = this.addChatMessage('assistant', '<div class="loading-indicator"><span></span><span></span><span></span></div>');
+            const loadingId = this.addChatMessage('assistant', '<div class="loading-indicator"><span></span><span></span><span></span></div>', { rawHtml: true });
 
             // 提取电路状态
-            const circuitState = this.explainer.extractCircuitState({ concise: true });
+            const circuitState = this.explainer.extractCircuitState({ concise: true, includeTopology: true });
 
             // 调用 AI
             const answer = await this.aiClient.explainCircuit(question, circuitState);
 
             // 移除加载提示，添加回答
             this.removeChatMessage(loadingId);
-            this.addChatMessage('assistant', answer);
+            this.addChatMessage('assistant', answer, { markdown: true });
 
         } catch (error) {
             console.error('Question error:', error);
@@ -360,21 +379,56 @@ export class AIPanel {
     /**
      * 添加聊天消息
      */
-    addChatMessage(role, content) {
+    addChatMessage(role, content, options = {}) {
+        const { rawHtml = false, markdown = false } = options;
         const messagesDiv = document.getElementById('chat-messages');
         const messageId = `msg-${Date.now()}-${Math.random()}`;
         
         const messageEl = document.createElement('div');
         messageEl.className = `chat-message ${role}`;
         messageEl.id = messageId;
-        messageEl.innerHTML = `<div class="chat-message-content">${content}</div>`;
+        const rendered = rawHtml ? content
+            : markdown ? this.renderMarkdown(content)
+            : this.escapeHtml(content);
+        messageEl.innerHTML = `<div class="chat-message-content">${rendered}</div>`;
         
         messagesDiv.appendChild(messageEl);
         messagesDiv.scrollTop = messagesDiv.scrollHeight;
+
+        if (markdown) {
+            // 异步渲染公式
+            if (window.MathJax?.typesetPromise) {
+                window.MathJax.typesetPromise([messageEl]).catch(() => {});
+            }
+        }
         
         this.messageHistory.push({ role, content, id: messageId });
         
         return messageId;
+    }
+
+    escapeHtml(text) {
+        if (text === undefined || text === null) return '';
+        return String(text)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    renderMarkdown(markdownText) {
+        const text = markdownText || '';
+        if (window.marked?.parse) {
+            return window.marked.parse(text, { breaks: true });
+        }
+
+        // 轻量 fallback：仅处理粗体/斜体/代码/换行
+        const escaped = this.escapeHtml(text);
+        const withCode = escaped.replace(/`([^`]+)`/g, '<code>$1</code>');
+        const withBold = withCode.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+        const withItalic = withBold.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+        return withItalic.replace(/\n/g, '<br>');
     }
 
     /**
@@ -388,6 +442,109 @@ export class AIPanel {
     }
 
     /**
+     * 回撤上一轮问答（移除最后的 assistant + preceding user）
+     */
+    undoLastExchange() {
+        if (this.isProcessing || this.messageHistory.length === 0) return;
+        // 找到最后一个 assistant 消息
+        let removed = false;
+        while (this.messageHistory.length > 0) {
+            const last = this.messageHistory[this.messageHistory.length - 1];
+            this.removeChatMessage(last.id);
+            if (last.role === 'assistant') {
+                removed = true;
+            } else if (removed && last.role === 'user') {
+                break;
+            }
+        }
+    }
+
+    /**
+     * 开启新对话：归档当前对话，清空消息
+     */
+    startNewConversation() {
+        if (this.messageHistory.length > 0) {
+            this.archiveCurrentConversation();
+        }
+        const messagesDiv = document.getElementById('chat-messages');
+        messagesDiv.innerHTML = '';
+        this.messageHistory = [];
+        this.lastQuestion = '';
+        this.refreshHistorySelect();
+    }
+
+    /**
+     * 将当前对话保存到 localStorage
+     */
+    archiveCurrentConversation() {
+        const history = this.loadHistory();
+        const title = this.messageHistory.find(m => m.role === 'user')?.content?.slice(0, 40) || '未命名会话';
+        const record = {
+            id: `history-${Date.now()}`,
+            title,
+            timestamp: Date.now(),
+            messages: [...this.messageHistory]
+        };
+        history.unshift(record);
+        // 保留最新的 20 条
+        const trimmed = history.slice(0, 20);
+        try {
+            localStorage.setItem('ai_chat_history', JSON.stringify(trimmed));
+        } catch (e) {
+            console.warn('保存历史失败', e);
+        }
+    }
+
+    loadHistory() {
+        try {
+            const raw = localStorage.getItem('ai_chat_history');
+            if (!raw) return [];
+            const parsed = JSON.parse(raw);
+            return Array.isArray(parsed) ? parsed : [];
+        } catch (_) {
+            return [];
+        }
+    }
+
+    refreshHistorySelect() {
+        const historySelect = document.getElementById('chat-history-select');
+        if (!historySelect) return;
+        const history = this.loadHistory();
+        const currentValue = historySelect.value;
+        historySelect.innerHTML = '<option value=\"\">历史记录</option>';
+        history.forEach(item => {
+            const opt = document.createElement('option');
+            const date = new Date(item.timestamp).toLocaleString();
+            opt.value = item.id;
+            opt.textContent = `${item.title} (${date})`;
+            historySelect.appendChild(opt);
+        });
+        // 保持选择
+        historySelect.value = currentValue || '';
+    }
+
+    loadConversationFromHistory(id) {
+        const history = this.loadHistory();
+        const record = history.find(h => h.id === id);
+        if (!record) return;
+
+        // 清空现有
+        const messagesDiv = document.getElementById('chat-messages');
+        messagesDiv.innerHTML = '';
+        this.messageHistory = [];
+        this.lastQuestion = '';
+
+        // 重新渲染
+        for (const msg of record.messages) {
+            const opts = { markdown: msg.role === 'assistant' };
+            this.addChatMessage(msg.role, msg.content, opts);
+            if (msg.role === 'user') {
+                this.lastQuestion = msg.content;
+            }
+        }
+    }
+
+    /**
      * 初始化设置对话框
      */
     initializeSettingsDialog() {
@@ -398,6 +555,13 @@ export class AIPanel {
         const clearKeyBtn = document.getElementById('settings-clear-key-btn');
         const fetchModelsBtn = document.getElementById('settings-fetch-models-btn');
         const fetchStatus = document.getElementById('model-fetch-status');
+        const visionSelect = document.getElementById('vision-model-select');
+        const textSelect = document.getElementById('text-model-select');
+        const visionInput = document.getElementById('vision-model');
+        const textInput = document.getElementById('text-model');
+
+        this.bindModelSelector(visionSelect, visionInput);
+        this.bindModelSelector(textSelect, textInput);
 
         cancelBtn.addEventListener('click', () => {
             dialog.classList.add('hidden');
@@ -461,6 +625,8 @@ export class AIPanel {
         document.getElementById('api-key').value = config.apiKey;
         document.getElementById('vision-model').value = config.visionModel;
         document.getElementById('text-model').value = config.textModel;
+        this.syncSelectToValue(document.getElementById('vision-model-select'), config.visionModel);
+        this.syncSelectToValue(document.getElementById('text-model-select'), config.textModel);
         
         document.getElementById('ai-settings-dialog').classList.remove('hidden');
     }
@@ -488,9 +654,68 @@ export class AIPanel {
         // 设置已在 OpenAIClient 构造函数中自动加载
     }
 
+    bindModelSelector(selectEl, inputEl) {
+        if (!selectEl || !inputEl) return;
+        selectEl.addEventListener('change', () => {
+            if (selectEl.value) {
+                inputEl.value = selectEl.value;
+            }
+        });
+    }
+
+    fillSelectOptions(selectEl, options = [], currentValue = '') {
+        if (!selectEl) return;
+        const current = currentValue?.trim();
+        selectEl.innerHTML = '<option value=\"\">从列表选择</option>';
+        options.forEach(id => {
+            const opt = document.createElement('option');
+            opt.value = id;
+            opt.textContent = id;
+            selectEl.appendChild(opt);
+        });
+        // 保留当前值，即便它不在新列表中
+        if (current && !options.includes(current)) {
+            const customOpt = document.createElement('option');
+            customOpt.value = current;
+            customOpt.textContent = `${current} (自定义)`;
+            selectEl.appendChild(customOpt);
+        }
+    }
+
+    syncSelectToValue(selectEl, value) {
+        if (!selectEl) return;
+        const val = value?.trim() || '';
+        const hasOption = Array.from(selectEl.options).some(opt => opt.value === val);
+        if (!hasOption && val) {
+            const opt = document.createElement('option');
+            opt.value = val;
+            opt.textContent = `${val} (自定义)`;
+            selectEl.appendChild(opt);
+        }
+        selectEl.value = val;
+    }
+
+    isVisionModelId(modelId) {
+        if (!modelId) return false;
+        const lower = modelId.toLowerCase();
+        if (/(vision|image|omni)/.test(lower)) return true;
+
+        // 常见多模态模型前缀（推断）
+        const visionPrefixes = [
+            'gpt-4o',
+            'gpt-4.1',
+            'gpt-5'
+        ];
+        return visionPrefixes.some(prefix => lower.startsWith(prefix));
+    }
+
     populateModelLists(models = []) {
         const visionList = document.getElementById('model-list-vision');
         const textList = document.getElementById('model-list-text');
+        const visionSelect = document.getElementById('vision-model-select');
+        const textSelect = document.getElementById('text-model-select');
+        const visionInput = document.getElementById('vision-model');
+        const textInput = document.getElementById('text-model');
         if (!visionList || !textList) return;
 
         const toOption = (id) => {
@@ -499,14 +724,29 @@ export class AIPanel {
             return opt;
         };
 
-        const visionModels = models.filter(m => /vision|image/i.test(m));
-        const textModels = models.filter(m => !/vision|image/i.test(m));
+        // 视觉列表不做过滤，直接展示全部；文本列表同样全部展示
+        const visionModels = [...new Set(models)];
+        const textModels = [...new Set(models)];
 
         visionList.innerHTML = '';
         textList.innerHTML = '';
 
         visionModels.forEach(id => visionList.appendChild(toOption(id)));
         textModels.forEach(id => textList.appendChild(toOption(id)));
+
+        if (visionSelect) {
+            this.fillSelectOptions(visionSelect, visionModels, visionInput?.value);
+        }
+        if (textSelect) {
+            this.fillSelectOptions(textSelect, textModels, textInput?.value);
+        }
+
+        if (visionSelect && visionInput) {
+            this.syncSelectToValue(visionSelect, visionInput.value.trim());
+        }
+        if (textSelect && textInput) {
+            this.syncSelectToValue(textSelect, textInput.value.trim());
+        }
     }
 
     /**

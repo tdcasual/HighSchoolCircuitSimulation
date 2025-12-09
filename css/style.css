@@ -1269,6 +1269,33 @@ body {
     margin: 6px 0 10px;
 }
 
+#chat-controls {
+    display: flex;
+    gap: 8px;
+    margin: 6px 0 10px;
+    flex-wrap: wrap;
+}
+
+#chat-controls button,
+#chat-controls select {
+    padding: 6px 10px;
+    border: 1px solid #d0d0d0;
+    border-radius: 10px;
+    background: #f9fbff;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-color);
+    transition: all 0.2s;
+}
+
+#chat-controls button:hover,
+#chat-controls select:hover {
+    background: #f0f6ff;
+    border-color: var(--primary-color);
+    color: var(--primary-dark);
+}
+
 .followup-btn {
     flex: 1;
     background: #f9fbff;
@@ -1531,7 +1558,8 @@ body {
     color: #555;
 }
 
-#ai-settings-dialog input {
+#ai-settings-dialog input,
+#ai-settings-dialog select {
     width: 100%;
     padding: 11px 14px;
     border: 1.5px solid #d0d0d0;
@@ -1541,11 +1569,26 @@ body {
     background: #fafafa;
 }
 
-#ai-settings-dialog input:focus {
+#ai-settings-dialog input:focus,
+#ai-settings-dialog select:focus {
     outline: none;
     border-color: #10a37f;
     background: #fff;
     box-shadow: 0 0 0 3px rgba(16, 163, 127, 0.1);
+}
+
+.model-input-row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.model-input-row select {
+    flex: 0 0 42%;
+}
+
+.model-input-row input {
+    flex: 1 1 auto;
 }
 
 #ai-settings-dialog .dialog-buttons {
