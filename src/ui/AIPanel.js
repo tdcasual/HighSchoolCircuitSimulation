@@ -12,6 +12,13 @@ export class AIPanel {
         this.circuit = app.circuit;
         this.aiClient = new OpenAIClient();
         this.explainer = new CircuitExplainer(this.circuit);
+        this.layoutStorageKey = 'ai_panel_layout';
+        this.panelGesture = null;
+        this.minPanelWidth = 320;
+        this.minPanelHeight = 260;
+        this.viewportPadding = 12;
+        this.defaultRightOffset = 20;
+        this.defaultBottomOffset = 16;
         
         this.currentImage = null;
         this.messageHistory = [];
@@ -26,9 +33,13 @@ export class AIPanel {
      * 初始化 UI 事件
      */
     initializeUI() {
+        this.panel = document.getElementById('ai-assistant-panel');
+        this.panelHeader = document.getElementById('ai-panel-header');
+        this.resizeHandle = document.getElementById('ai-resize-handle');
+
         // 折叠/展开
         const toggleBtn = document.getElementById('ai-toggle-btn');
-        const panel = document.getElementById('ai-assistant-panel');
+        const panel = this.panel;
         toggleBtn.addEventListener('click', () => {
             panel.classList.toggle('collapsed');
             toggleBtn.textContent = panel.classList.contains('collapsed') ? '▲' : '▼';
@@ -56,6 +67,9 @@ export class AIPanel {
 
         // 设置对话框
         this.initializeSettingsDialog();
+
+        // 布局控制
+        this.initializePanelLayoutControls();
     }
 
     /**
@@ -523,6 +537,248 @@ export class AIPanel {
             console.error('Failed to load circuit:', e);
         }
         return false;
+    }
+
+    /**
+     * 初始化 AI 面板的拖拽和缩放
+     */
+    initializePanelLayoutControls() {
+        if (!this.panel) return;
+
+        this.boundPanelPointerMove = (event) => this.handlePanelPointerMove(event);
+        this.boundPanelPointerUp = (event) => this.handlePanelPointerUp(event);
+
+        this.restorePanelLayout();
+
+        if (this.panelHeader) {
+            this.panelHeader.addEventListener('pointerdown', (e) => this.tryStartPanelDrag(e));
+        }
+
+        if (this.resizeHandle) {
+            this.resizeHandle.addEventListener('pointerdown', (e) => this.tryStartPanelResize(e));
+        }
+
+        window.addEventListener('resize', () => this.constrainPanelToViewport());
+    }
+
+    tryStartPanelDrag(event) {
+        if (!this.panel || this.panel.classList.contains('collapsed')) return;
+        if (event.pointerType === 'mouse' && event.button !== 0) return;
+        if (event.target.closest('#ai-panel-actions')) return;
+
+        event.preventDefault();
+        this.startPanelGesture('drag', event);
+    }
+
+    tryStartPanelResize(event) {
+        if (!this.panel || this.panel.classList.contains('collapsed')) return;
+        if (event.pointerType === 'mouse' && event.button !== 0) return;
+
+        event.preventDefault();
+        event.stopPropagation();
+        this.startPanelGesture('resize', event);
+    }
+
+    startPanelGesture(type, event) {
+        const rect = this.panel.getBoundingClientRect();
+        this.setPanelAbsolutePosition(rect.left, rect.top);
+
+        this.panelGesture = {
+            type,
+            pointerId: event.pointerId,
+            startX: event.clientX,
+            startY: event.clientY,
+            startLeft: rect.left,
+            startTop: rect.top,
+            startWidth: rect.width,
+            startHeight: rect.height
+        };
+
+        this.panel.classList.add(type === 'drag' ? 'dragging' : 'resizing');
+        window.addEventListener('pointermove', this.boundPanelPointerMove);
+        window.addEventListener('pointerup', this.boundPanelPointerUp);
+        window.addEventListener('pointercancel', this.boundPanelPointerUp);
+    }
+
+    handlePanelPointerMove(event) {
+        if (!this.panelGesture || event.pointerId !== this.panelGesture.pointerId) return;
+
+        event.preventDefault();
+        if (this.panelGesture.type === 'drag') {
+            this.updatePanelDrag(event);
+        } else {
+            this.updatePanelResize(event);
+        }
+    }
+
+    handlePanelPointerUp(event) {
+        if (!this.panelGesture || event.pointerId !== this.panelGesture.pointerId) return;
+
+        window.removeEventListener('pointermove', this.boundPanelPointerMove);
+        window.removeEventListener('pointerup', this.boundPanelPointerUp);
+        window.removeEventListener('pointercancel', this.boundPanelPointerUp);
+        this.panel.classList.remove('dragging', 'resizing');
+        this.panelGesture = null;
+        this.savePanelLayout();
+    }
+
+    updatePanelDrag(event) {
+        if (!this.panelGesture) return;
+
+        const { startX, startY, startLeft, startTop, startWidth, startHeight } = this.panelGesture;
+        const bounds = this.getPanelBounds();
+        const dx = event.clientX - startX;
+        const dy = event.clientY - startY;
+        const maxLeft = Math.max(bounds.minX, bounds.maxX - startWidth);
+        const maxTop = Math.max(bounds.minY, bounds.maxY - startHeight);
+        const nextLeft = this.clamp(startLeft + dx, bounds.minX, maxLeft);
+        const nextTop = this.clamp(startTop + dy, bounds.minY, maxTop);
+
+        this.setPanelAbsolutePosition(nextLeft, nextTop);
+    }
+
+    updatePanelResize(event) {
+        if (!this.panelGesture) return;
+
+        const { startX, startY, startWidth, startHeight, startLeft, startTop } = this.panelGesture;
+        const dx = event.clientX - startX;
+        const dy = event.clientY - startY;
+        const bounds = this.getPanelBounds();
+
+        const availableWidth = Math.max(bounds.maxX - startLeft, 0);
+        const availableHeight = Math.max(bounds.maxY - startTop, 0);
+        const minWidth = Math.min(this.minPanelWidth, availableWidth || this.minPanelWidth);
+        const minHeight = Math.min(this.minPanelHeight, availableHeight || this.minPanelHeight);
+        const maxWidth = availableWidth || this.minPanelWidth;
+        const maxHeight = availableHeight || this.minPanelHeight;
+
+        const nextWidth = this.clamp(startWidth + dx, minWidth, Math.max(minWidth, maxWidth));
+        const nextHeight = this.clamp(startHeight + dy, minHeight, Math.max(minHeight, maxHeight));
+
+        this.panel.style.width = `${nextWidth}px`;
+        this.panel.style.height = `${nextHeight}px`;
+    }
+
+    setPanelAbsolutePosition(left, top) {
+        if (!this.panel) return;
+        this.panel.style.left = `${left}px`;
+        this.panel.style.top = `${top}px`;
+        this.panel.style.right = 'auto';
+        this.panel.style.bottom = 'auto';
+    }
+
+    getPanelBounds() {
+        const padding = this.viewportPadding;
+        return {
+            minX: padding,
+            minY: padding,
+            maxX: window.innerWidth - padding,
+            maxY: window.innerHeight - padding
+        };
+    }
+
+    clamp(value, min, max) {
+        if (Number.isNaN(value)) return min;
+        if (max < min) max = min;
+        return Math.min(Math.max(value, min), max);
+    }
+
+    restorePanelLayout() {
+        const saved = this.getSavedPanelLayout();
+        const layout = saved || this.getDefaultPanelLayout();
+        this.applyPanelLayout(layout);
+    }
+
+    applyPanelLayout(layout) {
+        if (!this.panel) return;
+
+        const bounds = this.getPanelBounds();
+        const availableWidth = Math.max(bounds.maxX - bounds.minX, 0);
+        const availableHeight = Math.max(bounds.maxY - bounds.minY, 0);
+        const baseWidth = this.panel.offsetWidth || 420;
+        const baseHeight = this.panel.offsetHeight || 420;
+
+        const width = this.clamp(
+            typeof layout.width === 'number' ? layout.width : baseWidth,
+            availableWidth ? Math.min(this.minPanelWidth, availableWidth) : this.minPanelWidth,
+            availableWidth || this.minPanelWidth
+        );
+
+        const height = this.clamp(
+            typeof layout.height === 'number' ? layout.height : baseHeight,
+            availableHeight ? Math.min(this.minPanelHeight, availableHeight) : this.minPanelHeight,
+            availableHeight || this.minPanelHeight
+        );
+
+        const maxLeft = Math.max(bounds.minX, bounds.maxX - width);
+        const maxTop = Math.max(bounds.minY, bounds.maxY - height);
+
+        const left = this.clamp(
+            typeof layout.left === 'number' ? layout.left : (bounds.maxX - width - this.defaultRightOffset),
+            bounds.minX,
+            maxLeft
+        );
+
+        const top = this.clamp(
+            typeof layout.top === 'number' ? layout.top : (bounds.maxY - height - this.defaultBottomOffset),
+            bounds.minY,
+            maxTop
+        );
+
+        this.panel.style.width = `${width}px`;
+        this.panel.style.height = `${height}px`;
+        this.setPanelAbsolutePosition(left, top);
+    }
+
+    getSavedPanelLayout() {
+        try {
+            const raw = localStorage.getItem(this.layoutStorageKey);
+            if (!raw) return null;
+            const data = JSON.parse(raw);
+            const keys = ['left', 'top', 'width', 'height'];
+            if (keys.every(key => typeof data[key] === 'number' && !Number.isNaN(data[key]))) {
+                return data;
+            }
+        } catch (error) {
+            console.warn('Failed to load AI panel layout:', error);
+        }
+        return null;
+    }
+
+    savePanelLayout() {
+        if (!this.panel) return;
+        try {
+            const rect = this.panel.getBoundingClientRect();
+            const payload = {
+                left: rect.left,
+                top: rect.top,
+                width: rect.width,
+                height: rect.height
+            };
+            localStorage.setItem(this.layoutStorageKey, JSON.stringify(payload));
+        } catch (error) {
+            console.warn('Failed to save AI panel layout:', error);
+        }
+    }
+
+    getDefaultPanelLayout() {
+        const width = this.panel?.offsetWidth || 420;
+        const height = this.panel?.offsetHeight || 420;
+        const left = Math.max(this.viewportPadding, window.innerWidth - width - this.defaultRightOffset);
+        const top = Math.max(this.viewportPadding, window.innerHeight - height - this.defaultBottomOffset);
+        return { left, top, width, height };
+    }
+
+    constrainPanelToViewport() {
+        if (!this.panel) return;
+        const rect = this.panel.getBoundingClientRect();
+        this.applyPanelLayout({
+            left: rect.left,
+            top: rect.top,
+            width: rect.width,
+            height: rect.height
+        });
+        this.savePanelLayout();
     }
 
 }
