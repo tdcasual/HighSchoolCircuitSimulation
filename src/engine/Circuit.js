@@ -853,10 +853,19 @@ export class Circuit {
             const endpoints = wireEndpoints.get(wireId);
             const startFlow = terminalFlows.get(endpoints.startKey) || 0;
             const endFlow = terminalFlows.get(endpoints.endKey) || 0;
-            let magnitude = Math.max(Math.abs(startFlow), Math.abs(endFlow));
-            if (directAssignments.has(wireId) && directAssignments.get(wireId).currentMagnitude !== undefined) {
-                magnitude = directAssignments.get(wireId).currentMagnitude;
-            }
+            const startMag = Math.abs(startFlow);
+            const endMag = Math.abs(endFlow);
+            const startComp = this.components.get(endpoints.startKey.split(':')[0]);
+            const endComp = this.components.get(endpoints.endKey.split(':')[0]);
+            const startShorted = !!startComp?._isShorted;
+            const endShorted = !!endComp?._isShorted;
+            const hasTinyStart = startMag < eps && !startShorted;
+            const hasTinyEnd = endMag < eps && !endShorted;
+            // If a branch endpoint is effectively open, don't borrow the larger trunk current;
+            // shorted components still propagate the bus magnitude
+            const magnitude = (directAssignments.has(wireId) && directAssignments.get(wireId).currentMagnitude !== undefined)
+                ? directAssignments.get(wireId).currentMagnitude
+                : ((hasTinyStart || hasTinyEnd) ? Math.min(startMag, endMag) : Math.max(startMag, endMag));
             nodeResult.set(wireId, { flowDirection: direction, currentMagnitude: magnitude });
         }
 
@@ -1010,6 +1019,16 @@ export class Circuit {
         const endFlow = this.getTerminalCurrentFlow(endComp, wire.endTerminalIndex, results);
         const startMag = Math.abs(startFlow);
         const endMag = Math.abs(endFlow);
+        const flowEps = 1e-9;
+        const startShorted = !!startComp._isShorted;
+        const endShorted = !!endComp._isShorted;
+        const hasTinyStart = startMag < flowEps && !startShorted;
+        const hasTinyEnd = endMag < flowEps && !endShorted;
+        // Avoid leaking trunk current into a dead branch (open switch/charged cap) but still
+        // propagate through shorted components that simply sit on the bus
+        const baseCurrent = (hasTinyStart || hasTinyEnd)
+            ? Math.min(startMag, endMag)
+            : Math.max(startMag, endMag);
         
         // CRITICAL: Handle ideal voltmeters robustly
         // Wires connected to ideal voltmeters should show zero current
@@ -1039,14 +1058,14 @@ export class Circuit {
             if (hasJunction) {
                 // Wire passes through a junction - may have current from other circuit paths
                 // Use normal calculation
-                current = Math.max(startMag, endMag);
+                current = baseCurrent;
             } else {
                 // Direct connection to ideal voltmeter - no current
                 current = 0;
             }
         } else {
             // Normal case - use maximum current from either end
-            current = Math.max(startMag, endMag);
+            current = baseCurrent;
         }
         
         const eps = 1e-9;

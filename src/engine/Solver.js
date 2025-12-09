@@ -323,6 +323,7 @@ export class MNASolver {
                 this.stampResistor(A, i1, i2, Req);
                 
                 // 添加等效电流源
+                // Ieq 方向与正极一致（上一时刻的电压决定电流源大小）
                 const Ieq = comp.capacitance * (comp.prevVoltage || 0) / this.dt;
                 if (i1 >= 0) z[i1] += Ieq;
                 if (i2 >= 0) z[i2] -= Ieq;
