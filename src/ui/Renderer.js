@@ -16,10 +16,12 @@ export class Renderer {
         this.componentLayer = this.svg.querySelector('#layer-components');
         this.uiLayer = this.svg.querySelector('#layer-ui');
         
-        // 显示设置
-        this.showCurrent = true;
-        this.showVoltage = true;
-        this.showPower = false;
+        // 数值显示默认设置（单个元器件可覆盖）
+        this.defaultDisplay = {
+            current: true,
+            voltage: false,
+            power: false
+        };
         
         // 元器件SVG元素映射
         this.componentElements = new Map();
@@ -176,6 +178,7 @@ export class Renderer {
                 }
                 break;
             case 'Capacitor':
+            case 'ParallelPlateCapacitor':
                 relX = terminalIndex === 0 ? -30 : 30;
                 relY = 0;
                 break;
@@ -208,7 +211,11 @@ export class Renderer {
         for (const [id, g] of this.componentElements) {
             const comp = this.circuit.getComponent(id);
             if (comp) {
-                SVGRenderer.updateValueDisplay(g, comp, this.showCurrent, this.showVoltage, this.showPower);
+                const display = comp.display || {};
+                const showCurrent = display.current ?? this.defaultDisplay.current;
+                const showVoltage = display.voltage ?? this.defaultDisplay.voltage;
+                const showPower = display.power ?? this.defaultDisplay.power;
+                SVGRenderer.updateValueDisplay(g, comp, showCurrent, showVoltage, showPower);
             }
         }
     }
@@ -217,9 +224,12 @@ export class Renderer {
      * 设置显示选项
      */
     setDisplayOptions(showCurrent, showVoltage, showPower) {
-        this.showCurrent = showCurrent;
-        this.showVoltage = showVoltage;
-        this.showPower = showPower;
+        // 兼容旧逻辑：设置默认显示（不强制覆盖每个元器件的单独配置）
+        this.defaultDisplay = {
+            current: !!showCurrent,
+            voltage: !!showVoltage,
+            power: !!showPower
+        };
         this.updateValues();
     }
 

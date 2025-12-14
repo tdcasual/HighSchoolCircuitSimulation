@@ -7,6 +7,7 @@ import { Circuit } from './engine/Circuit.js';
 import { Renderer } from './ui/Renderer.js';
 import { InteractionManager } from './ui/Interaction.js';
 import { AIPanel } from './ui/AIPanel.js';
+import { ObservationPanel } from './ui/ObservationPanel.js';
 import { resetIdCounter, updateIdCounterFromExisting } from './components/Component.js';
 
 class CircuitSimulatorApp {
@@ -22,6 +23,9 @@ class CircuitSimulatorApp {
         
         // 初始化交互管理器
         this.interaction = new InteractionManager(this);
+
+        // 初始化观察面板
+        this.observationPanel = new ObservationPanel(this);
         
         // 初始化 AI 助手面板
         this.aiPanel = new AIPanel(this);
@@ -118,12 +122,15 @@ class CircuitSimulatorApp {
             
             // 更新导线电流动画
             this.renderer.updateWireAnimations(this.circuit.isRunning, results);
+
+            // 更新观察面板（采样与绘制）
+            this.observationPanel?.onCircuitUpdate(results);
             
             // 更新选中元器件的属性面板
             if (this.interaction.selectedComponent) {
                 const comp = this.circuit.getComponent(this.interaction.selectedComponent);
                 if (comp) {
-                    this.interaction.updatePropertyPanel(comp);
+                    this.interaction.updateSelectedComponentReadouts(comp);
                 }
             }
         } else {
@@ -197,6 +204,7 @@ class CircuitSimulatorApp {
         this.renderer.clear();
         resetIdCounter();
         this.interaction.clearSelection();
+        this.observationPanel?.clearAllPlots();
             
         // 清除缓存
         localStorage.removeItem('saved_circuit');
@@ -252,6 +260,7 @@ class CircuitSimulatorApp {
                 
                 this.renderer.render();
                 this.interaction.clearSelection();
+                this.observationPanel?.refreshComponentOptions();
                 
                 this.updateStatus(`已导入电路: ${data.meta?.name || '未命名'}`);
             } catch (err) {
@@ -315,6 +324,7 @@ class CircuitSimulatorApp {
                 updateIdCounterFromExisting(allIds);
                 
                 this.renderer.render();
+                this.observationPanel?.refreshComponentOptions();
                 this.updateStatus(`已从缓存恢复电路 (${circuitJSON.components.length} 个元器件)`);
             }
         } catch (e) {

@@ -3,17 +3,17 @@
  * 处理拖放、连线、选择等用户交互
  */
 
-import { createComponent, ComponentNames, ComponentDefaults } from '../components/Component.js';
+import { createComponent, ComponentNames, ComponentDefaults, SVGRenderer } from '../components/Component.js';
 import { 
     createElement, 
     createPropertyRow, 
-    createMeasurementRows, 
     createHintParagraph,
     createFormGroup,
     createSliderFormGroup,
     createSwitchToggleGroup,
     clearElement
 } from '../utils/SafeDOM.js';
+import { computeOverlapFractionFromOffsetPx, computeParallelPlateCapacitance } from '../utils/Physics.js';
 
 export class InteractionManager {
     constructor(app) {
@@ -30,6 +30,8 @@ export class InteractionManager {
         this.dragOffset = { x: 0, y: 0 };
         this.selectedComponent = null;
         this.selectedWire = null;
+
+        // 平行板电容探索模式：拖动极板（使用局部 document 监听实现）
         
         // 连线状态
         this.wireStart = null;
@@ -65,6 +67,21 @@ export class InteractionManager {
     }
 
     /**
+     * 将画布坐标转换为元器件局部坐标（考虑旋转）
+     */
+    canvasToComponentLocal(comp, canvasPoint) {
+        const dx = canvasPoint.x - (comp.x || 0);
+        const dy = canvasPoint.y - (comp.y || 0);
+        const rotation = (comp.rotation || 0) * Math.PI / 180;
+        const cos = Math.cos(-rotation);
+        const sin = Math.sin(-rotation);
+        return {
+            x: dx * cos - dy * sin,
+            y: dx * sin + dy * cos
+        };
+    }
+
+    /**
      * 绑定所有事件
      */
     bindEvents() {
@@ -76,9 +93,9 @@ export class InteractionManager {
         
         // 按钮事件
         this.bindButtonEvents();
-        
-        // 显示设置事件
-        this.bindDisplayEvents();
+
+        // 右侧面板 Tab 切换
+        this.bindSidePanelEvents();
         
         // 键盘事件
         this.bindKeyboardEvents();
@@ -105,7 +122,7 @@ export class InteractionManager {
      */
     bindToolboxEvents() {
         const toolItems = document.querySelectorAll('.tool-item');
-        const validTypes = ['PowerSource', 'Resistor', 'Rheostat', 'Bulb', 'Capacitor', 'Motor', 'Switch', 'Ammeter', 'Voltmeter'];
+        const validTypes = ['PowerSource', 'Resistor', 'Rheostat', 'Bulb', 'Capacitor', 'ParallelPlateCapacitor', 'Motor', 'Switch', 'Ammeter', 'Voltmeter'];
         
         // 标记是否正在从工具箱拖放
         this.isToolboxDrag = false;
@@ -300,24 +317,38 @@ export class InteractionManager {
     }
 
     /**
-     * 显示设置事件
+     * 右侧面板 Tab 切换
      */
-    bindDisplayEvents() {
-        const showCurrent = document.getElementById('show-current');
-        const showVoltage = document.getElementById('show-voltage');
-        const showPower = document.getElementById('show-power');
-        
-        const updateDisplay = () => {
-            this.renderer.setDisplayOptions(
-                showCurrent.checked,
-                showVoltage.checked,
-                showPower.checked
-            );
+    bindSidePanelEvents() {
+        const tabButtons = Array.from(document.querySelectorAll('.panel-tab-btn'));
+        const pages = Array.from(document.querySelectorAll('.panel-page'));
+        if (tabButtons.length === 0 || pages.length === 0) return;
+
+        const activate = (panelName) => {
+            tabButtons.forEach((btn) => {
+                const isActive = btn.dataset.panel === panelName;
+                btn.classList.toggle('active', isActive);
+                btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+            });
+
+            pages.forEach((page) => {
+                const isActive = page.dataset.panel === panelName;
+                page.classList.toggle('active', isActive);
+                if (page.id === 'panel-observation') {
+                    page.setAttribute('aria-hidden', isActive ? 'false' : 'true');
+                }
+            });
         };
-        
-        showCurrent.addEventListener('change', updateDisplay);
-        showVoltage.addEventListener('change', updateDisplay);
-        showPower.addEventListener('change', updateDisplay);
+
+        tabButtons.forEach((btn) => {
+            btn.addEventListener('click', () => {
+                const panelName = btn.dataset.panel;
+                if (panelName) activate(panelName);
+            });
+        });
+
+        // 暴露给其他逻辑使用（选择元件时自动跳回属性页）
+        this.activateSidePanelTab = activate;
     }
 
     /**
@@ -432,6 +463,19 @@ export class InteractionManager {
             if (componentG) {
                 this.toggleSwitch(componentG.dataset.id);
                 return;
+            }
+        }
+
+        // 平行板电容探索模式：拖动可动极板
+        if (target.classList.contains('plate-movable') && target.dataset.role === 'plate-movable') {
+            const componentG = target.closest('.component');
+            if (componentG) {
+                const compId = componentG.dataset.id;
+                const comp = this.circuit.getComponent(compId);
+                if (comp && comp.type === 'ParallelPlateCapacitor' && comp.explorationMode) {
+                    this.startParallelPlateCapacitorDrag(compId, e);
+                    return;
+                }
             }
         }
         
@@ -707,6 +751,7 @@ export class InteractionManager {
             const svgElement = this.renderer.addComponent(comp);
             console.log('Rendered SVG element:', svgElement);
             this.selectComponent(comp.id);
+            this.app.observationPanel?.refreshComponentOptions();
             this.updateStatus(`已添加 ${ComponentNames[type]}`);
         } catch (error) {
             console.error('Error adding component:', error);
@@ -730,6 +775,7 @@ export class InteractionManager {
         
         this.renderer.renderWires();
         this.clearSelection();
+        this.app.observationPanel?.refreshComponentOptions();
         this.updateStatus('已删除元器件');
     }
 
@@ -1292,6 +1338,60 @@ export class InteractionManager {
     }
 
     /**
+     * 平行板电容探索模式：拖动右侧极板
+     * - 左右拖动：改变板间距 d
+     * - 上下拖动：改变重叠面积（通过纵向错位近似）
+     */
+    startParallelPlateCapacitorDrag(componentId, e) {
+        const comp = this.circuit.getComponent(componentId);
+        if (!comp || comp.type !== 'ParallelPlateCapacitor' || !comp.explorationMode) return;
+
+        // 选中以便同步右侧面板
+        if (this.selectedComponent !== componentId) {
+            this.selectComponent(componentId);
+        }
+
+        const plateLengthPx = 24;
+        const pxPerMm = 10;
+        const minGapPx = 6;
+        const maxGapPx = 30;
+
+        const startCanvas = this.screenToCanvas(e.clientX, e.clientY);
+        const startLocal = this.canvasToComponentLocal(comp, startCanvas);
+
+        const startDistanceMm = (comp.plateDistance ?? 0.001) * 1000;
+        const startGapPx = Math.min(maxGapPx, Math.max(minGapPx, startDistanceMm * pxPerMm));
+        const startOffsetY = comp.plateOffsetYPx ?? 0;
+
+        const onMove = (moveE) => {
+            const canvas = this.screenToCanvas(moveE.clientX, moveE.clientY);
+            const local = this.canvasToComponentLocal(comp, canvas);
+            const dx = local.x - startLocal.x;
+            const dy = local.y - startLocal.y;
+
+            const gapPx = Math.min(maxGapPx, Math.max(minGapPx, startGapPx + dx));
+            const distanceMm = gapPx / pxPerMm;
+            comp.plateDistance = distanceMm / 1000;
+            comp.plateOffsetYPx = Math.min(plateLengthPx, Math.max(-plateLengthPx, startOffsetY + dy));
+
+            this.recomputeParallelPlateCapacitance(comp, { updateVisual: true, updatePanel: true });
+            this.renderer.setSelected(componentId, true);
+        };
+
+        const onUp = () => {
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+            this.updateStatus('已调整平行板电容参数');
+        };
+
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+
+        e.preventDefault();
+        e.stopPropagation();
+    }
+
+    /**
      * 选择元器件
      */
     selectComponent(id) {
@@ -1299,6 +1399,10 @@ export class InteractionManager {
         this.selectedComponent = id;
         this.selectedWire = null;
         this.renderer.setSelected(id, true);
+
+        if (typeof this.activateSidePanelTab === 'function') {
+            this.activateSidePanelTab('properties');
+        }
         
         const comp = this.circuit.getComponent(id);
         if (comp) {
@@ -1314,6 +1418,10 @@ export class InteractionManager {
         this.selectedWire = id;
         this.selectedComponent = null;
         this.renderer.setWireSelected(id, true);
+
+        if (typeof this.activateSidePanelTab === 'function') {
+            this.activateSidePanelTab('properties');
+        }
         
         // 清除之前的自动隐藏计时器
         if (this.wireAutoHideTimer) {
@@ -1913,15 +2021,71 @@ export class InteractionManager {
             value: comp.label || '',
             placeholder: '输入标签名称'
         }, '自定义标签将显示在元器件上');
-        
         const labelInput = labelGroup.querySelector('#comp-label');
         labelInput.addEventListener('change', () => {
             const newLabel = labelInput.value.trim();
             comp.label = newLabel || null;
             this.renderer.render();
+            this.app.observationPanel?.refreshComponentOptions();
             this.app.updateStatus(`已更新标签: ${newLabel || '（空）'}`);
         });
         content.appendChild(labelGroup);
+
+        // 数值显示（每个元器件单独配置）
+        const displayKeys = (() => {
+            switch (comp.type) {
+                case 'Switch':
+                    return [];
+                case 'Ammeter':
+                    return ['current'];
+                case 'Voltmeter':
+                    return ['voltage'];
+                default:
+                    return ['current', 'voltage', 'power'];
+            }
+        })();
+
+        if (displayKeys.length > 0) {
+            const displayHeader = createElement('h3', { textContent: '数值显示' });
+            content.appendChild(displayHeader);
+
+            const chipRow = createElement('div', { className: 'display-chip-row' });
+            const chipLabels = {
+                current: 'I 电流',
+                voltage: 'U 电压',
+                power: 'P 功率'
+            };
+
+            // 确保 display 结构存在
+            if (!comp.display || typeof comp.display !== 'object') {
+                comp.display = { current: true, voltage: false, power: false };
+            }
+
+            displayKeys.forEach((key) => {
+                const isOn = !!comp.display[key];
+                const btn = createElement('button', {
+                    className: 'display-chip' + (isOn ? ' active' : ''),
+                    textContent: chipLabels[key] || key,
+                    attrs: {
+                        type: 'button',
+                        'data-key': key,
+                        'aria-pressed': isOn ? 'true' : 'false'
+                    }
+                });
+
+                btn.addEventListener('click', () => {
+                    const next = !comp.display[key];
+                    comp.display[key] = next;
+                    btn.classList.toggle('active', next);
+                    btn.setAttribute('aria-pressed', next ? 'true' : 'false');
+                    this.renderer.updateValues();
+                });
+
+                chipRow.appendChild(btn);
+            });
+
+            content.appendChild(chipRow);
+        }
         
         // 根据类型显示不同的属性
         switch (comp.type) {
@@ -1968,6 +2132,92 @@ export class InteractionManager {
             case 'Capacitor':
                 content.appendChild(createPropertyRow('电容值', `${(comp.capacitance * 1000000).toFixed(0)} μF`));
                 break;
+
+            case 'ParallelPlateCapacitor': {
+                // 先用当前物理参数同步一次电容值（不改变已存电荷）
+                this.recomputeParallelPlateCapacitance(comp, { updateVisual: false, updatePanel: false });
+
+                content.appendChild(createElement('h3', { textContent: '探索模式' }));
+
+                const exploreGroup = createElement('div', { className: 'form-group' });
+                exploreGroup.appendChild(createElement('label', { textContent: '开启探索（拖动右侧极板）' }));
+                const exploreToggle = createElement('input', {
+                    id: 'ppc-toggle-explore',
+                    attrs: { type: 'checkbox' }
+                });
+                exploreToggle.checked = !!comp.explorationMode;
+                exploreToggle.addEventListener('change', () => {
+                    comp.explorationMode = !!exploreToggle.checked;
+                    this.recomputeParallelPlateCapacitance(comp, { updateVisual: true, updatePanel: true });
+                });
+                exploreGroup.appendChild(exploreToggle);
+                exploreGroup.appendChild(createElement('p', { className: 'hint', textContent: '左右拖动改变 d，上下拖动改变重叠面积' }));
+                content.appendChild(exploreGroup);
+
+                const distanceGroup = createFormGroup('极板间距 d', {
+                    id: 'ppc-input-distance',
+                    value: ((comp.plateDistance || 0) * 1000).toFixed(3),
+                    min: 0.001,
+                    step: 0.1,
+                    unit: 'mm'
+                });
+                const areaGroup = createFormGroup('极板面积 A', {
+                    id: 'ppc-input-area',
+                    value: ((comp.plateArea || 0) * 10000).toFixed(2),
+                    min: 0.01,
+                    step: 1,
+                    unit: 'cm²'
+                });
+                const erGroup = createFormGroup('介电常数 εr', {
+                    id: 'ppc-input-er',
+                    value: comp.dielectricConstant ?? 1,
+                    min: 1,
+                    step: 0.1,
+                    unit: ''
+                });
+
+                content.appendChild(distanceGroup);
+                content.appendChild(areaGroup);
+                content.appendChild(erGroup);
+
+                const distanceInput = distanceGroup.querySelector('#ppc-input-distance');
+                if (distanceInput) {
+                    distanceInput.addEventListener('change', () => {
+                        const distanceMm = this.safeParseFloat(distanceInput.value, (comp.plateDistance || 0.001) * 1000, 0.001, 1e9);
+                        comp.plateDistance = distanceMm / 1000;
+                        this.recomputeParallelPlateCapacitance(comp, { updateVisual: true, updatePanel: true });
+                    });
+                }
+
+                const areaInput = areaGroup.querySelector('#ppc-input-area');
+                if (areaInput) {
+                    areaInput.addEventListener('change', () => {
+                        const areaCm2 = this.safeParseFloat(areaInput.value, (comp.plateArea || 0.01) * 10000, 0.01, 1e12);
+                        comp.plateArea = areaCm2 / 10000;
+                        this.recomputeParallelPlateCapacitance(comp, { updateVisual: true, updatePanel: true });
+                    });
+                }
+
+                const erInput = erGroup.querySelector('#ppc-input-er');
+                if (erInput) {
+                    erInput.addEventListener('change', () => {
+                        comp.dielectricConstant = this.safeParseFloat(erInput.value, comp.dielectricConstant ?? 1, 1, 1e9);
+                        this.recomputeParallelPlateCapacitance(comp, { updateVisual: true, updatePanel: true });
+                    });
+                }
+
+                content.appendChild(createElement('h3', { textContent: '演示量' }));
+                content.appendChild(createPropertyRow('电容 C', '—', { valueId: 'ppc-readout-capacitance' }));
+                content.appendChild(createPropertyRow('板间距 d', '—', { valueId: 'ppc-readout-distance' }));
+                content.appendChild(createPropertyRow('重叠比例', '—', { valueId: 'ppc-readout-overlap' }));
+                content.appendChild(createPropertyRow('有效面积 A_eff', '—', { valueId: 'ppc-readout-area' }));
+                content.appendChild(createPropertyRow('电场强度 E', '—', { valueId: 'ppc-readout-field' }));
+                content.appendChild(createPropertyRow('电荷 |Q|', '—', { valueId: 'ppc-readout-charge' }));
+
+                // 初始化一次读数
+                this.updateParallelPlateCapacitorPanelValues(comp);
+                break;
+            }
                 
             case 'Motor':
                 content.appendChild(createPropertyRow('电枢电阻', `${comp.resistance} Ω`));
@@ -1997,20 +2247,50 @@ export class InteractionManager {
                 break;
         }
         
-        // 显示当前测量值
-        if (this.circuit.isRunning) {
-            content.appendChild(createMeasurementRows({
-                current: comp.currentValue || 0,
-                voltage: comp.voltageValue || 0,
-                power: comp.powerValue || 0
-            }));
-        }
+        // 实时测量（不再每帧重建面板，改为更新这些读数节点）
+        content.appendChild(createElement('h3', { textContent: '实时测量' }));
+        content.appendChild(createPropertyRow('电流', `${(comp.currentValue || 0).toFixed(4)} A`, { valueId: 'measure-current' }));
+        content.appendChild(createPropertyRow('电压', `${(comp.voltageValue || 0).toFixed(4)} V`, { valueId: 'measure-voltage' }));
+        content.appendChild(createPropertyRow('功率', `${(comp.powerValue || 0).toFixed(4)} W`, { valueId: 'measure-power' }));
         
         content.appendChild(createHintParagraph([
             '双击或右键编辑属性',
             '按 R 旋转，按 Delete 删除',
             '<b>Alt + 拖动端子</b> 延长引脚'
         ]));
+    }
+
+    /**
+     * 仅更新属性面板里的“实时测量”等动态值，避免每帧重建 DOM 导致闪烁/输入框失焦
+     */
+    updateSelectedComponentReadouts(comp) {
+        if (!comp) return;
+
+        const currentEl = document.getElementById('measure-current');
+        const voltageEl = document.getElementById('measure-voltage');
+        const powerEl = document.getElementById('measure-power');
+
+        if (currentEl) currentEl.textContent = `${(comp.currentValue || 0).toFixed(4)} A`;
+        if (voltageEl) voltageEl.textContent = `${(comp.voltageValue || 0).toFixed(4)} V`;
+        if (powerEl) powerEl.textContent = `${(comp.powerValue || 0).toFixed(4)} W`;
+
+        // 仪表读数行（如果存在）
+        const ammeterReading = document.querySelector('.ammeter-reading');
+        if (ammeterReading && comp.type === 'Ammeter') {
+            ammeterReading.textContent = `${(Math.abs(comp.currentValue) || 0).toFixed(3)} A`;
+        }
+        const voltmeterReading = document.querySelector('.voltmeter-reading');
+        if (voltmeterReading && comp.type === 'Voltmeter') {
+            voltmeterReading.textContent = `${(Math.abs(comp.voltageValue) || 0).toFixed(3)} V`;
+        }
+
+        // 特殊组件的动态字段
+        if (comp.type === 'Rheostat') {
+            this.updateRheostatPanelValues(comp);
+        }
+        if (comp.type === 'ParallelPlateCapacitor') {
+            this.updateParallelPlateCapacitorPanelValues(comp);
+        }
     }
 
     /**
@@ -2041,6 +2321,100 @@ export class InteractionManager {
             currentREl.appendChild(small);
             
             positionEl.textContent = `${(comp.position * 100).toFixed(0)}%`;
+        }
+    }
+
+    /**
+     * 根据平行板电容的物理参数重算电容值，并可选更新图形/面板。
+     * 注意：不修改 prevCharge（用于保持“断开后 Q 近似守恒”的演示效果）。
+     */
+    recomputeParallelPlateCapacitance(comp, options = {}) {
+        if (!comp || comp.type !== 'ParallelPlateCapacitor') return;
+
+        const plateLengthPx = 24;
+        const overlapFraction = computeOverlapFractionFromOffsetPx(comp.plateOffsetYPx || 0, plateLengthPx);
+        const C = computeParallelPlateCapacitance({
+            plateArea: comp.plateArea,
+            plateDistance: comp.plateDistance,
+            dielectricConstant: comp.dielectricConstant,
+            overlapFraction
+        });
+        comp.capacitance = C;
+
+        if (options.updateVisual) {
+            const g = this.renderer.componentElements.get(comp.id);
+            if (g) {
+                SVGRenderer.updateParallelPlateCapacitorVisual(g, comp);
+            } else {
+                this.renderer.refreshComponent(comp);
+            }
+        }
+
+        if (options.updatePanel) {
+            this.updateParallelPlateCapacitorPanelValues(comp);
+        }
+    }
+
+    /**
+     * 仅更新平行板电容在属性面板中的动态字段
+     */
+    updateParallelPlateCapacitorPanelValues(comp) {
+        if (!comp || comp.type !== 'ParallelPlateCapacitor') return;
+
+        const plateLengthPx = 24;
+        const overlapFraction = computeOverlapFractionFromOffsetPx(comp.plateOffsetYPx || 0, plateLengthPx);
+        const distanceMm = (comp.plateDistance || 0) * 1000;
+        const areaCm2 = (comp.plateArea || 0) * 10000;
+        const effAreaCm2 = areaCm2 * overlapFraction;
+
+        const voltage = Math.abs(comp.voltageValue || 0);
+        const field = comp.plateDistance ? voltage / comp.plateDistance : 0; // V/m
+        const charge = Math.abs(comp.prevCharge ?? (comp.capacitance || 0) * (comp.prevVoltage || 0));
+
+        const capEl = document.getElementById('ppc-readout-capacitance');
+        const distanceEl = document.getElementById('ppc-readout-distance');
+        const overlapEl = document.getElementById('ppc-readout-overlap');
+        const areaEl = document.getElementById('ppc-readout-area');
+        const fieldEl = document.getElementById('ppc-readout-field');
+        const chargeEl = document.getElementById('ppc-readout-charge');
+
+        const formatCap = (C) => {
+            if (!Number.isFinite(C)) return '0 F';
+            const absC = Math.abs(C);
+            if (absC >= 1e-3) return `${(C * 1e3).toFixed(3)} mF`;
+            if (absC >= 1e-6) return `${(C * 1e6).toFixed(3)} μF`;
+            if (absC >= 1e-9) return `${(C * 1e9).toFixed(3)} nF`;
+            return `${(C * 1e12).toFixed(3)} pF`;
+        };
+
+        const formatCharge = (Q) => {
+            if (!Number.isFinite(Q)) return '0 C';
+            const absQ = Math.abs(Q);
+            if (absQ >= 1e-3) return `${(Q * 1e3).toFixed(3)} mC`;
+            if (absQ >= 1e-6) return `${(Q * 1e6).toFixed(3)} μC`;
+            if (absQ >= 1e-9) return `${(Q * 1e9).toFixed(3)} nC`;
+            return `${(Q * 1e12).toFixed(3)} pC`;
+        };
+
+        const formatField = (E) => {
+            if (!Number.isFinite(E)) return '0 V/m';
+            const absE = Math.abs(E);
+            if (absE >= 1e6) return `${(E / 1e6).toFixed(3)} MV/m`;
+            if (absE >= 1e3) return `${(E / 1e3).toFixed(3)} kV/m`;
+            return `${E.toFixed(3)} V/m`;
+        };
+
+        if (capEl) capEl.textContent = formatCap(comp.capacitance || 0);
+        if (distanceEl) distanceEl.textContent = `${distanceMm.toFixed(3)} mm`;
+        if (overlapEl) overlapEl.textContent = `${(overlapFraction * 100).toFixed(1)}%`;
+        if (areaEl) areaEl.textContent = `${effAreaCm2.toFixed(2)} cm²`;
+        if (fieldEl) fieldEl.textContent = formatField(field);
+        if (chargeEl) chargeEl.textContent = formatCharge(charge);
+
+        // 输入框（如果存在）也同步当前值，避免拖动时显示滞后
+        const distanceInput = document.getElementById('ppc-input-distance');
+        if (distanceInput && document.activeElement !== distanceInput) {
+            distanceInput.value = distanceMm.toFixed(3);
         }
     }
 
@@ -2142,6 +2516,41 @@ export class InteractionManager {
                     unit: 'μF'
                 }));
                 break;
+
+            case 'ParallelPlateCapacitor': {
+                content.appendChild(createFormGroup('极板面积 A (cm²)', {
+                    id: 'edit-plate-area',
+                    value: (comp.plateArea || 0) * 10000,
+                    min: 0.01,
+                    step: 1,
+                    unit: 'cm²'
+                }));
+                content.appendChild(createFormGroup('极板间距 d (mm)', {
+                    id: 'edit-plate-distance',
+                    value: (comp.plateDistance || 0) * 1000,
+                    min: 0.01,
+                    step: 0.1,
+                    unit: 'mm'
+                }));
+                content.appendChild(createFormGroup('相对介电常数 εr', {
+                    id: 'edit-dielectric-constant',
+                    value: comp.dielectricConstant ?? 1,
+                    min: 1,
+                    step: 0.1,
+                    unit: ''
+                }));
+
+                const exploreGroup = createElement('div', { className: 'form-group' });
+                exploreGroup.appendChild(createElement('label', { textContent: '探索模式（可拖动极板）' }));
+                const checkbox = createElement('input', {
+                    id: 'edit-exploration-mode',
+                    attrs: { type: 'checkbox' }
+                });
+                checkbox.checked = !!comp.explorationMode;
+                exploreGroup.appendChild(checkbox);
+                content.appendChild(exploreGroup);
+                break;
+            }
                 
             case 'Motor':
                 content.appendChild(createFormGroup('电枢电阻 (Ω)', {
@@ -2308,6 +2717,34 @@ export class InteractionManager {
                     );
                     comp.capacitance = capValue / 1000000;
                     break;
+
+                case 'ParallelPlateCapacitor': {
+                    const areaCm2 = this.safeParseFloat(
+                        document.getElementById('edit-plate-area').value,
+                        (comp.plateArea || 0.01) * 10000,
+                        0.01,
+                        1e12
+                    );
+                    const distanceMm = this.safeParseFloat(
+                        document.getElementById('edit-plate-distance').value,
+                        (comp.plateDistance || 0.001) * 1000,
+                        0.001,
+                        1e9
+                    );
+                    comp.plateArea = areaCm2 / 10000;
+                    comp.plateDistance = distanceMm / 1000;
+                    comp.dielectricConstant = this.safeParseFloat(
+                        document.getElementById('edit-dielectric-constant').value,
+                        comp.dielectricConstant ?? 1,
+                        1,
+                        1e9
+                    );
+                    const exploreEl = document.getElementById('edit-exploration-mode');
+                    comp.explorationMode = !!(exploreEl && exploreEl.checked);
+
+                    this.recomputeParallelPlateCapacitance(comp, { updateVisual: false });
+                    break;
+                }
                     
                 case 'Motor':
                     comp.resistance = this.safeParseFloat(

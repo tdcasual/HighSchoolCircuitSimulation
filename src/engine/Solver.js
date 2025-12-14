@@ -12,6 +12,9 @@ export class MNASolver {
         this.groundNode = 0;        // 接地节点（参考节点）
         this.voltageSourceCount = 0; // 电压源数量（用于扩展矩阵）
         this.dt = 0.001;            // 时间步长（秒）
+        // gmin 稳定化：给每个非接地节点加一个极小的对地电导，避免“悬浮子电路”导致矩阵奇异
+        // 取值为 1e-12 S (≈ 1e12Ω) 基本不影响正常高中电路数值，但能显著提升鲁棒性
+        this.gmin = 1e-12;
     }
 
     /**
@@ -96,6 +99,14 @@ export class MNASolver {
         // 为每个元器件添加印记（stamp）
         for (const comp of this.components) {
             this.stampComponent(comp, A, z, nodeCount);
+        }
+
+        // gmin 稳定化：给每个非接地节点加一个极小对地电导
+        // 目的：当画布上存在与参考地完全断开的“悬浮子电路”时，仍可得到可解的方程组
+        if (this.gmin > 0) {
+            for (let i = 0; i < nodeCount - 1; i++) {
+                A[i][i] += this.gmin;
+            }
         }
 
         // 调试输出矩阵
@@ -188,11 +199,14 @@ export class MNASolver {
                 // 滑动变阻器模型：根据连接模式决定如何stamp
                 // 内部结构：端子0(左) -- R1 -- 端子2(滑动触点) -- R2 -- 端子1(右)
                 // 总电阻 = maxR，按位置分配
-                const totalR = comp.maxResistance || 100;
-                // R1 = 左端到滑块的电阻
-                const R1 = Math.max(1e-9, totalR * comp.position);
-                // R2 = 滑块到右端的电阻
-                const R2 = Math.max(1e-9, totalR * (1 - comp.position));
+                const minR = comp.minResistance ?? 0;
+                const maxR = comp.maxResistance ?? 100;
+                const position = comp.position == null ? 0.5 : Math.min(Math.max(comp.position, 0), 1);
+                const range = Math.max(0, maxR - minR);
+                // R1 = 左端到滑块的电阻（支持 minResistance）
+                const R1 = Math.max(1e-9, minR + range * position);
+                // R2 = 滑块到右端的电阻（支持 minResistance）
+                const R2 = Math.max(1e-9, maxR - range * position);
                 
                 // 获取三个节点
                 const n_left = comp.nodes[0];
@@ -207,27 +221,30 @@ export class MNASolver {
                 const i_right = rightValid ? n_right - 1 : null;
                 const i_slider = sliderValid ? n_slider - 1 : null;
                 
-                // 强制输出调试信息
-                console.warn(`[Rheostat] nodes=[${n_left},${n_right},${n_slider}], idx=[${i_left},${i_right},${i_slider}], mode=${comp.connectionMode}, R1=${R1.toFixed(2)}, R2=${R2.toFixed(2)}`);
+                const debugWarn = (...args) => {
+                    if (this.debugMode) console.warn(...args);
+                };
+
+                debugWarn(`[Rheostat] nodes=[${n_left},${n_right},${n_slider}], idx=[${i_left},${i_right},${i_slider}], mode=${comp.connectionMode}, R1=${R1.toFixed(2)}, R2=${R2.toFixed(2)}`);
                 
                 // 根据连接模式决定stamp方式
                 switch (comp.connectionMode) {
                     case 'left-slider':
-                        console.warn('  -> left-slider mode');
+                        debugWarn('  -> left-slider mode');
                         if (leftValid && sliderValid) {
                             this.stampResistor(A, i_left, i_slider, R1);
                         }
                         break;
                     case 'right-slider':
-                        console.warn('  -> right-slider mode');
+                        debugWarn('  -> right-slider mode');
                         if (sliderValid && rightValid) {
                             this.stampResistor(A, i_slider, i_right, R2);
                         }
                         break;
                     case 'left-right':
-                        console.warn('  -> left-right mode');
+                        debugWarn('  -> left-right mode');
                         if (leftValid && rightValid) {
-                            this.stampResistor(A, i_left, i_right, Math.max(1e-9, totalR));
+                            this.stampResistor(A, i_left, i_right, Math.max(1e-9, maxR));
                         }
                         break;
                     case 'all': {
@@ -236,28 +253,28 @@ export class MNASolver {
                         const rightEqSlider = (n_right === n_slider);
                         const leftEqRight = (n_left === n_right);
                         
-                        console.warn(`  -> all mode: L=S:${leftEqSlider}, R=S:${rightEqSlider}, L=R:${leftEqRight}`);
+                        debugWarn(`  -> all mode: L=S:${leftEqSlider}, R=S:${rightEqSlider}, L=R:${leftEqRight}`);
                         
                         if (leftEqSlider && rightEqSlider) {
-                            console.warn('    => completely shorted');
+                            debugWarn('    => completely shorted');
                         } else if (leftEqSlider) {
-                            console.warn('    => R1 shorted, stamp R2');
+                            debugWarn('    => R1 shorted, stamp R2');
                             if (sliderValid && rightValid) {
                                 this.stampResistor(A, i_slider, i_right, R2);
                             }
                         } else if (rightEqSlider) {
-                            console.warn('    => R2 shorted, stamp R1');
+                            debugWarn('    => R2 shorted, stamp R1');
                             if (leftValid && sliderValid) {
                                 this.stampResistor(A, i_left, i_slider, R1);
                             }
                         } else if (leftEqRight) {
                             const R_parallel = (R1 * R2) / (R1 + R2);
-                            console.warn(`    => R1||R2 = ${R_parallel.toFixed(2)}`);
+                            debugWarn(`    => R1||R2 = ${R_parallel.toFixed(2)}`);
                             if (leftValid && sliderValid) {
                                 this.stampResistor(A, i_left, i_slider, R_parallel);
                             }
                         } else {
-                            console.warn('    => normal 3-terminal');
+                            debugWarn('    => normal 3-terminal');
                             if (leftValid && sliderValid) {
                                 this.stampResistor(A, i_left, i_slider, R1);
                             }
@@ -268,7 +285,7 @@ export class MNASolver {
                         break;
                     }
                     default:
-                        console.warn('  -> disconnected');
+                        debugWarn('  -> disconnected');
                         break;
                 }
                 break;
@@ -315,19 +332,21 @@ export class MNASolver {
                 break;
                 
             case 'Capacitor':
-                // 使用后向欧拉法处理电容
-                // 等效电阻 Req = dt / C
-                // 等效电流源 Ieq = C * v_prev / dt
-                const Req = this.dt / comp.capacitance;
-                const G = 1 / Req;
+            case 'ParallelPlateCapacitor': {
+                // 使用后向欧拉法处理电容（支持可变电容：用“上一时刻电荷”而非“上一时刻电压”）
+                // I = dQ/dt,  Q = C * V
+                // 后向欧拉：I = (C_new * V_new - Q_prev) / dt
+                // 等效为：导纳 G = C_new / dt，并联电流源 Ieq = Q_prev / dt（方向：从负极到正极）
+                const C = Math.max(1e-18, comp.capacitance || 0);
+                const Req = this.dt / C;
                 this.stampResistor(A, i1, i2, Req);
-                
-                // 添加等效电流源
-                // Ieq 方向与正极一致（上一时刻的电压决定电流源大小）
-                const Ieq = comp.capacitance * (comp.prevVoltage || 0) / this.dt;
+
+                const Qprev = comp.prevCharge || 0;
+                const Ieq = Qprev / this.dt;
                 if (i1 >= 0) z[i1] += Ieq;
                 if (i2 >= 0) z[i2] -= Ieq;
                 break;
+            }
                 
             case 'Motor':
                 // 电动机模型：电阻串联反电动势
@@ -454,9 +473,12 @@ export class MNASolver {
                 const v_right = getVoltage(comp.nodes[1]);
                 const v_slider = getVoltage(comp.nodes[2]);
                 
-                const totalR = comp.maxResistance || 100;
-                const R1 = Math.max(1e-9, totalR * comp.position);
-                const R2 = Math.max(1e-9, totalR * (1 - comp.position));
+                const minR = comp.minResistance ?? 0;
+                const maxR = comp.maxResistance ?? 100;
+                const position = comp.position == null ? 0.5 : Math.min(Math.max(comp.position, 0), 1);
+                const range = Math.max(0, maxR - minR);
+                const R1 = Math.max(1e-9, minR + range * position);
+                const R2 = Math.max(1e-9, maxR - range * position);
                 
                 switch (comp.connectionMode) {
                     case 'left-slider':
@@ -467,7 +489,7 @@ export class MNASolver {
                         return (v_slider - v_right) / R2;
                     case 'left-right':
                         // 全阻值
-                        return (v_left - v_right) / Math.max(1e-9, totalR);
+                        return (v_left - v_right) / Math.max(1e-9, maxR);
                     case 'all': {
                         // 三端都连接，根据节点连接情况计算电流
                         const n_left = comp.nodes[0];
@@ -523,19 +545,20 @@ export class MNASolver {
                 return -motorCurrent;
                 
             case 'Capacitor':
-                // 电容电流 = C * dV/dt
-                const prevV = comp.prevVoltage || 0;
-                const capacitorCurrent = comp.capacitance * (dV - prevV) / this.dt;
-                
-                // 稳态检测：当电压变化极小时，认为充电完成，电流为0
-                const voltageChange = Math.abs(dV - prevV);
-                const steadyStateThreshold = 1e-6; // 1微V阈值
-                
-                if (voltageChange < steadyStateThreshold) {
-                    return 0; // 稳态，无电流
+            case 'ParallelPlateCapacitor': {
+                // 电容电流 = dQ/dt,  Q = C * V（支持可变电容）
+                const C = comp.capacitance || 0;
+                const qPrev = comp.prevCharge || 0;
+                const qNew = C * dV;
+                const dQ = qNew - qPrev;
+
+                // 稳态检测：当电荷变化极小时，认为充电完成，电流为0
+                const steadyStateThreshold = 1e-12; // 1pC 阈值（足够小且更适配可变电容）
+                if (Math.abs(dQ) < steadyStateThreshold) {
+                    return 0;
                 }
-                
-                return capacitorCurrent;
+                return dQ / this.dt;
+            }
                 
             case 'Switch':
                 // 开关电流
@@ -577,10 +600,12 @@ export class MNASolver {
      */
     updateDynamicComponents(voltages) {
         for (const comp of this.components) {
-            if (comp.type === 'Capacitor') {
+            if (comp.type === 'Capacitor' || comp.type === 'ParallelPlateCapacitor') {
                 const v1 = voltages[comp.nodes[0]] || 0;
                 const v2 = voltages[comp.nodes[1]] || 0;
-                comp.prevVoltage = v1 - v2;
+                const v = v1 - v2;
+                comp.prevVoltage = v;
+                comp.prevCharge = (comp.capacitance || 0) * v;
             }
             
             if (comp.type === 'Motor') {

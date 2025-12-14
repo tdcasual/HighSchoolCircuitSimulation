@@ -5,6 +5,7 @@
 
 import { MNASolver } from './Solver.js';
 import { createComponent } from '../components/Component.js';
+import { computeOverlapFractionFromOffsetPx, computeParallelPlateCapacitance } from '../utils/Physics.js';
 
 export class Circuit {
     constructor() {
@@ -16,6 +17,7 @@ export class Circuit {
         this.lastResults = null;
         this.simulationInterval = null;
         this.dt = 0.01;               // 10ms 时间步长
+        this.simTime = 0;             // 仿真时间（秒）
         this._wireFlowCache = { version: null, map: new Map() };
         this.terminalConnectionMap = new Map();
         this.debugMode = false;
@@ -211,23 +213,25 @@ export class Circuit {
         this.nodes = Array.from({ length: nodeIndex }, (_, i) => ({ id: i }));
         
         // 调试：打印节点与端子映射，帮助排查错误连接
-        console.warn('--- Node mapping ---');
-        const nodeTerminals = Array.from({ length: nodeIndex }, () => []);
-        for (const [id, comp] of this.components) {
-            const append = (node, terminalIdx) => {
-                if (node !== undefined && node >= 0) {
-                    nodeTerminals[node].push(`${id}:${terminalIdx}`);
+        if (this.debugMode) {
+            console.warn('--- Node mapping ---');
+            const nodeTerminals = Array.from({ length: nodeIndex }, () => []);
+            for (const [id, comp] of this.components) {
+                const append = (node, terminalIdx) => {
+                    if (node !== undefined && node >= 0) {
+                        nodeTerminals[node].push(`${id}:${terminalIdx}`);
+                    }
+                };
+                append(comp.nodes[0], 0);
+                append(comp.nodes[1], 1);
+                if (comp.type === 'Rheostat') {
+                    append(comp.nodes[2], 2);
                 }
-            };
-            append(comp.nodes[0], 0);
-            append(comp.nodes[1], 1);
-            if (comp.type === 'Rheostat') {
-                append(comp.nodes[2], 2);
             }
+            nodeTerminals.forEach((ts, idx) => {
+                console.warn(`node ${idx}: ${ts.join(', ')}`);
+            });
         }
-        nodeTerminals.forEach((ts, idx) => {
-            console.warn(`node ${idx}: ${ts.join(', ')}`);
-        });
         
         // 检测滑动变阻器的连接模式
         this.detectRheostatConnections();
@@ -253,7 +257,9 @@ export class Circuit {
                 }
             }
             
-            console.log(`Rheostat ${id}: terminals connected = [left:${terminalConnected[0]}, right:${terminalConnected[1]}, slider:${terminalConnected[2]}]`);
+            if (this.debugMode) {
+                console.log(`Rheostat ${id}: terminals connected = [left:${terminalConnected[0]}, right:${terminalConnected[1]}, slider:${terminalConnected[2]}]`);
+            }
             
             // 确定连接模式
             // connectionMode: 'left-slider' | 'right-slider' | 'left-right' | 'all' | 'none'
@@ -279,7 +285,9 @@ export class Circuit {
                 }
             }
             
-            console.log(`Rheostat ${id}: connectionMode = ${comp.connectionMode}`);
+            if (this.debugMode) {
+                console.log(`Rheostat ${id}: connectionMode = ${comp.connectionMode}`);
+            }
             
             // 计算接入电路的实际电阻
             this.calculateRheostatActiveResistance(comp);
@@ -367,11 +375,13 @@ export class Circuit {
         }
         
         this.isRunning = true;
+        this.simTime = 0;
         
         // 重置动态元器件状态
         for (const [id, comp] of this.components) {
-            if (comp.type === 'Capacitor') {
+            if (comp.type === 'Capacitor' || comp.type === 'ParallelPlateCapacitor') {
                 comp.prevVoltage = 0;
+                comp.prevCharge = 0;
             }
             if (comp.type === 'Motor') {
                 comp.speed = 0;
@@ -429,6 +439,7 @@ export class Circuit {
         }
 
         if (this.lastResults.valid) {
+            this.simTime += this.dt;
             // 更新动态元器件
             this.solver.updateDynamicComponents(this.lastResults.voltages);
 
@@ -925,7 +936,7 @@ export class Circuit {
      * @returns {boolean} 是否为稳态电容器
      */
     isSteadyStateCapacitor(comp) {
-        if (!comp || comp.type !== 'Capacitor') return false;
+        if (!comp || (comp.type !== 'Capacitor' && comp.type !== 'ParallelPlateCapacitor')) return false;
         // 电流极小时认为充电完成
         return Math.abs(comp.currentValue || 0) < 1e-6;
     }
@@ -1170,6 +1181,7 @@ export class Circuit {
                 y: comp.y,
                 rotation: comp.rotation || 0,
                 properties: this.getComponentProperties(comp),
+                display: comp.display || null,
                 terminalExtensions: comp.terminalExtensions || null
             })),
             wires: Array.from(this.wires.values()).map(wire => ({
@@ -1214,6 +1226,15 @@ export class Circuit {
                 };
             case 'Capacitor':
                 return { capacitance: comp.capacitance };
+            case 'ParallelPlateCapacitor':
+                return {
+                    plateArea: comp.plateArea,
+                    plateDistance: comp.plateDistance,
+                    dielectricConstant: comp.dielectricConstant,
+                    plateOffsetYPx: comp.plateOffsetYPx,
+                    explorationMode: comp.explorationMode,
+                    capacitance: comp.capacitance
+                };
             case 'Motor':
                 return {
                     resistance: comp.resistance,
@@ -1262,6 +1283,26 @@ export class Circuit {
                 comp.label = compData.label;  // 恢复自定义标签
             }
             Object.assign(comp, compData.properties);
+
+            // 平行板电容：始终用物理参数刷新电容值，避免保存文件中 C 与参数不一致
+            if (comp.type === 'ParallelPlateCapacitor') {
+                const plateLengthPx = 24;
+                const overlapFraction = computeOverlapFractionFromOffsetPx(comp.plateOffsetYPx || 0, plateLengthPx);
+                comp.capacitance = computeParallelPlateCapacitance({
+                    plateArea: comp.plateArea,
+                    plateDistance: comp.plateDistance,
+                    dielectricConstant: comp.dielectricConstant,
+                    overlapFraction
+                });
+            }
+
+            // 恢复数值显示开关（单元件配置）
+            if (compData.display && typeof compData.display === 'object') {
+                comp.display = {
+                    ...(comp.display || {}),
+                    ...compData.display
+                };
+            }
             
             // 恢复端子延伸
             if (compData.terminalExtensions) {

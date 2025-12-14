@@ -3,6 +3,8 @@
  * 定义各种电路元器件的属性和SVG渲染
  */
 
+import { clamp, computeOverlapFractionFromOffsetPx, computeParallelPlateCapacitance } from '../utils/Physics.js';
+
 // 元器件ID计数器
 let componentIdCounter = 0;
 
@@ -67,6 +69,15 @@ export const ComponentDefaults = {
     Capacitor: {
         capacitance: 0.001     // 电容值 (F) = 1000μF
     },
+    ParallelPlateCapacitor: {
+        // 平行板电容（用于演示 C 的决定因素）
+        plateArea: 0.01,           // 极板面积 A (m²) = 100 cm²
+        plateDistance: 0.001,      // 极板间距 d (m) = 1 mm
+        dielectricConstant: 1,     // 相对介电常数 εr
+        plateOffsetYPx: 0,         // 单极板纵向偏移（用于演示重叠面积），单位：局部像素
+        explorationMode: true,     // 是否开启探索模式（允许拖动极板）
+        capacitance: 8.854e-11     // 由默认 A/d 估算得到的电容（F）
+    },
     Motor: {
         resistance: 5,         // 电枢电阻 (Ω)
         torqueConstant: 0.1,   // 转矩常数 (N·m/A)
@@ -96,6 +107,7 @@ export const ComponentNames = {
     Rheostat: '滑动变阻器',
     Bulb: '灯泡',
     Capacitor: '电容',
+    ParallelPlateCapacitor: '平行板电容',
     Motor: '电动机',
     Switch: '开关',
     Ammeter: '电流表',
@@ -124,7 +136,24 @@ export function createComponent(type, x, y, existingId = null) {
     
     const id = existingId || generateId(type);
     
-    return {
+    const defaultDisplay = {
+        current: true,
+        voltage: false,
+        power: false
+    };
+    // 仪表默认显示其“主读数”
+    if (type === 'Voltmeter') {
+        defaultDisplay.current = false;
+        defaultDisplay.voltage = true;
+    }
+    // 开关默认不显示数值（避免干扰）
+    if (type === 'Switch') {
+        defaultDisplay.current = false;
+        defaultDisplay.voltage = false;
+        defaultDisplay.power = false;
+    }
+
+    const component = {
         id: id,
         type: type,
         label: null,           // 自定义标签 (如 V1, R1, R2 等)
@@ -136,9 +165,26 @@ export function createComponent(type, x, y, existingId = null) {
         currentValue: 0,       // 当前电流
         voltageValue: 0,       // 当前电压
         powerValue: 0,         // 当前功率
+        // 数值显示开关：每个元器件单独配置
+        // 默认仅显示电流，电压/功率默认隐藏
+        display: defaultDisplay,
         terminalExtensions: terminalExtensions, // 端子延长偏移
         ...defaults
     };
+
+    // 平行板电容：根据物理参数计算初始电容值
+    if (type === 'ParallelPlateCapacitor') {
+        const plateLengthPx = 24;
+        const overlapFraction = computeOverlapFractionFromOffsetPx(component.plateOffsetYPx || 0, plateLengthPx);
+        component.capacitance = computeParallelPlateCapacitance({
+            plateArea: component.plateArea,
+            plateDistance: component.plateDistance,
+            dielectricConstant: component.dielectricConstant,
+            overlapFraction
+        });
+    }
+
+    return component;
 }
 
 /**
@@ -174,6 +220,9 @@ export const SVGRenderer = {
                 break;
             case 'Capacitor':
                 this.renderCapacitor(g, comp);
+                break;
+            case 'ParallelPlateCapacitor':
+                this.renderParallelPlateCapacitor(g, comp);
                 break;
             case 'Motor':
                 this.renderMotor(g, comp);
@@ -384,6 +433,82 @@ export const SVGRenderer = {
                 ? `${(comp.capacitance * 1000).toFixed(0)}mF`
                 : `${(comp.capacitance * 1000000).toFixed(0)}μF`;
             this.addText(g, 0, 25, capValue, 10, 'label');
+        }
+    },
+
+    /**
+     * 渲染平行板电容（探索模式：可拖动右侧极板演示 d/重叠面积 对 C 的影响）
+     */
+    renderParallelPlateCapacitor(g, comp) {
+        const plateLengthPx = 24;
+        const halfLen = plateLengthPx / 2;
+        const pxPerMm = 10;
+        const minGapPx = 6;
+        const maxGapPx = 30;
+        const distanceMm = (comp.plateDistance ?? 0.001) * 1000;
+        const gapPx = clamp(distanceMm * pxPerMm, minGapPx, maxGapPx);
+        const offsetY = clamp(comp.plateOffsetYPx ?? 0, -plateLengthPx, plateLengthPx);
+
+        const leftX = -gapPx / 2;
+        const rightX = gapPx / 2;
+
+        // 连接线
+        const leftConn = this.addLine(g, -30, 0, leftX, 0);
+        leftConn.setAttribute('class', 'ppc-connector ppc-connector-left');
+        const rightConn = this.addLine(g, rightX, 0, 30, 0);
+        rightConn.setAttribute('class', 'ppc-connector ppc-connector-right');
+
+        // 极板（左固定、右可动）
+        const plateWidth = 4;
+
+        const leftPlate = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        leftPlate.setAttribute('x', leftX - plateWidth / 2);
+        leftPlate.setAttribute('y', -halfLen);
+        leftPlate.setAttribute('width', plateWidth);
+        leftPlate.setAttribute('height', plateLengthPx);
+        leftPlate.setAttribute('fill', 'none');
+        leftPlate.setAttribute('stroke-width', 2);
+        leftPlate.setAttribute('class', 'capacitor-plate plate-capacitor-plate ppc-plate ppc-plate-left');
+        g.appendChild(leftPlate);
+
+        const rightPlate = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        rightPlate.setAttribute('x', rightX - plateWidth / 2);
+        rightPlate.setAttribute('y', -halfLen + offsetY);
+        rightPlate.setAttribute('width', plateWidth);
+        rightPlate.setAttribute('height', plateLengthPx);
+        rightPlate.setAttribute('fill', 'none');
+        rightPlate.setAttribute('stroke-width', 2);
+        rightPlate.setAttribute('class', 'capacitor-plate plate-capacitor-plate ppc-plate ppc-plate-right plate-movable');
+        rightPlate.setAttribute('data-role', 'plate-movable');
+        if (comp.explorationMode) {
+            rightPlate.style.pointerEvents = 'all';
+            rightPlate.style.cursor = 'grab';
+        } else {
+            rightPlate.style.pointerEvents = 'none';
+        }
+        g.appendChild(rightPlate);
+
+        // 端子（支持延长）
+        this.addTerminal(g, -30, 0, 0, comp);
+        this.addTerminal(g, 30, 0, 1, comp);
+
+        // 标签
+        if (comp.label) {
+            this.addText(g, 0, 25, comp.label, 10, 'label ppc-label');
+        } else {
+            // 根据量级显示 pF/nF/μF/mF
+            const C = comp.capacitance || 0;
+            let text;
+            if (Math.abs(C) >= 1e-3) {
+                text = `${(C * 1e3).toFixed(0)}mF`;
+            } else if (Math.abs(C) >= 1e-6) {
+                text = `${(C * 1e6).toFixed(1)}μF`;
+            } else if (Math.abs(C) >= 1e-9) {
+                text = `${(C * 1e9).toFixed(1)}nF`;
+            } else {
+                text = `${(C * 1e12).toFixed(1)}pF`;
+            }
+            this.addText(g, 0, 25, text, 10, 'label ppc-label');
         }
     },
 
@@ -677,10 +802,16 @@ export const SVGRenderer = {
         if (comp.type === 'Ammeter') {
             // 电流表：显示电流读数，更大更醒目
             if (currentDisplay) {
-                const reading = Math.abs(comp.currentValue || 0);
-                currentDisplay.textContent = `${reading.toFixed(3)} A`;
-                currentDisplay.setAttribute('font-size', '14');
-                currentDisplay.setAttribute('font-weight', '700');
+                if (showCurrent) {
+                    const reading = Math.abs(comp.currentValue || 0);
+                    currentDisplay.textContent = `${reading.toFixed(3)} A`;
+                    currentDisplay.setAttribute('font-size', '14');
+                    currentDisplay.setAttribute('font-weight', '700');
+                } else {
+                    currentDisplay.textContent = '';
+                    currentDisplay.setAttribute('font-size', '13');
+                    currentDisplay.setAttribute('font-weight', '600');
+                }
             }
             if (voltageDisplay) voltageDisplay.textContent = '';
             if (powerDisplay) powerDisplay.textContent = '';
@@ -690,10 +821,16 @@ export const SVGRenderer = {
         if (comp.type === 'Voltmeter') {
             // 电压表：显示电压读数，更大更醒目
             if (voltageDisplay) {
-                const reading = Math.abs(comp.voltageValue || 0);
-                voltageDisplay.textContent = `${reading.toFixed(3)} V`;
-                voltageDisplay.setAttribute('font-size', '14');
-                voltageDisplay.setAttribute('font-weight', '700');
+                if (showVoltage) {
+                    const reading = Math.abs(comp.voltageValue || 0);
+                    voltageDisplay.textContent = `${reading.toFixed(3)} V`;
+                    voltageDisplay.setAttribute('font-size', '14');
+                    voltageDisplay.setAttribute('font-weight', '700');
+                } else {
+                    voltageDisplay.textContent = '';
+                    voltageDisplay.setAttribute('font-size', '13');
+                    voltageDisplay.setAttribute('font-weight', '600');
+                }
             }
             // 理想电压表不显示电流，强制清空
             if (currentDisplay) {
@@ -771,6 +908,72 @@ export const SVGRenderer = {
                     plate.classList.remove('charged');
                 }
             });
+        }
+    },
+
+    /**
+     * 更新平行板电容的极板位置与标签（用于拖动探索模式，避免整组重绘导致闪烁）
+     */
+    updateParallelPlateCapacitorVisual(g, comp) {
+        if (!g || !comp) return;
+
+        const plateLengthPx = 24;
+        const halfLen = plateLengthPx / 2;
+        const plateWidth = 4;
+        const pxPerMm = 10;
+        const minGapPx = 6;
+        const maxGapPx = 30;
+
+        const distanceMm = (comp.plateDistance ?? 0.001) * 1000;
+        const gapPx = clamp(distanceMm * pxPerMm, minGapPx, maxGapPx);
+        const offsetY = clamp(comp.plateOffsetYPx ?? 0, -plateLengthPx, plateLengthPx);
+
+        const leftX = -gapPx / 2;
+        const rightX = gapPx / 2;
+
+        const leftConn = g.querySelector('.ppc-connector-left');
+        if (leftConn) {
+            leftConn.setAttribute('x2', String(leftX));
+        }
+        const rightConn = g.querySelector('.ppc-connector-right');
+        if (rightConn) {
+            rightConn.setAttribute('x1', String(rightX));
+        }
+
+        const leftPlate = g.querySelector('.ppc-plate-left');
+        if (leftPlate) {
+            leftPlate.setAttribute('x', String(leftX - plateWidth / 2));
+            leftPlate.setAttribute('y', String(-halfLen));
+        }
+
+        const rightPlate = g.querySelector('.ppc-plate-right');
+        if (rightPlate) {
+            rightPlate.setAttribute('x', String(rightX - plateWidth / 2));
+            rightPlate.setAttribute('y', String(-halfLen + offsetY));
+            if (comp.explorationMode) {
+                rightPlate.style.pointerEvents = 'all';
+                rightPlate.style.cursor = 'grab';
+            } else {
+                rightPlate.style.pointerEvents = 'none';
+                rightPlate.style.cursor = '';
+            }
+        }
+
+        // 标签（无自定义标签时显示电容值）
+        const label = g.querySelector('.ppc-label');
+        if (label && !comp.label) {
+            const C = comp.capacitance || 0;
+            let text;
+            if (Math.abs(C) >= 1e-3) {
+                text = `${(C * 1e3).toFixed(0)}mF`;
+            } else if (Math.abs(C) >= 1e-6) {
+                text = `${(C * 1e6).toFixed(1)}μF`;
+            } else if (Math.abs(C) >= 1e-9) {
+                text = `${(C * 1e9).toFixed(1)}nF`;
+            } else {
+                text = `${(C * 1e12).toFixed(1)}pF`;
+            }
+            label.textContent = text;
         }
     },
 
