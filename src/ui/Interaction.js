@@ -27,6 +27,7 @@ export class InteractionManager {
         this.isWiring = false;
         this.isDraggingComponent = false; // 标记是否正在拖动元器件（而不是从工具箱拖放）
         this.dragTarget = null;
+        this.dragGroup = null; // 黑箱拖动时的组移动信息
         this.dragOffset = { x: 0, y: 0 };
         this.selectedComponent = null;
         this.selectedWire = null;
@@ -122,7 +123,7 @@ export class InteractionManager {
      */
     bindToolboxEvents() {
         const toolItems = document.querySelectorAll('.tool-item');
-        const validTypes = ['PowerSource', 'Resistor', 'Rheostat', 'Bulb', 'Capacitor', 'ParallelPlateCapacitor', 'Motor', 'Switch', 'Ammeter', 'Voltmeter'];
+        const validTypes = ['PowerSource', 'Resistor', 'Rheostat', 'Bulb', 'Capacitor', 'ParallelPlateCapacitor', 'Motor', 'Switch', 'Ammeter', 'Voltmeter', 'BlackBox'];
         
         // 标记是否正在从工具箱拖放
         this.isToolboxDrag = false;
@@ -600,11 +601,44 @@ export class InteractionManager {
                 if (alignment.snapY !== null) {
                     newY = alignment.snapY;
                 }
-                
-                // 更新位置
-                comp.x = newX;
-                comp.y = newY;
-                this.renderer.updateComponentPosition(comp);
+
+                // 黑箱：整体移动（包含盒内元件与内部导线控制点）
+                if (comp.type === 'BlackBox' && this.dragGroup && this.dragGroup.boxId === comp.id) {
+                    const dx = newX - (comp.x || 0);
+                    const dy = newY - (comp.y || 0);
+
+                    comp.x = newX;
+                    comp.y = newY;
+
+                    // 移动盒内元件
+                    for (const id of this.dragGroup.componentIds) {
+                        const inner = this.circuit.getComponent(id);
+                        if (!inner) continue;
+                        inner.x = (inner.x || 0) + dx;
+                        inner.y = (inner.y || 0) + dy;
+                        this.renderer.updateComponentTransform(inner);
+                    }
+
+                    // 移动内部导线控制点（两端都在组内的导线）
+                    for (const wireId of this.dragGroup.internalWireIds) {
+                        const wire = this.circuit.getWire(wireId);
+                        if (!wire || !Array.isArray(wire.controlPoints)) continue;
+                        wire.controlPoints = wire.controlPoints.map((p) => ({ x: (p.x || 0) + dx, y: (p.y || 0) + dy }));
+                    }
+
+                    // 更新黑箱自身 transform
+                    this.renderer.updateComponentTransform(comp);
+
+                    // 刷新与组相关的导线（含外部连接）
+                    for (const wireId of this.dragGroup.connectedWireIds) {
+                        this.renderer.refreshWire(wireId);
+                    }
+                } else {
+                    // 普通元器件：更新位置
+                    comp.x = newX;
+                    comp.y = newY;
+                    this.renderer.updateComponentPosition(comp);
+                }
                 
                 // 显示对齐辅助线
                 this.showAlignmentGuides(alignment);
@@ -646,6 +680,7 @@ export class InteractionManager {
             this.isDragging = false;
             this.dragTarget = null;
             this.isDraggingComponent = false; // 清除拖动标志
+            this.dragGroup = null;
             this.hideAlignmentGuides(); // 隐藏对齐辅助线
             this.circuit.rebuildNodes();
         }
@@ -681,6 +716,7 @@ export class InteractionManager {
         if (this.isDragging) {
             this.isDragging = false;
             this.dragTarget = null;
+            this.dragGroup = null;
         }
     }
 
@@ -752,6 +788,7 @@ export class InteractionManager {
             console.log('Rendered SVG element:', svgElement);
             this.selectComponent(comp.id);
             this.app.observationPanel?.refreshComponentOptions();
+            this.app.observationPanel?.refreshDialGauges();
             this.updateStatus(`已添加 ${ComponentNames[type]}`);
         } catch (error) {
             console.error('Error adding component:', error);
@@ -776,6 +813,7 @@ export class InteractionManager {
         this.renderer.renderWires();
         this.clearSelection();
         this.app.observationPanel?.refreshComponentOptions();
+        this.app.observationPanel?.refreshDialGauges();
         this.updateStatus('已删除元器件');
     }
 
@@ -827,6 +865,7 @@ export class InteractionManager {
         this.isDragging = true;
         this.dragTarget = id;
         this.isDraggingComponent = true; // 标记正在拖动元器件
+        this.dragGroup = null;
         
         // 使用统一的坐标转换，计算鼠标相对于元器件中心的偏移
         const canvasCoords = this.screenToCanvas(e.clientX, e.clientY);
@@ -834,6 +873,32 @@ export class InteractionManager {
             x: canvasCoords.x - comp.x,
             y: canvasCoords.y - comp.y
         };
+
+        // 黑箱：准备整体移动信息（盒内元件 + 内部导线控制点）
+        if (comp.type === 'BlackBox') {
+            const componentIds = this.getBlackBoxContainedComponentIds(comp, { includeBoxes: true });
+            const groupIds = new Set([comp.id, ...componentIds]);
+            const internalWireIds = [];
+            const connectedWireIds = new Set();
+
+            for (const wire of this.circuit.getAllWires()) {
+                const inGroupStart = groupIds.has(wire.startComponentId);
+                const inGroupEnd = groupIds.has(wire.endComponentId);
+                if (inGroupStart || inGroupEnd) {
+                    connectedWireIds.add(wire.id);
+                }
+                if (inGroupStart && inGroupEnd) {
+                    internalWireIds.push(wire.id);
+                }
+            }
+
+            this.dragGroup = {
+                boxId: comp.id,
+                componentIds,
+                internalWireIds,
+                connectedWireIds: Array.from(connectedWireIds)
+            };
+        }
         
         this.selectComponent(id);
     }
@@ -2027,6 +2092,7 @@ export class InteractionManager {
             comp.label = newLabel || null;
             this.renderer.render();
             this.app.observationPanel?.refreshComponentOptions();
+            this.app.observationPanel?.refreshDialGauges();
             this.app.updateStatus(`已更新标签: ${newLabel || '（空）'}`);
         });
         content.appendChild(labelGroup);
@@ -2035,6 +2101,7 @@ export class InteractionManager {
         const displayKeys = (() => {
             switch (comp.type) {
                 case 'Switch':
+                case 'BlackBox':
                     return [];
                 case 'Ammeter':
                     return ['current'];
@@ -2245,6 +2312,70 @@ export class InteractionManager {
                     valueClass: 'voltmeter-reading' 
                 }));
                 break;
+
+            case 'BlackBox': {
+                const w = Math.max(80, comp.boxWidth || 180);
+                const h = Math.max(60, comp.boxHeight || 110);
+                const modeLabel = comp.viewMode === 'opaque' ? '隐藏（黑箱）' : '透明（可观察）';
+
+                // 自动统计当前“盒内”组件数量（不含自身）
+                const contained = this.getBlackBoxContainedComponentIds(comp, { includeBoxes: true });
+
+                content.appendChild(createPropertyRow('大小', `${w.toFixed(0)} × ${h.toFixed(0)} px`));
+                content.appendChild(createPropertyRow('显示模式', modeLabel));
+                content.appendChild(createPropertyRow('内部元件数', `${contained.length} 个`));
+
+                content.appendChild(createElement('h3', { textContent: '黑箱设置' }));
+
+                const modeGroup = createElement('div', { className: 'form-group' });
+                modeGroup.appendChild(createElement('label', { textContent: '内部可见性' }));
+                const modeSelect = createElement('select', { id: 'blackbox-viewmode' });
+                modeSelect.appendChild(createElement('option', { textContent: '透明（观察内部）', attrs: { value: 'transparent' } }));
+                modeSelect.appendChild(createElement('option', { textContent: '隐藏（黑箱）', attrs: { value: 'opaque' } }));
+                modeSelect.value = comp.viewMode === 'opaque' ? 'opaque' : 'transparent';
+                modeSelect.addEventListener('change', () => {
+                    comp.viewMode = modeSelect.value === 'opaque' ? 'opaque' : 'transparent';
+                    this.renderer.render();
+                    this.selectComponent(comp.id);
+                });
+                modeGroup.appendChild(modeSelect);
+                modeGroup.appendChild(createElement('p', { className: 'hint', textContent: '隐藏模式下，盒内元件与导线会被遮挡/隐藏，电路计算不受影响。' }));
+                content.appendChild(modeGroup);
+
+                const widthGroup = createFormGroup('宽度', {
+                    id: 'blackbox-width',
+                    value: w.toFixed(0),
+                    min: 80,
+                    step: 10,
+                    unit: 'px'
+                });
+                const heightGroup = createFormGroup('高度', {
+                    id: 'blackbox-height',
+                    value: h.toFixed(0),
+                    min: 60,
+                    step: 10,
+                    unit: 'px'
+                });
+                const widthInput = widthGroup.querySelector('#blackbox-width');
+                const heightInput = heightGroup.querySelector('#blackbox-height');
+                if (widthInput) {
+                    widthInput.addEventListener('change', () => {
+                        comp.boxWidth = this.safeParseFloat(widthInput.value, w, 80, 5000);
+                        this.renderer.render();
+                        this.selectComponent(comp.id);
+                    });
+                }
+                if (heightInput) {
+                    heightInput.addEventListener('change', () => {
+                        comp.boxHeight = this.safeParseFloat(heightInput.value, h, 60, 5000);
+                        this.renderer.render();
+                        this.selectComponent(comp.id);
+                    });
+                }
+                content.appendChild(widthGroup);
+                content.appendChild(heightGroup);
+                break;
+            }
         }
         
         // 实时测量（不再每帧重建面板，改为更新这些读数节点）
@@ -2607,6 +2738,36 @@ export class InteractionManager {
                     unit: 'V'
                 }));
                 break;
+
+            case 'BlackBox': {
+                const w = Math.max(80, comp.boxWidth || 180);
+                const h = Math.max(60, comp.boxHeight || 110);
+                content.appendChild(createFormGroup('宽度 (px)', {
+                    id: 'edit-box-width',
+                    value: w,
+                    min: 80,
+                    step: 10,
+                    unit: 'px'
+                }));
+                content.appendChild(createFormGroup('高度 (px)', {
+                    id: 'edit-box-height',
+                    value: h,
+                    min: 60,
+                    step: 10,
+                    unit: 'px'
+                }));
+
+                const modeGroup = createElement('div', { className: 'form-group' });
+                modeGroup.appendChild(createElement('label', { textContent: '显示模式' }));
+                const select = createElement('select', { id: 'edit-box-mode' });
+                select.appendChild(createElement('option', { textContent: '透明（观察内部）', attrs: { value: 'transparent' } }));
+                select.appendChild(createElement('option', { textContent: '隐藏（黑箱）', attrs: { value: 'opaque' } }));
+                select.value = comp.viewMode === 'opaque' ? 'opaque' : 'transparent';
+                modeGroup.appendChild(select);
+                modeGroup.appendChild(createElement('p', { className: 'hint', textContent: '隐藏模式下会遮挡盒内电路，但电学计算不变。' }));
+                content.appendChild(modeGroup);
+                break;
+            }
         }
         
         dialog.classList.remove('hidden');
@@ -2658,6 +2819,36 @@ export class InteractionManager {
             result = maxValue;
         }
         return result;
+    }
+
+    /**
+     * 获取黑箱内部包含的元器件（按中心点是否落在盒子范围内判断）
+     * @param {Object} boxComp
+     * @param {Object} options
+     * @param {boolean} [options.includeBoxes=false] - 是否包含其它黑箱
+     * @returns {string[]} component ids
+     */
+    getBlackBoxContainedComponentIds(boxComp, options = {}) {
+        if (!boxComp || boxComp.type !== 'BlackBox') return [];
+        const includeBoxes = !!options.includeBoxes;
+        const w = Math.max(80, boxComp.boxWidth || 180);
+        const h = Math.max(60, boxComp.boxHeight || 110);
+        const left = (boxComp.x || 0) - w / 2;
+        const right = (boxComp.x || 0) + w / 2;
+        const top = (boxComp.y || 0) - h / 2;
+        const bottom = (boxComp.y || 0) + h / 2;
+
+        const ids = [];
+        for (const [id, comp] of this.circuit.components) {
+            if (!comp || id === boxComp.id) continue;
+            if (!includeBoxes && comp.type === 'BlackBox') continue;
+            const x = comp.x || 0;
+            const y = comp.y || 0;
+            if (x >= left && x <= right && y >= top && y <= bottom) {
+                ids.push(id);
+            }
+        }
+        return ids;
     }
 
     /**
@@ -2782,14 +2973,38 @@ export class InteractionManager {
                         document.getElementById('edit-range').value, 15, 0.001, 1e9
                     );
                     break;
+
+                case 'BlackBox': {
+                    comp.boxWidth = this.safeParseFloat(
+                        document.getElementById('edit-box-width').value,
+                        comp.boxWidth || 180,
+                        80,
+                        5000
+                    );
+                    comp.boxHeight = this.safeParseFloat(
+                        document.getElementById('edit-box-height').value,
+                        comp.boxHeight || 110,
+                        60,
+                        5000
+                    );
+                    const mode = document.getElementById('edit-box-mode')?.value;
+                    comp.viewMode = mode === 'opaque' ? 'opaque' : 'transparent';
+                    break;
+                }
             }
-            
+
             // 刷新渲染
-            this.renderer.refreshComponent(comp);
-            this.renderer.setSelected(comp.id, true);
-            // 更新连接到该元器件的导线
-            this.renderer.updateConnectedWires(comp.id);
-            this.updatePropertyPanel(comp);
+            if (comp.type === 'BlackBox') {
+                // 黑箱会影响“内部元件/导线是否显示”，需要全量重绘
+                this.renderer.render();
+                this.selectComponent(comp.id);
+            } else {
+                this.renderer.refreshComponent(comp);
+                this.renderer.setSelected(comp.id, true);
+                // 更新连接到该元器件的导线
+                this.renderer.updateConnectedWires(comp.id);
+                this.updatePropertyPanel(comp);
+            }
             
             this.hideDialog();
             this.updateStatus('属性已更新');
@@ -2818,6 +3033,33 @@ export class InteractionManager {
             { label: '复制', action: () => this.duplicateComponent(componentId) },
             { label: '删除 (Del)', action: () => this.deleteComponent(componentId), className: 'danger' }
         ];
+
+        // 仪表：自主读数（右侧指针表盘）
+        if (comp && (comp.type === 'Ammeter' || comp.type === 'Voltmeter')) {
+            const enabled = !!comp.selfReading;
+            menuItems.splice(1, 0, {
+                label: enabled ? '关闭自主读数（右侧表盘）' : '开启自主读数（右侧表盘）',
+                action: () => {
+                    comp.selfReading = !enabled;
+                    this.app.observationPanel?.refreshDialGauges();
+                    this.app.updateStatus(comp.selfReading ? '已开启自主读数：请在右侧“观察”查看表盘' : '已关闭自主读数');
+                }
+            });
+        }
+
+        // 黑箱：快速切换显示模式
+        if (comp && comp.type === 'BlackBox') {
+            const isOpaque = comp.viewMode === 'opaque';
+            menuItems.splice(1, 0, {
+                label: isOpaque ? '设为透明（显示内部）' : '设为隐藏（黑箱）',
+                action: () => {
+                    comp.viewMode = isOpaque ? 'transparent' : 'opaque';
+                    this.renderer.render();
+                    this.selectComponent(comp.id);
+                    this.app.updateStatus(comp.viewMode === 'opaque' ? '黑箱已设为隐藏模式' : '黑箱已设为透明模式');
+                }
+            });
+        }
         
         menuItems.forEach(item => {
             const menuItem = document.createElement('div');

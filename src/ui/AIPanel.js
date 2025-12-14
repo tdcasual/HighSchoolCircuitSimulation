@@ -43,6 +43,10 @@ export class AIPanel {
         toggleBtn.addEventListener('click', () => {
             panel.classList.toggle('collapsed');
             toggleBtn.textContent = panel.classList.contains('collapsed') ? '▲' : '▼';
+            // 展开时确保面板仍在视口内（折叠时可能被拖到极端位置）
+            if (!panel.classList.contains('collapsed')) {
+                window.requestAnimationFrame(() => this.constrainPanelToViewport());
+            }
         });
 
         // Tab 切换
@@ -804,7 +808,7 @@ export class AIPanel {
     }
 
     tryStartPanelDrag(event) {
-        if (!this.panel || this.panel.classList.contains('collapsed')) return;
+        if (!this.panel) return;
         if (event.pointerType === 'mouse' && event.button !== 0) return;
         if (event.target.closest('#ai-panel-actions')) return;
 
@@ -823,7 +827,12 @@ export class AIPanel {
 
     startPanelGesture(type, event) {
         const rect = this.panel.getBoundingClientRect();
-        this.setPanelAbsolutePosition(rect.left, rect.top);
+        const isCollapsed = this.panel.classList.contains('collapsed');
+        const collapsedPeekHeight = 46; // 与 CSS: translateY(calc(100% - 46px)) 保持一致
+        const headerRect = this.panelHeader?.getBoundingClientRect();
+        const headerHeight = headerRect?.height || collapsedPeekHeight;
+        const transformDeltaY = isCollapsed ? Math.max(rect.height - collapsedPeekHeight, 0) : 0;
+        this.setPanelAbsolutePosition(rect.left, rect.top - transformDeltaY);
 
         this.panelGesture = {
             type,
@@ -833,7 +842,10 @@ export class AIPanel {
             startLeft: rect.left,
             startTop: rect.top,
             startWidth: rect.width,
-            startHeight: rect.height
+            startHeight: rect.height,
+            isCollapsed,
+            headerHeight: collapsedPeekHeight,
+            transformDeltaY
         };
 
         this.panel.classList.add(type === 'drag' ? 'dragging' : 'resizing');
@@ -867,16 +879,18 @@ export class AIPanel {
     updatePanelDrag(event) {
         if (!this.panelGesture) return;
 
-        const { startX, startY, startLeft, startTop, startWidth, startHeight } = this.panelGesture;
+        const { startX, startY, startLeft, startTop, startWidth, startHeight, isCollapsed, headerHeight, transformDeltaY } = this.panelGesture;
         const bounds = this.getPanelBounds();
         const dx = event.clientX - startX;
         const dy = event.clientY - startY;
+        const effectiveHeight = isCollapsed ? Math.max(1, headerHeight) : startHeight;
         const maxLeft = Math.max(bounds.minX, bounds.maxX - startWidth);
-        const maxTop = Math.max(bounds.minY, bounds.maxY - startHeight);
+        const maxTop = Math.max(bounds.minY, bounds.maxY - effectiveHeight);
         const nextLeft = this.clamp(startLeft + dx, bounds.minX, maxLeft);
         const nextTop = this.clamp(startTop + dy, bounds.minY, maxTop);
 
-        this.setPanelAbsolutePosition(nextLeft, nextTop);
+        const nextTopStyle = isCollapsed ? (nextTop - transformDeltaY) : nextTop;
+        this.setPanelAbsolutePosition(nextLeft, nextTopStyle);
     }
 
     updatePanelResize(event) {
@@ -991,11 +1005,15 @@ export class AIPanel {
         if (!this.panel) return;
         try {
             const rect = this.panel.getBoundingClientRect();
+            const styleLeft = parseFloat(this.panel.style.left);
+            const styleTop = parseFloat(this.panel.style.top);
+            const styleWidth = parseFloat(this.panel.style.width);
+            const styleHeight = parseFloat(this.panel.style.height);
             const payload = {
-                left: rect.left,
-                top: rect.top,
-                width: rect.width,
-                height: rect.height
+                left: Number.isFinite(styleLeft) ? styleLeft : rect.left,
+                top: Number.isFinite(styleTop) ? styleTop : rect.top,
+                width: Number.isFinite(styleWidth) ? styleWidth : rect.width,
+                height: Number.isFinite(styleHeight) ? styleHeight : rect.height
             };
             localStorage.setItem(this.layoutStorageKey, JSON.stringify(payload));
         } catch (error) {
@@ -1006,7 +1024,15 @@ export class AIPanel {
     getDefaultPanelLayout() {
         const width = this.panel?.offsetWidth || 420;
         const height = this.panel?.offsetHeight || 420;
-        const left = Math.max(this.viewportPadding, window.innerWidth - width - this.defaultRightOffset);
+        let reservedRight = 0;
+        const sidePanel = document.getElementById('side-panel');
+        if (sidePanel) {
+            const rect = sidePanel.getBoundingClientRect();
+            if (rect.width > 0) {
+                reservedRight = rect.width + 12;
+            }
+        }
+        const left = Math.max(this.viewportPadding, window.innerWidth - width - this.defaultRightOffset - reservedRight);
         const top = Math.max(this.viewportPadding, window.innerHeight - height - this.defaultBottomOffset);
         return { left, top, width, height };
     }
@@ -1014,11 +1040,15 @@ export class AIPanel {
     constrainPanelToViewport() {
         if (!this.panel) return;
         const rect = this.panel.getBoundingClientRect();
+        const styleLeft = parseFloat(this.panel.style.left);
+        const styleTop = parseFloat(this.panel.style.top);
+        const styleWidth = parseFloat(this.panel.style.width);
+        const styleHeight = parseFloat(this.panel.style.height);
         this.applyPanelLayout({
-            left: rect.left,
-            top: rect.top,
-            width: rect.width,
-            height: rect.height
+            left: Number.isFinite(styleLeft) ? styleLeft : rect.left,
+            top: Number.isFinite(styleTop) ? styleTop : rect.top,
+            width: Number.isFinite(styleWidth) ? styleWidth : rect.width,
+            height: Number.isFinite(styleHeight) ? styleHeight : rect.height
         });
         this.savePanelLayout();
     }

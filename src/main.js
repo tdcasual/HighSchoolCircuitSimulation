@@ -205,6 +205,7 @@ class CircuitSimulatorApp {
         resetIdCounter();
         this.interaction.clearSelection();
         this.observationPanel?.clearAllPlots();
+        this.observationPanel?.refreshDialGauges();
             
         // 清除缓存
         localStorage.removeItem('saved_circuit');
@@ -261,6 +262,7 @@ class CircuitSimulatorApp {
                 this.renderer.render();
                 this.interaction.clearSelection();
                 this.observationPanel?.refreshComponentOptions();
+                this.observationPanel?.refreshDialGauges();
                 
                 this.updateStatus(`已导入电路: ${data.meta?.name || '未命名'}`);
             } catch (err) {
@@ -325,6 +327,7 @@ class CircuitSimulatorApp {
                 
                 this.renderer.render();
                 this.observationPanel?.refreshComponentOptions();
+                this.observationPanel?.refreshDialGauges();
                 this.updateStatus(`已从缓存恢复电路 (${circuitJSON.components.length} 个元器件)`);
             }
         } catch (e) {

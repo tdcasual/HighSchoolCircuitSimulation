@@ -36,6 +36,37 @@ export class Renderer {
         this.renderWires();
     }
 
+    getOpaqueBlackBoxes() {
+        return this.circuit.getAllComponents().filter((c) => c.type === 'BlackBox' && c.viewMode === 'opaque');
+    }
+
+    isPointInsideBlackBox(point, box) {
+        if (!point || !box) return false;
+        const w = Math.max(80, box.boxWidth || 180);
+        const h = Math.max(60, box.boxHeight || 110);
+        const left = (box.x || 0) - w / 2;
+        const right = (box.x || 0) + w / 2;
+        const top = (box.y || 0) - h / 2;
+        const bottom = (box.y || 0) + h / 2;
+        return point.x >= left && point.x <= right && point.y >= top && point.y <= bottom;
+    }
+
+    computeHiddenComponentIds(opaqueBoxes) {
+        const hidden = new Set();
+        if (!opaqueBoxes || opaqueBoxes.length === 0) return hidden;
+        for (const comp of this.circuit.getAllComponents()) {
+            for (const box of opaqueBoxes) {
+                if (comp.id === box.id) continue;
+                const inside = this.isPointInsideBlackBox({ x: comp.x || 0, y: comp.y || 0 }, box);
+                if (inside) {
+                    hidden.add(comp.id);
+                    break;
+                }
+            }
+        }
+        return hidden;
+    }
+
     /**
      * 渲染所有元器件
      */
@@ -43,9 +74,13 @@ export class Renderer {
         // 清空图层
         this.componentLayer.innerHTML = '';
         this.componentElements.clear();
+
+        const opaqueBoxes = this.getOpaqueBlackBoxes();
+        const hiddenComponentIds = this.computeHiddenComponentIds(opaqueBoxes);
         
         // 渲染每个元器件
         for (const comp of this.circuit.getAllComponents()) {
+            if (hiddenComponentIds.has(comp.id)) continue;
             const g = SVGRenderer.createComponentGroup(comp);
             this.componentLayer.appendChild(g);
             this.componentElements.set(comp.id, g);
@@ -59,9 +94,21 @@ export class Renderer {
         // 清空导线层
         this.wireLayer.innerHTML = '';
         this.wireElements.clear();
+
+        const opaqueBoxes = this.getOpaqueBlackBoxes();
         
         // 渲染每条导线
         for (const wire of this.circuit.getAllWires()) {
+            if (opaqueBoxes.length > 0) {
+                const startPos = this.getTerminalPosition(wire.startComponentId, wire.startTerminalIndex);
+                const endPos = this.getTerminalPosition(wire.endComponentId, wire.endTerminalIndex);
+                if (startPos && endPos) {
+                    const hiddenByAnyBox = opaqueBoxes.some((box) =>
+                        this.isPointInsideBlackBox(startPos, box) && this.isPointInsideBlackBox(endPos, box)
+                    );
+                    if (hiddenByAnyBox) continue;
+                }
+            }
             const path = SVGRenderer.createWire(wire, this.getTerminalPosition.bind(this));
             this.wireLayer.appendChild(path);
             this.wireElements.set(wire.id, path);
@@ -124,6 +171,16 @@ export class Renderer {
     }
 
     /**
+     * 仅更新元器件的 transform（不扫描更新导线），用于批量移动/组合拖动的性能优化
+     */
+    updateComponentTransform(comp) {
+        const g = this.componentElements.get(comp.id);
+        if (g) {
+            g.setAttribute('transform', `translate(${comp.x}, ${comp.y}) rotate(${comp.rotation || 0})`);
+        }
+    }
+
+    /**
      * 更新连接到指定元器件的所有导线
      */
     updateConnectedWires(componentId) {
@@ -182,6 +239,12 @@ export class Renderer {
                 relX = terminalIndex === 0 ? -30 : 30;
                 relY = 0;
                 break;
+            case 'BlackBox': {
+                const w = Math.max(80, comp.boxWidth || 180);
+                relX = terminalIndex === 0 ? -w / 2 : w / 2;
+                relY = 0;
+                break;
+            }
             default:
                 relX = terminalIndex === 0 ? -30 : 30;
                 relY = 0;

@@ -1248,12 +1248,20 @@ export class Circuit {
             case 'Ammeter':
                 return {
                     resistance: comp.resistance,
-                    range: comp.range
+                    range: comp.range,
+                    selfReading: !!comp.selfReading
                 };
             case 'Voltmeter':
                 return {
                     resistance: comp.resistance,
-                    range: comp.range
+                    range: comp.range,
+                    selfReading: !!comp.selfReading
+                };
+            case 'BlackBox':
+                return {
+                    boxWidth: comp.boxWidth,
+                    boxHeight: comp.boxHeight,
+                    viewMode: comp.viewMode === 'opaque' ? 'opaque' : 'transparent'
                 };
             default:
                 return {};

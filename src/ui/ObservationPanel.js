@@ -44,6 +44,7 @@ export class ObservationPanel {
         this.circuit = app.circuit;
         this.root = document.getElementById('observation-root');
         this.plots = [];
+        this.gauges = new Map(); // componentId -> gauge state
         this.nextPlotIndex = 1;
         this._renderRaf = 0;
         this._lastSimTime = 0;
@@ -56,6 +57,9 @@ export class ObservationPanel {
         window.addEventListener('resize', () => {
             for (const plot of this.plots) {
                 plot._needsRedraw = true;
+            }
+            for (const gauge of this.gauges.values()) {
+                gauge._needsRedraw = true;
             }
             this.requestRender({ onlyIfActive: true });
         });
@@ -89,6 +93,18 @@ export class ObservationPanel {
             textContent: '运行模拟后将持续采样并绘制：y(x) 为参数曲线；也可将 X 设为时间 t 绘制波形。'
         }));
 
+        // 指针表盘区（电流表/电压表自主读数）
+        this.gaugeSectionEl = createElement('div', { className: 'observation-gauge-section' });
+        this.gaugeSectionEl.appendChild(createElement('h3', { textContent: '指针表盘' }));
+        this.gaugeHintEl = createElement('p', {
+            className: 'hint',
+            textContent: '右键电流表/电压表，开启“自主读数（右侧表盘）”后将在这里显示。'
+        });
+        this.gaugeSectionEl.appendChild(this.gaugeHintEl);
+        this.gaugeListEl = createElement('div', { className: 'observation-gauge-list' });
+        this.gaugeSectionEl.appendChild(this.gaugeListEl);
+        this.root.appendChild(this.gaugeSectionEl);
+
         this.plotListEl = createElement('div', { className: 'observation-plot-list' });
         this.root.appendChild(this.plotListEl);
 
@@ -97,6 +113,9 @@ export class ObservationPanel {
 
         // 默认添加一张图，便于上手
         this.addPlot();
+
+        // 初始化表盘列表
+        this.refreshDialGauges();
     }
 
     bindTabRefresh() {
@@ -104,6 +123,7 @@ export class ObservationPanel {
         if (!tabBtn) return;
         tabBtn.addEventListener('click', () => {
             this.refreshComponentOptions();
+            this.refreshDialGauges();
             this.requestRender({ onlyIfActive: false });
         });
     }
@@ -399,6 +419,75 @@ export class ObservationPanel {
         }
     }
 
+    /**
+     * 重新构建“自主读数”表盘列表（DOM）
+     */
+    refreshDialGauges() {
+        if (!this.gaugeListEl) return;
+
+        const meterComponents = [];
+        for (const comp of this.circuit.components.values()) {
+            if ((comp.type === 'Ammeter' || comp.type === 'Voltmeter') && comp.selfReading) {
+                meterComponents.push(comp);
+            }
+        }
+
+        clearElement(this.gaugeListEl);
+        this.gauges.clear();
+
+        if (this.gaugeHintEl) {
+            this.gaugeHintEl.style.display = meterComponents.length > 0 ? 'none' : 'block';
+        }
+
+        meterComponents.forEach((comp) => {
+            const card = createElement('div', { className: 'observation-gauge-card', attrs: { 'data-comp-id': comp.id } });
+
+            const header = createElement('div', { className: 'gauge-card-header' });
+            const title = createElement('div', {
+                className: 'gauge-title',
+                textContent: comp.label ? `${comp.label} · ${comp.id}` : comp.id
+            });
+            const closeBtn = createElement('button', {
+                className: 'gauge-close-btn',
+                textContent: '关闭',
+                attrs: { type: 'button' }
+            });
+            header.appendChild(title);
+            header.appendChild(closeBtn);
+            card.appendChild(header);
+
+            const canvasWrap = createElement('div', { className: 'gauge-canvas-wrap' });
+            const canvas = createElement('canvas', { className: 'gauge-canvas' });
+            canvasWrap.appendChild(canvas);
+            card.appendChild(canvasWrap);
+
+            const footer = createElement('div', { className: 'gauge-footer' });
+            const meta = createElement('div', { className: 'gauge-meta', textContent: '—' });
+            footer.appendChild(meta);
+            card.appendChild(footer);
+
+            closeBtn.addEventListener('click', () => {
+                comp.selfReading = false;
+                this.refreshDialGauges();
+                this.app.updateStatus('已关闭自主读数');
+            });
+
+            this.gaugeListEl.appendChild(card);
+
+            const gauge = {
+                compId: comp.id,
+                type: comp.type,
+                canvas,
+                meta,
+                lastValue: null,
+                _needsRedraw: true
+            };
+            this.gauges.set(comp.id, gauge);
+        });
+
+        this.requestRender({ onlyIfActive: true });
+    }
+
     refreshQuantityOptionsForAxis(plot, axisKey) {
         const axis = axisKey === 'x' ? plot.x : plot.y;
         const select = axisKey === 'x' ? plot.elements.xQuantitySelect : plot.elements.yQuantitySelect;
@@ -446,6 +535,22 @@ export class ObservationPanel {
         for (const plot of this.plots) {
             this.samplePlot(plot, { updateLatestText: canRenderNow });
         }
+
+        // 表盘读数（只在“观察”页可见时刷新 DOM/Canvas）
+        if (canRenderNow && this.gauges.size > 0) {
+            for (const [compId, gauge] of this.gauges) {
+                const comp = this.circuit.components.get(compId);
+                if (!comp) continue;
+                const reading = comp.type === 'Ammeter'
+                    ? Math.abs(comp.currentValue || 0)
+                    : Math.abs(comp.voltageValue || 0);
+                const rounded = Math.round(reading * 1e6) / 1e6;
+                if (gauge.lastValue === null || Math.abs((gauge.lastValue || 0) - rounded) > 1e-9) {
+                    gauge.lastValue = rounded;
+                    gauge._needsRedraw = true;
+                }
+            }
+        }
         this.requestRender({ onlyIfActive: true });
     }
 
@@ -478,6 +583,138 @@ export class ObservationPanel {
             this.renderPlot(plot);
             plot._needsRedraw = false;
         }
+
+        for (const gauge of this.gauges.values()) {
+            if (!gauge._needsRedraw) continue;
+            this.renderGauge(gauge);
+            gauge._needsRedraw = false;
+        }
+    }
+
+    renderGauge(gauge) {
+        const comp = this.circuit.components.get(gauge.compId);
+        if (!comp || !gauge.canvas) return;
+
+        this.resizeCanvasToDisplaySize(gauge.canvas);
+        const ctx = gauge.canvas.getContext('2d');
+        if (!ctx) return;
+
+        const dpr = window.devicePixelRatio || 1;
+        const w = gauge.canvas.width;
+        const h = gauge.canvas.height;
+
+        const unit = comp.type === 'Ammeter' ? 'A' : 'V';
+        const range = Number.isFinite(comp.range) && comp.range > 0 ? comp.range : (comp.type === 'Ammeter' ? 3 : 15);
+        const reading = comp.type === 'Ammeter'
+            ? Math.abs(comp.currentValue || 0)
+            : Math.abs(comp.voltageValue || 0);
+
+        // 更新底部文字
+        if (gauge.meta) {
+            gauge.meta.textContent = `读数: ${formatNumberCompact(reading, 4)} ${unit} / 量程: ${range}${unit}`;
+        }
+
+        // 背景
+        ctx.clearRect(0, 0, w, h);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, w, h);
+
+        // 仿图片风格：圆弧刻度 + 指针
+        const cx = w / 2;
+        const cy = h * 0.78;
+        const radius = Math.min(w * 0.42, h * 0.62);
+
+        const startAngle = Math.PI * 1.12; // 左侧略偏下
+        const endAngle = Math.PI * -0.12;  // 右侧略偏下
+
+        // 外弧
+        ctx.strokeStyle = 'rgba(15, 23, 42, 0.55)';
+        ctx.lineWidth = 2 * dpr;
+        ctx.beginPath();
+        ctx.arc(cx, cy, radius, startAngle, endAngle, false);
+        ctx.stroke();
+
+        // 刻度：使用“漂亮刻度”
+        const ticks = computeNiceTicks(0, range, 6)
+            .filter((t) => t >= 0 - 1e-12 && t <= range + 1e-12);
+        if (ticks.length === 0 || ticks[0] !== 0) ticks.unshift(0);
+        if (ticks[ticks.length - 1] !== range) ticks.push(range);
+
+        const toAngle = (v) => {
+            const k = Math.min(Math.max(v / range, 0), 1);
+            return startAngle + (endAngle - startAngle) * k;
+        };
+
+        // 小刻度（在相邻大刻度间插 4 个）
+        ctx.strokeStyle = 'rgba(15, 23, 42, 0.35)';
+        ctx.lineWidth = 1 * dpr;
+        for (let i = 0; i < ticks.length - 1; i++) {
+            const a0 = toAngle(ticks[i]);
+            const a1 = toAngle(ticks[i + 1]);
+            const steps = 5;
+            for (let s = 1; s < steps; s++) {
+                const a = a0 + (a1 - a0) * (s / steps);
+                const x1 = cx + Math.cos(a) * (radius - 10 * dpr);
+                const y1 = cy + Math.sin(a) * (radius - 10 * dpr);
+                const x2 = cx + Math.cos(a) * (radius - 4 * dpr);
+                const y2 = cy + Math.sin(a) * (radius - 4 * dpr);
+                ctx.beginPath();
+                ctx.moveTo(x1, y1);
+                ctx.lineTo(x2, y2);
+                ctx.stroke();
+            }
+        }
+
+        // 大刻度 + 数字
+        ctx.strokeStyle = 'rgba(15, 23, 42, 0.65)';
+        ctx.lineWidth = 2 * dpr;
+        ctx.fillStyle = '#0f172a';
+        ctx.font = `${12 * dpr}px serif`;
+        ticks.forEach((t) => {
+            const a = toAngle(t);
+            const x1 = cx + Math.cos(a) * (radius - 14 * dpr);
+            const y1 = cy + Math.sin(a) * (radius - 14 * dpr);
+            const x2 = cx + Math.cos(a) * (radius + 1 * dpr);
+            const y2 = cy + Math.sin(a) * (radius + 1 * dpr);
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+            ctx.stroke();
+
+            const labelX = cx + Math.cos(a) * (radius - 28 * dpr);
+            const labelY = cy + Math.sin(a) * (radius - 28 * dpr);
+            const text = t === 0 ? '0' : (Math.abs(t - range) < 1e-9 ? String(range) : String(t));
+            ctx.save();
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(text, labelX, labelY);
+            ctx.restore();
+        });
+
+        // 单位
+        ctx.fillStyle = '#111827';
+        ctx.font = `${14 * dpr}px serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(unit, cx, cy + 26 * dpr);
+
+        // 指针
+        const norm = Math.min(Math.max(reading / range, 0), 1);
+        const angle = startAngle + (endAngle - startAngle) * norm;
+        const px = cx + Math.cos(angle) * (radius - 34 * dpr);
+        const py = cy + Math.sin(angle) * (radius - 34 * dpr);
+        ctx.strokeStyle = 'rgba(15, 23, 42, 0.9)';
+        ctx.lineWidth = 3 * dpr;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(px, py);
+        ctx.stroke();
+
+        // 中心旋钮
+        ctx.fillStyle = '#0f172a';
+        ctx.beginPath();
+        ctx.arc(cx, cy, 4.5 * dpr, 0, Math.PI * 2);
+        ctx.fill();
     }
 
     renderPlot(plot) {

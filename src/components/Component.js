@@ -90,11 +90,19 @@ export const ComponentDefaults = {
     },
     Ammeter: {
         resistance: 0,         // 内阻 (Ω)，0表示理想电流表
-        range: 3               // 量程 (A)
+        range: 3,              // 量程 (A)
+        selfReading: false     // 自主读数模式（右侧指针表盘）
     },
     Voltmeter: {
         resistance: Infinity,  // 内阻 (Ω)，Infinity表示理想电压表
-        range: 15              // 量程 (V)
+        range: 15,             // 量程 (V)
+        selfReading: false     // 自主读数模式（右侧指针表盘）
+    },
+    BlackBox: {
+        // 黑箱/组合容器：用于遮挡或透明观察内部电路
+        boxWidth: 180,         // 盒子宽度（局部坐标 px）
+        boxHeight: 110,        // 盒子高度（局部坐标 px）
+        viewMode: 'transparent' // 'transparent' | 'opaque'
     }
 };
 
@@ -111,7 +119,8 @@ export const ComponentNames = {
     Motor: '电动机',
     Switch: '开关',
     Ammeter: '电流表',
-    Voltmeter: '电压表'
+    Voltmeter: '电压表',
+    BlackBox: '黑箱'
 };
 
 /**
@@ -148,6 +157,12 @@ export function createComponent(type, x, y, existingId = null) {
     }
     // 开关默认不显示数值（避免干扰）
     if (type === 'Switch') {
+        defaultDisplay.current = false;
+        defaultDisplay.voltage = false;
+        defaultDisplay.power = false;
+    }
+    // 黑箱仅用于封装/遮挡，默认不显示数值
+    if (type === 'BlackBox') {
         defaultDisplay.current = false;
         defaultDisplay.voltage = false;
         defaultDisplay.power = false;
@@ -235,6 +250,9 @@ export const SVGRenderer = {
                 break;
             case 'Voltmeter':
                 this.renderVoltmeter(g, comp);
+                break;
+            case 'BlackBox':
+                this.renderBlackBox(g, comp);
                 break;
         }
         
@@ -674,6 +692,37 @@ export const SVGRenderer = {
         // 量程标签 - 优先显示自定义标签
         const labelText = comp.label || `${comp.range}V`;
         this.addText(g, 0, 30, labelText, 9, 'label');
+    },
+
+    /**
+     * 渲染黑箱（组合容器）
+     */
+    renderBlackBox(g, comp) {
+        const w = Math.max(80, comp.boxWidth || 180);
+        const h = Math.max(60, comp.boxHeight || 110);
+        const mode = comp.viewMode === 'opaque' ? 'opaque' : 'transparent';
+
+        const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        rect.setAttribute('x', String(-w / 2));
+        rect.setAttribute('y', String(-h / 2));
+        rect.setAttribute('width', String(w));
+        rect.setAttribute('height', String(h));
+        rect.setAttribute('rx', '14');
+        rect.setAttribute('ry', '14');
+        rect.setAttribute('class', `blackbox-body ${mode}`);
+        g.appendChild(rect);
+
+        // 标题
+        const labelText = comp.label || 'BlackBox';
+        this.addText(g, 0, 6, labelText, 13, 'blackbox-title');
+
+        // 端口提示
+        this.addText(g, -w / 2 + 14, -h / 2 + 18, '端口1', 10, 'blackbox-port');
+        this.addText(g, w / 2 - 14, -h / 2 + 18, '端口2', 10, 'blackbox-port');
+
+        // 端子：放在盒子边缘中心（内部连线可从盒子内接到边缘；外部连线从外侧接入）
+        this.addTerminal(g, -w / 2, 0, 0, comp);
+        this.addTerminal(g, w / 2, 0, 1, comp);
     },
 
     /**
