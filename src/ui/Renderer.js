@@ -4,6 +4,7 @@
  */
 
 import { SVGRenderer, ComponentNames } from '../components/Component.js';
+import { getTerminalWorldPosition } from '../utils/TerminalGeometry.js';
 
 export class Renderer {
     constructor(svgCanvas, circuit) {
@@ -34,6 +35,8 @@ export class Renderer {
     render() {
         this.renderComponents();
         this.renderWires();
+        // Ensure value displays are populated even before the simulation starts.
+        this.updateValues();
     }
 
     getOpaqueBlackBoxes() {
@@ -100,8 +103,8 @@ export class Renderer {
         // 渲染每条导线
         for (const wire of this.circuit.getAllWires()) {
             if (opaqueBoxes.length > 0) {
-                const startPos = this.getTerminalPosition(wire.startComponentId, wire.startTerminalIndex);
-                const endPos = this.getTerminalPosition(wire.endComponentId, wire.endTerminalIndex);
+                const startPos = this.getWireEndpointPosition(wire, 'a');
+                const endPos = this.getWireEndpointPosition(wire, 'b');
                 if (startPos && endPos) {
                     const hiddenByAnyBox = opaqueBoxes.some((box) =>
                         this.isPointInsideBlackBox(startPos, box) && this.isPointInsideBlackBox(endPos, box)
@@ -109,7 +112,7 @@ export class Renderer {
                     if (hiddenByAnyBox) continue;
                 }
             }
-            const path = SVGRenderer.createWire(wire, this.getTerminalPosition.bind(this));
+            const path = SVGRenderer.createWire(wire, this.getWireEndpointPosition.bind(this));
             this.wireLayer.appendChild(path);
             this.wireElements.set(wire.id, path);
         }
@@ -122,6 +125,11 @@ export class Renderer {
         const g = SVGRenderer.createComponentGroup(comp);
         this.componentLayer.appendChild(g);
         this.componentElements.set(comp.id, g);
+        const display = comp.display || {};
+        const showCurrent = display.current ?? this.defaultDisplay.current;
+        const showVoltage = display.voltage ?? this.defaultDisplay.voltage;
+        const showPower = display.power ?? this.defaultDisplay.power;
+        SVGRenderer.updateValueDisplay(g, comp, showCurrent, showVoltage, showPower);
         return g;
     }
 
@@ -140,7 +148,7 @@ export class Renderer {
      * 添加导线
      */
     addWire(wire) {
-        const path = SVGRenderer.createWire(wire, this.getTerminalPosition.bind(this));
+        const path = SVGRenderer.createWire(wire, this.getWireEndpointPosition.bind(this));
         this.wireLayer.appendChild(path);
         this.wireElements.set(wire.id, path);
         return path;
@@ -165,8 +173,8 @@ export class Renderer {
         if (g) {
             g.setAttribute('transform', `translate(${comp.x}, ${comp.y}) rotate(${comp.rotation || 0})`);
         }
-        
-        // 更新相关导线
+
+        // If wire endpoints are bound to this component's terminals, keep them attached visually.
         this.updateConnectedWires(comp.id);
     }
 
@@ -184,14 +192,45 @@ export class Renderer {
      * 更新连接到指定元器件的所有导线
      */
     updateConnectedWires(componentId) {
+        const comp = this.circuit.getComponent(componentId);
+        if (!comp) return;
+
+        const updateEndpoint = (wire, endKey, ref) => {
+            if (!ref || ref.componentId !== componentId) return false;
+            const terminalIndex = ref.terminalIndex;
+            if (!Number.isInteger(terminalIndex) || terminalIndex < 0) return false;
+            const pos = getTerminalWorldPosition(comp, terminalIndex);
+            if (!pos) return false;
+            const current = wire[endKey];
+            if (current && current.x === pos.x && current.y === pos.y) return false;
+            wire[endKey] = { x: pos.x, y: pos.y };
+            return true;
+        };
+
         for (const wire of this.circuit.getAllWires()) {
-            if (wire.startComponentId === componentId || wire.endComponentId === componentId) {
-                const path = this.wireElements.get(wire.id);
-                if (path) {
-                    SVGRenderer.updateWirePath(path, wire, this.getTerminalPosition.bind(this));
-                }
+            if (!wire) continue;
+            const changedA = updateEndpoint(wire, 'a', wire.aRef);
+            const changedB = updateEndpoint(wire, 'b', wire.bRef);
+            if (changedA || changedB) {
+                this.refreshWire(wire.id);
             }
         }
+    }
+
+    /**
+     * 获取导线端点的绝对位置（Model C）
+     * @param {Object} wire
+     * @param {'a'|'b'} which
+     * @returns {{x:number,y:number}|null}
+     */
+    getWireEndpointPosition(wire, which) {
+        if (!wire) return null;
+        const pt = which === 'a' ? wire.a : wire.b;
+        if (!pt) return null;
+        const x = Number(pt.x);
+        const y = Number(pt.y);
+        if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+        return { x, y };
     }
 
     /**
@@ -200,71 +239,8 @@ export class Renderer {
     getTerminalPosition(componentId, terminalIndex) {
         const comp = this.circuit.getComponent(componentId);
         if (!comp) return null;
-        
-        // 根据元器件类型获取端子相对位置
-        let relX, relY;
-        
-        switch (comp.type) {
-            case 'PowerSource':
-            case 'Bulb':
-            case 'Motor':
-                relX = terminalIndex === 0 ? -30 : 30;
-                relY = 0;
-                break;
-            case 'Resistor':
-                relX = terminalIndex === 0 ? -30 : 30;
-                relY = 0;
-                break;
-            case 'Rheostat':
-                // 滑动变阻器有三个端子：0=左端, 1=右端, 2=滑动触点
-                if (terminalIndex === 0) {
-                    relX = -35;
-                    relY = 0;
-                } else if (terminalIndex === 1) {
-                    relX = 35;
-                    relY = 0;
-                } else if (terminalIndex === 2) {
-                    // 滑动触点位置随滑块移动（与Component.js中的sliderX计算一致）
-                    // 注意：position可能为0，不能用 || 0.5
-                    const pos = comp.position !== undefined ? comp.position : 0.5;
-                    relX = -20 + 40 * pos;
-                    relY = -28;
-                } else {
-                    relX = 0;
-                    relY = 0;
-                }
-                break;
-            case 'Capacitor':
-            case 'ParallelPlateCapacitor':
-                relX = terminalIndex === 0 ? -30 : 30;
-                relY = 0;
-                break;
-            case 'BlackBox': {
-                const w = Math.max(80, comp.boxWidth || 180);
-                relX = terminalIndex === 0 ? -w / 2 : w / 2;
-                relY = 0;
-                break;
-            }
-            default:
-                relX = terminalIndex === 0 ? -30 : 30;
-                relY = 0;
-        }
-        
-        // 应用端子延长偏移
-        if (comp.terminalExtensions && comp.terminalExtensions[terminalIndex]) {
-            relX += comp.terminalExtensions[terminalIndex].x || 0;
-            relY += comp.terminalExtensions[terminalIndex].y || 0;
-        }
-        
-        // 应用旋转
-        const rotation = (comp.rotation || 0) * Math.PI / 180;
-        const cos = Math.cos(rotation);
-        const sin = Math.sin(rotation);
-        
-        return {
-            x: comp.x + relX * cos - relY * sin,
-            y: comp.y + relX * sin + relY * cos
-        };
+
+        return getTerminalWorldPosition(comp, terminalIndex);
     }
 
     /**
@@ -334,8 +310,8 @@ export class Renderer {
             } else {
                 wireGroup.classList.remove('selected');
             }
-            // 刷新导线以显示/隐藏控制点
-            SVGRenderer.updateWirePath(wireGroup, wire, this.getTerminalPosition.bind(this));
+            // 刷新导线以显示/隐藏端点
+            SVGRenderer.updateWirePath(wireGroup, wire, this.getWireEndpointPosition.bind(this));
         }
     }
 
@@ -346,7 +322,7 @@ export class Renderer {
         const wireGroup = this.wireElements.get(wireId);
         const wire = this.circuit.getWire(wireId);
         if (wireGroup && wire) {
-            SVGRenderer.updateWirePath(wireGroup, wire, this.getTerminalPosition.bind(this));
+            SVGRenderer.updateWirePath(wireGroup, wire, this.getWireEndpointPosition.bind(this));
         }
     }
 
@@ -367,6 +343,11 @@ export class Renderer {
             if (wasSelected) {
                 newG.classList.add('selected');
             }
+            const display = comp.display || {};
+            const showCurrent = display.current ?? this.defaultDisplay.current;
+            const showVoltage = display.voltage ?? this.defaultDisplay.voltage;
+            const showPower = display.power ?? this.defaultDisplay.power;
+            SVGRenderer.updateValueDisplay(newG, comp, showCurrent, showVoltage, showPower);
         }
     }
 
