@@ -4,8 +4,10 @@
  */
 
 import { MNASolver } from './Solver.js';
+import { Matrix } from './Matrix.js';
 import { createComponent } from '../components/Component.js';
 import { computeOverlapFractionFromOffsetPx, computeParallelPlateCapacitance } from '../utils/Physics.js';
+import { getTerminalWorldPosition } from '../utils/TerminalGeometry.js';
 
 export class Circuit {
     constructor() {
@@ -41,12 +43,6 @@ export class Circuit {
      */
     removeComponent(id) {
         this.components.delete(id);
-        // 删除与该元器件相关的所有导线
-        for (const [wireId, wire] of this.wires) {
-            if (wire.startComponentId === id || wire.endComponentId === id) {
-                this.wires.delete(wireId);
-            }
-        }
         this.rebuildNodes();
     }
 
@@ -82,40 +78,21 @@ export class Circuit {
      * 使用并查集算法合并连接的端点
      */
     rebuildNodes() {
-        // 首先检测哪些端子有导线连接
-        const connectedTerminals = new Map();
-        const incrementConnection = (key) => {
-            connectedTerminals.set(key, (connectedTerminals.get(key) || 0) + 1);
-        };
-        for (const [wireId, wire] of this.wires) {
-            incrementConnection(`${wire.startComponentId}:${wire.startTerminalIndex}`);
-            incrementConnection(`${wire.endComponentId}:${wire.endTerminalIndex}`);
-        }
-        this.terminalConnectionMap = connectedTerminals;
-        
-        // 收集所有有导线连接的端点
-        // 只有实际连接了导线的端子才会被添加，避免产生孤立节点
-        const terminals = [];
-        const hasWire = (componentId, terminalIndex) => connectedTerminals.has(`${componentId}:${terminalIndex}`);
-        for (const [id, comp] of this.components) {
-            // 只添加有导线连接的端子
-            if (hasWire(id, 0)) {
-                terminals.push({ componentId: id, terminalIndex: 0 });
-            }
-            if (hasWire(id, 1)) {
-                terminals.push({ componentId: id, terminalIndex: 1 });
-            }
-            // 滑动变阻器的第三个端子
-            if (comp.type === 'Rheostat' && hasWire(id, 2)) {
-                terminals.push({ componentId: id, terminalIndex: 2 });
-            }
-        }
+        // Keep any terminal-bound wire endpoints synced to the current terminal geometry
+        // before we rebuild the coordinate-based connectivity graph.
+        this.syncWireEndpointsToTerminalRefs();
 
-        // 并查集
-        const parent = new Map();
-        
-        const getTerminalKey = (t) => `${t.componentId}:${t.terminalIndex}`;
-        
+        const pointKey = (pt) => {
+            if (!pt) return null;
+            const x = Number.isFinite(pt.x) ? Math.round(pt.x) : null;
+            const y = Number.isFinite(pt.y) ? Math.round(pt.y) : null;
+            if (x === null || y === null) return null;
+            return `${x},${y}`;
+        };
+
+        // Union-find over "posts" (component terminals + wire endpoints).
+        const parent = new Map(); // postId -> parentPostId
+
         const find = (key) => {
             if (!parent.has(key)) parent.set(key, key);
             if (parent.get(key) !== key) {
@@ -123,97 +100,169 @@ export class Circuit {
             }
             return parent.get(key);
         };
-        
+
         const union = (key1, key2) => {
             const root1 = find(key1);
             const root2 = find(key2);
-            if (root1 !== root2) {
-                parent.set(root1, root2);
+            if (root1 !== root2) parent.set(root1, root2);
+        };
+
+        // Coordinate buckets: posts at the same (quantized) coordinate belong to the same electrical node.
+        const coordRepresentative = new Map(); // coordKey -> postId
+        const coordTerminalCount = new Map(); // coordKey -> count of component terminals
+        const coordWireEndpointCount = new Map(); // coordKey -> count of wire endpoints
+        const terminalCoordKey = new Map(); // terminalKey -> coordKey
+
+        const noteCoord = (coordKey, postId) => {
+            if (!coordKey) return;
+            if (!coordRepresentative.has(coordKey)) {
+                coordRepresentative.set(coordKey, postId);
+            } else {
+                union(postId, coordRepresentative.get(coordKey));
             }
         };
 
-        // 初始化并查集
-        for (const t of terminals) {
-            const key = getTerminalKey(t);
-            parent.set(key, key);
+        const registerTerminal = (componentId, terminalIndex, comp) => {
+            const pos = getTerminalWorldPosition(comp, terminalIndex);
+            const coordKey = pointKey(pos);
+            const postId = `T:${componentId}:${terminalIndex}`;
+            parent.set(postId, postId);
+            noteCoord(coordKey, postId);
+            const tKey = `${componentId}:${terminalIndex}`;
+            terminalCoordKey.set(tKey, coordKey);
+            coordTerminalCount.set(coordKey, (coordTerminalCount.get(coordKey) || 0) + 1);
+        };
+
+        // Register all component terminals (even if isolated; we will later mark unconnected ones as -1).
+        for (const [id, comp] of this.components) {
+            registerTerminal(id, 0, comp);
+            registerTerminal(id, 1, comp);
+            if (comp.type === 'Rheostat') {
+                registerTerminal(id, 2, comp);
+            }
         }
 
-        // 根据导线合并节点
-        for (const [wireId, wire] of this.wires) {
-            const key1 = `${wire.startComponentId}:${wire.startTerminalIndex}`;
-            const key2 = `${wire.endComponentId}:${wire.endTerminalIndex}`;
-            
-            // 检查导线端点是否有效
-            if (!parent.has(key1)) {
-                console.warn(`Wire ${wireId}: start terminal ${key1} not found in components`);
-                continue;
-            }
-            if (!parent.has(key2)) {
-                console.warn(`Wire ${wireId}: end terminal ${key2} not found in components`);
-                continue;
-            }
-            
-            union(key1, key2);
+        const registerWireEndpoint = (wireId, which, pt) => {
+            const coordKey = pointKey(pt);
+            const postId = `W:${wireId}:${which}`;
+            parent.set(postId, postId);
+            noteCoord(coordKey, postId);
+            coordWireEndpointCount.set(coordKey, (coordWireEndpointCount.get(coordKey) || 0) + 1);
+            return postId;
+        };
+
+        // Register wire endpoints and union each wire's endpoints (ideal conductor).
+        for (const wire of this.wires.values()) {
+            const aPt = wire?.a;
+            const bPt = wire?.b;
+            if (!aPt || !bPt) continue;
+            const aId = registerWireEndpoint(wire.id, 'a', aPt);
+            const bId = registerWireEndpoint(wire.id, 'b', bPt);
+            union(aId, bId);
         }
 
-        // 生成节点映射
-        // 重要：电源的负极应该是节点0（参考地）
+        // Build terminal "degree" map (junction degree at the coordinate point).
+        const connectedTerminals = new Map();
+        for (const [id, comp] of this.components) {
+            const terminalCount = comp.type === 'Rheostat' ? 3 : 2;
+            for (let ti = 0; ti < terminalCount; ti++) {
+                const tKey = `${id}:${ti}`;
+                const coordKey = terminalCoordKey.get(tKey);
+                const wireCount = coordWireEndpointCount.get(coordKey) || 0;
+                const otherTerminalCount = Math.max(0, (coordTerminalCount.get(coordKey) || 0) - 1);
+                const degree = wireCount + otherTerminalCount;
+                if (degree > 0) connectedTerminals.set(tKey, degree);
+            }
+        }
+        this.terminalConnectionMap = connectedTerminals;
+
+        // Assign node indices to union roots that contain at least one connected component terminal.
         const nodeMap = new Map(); // root -> nodeIndex
         let nodeIndex = 0;
-        
-        // 首先，找到电源的负极端点，确保它是节点0
+
+        const assignNodeIfNeeded = (root) => {
+            if (!nodeMap.has(root)) nodeMap.set(root, nodeIndex++);
+        };
+
+        const getTerminalPostId = (componentId, terminalIndex) => `T:${componentId}:${terminalIndex}`;
+
+        // Prefer power source negative terminal as ground if it is actually connected.
+        let groundRoot = null;
         for (const [id, comp] of this.components) {
-            if (comp.type === 'PowerSource') {
-                // 端点1是负极
-                const negativeKey = `${id}:1`;
-                const root = find(negativeKey);
-                if (!nodeMap.has(root)) {
-                    nodeMap.set(root, nodeIndex++);
+            if (comp.type !== 'PowerSource') continue;
+            const negKey = `${id}:1`;
+            const negPostId = getTerminalPostId(id, 1);
+            const root = find(negPostId);
+            if (connectedTerminals.has(negKey)) {
+                groundRoot = root;
+                assignNodeIfNeeded(root);
+                break;
+            }
+        }
+
+        // If no connected power negative terminal, pick the first connected terminal as ground.
+        if (!groundRoot) {
+            for (const tKey of connectedTerminals.keys()) {
+                const [cid, tidxRaw] = tKey.split(':');
+                const tidx = Number.parseInt(tidxRaw, 10);
+                const root = find(getTerminalPostId(cid, tidx));
+                groundRoot = root;
+                assignNodeIfNeeded(root);
+                break;
+            }
+        }
+
+        // If still none (completely disconnected layout), fall back to first power source negative terminal if any.
+        if (!groundRoot) {
+            for (const [id, comp] of this.components) {
+                if (comp.type !== 'PowerSource') continue;
+                const negPostId = getTerminalPostId(id, 1);
+                groundRoot = find(negPostId);
+                assignNodeIfNeeded(groundRoot);
+                break;
+            }
+        }
+
+        // Assign remaining connected roots.
+        for (const tKey of connectedTerminals.keys()) {
+            const [cid, tidxRaw] = tKey.split(':');
+            const tidx = Number.parseInt(tidxRaw, 10);
+            const root = find(getTerminalPostId(cid, tidx));
+            assignNodeIfNeeded(root);
+        }
+
+        // Update component node references. Unconnected terminals remain -1 to avoid phantom currents.
+        for (const [id, comp] of this.components) {
+            const terminalCount = comp.type === 'Rheostat' ? 3 : 2;
+            comp.nodes = Array.from({ length: terminalCount }, () => -1);
+            for (let ti = 0; ti < terminalCount; ti++) {
+                const tKey = `${id}:${ti}`;
+                const connected = connectedTerminals.has(tKey);
+                const postId = getTerminalPostId(id, ti);
+                const root = find(postId);
+                const mapped = nodeMap.has(root) ? nodeMap.get(root) : undefined;
+                // Always allow the chosen ground root terminal to map (helps maintain a reference node).
+                if ((connected || (groundRoot && root === groundRoot)) && mapped !== undefined) {
+                    comp.nodes[ti] = mapped;
                 }
-                break; // 只需要找到一个电源
-            }
-        }
-        
-        // 然后分配其他节点
-        for (const t of terminals) {
-            const key = getTerminalKey(t);
-            const root = find(key);
-            if (!nodeMap.has(root)) {
-                nodeMap.set(root, nodeIndex++);
             }
         }
 
-        // 更新元器件的节点引用
-        // 未连接导线的端子节点索引设为 -1
-        for (const [id, comp] of this.components) {
-            const key0 = `${id}:0`;
-            const key1 = `${id}:1`;
-            
-            // 检查端子是否有导线连接
-            const node0 = parent.has(key0) ? nodeMap.get(find(key0)) : undefined;
-            const node1 = parent.has(key1) ? nodeMap.get(find(key1)) : undefined;
-            
-            if (comp.type === 'Rheostat') {
-                // 滑动变阻器有三个节点，未连接的端子设为 -1
-                const key2 = `${id}:2`;
-                const node2 = parent.has(key2) ? nodeMap.get(find(key2)) : undefined;
-                comp.nodes = [
-                    node0 !== undefined ? node0 : -1,
-                    node1 !== undefined ? node1 : -1,
-                    node2 !== undefined ? node2 : -1
-                ];
-            } else {
-                comp.nodes = [
-                    node0 !== undefined ? node0 : -1,
-                    node1 !== undefined ? node1 : -1
-                ];
+        // Record which electrical node each wire belongs to (for short-circuit warnings / animations).
+        for (const wire of this.wires.values()) {
+            const aId = `W:${wire.id}:a`;
+            if (!parent.has(aId)) {
+                wire.nodeIndex = -1;
+                continue;
             }
+            const root = find(aId);
+            wire.nodeIndex = nodeMap.has(root) ? nodeMap.get(root) : -1;
         }
 
-        // 生成节点列表
+        // Generate node list.
         this.nodes = Array.from({ length: nodeIndex }, (_, i) => ({ id: i }));
-        
-        // 调试：打印节点与端子映射，帮助排查错误连接
+
+        // Debug: print node to terminal mapping.
         if (this.debugMode) {
             console.warn('--- Node mapping ---');
             const nodeTerminals = Array.from({ length: nodeIndex }, () => []);
@@ -223,23 +272,20 @@ export class Circuit {
                         nodeTerminals[node].push(`${id}:${terminalIdx}`);
                     }
                 };
-                append(comp.nodes[0], 0);
-                append(comp.nodes[1], 1);
-                if (comp.type === 'Rheostat') {
-                    append(comp.nodes[2], 2);
-                }
+                (comp.nodes || []).forEach((node, terminalIdx) => append(node, terminalIdx));
             }
             nodeTerminals.forEach((ts, idx) => {
                 console.warn(`node ${idx}: ${ts.join(', ')}`);
             });
         }
-        
-        // 检测滑动变阻器的连接模式
+
+        // Topology changed: clear flow cache
+        this._wireFlowCache = { version: null, map: new Map() };
+
+        // Detect rheostat connection modes (based on terminal degrees)
         this.detectRheostatConnections();
 
         // Track nodes that contain a shorted power source (both terminals on the same electrical node).
-        // Used by the renderer to show a short-circuit warning even when the solver cannot produce
-        // a meaningful current value (ideal source shorted).
         const shorted = new Set();
         for (const comp of this.components.values()) {
             if (comp.type !== 'PowerSource') continue;
@@ -253,6 +299,31 @@ export class Circuit {
     }
 
     /**
+     * Sync wire endpoints that are bound to component terminals.
+     * This is a UX/interaction helper: it lets wires stay attached when components move/rotate/extend terminals.
+     */
+    syncWireEndpointsToTerminalRefs() {
+        for (const wire of this.wires.values()) {
+            if (!wire) continue;
+            const applyRef = (endKey) => {
+                const refKey = endKey === 'a' ? 'aRef' : 'bRef';
+                const ref = wire[refKey];
+                const componentId = ref?.componentId;
+                const terminalIndex = ref?.terminalIndex;
+                if (componentId === undefined || componentId === null) return;
+                if (!Number.isInteger(terminalIndex) || terminalIndex < 0) return;
+                const comp = this.components.get(componentId);
+                if (!comp) return;
+                const pos = getTerminalWorldPosition(comp, terminalIndex);
+                if (!pos) return;
+                wire[endKey] = { x: pos.x, y: pos.y };
+            };
+            applyRef('a');
+            applyRef('b');
+        }
+    }
+
+    /**
      * 检测滑动变阻器的连接模式
      * 确定哪些端子被实际接入电路
      */
@@ -260,16 +331,11 @@ export class Circuit {
         for (const [id, comp] of this.components) {
             if (comp.type !== 'Rheostat') continue;
             
-            // 检查每个端子是否有导线连接
-            const terminalConnected = [false, false, false]; // [左端, 右端, 滑动触点]
-            
-            for (const [wireId, wire] of this.wires) {
-                if (wire.startComponentId === id) {
-                    terminalConnected[wire.startTerminalIndex] = true;
-                }
-                if (wire.endComponentId === id) {
-                    terminalConnected[wire.endTerminalIndex] = true;
-                }
+            // 端子是否“接入电路”：该端子所在坐标是否有其他端子/导线端点
+            const terminalConnected = [false, false, false];
+            for (let ti = 0; ti < 3; ti++) {
+                const key = `${id}:${ti}`;
+                terminalConnected[ti] = (this.terminalConnectionMap.get(key) || 0) > 0;
             }
             
             if (this.debugMode) {
@@ -710,36 +776,17 @@ export class Circuit {
     }
 
     computeWireFlowCache(results) {
-        const wiresByNode = new Map();
+        const wiresByNode = new Map(); // nodeIndex -> wire[]
         const cache = new Map();
 
-        for (const [wireId, wire] of this.wires) {
-            const startComp = this.components.get(wire.startComponentId);
-            const endComp = this.components.get(wire.endComponentId);
-            if (!startComp || !endComp) continue;
-            const startNode = startComp.nodes?.[wire.startTerminalIndex];
-            const endNode = endComp.nodes?.[wire.endTerminalIndex];
-            if (startNode === undefined || startNode < 0 || endNode === undefined || endNode < 0) continue;
-            if (startNode !== endNode) {
-                // 理论上不会发生，但为了安全直接根据元件电流决定方向
-                const startFlow = this.getTerminalCurrentFlow(startComp, wire.startTerminalIndex, results);
-                const endFlow = this.getTerminalCurrentFlow(endComp, wire.endTerminalIndex, results);
-                const direction = Math.abs(startFlow) >= Math.abs(endFlow)
-                    ? (startFlow >= 0 ? 1 : -1)
-                    : (endFlow >= 0 ? -1 : 1);
-                cache.set(wireId, {
-                    flowDirection: direction,
-                    currentMagnitude: Math.max(Math.abs(startFlow), Math.abs(endFlow))
-                });
-                continue;
-            }
-            if (!wiresByNode.has(startNode)) {
-                wiresByNode.set(startNode, []);
-            }
-            wiresByNode.get(startNode).push(wire);
+        for (const wire of this.wires.values()) {
+            const nodeId = wire?.nodeIndex;
+            if (nodeId === undefined || nodeId === null || nodeId < 0) continue;
+            if (!wiresByNode.has(nodeId)) wiresByNode.set(nodeId, []);
+            wiresByNode.get(nodeId).push(wire);
         }
 
-        for (const [nodeId, nodeWires] of wiresByNode) {
+        for (const [, nodeWires] of wiresByNode) {
             const nodeMap = this.computeNodeWireFlow(nodeWires, results);
             for (const [wireId, info] of nodeMap) {
                 cache.set(wireId, info);
@@ -750,253 +797,173 @@ export class Circuit {
     }
 
     computeNodeWireFlow(nodeWires, results) {
-        const adjacency = new Map(); // terminalKey -> [{wireId, neighbor}]
-        const wireEndpoints = new Map(); // wireId -> {startKey, endKey}
-        const terminalFlows = new Map(); // terminalKey -> flow value
-        const eps = 1e-9;
-
-        const addAdjacency = (key, wireId, neighbor) => {
-            if (!adjacency.has(key)) adjacency.set(key, []);
-            adjacency.get(key).push({ wireId, neighbor });
-        };
-
-        const ensureTerminalFlow = (componentId, terminalIndex, key) => {
-            if (terminalFlows.has(key)) return;
-            const comp = this.components.get(componentId);
-            if (!comp) {
-                terminalFlows.set(key, 0);
-                return;
-            }
-            const flow = this.getTerminalCurrentFlow(comp, terminalIndex, results);
-            terminalFlows.set(key, flow);
-        };
-
-        const remainingWires = [];
-        const directAssignments = new Map();
-
-        for (const wire of nodeWires) {
-            const startKey = `${wire.startComponentId}:${wire.startTerminalIndex}`;
-            const endKey = `${wire.endComponentId}:${wire.endTerminalIndex}`;
-            wireEndpoints.set(wire.id, { startKey, endKey });
-            addAdjacency(startKey, wire.id, endKey);
-            addAdjacency(endKey, wire.id, startKey);
-            ensureTerminalFlow(wire.startComponentId, wire.startTerminalIndex, startKey);
-            ensureTerminalFlow(wire.endComponentId, wire.endTerminalIndex, endKey);
-
-            const startFlow = terminalFlows.get(startKey) || 0;
-            const endFlow = terminalFlows.get(endKey) || 0;
-            if (startFlow > eps && endFlow < -eps) {
-                directAssignments.set(wire.id, {
-                    flowDirection: 1,
-                    currentMagnitude: Math.min(Math.abs(startFlow), Math.abs(endFlow))
-                });
-            } else if (startFlow < -eps && endFlow > eps) {
-                directAssignments.set(wire.id, {
-                    flowDirection: -1,
-                    currentMagnitude: Math.min(Math.abs(startFlow), Math.abs(endFlow))
-                });
-            } else {
-                remainingWires.push(wire);
-            }
-        }
-
-        const entries = Array.from(terminalFlows.entries());
-        const sources = entries
-            .filter(([, flow]) => flow > eps)
-            .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
-        const sinks = entries
-            .filter(([, flow]) => flow < -eps)
-            .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
-
-        const wireDirections = new Map();
-        const computeDistances = (list) => {
-            const dist = new Map();
-            const queue = [];
-            for (const [key] of list) {
-                if (!key || dist.has(key)) continue;
-                dist.set(key, 0);
-                queue.push(key);
-            }
-            while (queue.length > 0) {
-                const key = queue.shift();
-                const neighbors = adjacency.get(key) || [];
-                for (const { neighbor } of neighbors) {
-                    if (dist.has(neighbor)) continue;
-                    dist.set(neighbor, (dist.get(key) || 0) + 1);
-                    queue.push(neighbor);
-                }
-            }
-            return dist;
-        };
-
-        const distanceFromSources = computeDistances(sources);
-        const distanceFromSinks = computeDistances(sinks);
-        const fallbackDistances = computeDistances(entries);
-        const hasSources = sources.length > 0;
-        const hasSinks = sinks.length > 0;
-        const fallbackValue = Math.max(nodeWires.length * 2 + adjacency.size, 4);
-
-        const getDistanceValue = (map, key, hasSeed) => {
-            if (map.has(key)) return map.get(key);
-            if (!hasSeed && fallbackDistances.has(key)) {
-                return fallbackDistances.get(key);
-            }
-            return fallbackValue;
-        };
-
-        const computeScore = (key) => {
-            const sourceDist = getDistanceValue(distanceFromSources, key, hasSources);
-            const sinkDist = getDistanceValue(distanceFromSinks, key, hasSinks);
-            const flow = terminalFlows.get(key) || 0;
-            const bias = Math.sign(flow) * 0.001;
-            return (sinkDist - sourceDist) + bias;
-        };
-
-        const unresolved = [];
-        for (const wire of remainingWires) {
-            const endpoints = wireEndpoints.get(wire.id);
-            const startScore = computeScore(endpoints.startKey);
-            const endScore = computeScore(endpoints.endKey);
-            if (!Number.isFinite(startScore) || !Number.isFinite(endScore)) {
-                unresolved.push(wire);
-                continue;
-            }
-            const diff = startScore - endScore;
-            if (Math.abs(diff) < 1e-6) {
-                unresolved.push(wire);
-                continue;
-            }
-            wireDirections.set(wire.id, diff > 0 ? 1 : -1);
-        }
-
-        for (const wire of unresolved) {
-            if (!wireDirections.has(wire.id)) {
-                wireDirections.set(wire.id, 1);
-            }
-        }
-
-        for (const [wireId, info] of directAssignments) {
-            wireDirections.set(wireId, info.flowDirection);
-        }
-
+        const physical = this.computeNodeWireFlowPhysical(nodeWires, results);
+        if (physical) return physical;
         const nodeResult = new Map();
-        for (const [wireId, direction] of wireDirections) {
-            const endpoints = wireEndpoints.get(wireId);
-            const startFlow = terminalFlows.get(endpoints.startKey) || 0;
-            const endFlow = terminalFlows.get(endpoints.endKey) || 0;
-            const startMag = Math.abs(startFlow);
-            const endMag = Math.abs(endFlow);
-            const startComp = this.components.get(endpoints.startKey.split(':')[0]);
-            const endComp = this.components.get(endpoints.endKey.split(':')[0]);
-            const startShorted = !!startComp?._isShorted;
-            const endShorted = !!endComp?._isShorted;
-            // "Tiny" only means "dead end" when the terminal is NOT a junction.
-            // A junction terminal can legitimately have 0 net injection while still carrying current
-            // from one wire segment to another.
-            const startIsJunction = (adjacency.get(endpoints.startKey) || []).length >= 2;
-            const endIsJunction = (adjacency.get(endpoints.endKey) || []).length >= 2;
-            const hasTinyStart = startMag < eps && !startShorted && !startIsJunction;
-            const hasTinyEnd = endMag < eps && !endShorted && !endIsJunction;
-            // If a branch endpoint is effectively open, don't borrow the larger trunk current;
-            // shorted components still propagate the bus magnitude
-            const magnitude = (directAssignments.has(wireId) && directAssignments.get(wireId).currentMagnitude !== undefined)
-                ? directAssignments.get(wireId).currentMagnitude
-                : ((hasTinyStart || hasTinyEnd) ? Math.min(startMag, endMag) : Math.max(startMag, endMag));
-            nodeResult.set(wireId, { flowDirection: direction, currentMagnitude: magnitude });
+        for (const wire of nodeWires || []) {
+            nodeResult.set(wire.id, { flowDirection: 0, currentMagnitude: 0 });
+        }
+        return nodeResult;
+    }
+
+    /**
+     * Compute wire currents inside a single electrical node by solving a resistive
+     * network on the wire graph (unit conductance per wire).
+     *
+     * This produces a KCL-consistent, physically-plausible distribution and avoids
+     * "phantom current" on bridge wires that connect equipotential points.
+     *
+     * @param {Object[]} nodeWires
+     * @param {Object} results
+     * @returns {Map<string, {flowDirection:number, currentMagnitude:number}>|null}
+     */
+    computeNodeWireFlowPhysical(nodeWires, results) {
+        if (!nodeWires || nodeWires.length === 0) return new Map();
+        const nodeId = nodeWires[0]?.nodeIndex;
+        if (nodeId === undefined || nodeId === null || nodeId < 0) return null;
+
+        const pointKey = (pt) => {
+            if (!pt) return null;
+            const x = Number.isFinite(pt.x) ? Math.round(pt.x) : null;
+            const y = Number.isFinite(pt.y) ? Math.round(pt.y) : null;
+            if (x === null || y === null) return null;
+            return `${x},${y}`;
+        };
+
+        // Build vertices from wire endpoint coordinates within this electrical node.
+        const keys = [];
+        const indexOfKey = new Map(); // coordKey -> idx
+        const ensureVertex = (coordKey) => {
+            if (!coordKey) return null;
+            if (indexOfKey.has(coordKey)) return indexOfKey.get(coordKey);
+            const idx = keys.length;
+            indexOfKey.set(coordKey, idx);
+            keys.push(coordKey);
+            return idx;
+        };
+
+        const edges = [];
+        const degrees = [];
+        for (const wire of nodeWires) {
+            const aKey = pointKey(wire?.a);
+            const bKey = pointKey(wire?.b);
+            const u = ensureVertex(aKey);
+            const v = ensureVertex(bKey);
+            if (u === null || v === null) continue;
+            edges.push({ wireId: wire.id, startIdx: u, endIdx: v, conductance: 1 });
+        }
+
+        const n = keys.length;
+        if (n <= 1 || edges.length === 0) {
+            const nodeResult = new Map();
+            for (const wire of nodeWires) {
+                nodeResult.set(wire.id, { flowDirection: 0, currentMagnitude: 0 });
+            }
+            return nodeResult;
+        }
+
+        // Degree heuristic for picking a stable anchor (reference vertex).
+        for (let i = 0; i < n; i++) degrees[i] = 0;
+        for (const edge of edges) {
+            const u = edge.startIdx;
+            const v = edge.endIdx;
+            if (u === v) continue;
+            degrees[u] += 1;
+            degrees[v] += 1;
+        }
+        let anchor = 0;
+        for (let i = 1; i < n; i++) {
+            if ((degrees[i] || 0) > (degrees[anchor] || 0)) anchor = i;
+        }
+
+        // Injection per vertex: sum of component terminal flows at this coordinate.
+        const injections = new Array(n).fill(0);
+        const tiny = 1e-12;
+        for (const comp of this.components.values()) {
+            if (!Array.isArray(comp.nodes)) continue;
+            for (let ti = 0; ti < comp.nodes.length; ti++) {
+                if (comp.nodes[ti] !== nodeId) continue;
+                const pos = getTerminalWorldPosition(comp, ti);
+                const vKey = pointKey(pos);
+                if (!vKey || !indexOfKey.has(vKey)) continue;
+                const idx = indexOfKey.get(vKey);
+                const rawFlow = this.getTerminalCurrentFlow(comp, ti, results);
+                const flow = Math.abs(rawFlow) < tiny ? 0 : rawFlow;
+                injections[idx] += flow;
+            }
+        }
+
+        const size = n - 1;
+        const A = Array.from({ length: size }, () => Array(size).fill(0));
+        const b = Array(size).fill(0);
+        const toReduced = (idx) => (idx < anchor ? idx : idx - 1);
+
+        for (let i = 0; i < n; i++) {
+            if (i === anchor) continue;
+            b[toReduced(i)] = injections[i] || 0;
+        }
+
+        for (const edge of edges) {
+            const u = edge.startIdx;
+            const v = edge.endIdx;
+            const g = edge.conductance;
+            if (u === v) continue;
+
+            if (u !== anchor) {
+                const ui = toReduced(u);
+                A[ui][ui] += g;
+            }
+            if (v !== anchor) {
+                const vi = toReduced(v);
+                A[vi][vi] += g;
+            }
+            if (u !== anchor && v !== anchor) {
+                const ui = toReduced(u);
+                const vi = toReduced(v);
+                A[ui][vi] -= g;
+                A[vi][ui] -= g;
+            }
+        }
+
+        const x = Matrix.solve(A, b);
+        if (!x) return null;
+
+        const potentials = new Array(n).fill(0);
+        for (let i = 0; i < n; i++) {
+            if (i === anchor) continue;
+            potentials[i] = x[toReduced(i)] || 0;
+        }
+
+        const eps = 1e-9;
+        const nodeResult = new Map();
+        for (const wire of nodeWires) {
+            nodeResult.set(wire.id, { flowDirection: 0, currentMagnitude: 0 });
+        }
+        for (const edge of edges) {
+            const u = edge.startIdx;
+            const v = edge.endIdx;
+            const g = edge.conductance;
+            const current = g * ((potentials[u] || 0) - (potentials[v] || 0));
+            let mag = Math.abs(current);
+            let dir = 0;
+            if (mag >= eps) {
+                dir = current > 0 ? 1 : -1;
+            } else {
+                mag = 0;
+            }
+            nodeResult.set(edge.wireId, { flowDirection: dir, currentMagnitude: mag });
         }
 
         return nodeResult;
     }
 
-    /**
-     * 检查导线是否经过电气连接点（多条导线交汇的节点）
-     * @param {Object} wire - 导线对象
-     * @returns {boolean} 是否经过连接点
-     */
-    wirePassesThroughJunction(wire) {
-        // 如果没有控制点，则是直接连接，不经过连接点
-        if (!wire.controlPoints || wire.controlPoints.length === 0) {
-            return false;
-        }
-        
-        // 检查是否有其他导线的端点或控制点与该导线的控制点重合
-        const threshold = 5; // 位置阈值（像素）
-        
-        for (const cp of wire.controlPoints) {
-            // 检查所有其他导线
-            for (const [otherId, otherWire] of this.wires) {
-                if (otherId === wire.id) continue;
-                
-                // 收集其他导线的所有关键点（控制点）
-                const keyPoints = [];
-                
-                // 添加控制点
-                if (otherWire.controlPoints) {
-                    keyPoints.push(...otherWire.controlPoints);
-                }
-                
-                // 检查是否有任何关键点与当前控制点重合
-                for (const kp of keyPoints) {
-                    const dx = Math.abs(kp.x - cp.x);
-                    const dy = Math.abs(kp.y - cp.y);
-                    if (dx < threshold && dy < threshold) {
-                        // 找到交汇点！
-                        return true;
-                    }
-                }
-            }
-        }
-        
-        return false;
+    computeNodeWireFlowHeuristic(nodeWires, results) {
+        return null;
     }
 
-    /**
-     * 检查元器件是否为稳态电容器（充电完成）
-     * @param {Object} comp - 元器件对象
-     * @returns {boolean} 是否为稳态电容器
-     */
-    isSteadyStateCapacitor(comp) {
-        if (!comp || (comp.type !== 'Capacitor' && comp.type !== 'ParallelPlateCapacitor')) return false;
-        // 电流极小时认为充电完成
-        return Math.abs(comp.currentValue || 0) < 1e-6;
-    }
-
-    /**
-     * 检查导线是否与稳态电容器串联
-     * 核心逻辑：只检查导线直接连接的两个组件，不检查节点上的其他组件
-     * @param {Object} wire - 导线对象
-     * @param {Object} results - 求解结果
-     * @returns {boolean} 是否与稳态电容器串联
-     */
-    wireInSeriesWithSteadyCapacitor(wire, results) {
-        const startComp = this.components.get(wire.startComponentId);
-        const endComp = this.components.get(wire.endComponentId);
-        if (!startComp || !endComp) return false;
-        
-        // 检查策略：
-        // 1. 如果导线直接连接到稳态电容器 -> 无电流
-        // 2. 如果导线两端的组件电流都接近0 -> 无电流
-        // 关键：不检查节点上的其他组件（如并联的滑动变阻器）
-        
-        // 直接检查：如果导线的任一端直接连接到稳态电容器
-        if (this.isSteadyStateCapacitor(startComp) || this.isSteadyStateCapacitor(endComp)) {
-            return true;
-        }
-        
-        // 检查导线两端直接连接的组件电流
-        // 如果两个组件的电流都接近0，说明这是一个零电流支路
-        const startCompCurrent = Math.abs(results.currents.get(wire.startComponentId) || 0);
-        const endCompCurrent = Math.abs(results.currents.get(wire.endComponentId) || 0);
-        
-        const currentThreshold = 1e-6;
-        
-        // 只有两端的组件电流都接近0，才认为是零电流支路
-        if (startCompCurrent < currentThreshold && endCompCurrent < currentThreshold) {
-            return true;
-        }
-        
-        return false;
-    }
+    // Model C: wires are ideal conductors and junctions are represented by endpoints.
+    // Wire current display is derived from node-internal flow solving (computeWireFlowCache),
+    // so we no longer need control-point/junction heuristics here.
 
     /**
      * 检查元器件是否为理想电压表
@@ -1017,14 +984,7 @@ export class Circuit {
      */
     isWireInShortCircuit(wire) {
         if (!wire) return false;
-        const startComp = this.components.get(wire.startComponentId);
-        const endComp = this.components.get(wire.endComponentId);
-        if (!startComp || !endComp) return false;
-        const startNode = startComp.nodes?.[wire.startTerminalIndex];
-        const endNode = endComp.nodes?.[wire.endTerminalIndex];
-        const node = (startNode !== undefined && startNode >= 0) ? startNode
-            : (endNode !== undefined && endNode >= 0) ? endNode
-                : -1;
+        const node = Number.isFinite(wire.nodeIndex) ? wire.nodeIndex : -1;
         if (node < 0) return false;
         return !!(this.shortedPowerNodes && this.shortedPowerNodes.has(node));
     }
@@ -1037,148 +997,34 @@ export class Circuit {
      */
     getWireCurrentInfo(wire, results) {
         if (!wire || !results || !results.valid) return null;
-        
-        const startComp = this.components.get(wire.startComponentId);
-        const endComp = this.components.get(wire.endComponentId);
-        if (!startComp || !endComp) return null;
-        
-        // Gate on connection quality to avoid phantom currents on dangling branches.
-        // NOTE: Allow "pass-through" junction terminals even if the component itself is incomplete:
-        // when a terminal has >=2 wires, it behaves like a node that can carry current across wires.
-        const startKey = `${wire.startComponentId}:${wire.startTerminalIndex}`;
-        const endKey = `${wire.endComponentId}:${wire.endTerminalIndex}`;
-        const startDegree = this.terminalConnectionMap.get(startKey) || 0;
-        const endDegree = this.terminalConnectionMap.get(endKey) || 0;
-        const startEligible = this.isComponentConnected(wire.startComponentId) || startDegree >= 2;
-        const endEligible = this.isComponentConnected(wire.endComponentId) || endDegree >= 2;
-        if (!startEligible || !endEligible) {
-            return {
-                current: 0,
-                voltage1: 0,
-                voltage2: 0,
-                isShorted: false,
-                flowDirection: 0,
-                voltageDiff: 0
-            };
-        }
-        
-        const startNode = startComp.nodes[wire.startTerminalIndex];
-        const endNode = endComp.nodes[wire.endTerminalIndex];
-        
-        const getVoltage = (nodeIdx) => {
-            if (nodeIdx === undefined || nodeIdx < 0) return 0;
-            return results.voltages[nodeIdx] || 0;
-        };
-        
-        const voltage1 = getVoltage(startNode);
-        const voltage2 = getVoltage(endNode);
-        const voltageDiff = voltage1 - voltage2;
+
+        const nodeId = Number.isFinite(wire.nodeIndex) ? wire.nodeIndex : -1;
+        const nodeVoltage = nodeId >= 0 ? (results.voltages[nodeId] || 0) : 0;
         const isShorted = this.isWireInShortCircuit(wire);
 
         if (isShorted) {
             return {
                 current: 0,
-                voltage1,
-                voltage2,
+                voltage1: nodeVoltage,
+                voltage2: nodeVoltage,
                 isShorted: true,
                 flowDirection: 0,
-                voltageDiff
+                voltageDiff: 0
             };
         }
 
-        const startFlow = this.getTerminalCurrentFlow(startComp, wire.startTerminalIndex, results);
-        const endFlow = this.getTerminalCurrentFlow(endComp, wire.endTerminalIndex, results);
-        const startMag = Math.abs(startFlow);
-        const endMag = Math.abs(endFlow);
-        const flowEps = 1e-9;
-        const startShorted = !!startComp._isShorted;
-        const endShorted = !!endComp._isShorted;
-        const startIsJunction = startDegree >= 2;
-        const endIsJunction = endDegree >= 2;
-        const hasTinyStart = startMag < flowEps && !startShorted && !startIsJunction;
-        const hasTinyEnd = endMag < flowEps && !endShorted && !endIsJunction;
-        // Avoid leaking trunk current into a dead branch (open switch/charged cap) but still
-        // propagate through shorted components that simply sit on the bus
-        const baseCurrent = (hasTinyStart || hasTinyEnd)
-            ? Math.min(startMag, endMag)
-            : Math.max(startMag, endMag);
-        
-        // CRITICAL: Handle ideal voltmeters robustly
-        // Wires connected to ideal voltmeters should show zero current
-        // UNLESS the wire passes through an electrical junction where other wires bring current
-        const startIsIdealV = this.isIdealVoltmeter(startComp);
-        const endIsIdealV = this.isIdealVoltmeter(endComp);
-        
-        // CRITICAL: Handle steady-state capacitors
-        // wireInSeriesWithSteadyCapacitor() now includes node-level junction detection
-        // Returns true ONLY if wire is in true series with capacitor (no parallel connections)
-        const inSeriesWithCapacitor = this.wireInSeriesWithSteadyCapacitor(wire, results);
-        
-        let current;
-        
-        // 优先检查稳态电容器
-        if (inSeriesWithCapacitor) {
-            // 真正的串联连接（已经排除并联连接点），强制电流为0
-            current = 0;
-        } else if (startIsIdealV && endIsIdealV) {
-            // Both ends are ideal voltmeters - no current should flow
-            current = 0;
-        } else if (startIsIdealV || endIsIdealV) {
-            // One end is ideal voltmeter
-            // Check if this wire passes through a junction where other wires meet
-            const hasJunction = this.wirePassesThroughJunction(wire);
-            
-            if (hasJunction) {
-                // Wire passes through a junction - may have current from other circuit paths
-                // Use normal calculation
-                current = baseCurrent;
-            } else {
-                // Direct connection to ideal voltmeter - no current
-                current = 0;
-            }
-        } else {
-            // Normal case - use maximum current from either end
-            current = baseCurrent;
-        }
-        
-        const eps = 1e-9;
-
         this.ensureWireFlowCache(results);
         const cachedFlow = this._wireFlowCache.map.get(wire.id);
-        let flowDirection = cachedFlow?.flowDirection ?? 0;
-        if (!flowDirection) {
-            if (startMag > eps && endMag > eps) {
-                flowDirection = startFlow >= 0 ? 1 : -1;
-            } else if (startMag > eps) {
-                flowDirection = startFlow >= 0 ? 1 : -1;
-            } else if (endMag > eps) {
-                flowDirection = endFlow >= 0 ? -1 : 1;
-            } else if (Math.abs(voltageDiff) > 1e-6) {
-                flowDirection = voltageDiff > 0 ? 1 : -1;
-            }
-        }
+        const current = cachedFlow ? (cachedFlow.currentMagnitude || 0) : 0;
+        const flowDirection = cachedFlow ? (cachedFlow.flowDirection || 0) : 0;
 
-        if (cachedFlow && cachedFlow.currentMagnitude !== undefined) {
-            // 使用缓存的电流值，但要尊重特殊情况
-            // 优先检查稳态电容器（已包含节点级别的连接点检查）
-            if (inSeriesWithCapacitor) {
-                current = 0;
-            } else if ((startIsIdealV || endIsIdealV) && !this.wirePassesThroughJunction(wire)) {
-                // 如果是直接连接到理想电压表且没有连接点，强制为0
-                current = 0;
-            } else {
-                current = cachedFlow.currentMagnitude;
-            }
-        }
-        if (current < eps) current = 0;
-        
         return {
             current,
-            voltage1,
-            voltage2,
-            isShorted,
+            voltage1: nodeVoltage,
+            voltage2: nodeVoltage,
+            isShorted: false,
             flowDirection,
-            voltageDiff
+            voltageDiff: 0
         };
     }
 
@@ -1229,7 +1075,7 @@ export class Circuit {
     toJSON() {
         return {
             meta: {
-                version: '1.0',
+                version: '2.0',
                 timestamp: Date.now(),
                 name: '电路设计'
             },
@@ -1246,15 +1092,10 @@ export class Circuit {
             })),
             wires: Array.from(this.wires.values()).map(wire => ({
                 id: wire.id,
-                start: {
-                    componentId: wire.startComponentId,
-                    terminalIndex: wire.startTerminalIndex
-                },
-                end: {
-                    componentId: wire.endComponentId,
-                    terminalIndex: wire.endTerminalIndex
-                },
-                controlPoints: wire.controlPoints || []
+                a: { x: wire?.a?.x ?? 0, y: wire?.a?.y ?? 0 },
+                b: { x: wire?.b?.x ?? 0, y: wire?.b?.y ?? 0 },
+                ...(wire?.aRef ? { aRef: wire.aRef } : {}),
+                ...(wire?.bRef ? { bRef: wire.bRef } : {})
             }))
         };
     }
@@ -1371,7 +1212,7 @@ export class Circuit {
                     ...compData.display
                 };
             }
-            
+
             // 恢复端子延伸
             if (compData.terminalExtensions) {
                 comp.terminalExtensions = compData.terminalExtensions;
@@ -1381,33 +1222,76 @@ export class Circuit {
         }
 
         // 导入导线
-        for (const wireData of json.wires) {
-            // 支持两种格式：
-            // 新格式: { start: { componentId, terminalIndex }, end: { componentId, terminalIndex } }
-            // 旧格式: { startComponentId, startTerminalIndex, endComponentId, endTerminalIndex }
-            let wire;
-            if (wireData.start && wireData.end) {
-                // 新格式
-                wire = {
-                    id: wireData.id,
-                    startComponentId: wireData.start.componentId,
-                    startTerminalIndex: wireData.start.terminalIndex,
-                    endComponentId: wireData.end.componentId,
-                    endTerminalIndex: wireData.end.terminalIndex,
-                    controlPoints: wireData.controlPoints || []
-                };
-            } else {
-                // 旧格式
-                wire = {
-                    id: wireData.id,
-                    startComponentId: wireData.startComponentId,
-                    startTerminalIndex: wireData.startTerminalIndex,
-                    endComponentId: wireData.endComponentId,
-                    endTerminalIndex: wireData.endTerminalIndex,
-                    controlPoints: wireData.controlPoints || []
-                };
+        const ensureUniqueWireId = (baseId) => {
+            if (!this.wires.has(baseId)) return baseId;
+            let i = 1;
+            while (this.wires.has(`${baseId}_${i}`)) i++;
+            return `${baseId}_${i}`;
+        };
+
+        const safePoint = (pt) => {
+            if (!pt) return null;
+            const x = Number(pt.x);
+            const y = Number(pt.y);
+            if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+            return { x, y };
+        };
+
+        const getTerminalPoint = (componentId, terminalIndex) => {
+            const comp = this.components.get(componentId);
+            if (!comp) return null;
+            return safePoint(getTerminalWorldPosition(comp, terminalIndex));
+        };
+
+        for (const wireData of json.wires || []) {
+            if (!wireData || !wireData.id) continue;
+
+            // v2 format: explicit endpoints (a/b points)
+            if (wireData.a && wireData.b) {
+                const a = safePoint(wireData.a);
+                const b = safePoint(wireData.b);
+                if (!a || !b) continue;
+                const id = ensureUniqueWireId(wireData.id);
+                const wire = { id, a, b };
+                if (wireData.aRef) wire.aRef = wireData.aRef;
+                if (wireData.bRef) wire.bRef = wireData.bRef;
+                this.wires.set(id, wire);
+                continue;
             }
-            this.wires.set(wire.id, wire);
+
+            // Legacy formats: start/end component terminal references (optionally with controlPoints polyline)
+            const startRef = wireData.start
+                ? { componentId: wireData.start.componentId, terminalIndex: wireData.start.terminalIndex }
+                : (wireData.startComponentId != null
+                    ? { componentId: wireData.startComponentId, terminalIndex: wireData.startTerminalIndex }
+                    : null);
+            const endRef = wireData.end
+                ? { componentId: wireData.end.componentId, terminalIndex: wireData.end.terminalIndex }
+                : (wireData.endComponentId != null
+                    ? { componentId: wireData.endComponentId, terminalIndex: wireData.endTerminalIndex }
+                    : null);
+
+            if (!startRef || !endRef) continue;
+
+            const start = getTerminalPoint(startRef.componentId, startRef.terminalIndex);
+            const end = getTerminalPoint(endRef.componentId, endRef.terminalIndex);
+            if (!start || !end) continue;
+
+            const controlPoints = Array.isArray(wireData.controlPoints) ? wireData.controlPoints : [];
+            const poly = [start, ...controlPoints.map(safePoint).filter(Boolean), end];
+
+            // Convert polyline into multiple 2-terminal wire segments.
+            for (let i = 0; i < poly.length - 1; i++) {
+                const a = poly[i];
+                const b = poly[i + 1];
+                if (!a || !b) continue;
+                const segBase = i === 0 ? wireData.id : `${wireData.id}_${i}`;
+                const id = ensureUniqueWireId(segBase);
+                const seg = { id, a: { x: a.x, y: a.y }, b: { x: b.x, y: b.y } };
+                if (i === 0) seg.aRef = startRef;
+                if (i === poly.length - 2) seg.bRef = endRef;
+                this.wires.set(id, seg);
+            }
         }
 
         this.rebuildNodes();
