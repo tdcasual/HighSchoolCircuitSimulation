@@ -136,6 +136,17 @@
                 </div>
             </div>
             <div class="tool-category">
+                <h3>连接</h3>
+                <div class="tool-item" data-type="Wire" draggable="true">
+                    <svg viewBox="0 0 60 40" width="60" height="40">
+                        <line x1="8" y1="20" x2="52" y2="20" stroke="#333" stroke-width="3" stroke-linecap="round"/>
+                        <circle cx="8" cy="20" r="3" fill="#2196F3" stroke="#1565C0" stroke-width="1"/>
+                        <circle cx="52" cy="20" r="3" fill="#2196F3" stroke="#1565C0" stroke-width="1"/>
+                    </svg>
+                    <span>导线</span>
+                </div>
+            </div>
+            <div class="tool-category">
                 <h3>操作</h3>
                 <button id="btn-clear" class="action-btn">清空电路</button>
                 <button id="btn-export" class="action-btn">导出JSON</button>
@@ -221,22 +232,60 @@
         </div>
     </div>
 
-    <!-- 习题板 -->
-    <div id="exercise-board-panel" class="hidden">
-        <div id="exercise-board-header">
-            <h3>习题板</h3>
-            <div id="exercise-board-actions">
-                <button id="exercise-board-mode-btn" title="编辑/预览">预览</button>
-                <button id="exercise-board-hide-btn" title="隐藏">×</button>
-            </div>
-        </div>
-        <div id="exercise-board-content">
-            <textarea id="exercise-board-editor" spellcheck="false"
-                placeholder="在这里写习题/讲解（支持 Markdown + LaTeX：$...$ / $$...$$）"></textarea>
-            <div id="exercise-board-preview" class="hidden"></div>
-        </div>
-        <div id="exercise-board-resize-handle" aria-hidden="true"></div>
-    </div>
+	    <!-- 习题板 -->
+	    <div id="exercise-board-panel" class="hidden">
+	        <div id="exercise-board-header">
+	            <h3>习题板</h3>
+	            <div id="exercise-board-actions">
+	                <button id="exercise-board-settings-btn" title="显示与排版">Aa</button>
+	                <button id="exercise-board-mode-btn" title="编辑/预览">预览</button>
+	                <button id="exercise-board-hide-btn" title="隐藏">×</button>
+	            </div>
+	        </div>
+	        <div id="exercise-board-settings" class="hidden" role="dialog" aria-label="习题板显示设置">
+	            <div class="ex-setting-row">
+	                <label for="exercise-board-font-size">字号</label>
+	                <input id="exercise-board-font-size" type="range" min="12" max="22" step="1" value="14">
+	                <span id="exercise-board-font-size-value" class="ex-setting-value">14px</span>
+	            </div>
+	            <div class="ex-setting-row">
+	                <label for="exercise-board-line-height">行距</label>
+	                <input id="exercise-board-line-height" type="range" min="1.2" max="2.2" step="0.05" value="1.7">
+	                <span id="exercise-board-line-height-value" class="ex-setting-value">1.70</span>
+	            </div>
+	            <div class="ex-setting-row">
+	                <label for="exercise-board-editor-font">编辑字体</label>
+	                <select id="exercise-board-editor-font">
+	                    <option value="mono" selected>等宽</option>
+	                    <option value="prose">正文</option>
+	                </select>
+	            </div>
+	            <div class="ex-setting-row ex-setting-row-inline">
+	                <label class="ex-checkbox">
+	                    <input id="exercise-board-prose-width" type="checkbox" checked>
+	                    <span>阅读宽度</span>
+	                </label>
+	                <button id="exercise-board-settings-reset-btn" type="button" class="ex-setting-reset">重置</button>
+	            </div>
+	        </div>
+	        <div id="exercise-board-toolbar" aria-label="习题板编辑工具栏">
+	            <button type="button" class="ex-tool-btn" data-ex-action="bold" title="加粗 (Ctrl+B)"><strong>B</strong></button>
+	            <button type="button" class="ex-tool-btn" data-ex-action="italic" title="斜体 (Ctrl+I)"><em>I</em></button>
+	            <button type="button" class="ex-tool-btn" data-ex-action="inline-code" title="行内代码 (Ctrl+`)"><code>&lt;/&gt;</code></button>
+	            <button type="button" class="ex-tool-btn" data-ex-action="quote" title="引用">&gt;</button>
+	            <button type="button" class="ex-tool-btn" data-ex-action="ul" title="无序列表">•</button>
+	            <button type="button" class="ex-tool-btn" data-ex-action="ol" title="有序列表">1.</button>
+	            <button type="button" class="ex-tool-btn" data-ex-action="math-inline" title="行内公式 $...$">$</button>
+	            <button type="button" class="ex-tool-btn" data-ex-action="math-block" title="公式块 $$...$$">$$</button>
+	            <button type="button" class="ex-tool-btn" data-ex-action="link" title="链接 (Ctrl+K)">🔗</button>
+	        </div>
+	        <div id="exercise-board-content">
+	            <textarea id="exercise-board-editor" spellcheck="false"
+	                placeholder="在这里写习题/讲解（支持 Markdown + LaTeX：$...$ / $$...$$）"></textarea>
+	            <div id="exercise-board-preview" class="hidden"><div id="exercise-board-preview-inner"></div></div>
+	        </div>
+	        <div id="exercise-board-resize-handle" aria-hidden="true"></div>
+	    </div>
 
     <!-- AI助手面板 -->
     <div id="ai-assistant-panel" class="collapsed">
