@@ -67,7 +67,18 @@ class CircuitSimulatorApp {
         
         console.log('\n--- Wires ---');
         for (const [id, wire] of this.circuit.wires) {
-            console.log(`${id}: ${wire.startComponentId}:${wire.startTerminalIndex} -> ${wire.endComponentId}:${wire.endTerminalIndex}`);
+            const fmtEnd = (which) => {
+                const ref = which === 'a' ? wire.aRef : wire.bRef;
+                if (ref && ref.componentId !== undefined && ref.componentId !== null) {
+                    return `${ref.componentId}:${ref.terminalIndex}`;
+                }
+                const pt = which === 'a' ? wire.a : wire.b;
+                if (pt && Number.isFinite(Number(pt.x)) && Number.isFinite(Number(pt.y))) {
+                    return `(${Math.round(Number(pt.x))},${Math.round(Number(pt.y))})`;
+                }
+                return '?';
+            };
+            console.log(`${id}: ${fmtEnd('a')} -> ${fmtEnd('b')}`);
         }
         
         console.log('\n--- Node Connections ---');
@@ -121,12 +132,13 @@ class CircuitSimulatorApp {
      * 电路更新回调
      */
     onCircuitUpdate(results) {
-        if (results.valid) {
-            this.renderer.updateValues();
-            
-            // 更新导线电流动画
-            this.renderer.updateWireAnimations(this.circuit.isRunning, results);
+        // Always refresh value labels so the UI never stays blank.
+        this.renderer.updateValues();
 
+        // Update wire animations; short-circuit warnings can show even when solve is invalid.
+        this.renderer.updateWireAnimations(this.circuit.isRunning, results);
+
+        if (results.valid) {
             // 更新观察面板（采样与绘制）
             this.observationPanel?.onCircuitUpdate(results);
             
@@ -137,9 +149,6 @@ class CircuitSimulatorApp {
                     this.interaction.updateSelectedComponentReadouts(comp);
                 }
             }
-        } else {
-            // 结果无效时也更新动画（清除动画）
-            this.renderer.updateWireAnimations(false, null);
         }
     }
 
