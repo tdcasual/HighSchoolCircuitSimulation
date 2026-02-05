@@ -27,9 +27,11 @@ export class MNASolver {
         this.nodes = nodes;
         this.voltageSourceCount = 0;
         this.shortCircuitDetected = false;
+        const isValidNode = (nodeIdx) => nodeIdx !== undefined && nodeIdx !== null && nodeIdx >= 0;
         
         // 检测并标记被短路的元器件（两端节点相同）
         for (const comp of components) {
+            comp.vsIndex = undefined;
             if (comp.nodes && comp.nodes.length >= 2) {
                 const n1 = comp.nodes[0];
                 const n2 = comp.nodes[1];
@@ -51,21 +53,33 @@ export class MNASolver {
         // 被短路的电源不作为电压源处理
         for (const comp of components) {
             if (comp.type === 'PowerSource') {
+                const n1 = comp.nodes?.[0];
+                const n2 = comp.nodes?.[1];
                 // 只有零内阻且未被短路的电源才使用电压源模型
                 if (!comp.internalResistance || comp.internalResistance < 1e-9) {
                     if (!comp._isShorted) {
-                        comp.vsIndex = this.voltageSourceCount++;
+                        if (isValidNode(n1) && isValidNode(n2)) {
+                            comp.vsIndex = this.voltageSourceCount++;
+                        }
                     }
                 }
             } else if (comp.type === 'Motor') {
                 if (!comp._isShorted) {
-                    comp.vsIndex = this.voltageSourceCount++;
+                    const n1 = comp.nodes?.[0];
+                    const n2 = comp.nodes?.[1];
+                    if (isValidNode(n1) && isValidNode(n2)) {
+                        comp.vsIndex = this.voltageSourceCount++;
+                    }
                 }
             } else if (comp.type === 'Ammeter') {
                 // 理想电流表使用电压源（V=0）来测量电流
                 if (!comp.resistance || comp.resistance <= 0) {
                     if (!comp._isShorted) {
-                        comp.vsIndex = this.voltageSourceCount++;
+                        const n1 = comp.nodes?.[0];
+                        const n2 = comp.nodes?.[1];
+                        if (isValidNode(n1) && isValidNode(n2)) {
+                            comp.vsIndex = this.voltageSourceCount++;
+                        }
                     }
                 }
             }
@@ -82,14 +96,24 @@ export class MNASolver {
         
         const nodeCount = this.nodes.length;
         if (nodeCount < 2) {
-            return { voltages: [], currents: new Map(), valid: false };
+            const voltages = Array.from({ length: nodeCount }, () => 0);
+            const currents = new Map();
+            for (const comp of this.components) {
+                currents.set(comp.id, 0);
+            }
+            return { voltages, currents, valid: true };
         }
 
         // 矩阵大小：节点数-1（去掉地节点）+ 电压源数
         const n = nodeCount - 1 + this.voltageSourceCount;
         
         if (n <= 0) {
-            return { voltages: [], currents: new Map(), valid: false };
+            const voltages = Array.from({ length: nodeCount }, () => 0);
+            const currents = new Map();
+            for (const comp of this.components) {
+                currents.set(comp.id, 0);
+            }
+            return { voltages, currents, valid: true };
         }
 
         // 创建MNA矩阵和向量
@@ -633,8 +657,10 @@ export class MNASolver {
      * @param {number[]} voltages - 当前节点电压
      */
     updateDynamicComponents(voltages) {
+        const isValidNode = (nodeIdx) => nodeIdx !== undefined && nodeIdx !== null && nodeIdx >= 0;
         for (const comp of this.components) {
             if (comp.type === 'Capacitor' || comp.type === 'ParallelPlateCapacitor') {
+                if (!comp.nodes || !isValidNode(comp.nodes[0]) || !isValidNode(comp.nodes[1])) continue;
                 const v1 = voltages[comp.nodes[0]] || 0;
                 const v2 = voltages[comp.nodes[1]] || 0;
                 const v = v1 - v2;
@@ -643,6 +669,7 @@ export class MNASolver {
             }
             
             if (comp.type === 'Motor') {
+                if (!comp.nodes || !isValidNode(comp.nodes[0]) || !isValidNode(comp.nodes[1])) continue;
                 // 更新电机转速和反电动势
                 // 简化模型：反电动势与转速成正比
                 const v1 = voltages[comp.nodes[0]] || 0;
