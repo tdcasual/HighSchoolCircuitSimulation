@@ -854,8 +854,8 @@ body {
     r: 8;
 }
 
-/* 导线节点点（蓝色，可拖动和连接） */
-.wire-node-point {
+/* 导线端点（蓝色，可拖动） */
+.wire-endpoint {
     fill: #2196F3;
     stroke: white;
     stroke-width: 2;
@@ -864,7 +864,7 @@ body {
     transition: r 0.15s ease;
 }
 
-.wire-node-point:hover {
+.wire-endpoint:hover {
     fill: #1565C0;
     r: 9 !important;
 }
@@ -1413,6 +1413,10 @@ body {
     min-height: 240px;
     max-width: calc(100vw - 32px);
     max-height: calc(100vh - 32px);
+    /* Typography (overridable via JS) */
+    --ex-font-size: 14px;
+    --ex-line-height: 1.7;
+    --ex-prose-max-width: 720px;
     background: var(--panel-bg);
     border: 1px solid var(--border-color);
     box-shadow: var(--shadow);
@@ -1471,10 +1475,157 @@ body {
     justify-content: center;
 }
 
+#exercise-board-actions #exercise-board-settings-btn {
+    font-weight: 700;
+    letter-spacing: -0.2px;
+    padding: 6px 10px;
+    min-width: 38px;
+}
+
 #exercise-board-actions button:hover {
     background: #e8f2ff;
     color: var(--primary-dark);
     border-color: var(--primary-color);
+}
+
+#exercise-board-settings {
+    position: absolute;
+    top: 46px;
+    right: 12px;
+    width: 300px;
+    max-width: calc(100% - 24px);
+    background: var(--panel-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    box-shadow: 0 10px 26px rgba(0, 0, 0, 0.18);
+    padding: 10px 12px;
+    z-index: 120;
+}
+
+#exercise-board-settings.hidden {
+    display: none;
+}
+
+.ex-setting-row + .ex-setting-row {
+    border-top: 1px solid rgba(221, 221, 221, 0.55);
+}
+
+.ex-setting-row {
+    display: grid;
+    grid-template-columns: 72px 1fr auto;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 0;
+}
+
+.ex-setting-row label {
+    font-size: 12px;
+    color: var(--text-light);
+}
+
+.ex-setting-row input[type="range"] {
+    width: 100%;
+}
+
+.ex-setting-row select {
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: #fbfdff;
+    font-size: 13px;
+    color: var(--text-color);
+}
+
+.ex-setting-value {
+    font-size: 12px;
+    color: var(--text-color);
+    opacity: 0.9;
+    min-width: 46px;
+    text-align: right;
+}
+
+.ex-setting-row-inline {
+    grid-template-columns: 1fr auto;
+}
+
+.ex-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--text-color);
+}
+
+.ex-setting-reset {
+    background: #fff7f7;
+    border: 1px solid rgba(244, 67, 54, 0.35);
+    color: #c62828;
+    padding: 6px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 13px;
+}
+
+.ex-setting-reset:hover {
+    background: #ffecec;
+    border-color: rgba(244, 67, 54, 0.6);
+}
+
+#exercise-board-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 8px 10px;
+    border-bottom: 1px solid #f0f0f0;
+    background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+}
+
+#exercise-board-toolbar.hidden {
+    display: none;
+}
+
+.ex-tool-btn {
+    background: #f7f9ff;
+    border: 1px solid var(--border-color);
+    color: var(--text-color);
+    padding: 6px 8px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 13px;
+    line-height: 1;
+    min-width: 34px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    user-select: none;
+}
+
+.ex-tool-btn code {
+    background: transparent;
+    padding: 0;
+    border-radius: 0;
+}
+
+.ex-tool-btn:hover {
+    background: #e8f2ff;
+    color: var(--primary-dark);
+    border-color: var(--primary-color);
+}
+
+#exercise-board-panel.split #exercise-board-content {
+    flex-direction: row;
+}
+
+#exercise-board-panel.split #exercise-board-editor,
+#exercise-board-panel.split #exercise-board-preview {
+    flex: 1;
+    min-width: 0;
+}
+
+#exercise-board-panel.split #exercise-board-editor {
+    border-right: 1px solid rgba(221, 221, 221, 0.7);
 }
 
 #exercise-board-content {
@@ -1491,11 +1642,19 @@ body {
     border: none;
     outline: none;
     padding: 12px 14px;
-    font-size: 13px;
-    line-height: 1.55;
+    font-size: var(--ex-font-size);
+    line-height: var(--ex-line-height);
     color: var(--text-color);
     background: #fbfdff;
     resize: none;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', 'Noto Sans SC', sans-serif;
+}
+
+#exercise-board-panel.editor-font-prose #exercise-board-editor {
+    font-family: 'Noto Sans SC', 'Noto Sans CJK SC', 'WenQuanYi Micro Hei', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', 'Segoe UI', sans-serif;
+}
+
+#exercise-board-panel.editor-font-mono #exercise-board-editor {
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', 'Noto Sans SC', sans-serif;
 }
 
@@ -1507,13 +1666,24 @@ body {
     flex: 1;
     overflow: auto;
     padding: 14px 16px;
-    font-size: 13px;
-    line-height: 1.7;
+    font-size: var(--ex-font-size);
+    line-height: var(--ex-line-height);
     color: var(--text-color);
+    overflow-wrap: anywhere;
+    word-break: break-word;
 }
 
 #exercise-board-preview.hidden {
     display: none;
+}
+
+#exercise-board-preview-inner {
+    max-width: var(--ex-prose-max-width);
+    margin: 0 auto;
+}
+
+#exercise-board-panel.prose-width-off #exercise-board-preview-inner {
+    max-width: none;
 }
 
 #exercise-board-preview h1,
@@ -1523,9 +1693,9 @@ body {
     line-height: 1.25;
 }
 
-#exercise-board-preview h1 { font-size: 18px; }
-#exercise-board-preview h2 { font-size: 16px; }
-#exercise-board-preview h3 { font-size: 14px; }
+#exercise-board-preview h1 { font-size: 1.45em; }
+#exercise-board-preview h2 { font-size: 1.25em; }
+#exercise-board-preview h3 { font-size: 1.08em; }
 
 #exercise-board-preview p {
     margin: 8px 0;
@@ -1565,6 +1735,32 @@ body {
 #exercise-board-preview pre code {
     background: transparent;
     padding: 0;
+}
+
+#exercise-board-preview img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 8px;
+}
+
+#exercise-board-preview table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 10px 0;
+    font-size: 0.95em;
+}
+
+#exercise-board-preview th,
+#exercise-board-preview td {
+    border: 1px solid var(--border-color);
+    padding: 6px 8px;
+    text-align: left;
+}
+
+#exercise-board-preview mjx-container {
+    overflow-x: auto;
+    overflow-y: hidden;
+    max-width: 100%;
 }
 
 #exercise-board-resize-handle {
