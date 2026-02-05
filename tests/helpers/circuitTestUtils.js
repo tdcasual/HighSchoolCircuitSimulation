@@ -1,27 +1,47 @@
 import { Circuit } from '../../src/engine/Circuit.js';
 import { createComponent } from '../../src/components/Component.js';
+import { getTerminalWorldPosition } from '../../src/utils/TerminalGeometry.js';
 
 export function createTestCircuit() {
-    return new Circuit();
+    const circuit = new Circuit();
+    // Deterministic, non-overlapping placement for tests (avoid accidental coordinate-based connections).
+    circuit.__testPlacementIndex = 0;
+    return circuit;
 }
 
-export function addComponent(circuit, type, id, props = {}) {
-    const component = createComponent(type, 0, 0, id);
+export function addComponent(circuit, type, id, props = {}, position = null) {
+    const idx = Number.isFinite(circuit.__testPlacementIndex) ? circuit.__testPlacementIndex : 0;
+    circuit.__testPlacementIndex = idx + 1;
+
+    const spacingX = 220;
+    const spacingY = 180;
+    const col = idx % 4;
+    const row = Math.floor(idx / 4);
+    const x = position?.x ?? col * spacingX;
+    const y = position?.y ?? row * spacingY;
+
+    const component = createComponent(type, x, y, id);
     Object.assign(component, props);
     circuit.addComponent(component);
     return component;
 }
 
 export function connectWire(circuit, id, startComponent, startTerminalIndex, endComponent, endTerminalIndex) {
-    const startId = typeof startComponent === 'string' ? startComponent : startComponent.id;
-    const endId = typeof endComponent === 'string' ? endComponent : endComponent.id;
+    const startComp = typeof startComponent === 'string' ? circuit.getComponent(startComponent) : startComponent;
+    const endComp = typeof endComponent === 'string' ? circuit.getComponent(endComponent) : endComponent;
+    if (!startComp || !endComp) {
+        throw new Error('connectWire: start/end component not found');
+    }
+
+    const aPos = getTerminalWorldPosition(startComp, startTerminalIndex);
+    const bPos = getTerminalWorldPosition(endComp, endTerminalIndex);
+    if (!aPos || !bPos) {
+        throw new Error('connectWire: invalid terminal positions');
+    }
     const wire = {
         id,
-        startComponentId: startId,
-        startTerminalIndex,
-        endComponentId: endId,
-        endTerminalIndex,
-        controlPoints: []
+        a: { x: aPos.x, y: aPos.y },
+        b: { x: bPos.x, y: bPos.y }
     };
     circuit.addWire(wire);
     return wire;
