@@ -37,6 +37,10 @@ export class InteractionManager {
         // 连线状态
         this.wireStart = null;
         this.tempWire = null;
+        this.isDraggingWireEndpoint = false;
+        this.wireEndpointDrag = null; // {wireId,end}
+        this.isDraggingWire = false;
+        this.wireDrag = null; // {wireId,startCanvas,startClient,startA,startB,detached,lastDx,lastDy}
         
         // 画布平移状态
         this.isPanning = false;
@@ -123,7 +127,7 @@ export class InteractionManager {
      */
     bindToolboxEvents() {
         const toolItems = document.querySelectorAll('.tool-item');
-        const validTypes = ['PowerSource', 'Resistor', 'Rheostat', 'Bulb', 'Capacitor', 'ParallelPlateCapacitor', 'Motor', 'Switch', 'Ammeter', 'Voltmeter', 'BlackBox'];
+        const validTypes = ['PowerSource', 'Resistor', 'Rheostat', 'Bulb', 'Capacitor', 'ParallelPlateCapacitor', 'Motor', 'Switch', 'Ammeter', 'Voltmeter', 'BlackBox', 'Wire'];
         
         // 标记是否正在从工具箱拖放
         this.isToolboxDrag = false;
@@ -192,7 +196,24 @@ export class InteractionManager {
             const x = Math.round(canvasX / 20) * 20;
             const y = Math.round(canvasY / 20) * 20;
             
-            this.addComponent(type, x, y);
+            if (type === 'Wire') {
+                if (typeof this.addWireAt === 'function') {
+                    this.addWireAt(x, y);
+                } else {
+                    // Fallback (should not happen): create a short wire segment at the drop point.
+                    const wire = {
+                        id: `wire_${Date.now()}`,
+                        a: { x: x - 30, y },
+                        b: { x: x + 30, y }
+                    };
+                    this.circuit.addWire(wire);
+                    this.renderer.addWire(wire);
+                    this.selectWire(wire.id);
+                    this.updateStatus('已添加导线');
+                }
+            } else {
+                this.addComponent(type, x, y);
+            }
         };
         
         // 只绑定到 SVG 元素
@@ -239,12 +260,23 @@ export class InteractionManager {
         // 鼠标在SVG中的位置
         const mouseX = e.clientX - rect.left;
         const mouseY = e.clientY - rect.top;
-        
-        // 缩放因子
-        const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
-        const newScale = Math.min(Math.max(this.scale * zoomFactor, 0.25), 4); // 限制缩放范围 0.25x - 4x
-        
-        if (newScale === this.scale) return;
+
+        // 统一 deltaY 的量级（trackpad/pinch 与滚轮差异很大）
+        let deltaY = Number(e.deltaY) || 0;
+        if (e.deltaMode === 1) deltaY *= 16;     // lines -> px
+        if (e.deltaMode === 2) deltaY *= 800;    // pages -> px (rough)
+        // pinch gesture in Chromium often sets ctrlKey=true; reduce sensitivity to avoid huge jumps
+        if (e.ctrlKey) deltaY *= 0.25;
+
+        const minScale = 0.1;
+        const maxScale = 4;
+        const zoomIntensity = 0.0015; // smaller = less sensitive
+
+        // Exponential mapping feels smooth and consistent across devices.
+        const zoomFactor = Math.exp(-deltaY * zoomIntensity);
+        const newScale = Math.min(Math.max(this.scale * zoomFactor, minScale), maxScale);
+
+        if (Math.abs(newScale - this.scale) < 1e-9) return;
         
         // 计算缩放前鼠标位置对应的画布坐标
         const canvasX = (mouseX - this.viewOffset.x) / this.scale;
@@ -414,44 +446,44 @@ export class InteractionManager {
         // 阻止默认的拖拽行为，防止触发drop事件创建重复元器件
         e.preventDefault();
         e.stopPropagation();
-        
-        // 右键或中键 - 直接开始拖动画布
-        if (e.button === 1 || e.button === 2) {
-            this.startPanning(e);
-            return;
-        }
-        
-        const target = e.target;
+
+	        const target = e.target;
+
+	        // 右键或中键 - 直接开始拖动画布
+	        if (e.button === 1 || e.button === 2) {
+	            this.startPanning(e);
+	            return;
+	        }
         
         // 如果正在连线模式，点击非端子/非节点的地方应该取消连线
         // 点击端子或节点会在 onMouseUp 中处理
-        if (this.isWiring) {
-            // 连线模式下的 mousedown 不做特殊处理，让 mouseup 来处理
-            return;
-        }
-        
-        // 检查是否点击了端子
-        if (target.classList.contains('terminal')) {
-            const componentG = target.closest('.component');
-            if (componentG) {
-                const componentId = componentG.dataset.id;
-                const terminalIndex = parseInt(target.dataset.terminal, 10);
-                // 验证端子索引有效
-                if (!isNaN(terminalIndex) && terminalIndex >= 0) {
-                    // Alt + 拖动 = 延长端子；否则 = 连线
-                    if (e.altKey) {
-                        this.startTerminalExtend(componentId, terminalIndex, e);
-                    } else {
-                        this.startWiring(componentId, terminalIndex, e);
-                    }
-                    return;
-                }
-            }
-        }
-        
-        // 检查是否点击了滑动变阻器的滑块
-        if (target.classList.contains('rheostat-slider')) {
-            const componentG = target.closest('.component');
+	        if (this.isWiring) {
+	            // 连线模式下的 mousedown 不做特殊处理，让 mouseup 来处理
+	            return;
+	        }
+
+	        // 端子交互：
+	        // - Alt + 拖动端子：延长/缩短引脚
+	        // - 普通点击端子：仅选中元器件（避免误拖动元器件）
+	        if (target.classList.contains('terminal')) {
+	            const componentG = target.closest('.component');
+	            if (componentG) {
+	                const componentId = componentG.dataset.id;
+	                const terminalIndex = parseInt(target.dataset.terminal, 10);
+	                if (e.altKey) {
+	                    if (!isNaN(terminalIndex) && terminalIndex >= 0) {
+	                        this.startTerminalExtend(componentId, terminalIndex, e);
+	                    }
+	                } else {
+	                    this.selectComponent(componentId);
+	                }
+	                return;
+	            }
+	        }
+	        
+	        // 检查是否点击了滑动变阻器的滑块
+	        if (target.classList.contains('rheostat-slider')) {
+	            const componentG = target.closest('.component');
             if (componentG) {
                 this.startRheostatDrag(componentG.dataset.id, e);
                 return;
@@ -480,15 +512,16 @@ export class InteractionManager {
             }
         }
         
-        // 检查是否点击了导线控制点/节点（拖动移动，或点击后开始连线）
-        if (target.classList.contains('wire-control-point') || target.classList.contains('wire-node-point')) {
+        // 检查是否点击了导线端点（拖动移动）
+        if (target.classList.contains('wire-endpoint')) {
             const wireGroup = target.closest('.wire-group');
             if (wireGroup) {
                 const wireId = wireGroup.dataset.id;
-                const pointIndex = parseInt(target.dataset.index, 10);
-                // 默认拖动移动节点；如果只是点击（没有移动），则在mouseup时开始连线
-                this.startControlPointDragOrWiring(wireId, pointIndex, e);
-                return;
+                const end = target.dataset.end;
+                if (end === 'a' || end === 'b') {
+                    this.startWireEndpointDrag(wireId, end, e);
+                    return;
+                }
             }
         }
         
@@ -499,11 +532,18 @@ export class InteractionManager {
             return;
         }
         
-        // 检查是否点击了导线或导线组（单击只选中，双击添加节点）
+        // 检查是否点击了导线或导线组（可拖动移动）
         if (target.classList.contains('wire') || target.classList.contains('wire-hit-area')) {
             const wireGroup = target.closest('.wire-group');
             const wireId = wireGroup ? wireGroup.dataset.id : target.dataset.id;
-            this.selectWire(wireId);
+            this.startWireDrag(wireId, e);
+            return;
+        }
+
+        // Shift + 点击空白处：从任意点开始画导线（允许独立导线）
+        if (e.shiftKey) {
+            const canvasCoords = this.screenToCanvas(e.clientX, e.clientY);
+            this.startWiringFromPoint(canvasCoords, e);
             return;
         }
         
@@ -558,10 +598,62 @@ export class InteractionManager {
      * 重置视图
      */
     resetView() {
-        this.viewOffset = { x: 0, y: 0 };
         this.scale = 1;
+        // Center the current circuit content in the viewport for a nicer reset.
+        const bounds = this.getCircuitBounds();
+        if (bounds) {
+            const centerX = (bounds.minX + bounds.maxX) / 2;
+            const centerY = (bounds.minY + bounds.maxY) / 2;
+            const rect = this.svg.getBoundingClientRect();
+            const screenCenterX = rect.width / 2;
+            const screenCenterY = rect.height / 2;
+            this.viewOffset = {
+                x: screenCenterX - centerX * this.scale,
+                y: screenCenterY - centerY * this.scale
+            };
+        } else {
+            this.viewOffset = { x: 0, y: 0 };
+        }
         this.updateViewTransform();
         this.updateStatus('视图已重置');
+    }
+
+    /**
+     * 计算当前电路在“画布坐标系”中的包围盒，用于居中/适配视图。
+     * @returns {{minX:number,minY:number,maxX:number,maxY:number}|null}
+     */
+    getCircuitBounds() {
+        let minX = Infinity;
+        let minY = Infinity;
+        let maxX = -Infinity;
+        let maxY = -Infinity;
+
+        const expand = (x, y) => {
+            if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+            minX = Math.min(minX, x);
+            minY = Math.min(minY, y);
+            maxX = Math.max(maxX, x);
+            maxY = Math.max(maxY, y);
+        };
+
+        for (const comp of this.circuit.getAllComponents()) {
+            if (!comp) continue;
+            expand(comp.x || 0, comp.y || 0);
+        }
+
+        for (const wire of this.circuit.getAllWires()) {
+            if (!wire) continue;
+            if (wire.a) expand(wire.a.x, wire.a.y);
+            if (wire.b) expand(wire.b.x, wire.b.y);
+        }
+
+        if (!Number.isFinite(minX) || !Number.isFinite(minY) || !Number.isFinite(maxX) || !Number.isFinite(maxY)) {
+            return null;
+        }
+
+        // Add a bit of padding so we don't center too tightly.
+        const pad = 80;
+        return { minX: minX - pad, minY: minY - pad, maxX: maxX + pad, maxY: maxY + pad };
     }
 
     /**
@@ -582,6 +674,101 @@ export class InteractionManager {
         const canvasCoords = this.screenToCanvas(e.clientX, e.clientY);
         const canvasX = canvasCoords.x;
         const canvasY = canvasCoords.y;
+
+	        // 拖动导线端点（Model C）
+	        if (this.isDraggingWireEndpoint && this.wireEndpointDrag) {
+	            const drag = this.wireEndpointDrag;
+	            const affected = Array.isArray(drag.affected) && drag.affected.length > 0
+	                ? drag.affected
+	                : [{ wireId: drag.wireId, end: drag.end }];
+
+	            const excludeWireEndpoints = new Set(affected.map((a) => `${a.wireId}:${a.end}`));
+	            const snapped = this.snapPoint(canvasX, canvasY, { excludeWireEndpoints });
+
+	            const originX = Number(drag.origin?.x) || 0;
+	            const originY = Number(drag.origin?.y) || 0;
+	            const moved = Math.hypot(snapped.x - originX, snapped.y - originY) > 1e-6;
+	            if (moved && !drag.detached) {
+	                // Once movement starts, detach any terminal bindings so the junction can move freely.
+	                for (const a of affected) {
+	                    const w = this.circuit.getWire(a.wireId);
+	                    if (!w) continue;
+	                    const refKey = a.end === 'a' ? 'aRef' : 'bRef';
+	                    delete w[refKey];
+	                }
+	                drag.detached = true;
+	            }
+
+	            const terminalSnap = snapped.snap && snapped.snap.type === 'terminal'
+	                ? { componentId: snapped.snap.componentId, terminalIndex: snapped.snap.terminalIndex }
+	                : null;
+
+	            const changedWireIds = new Set();
+	            for (const a of affected) {
+	                const w = this.circuit.getWire(a.wireId);
+	                if (!w || (a.end !== 'a' && a.end !== 'b')) continue;
+	                w[a.end] = { x: snapped.x, y: snapped.y };
+
+	                const refKey = a.end === 'a' ? 'aRef' : 'bRef';
+	                if (terminalSnap) {
+	                    w[refKey] = { componentId: terminalSnap.componentId, terminalIndex: terminalSnap.terminalIndex };
+	                } else if (drag.detached) {
+	                    delete w[refKey];
+	                }
+
+	                changedWireIds.add(a.wireId);
+	            }
+
+	            if (terminalSnap) {
+	                this.renderer.highlightTerminal(terminalSnap.componentId, terminalSnap.terminalIndex);
+	            } else {
+	                this.renderer.clearTerminalHighlight();
+	            }
+	            for (const id of changedWireIds) {
+	                this.renderer.refreshWire(id);
+	            }
+	            return;
+	        }
+
+        // 拖动整条导线（平移，保持线段形状）
+        if (this.isDraggingWire && this.wireDrag) {
+            const drag = this.wireDrag;
+            const wire = this.circuit.getWire(drag.wireId);
+            if (!wire || !wire.a || !wire.b) return;
+
+            const dxScreen = e.clientX - (drag.startClient?.x || 0);
+            const dyScreen = e.clientY - (drag.startClient?.y || 0);
+            const movedScreen = Math.hypot(dxScreen, dyScreen);
+            const moveThreshold = 3; // px
+
+            const rawDx = canvasX - (drag.startCanvas?.x || 0);
+            const rawDy = canvasY - (drag.startCanvas?.y || 0);
+            const snappedDx = Math.round(rawDx / 20) * 20;
+            const snappedDy = Math.round(rawDy / 20) * 20;
+
+            // Avoid accidental micro-moves: only start applying translation after threshold.
+            if (movedScreen < moveThreshold && snappedDx === 0 && snappedDy === 0) {
+                return;
+            }
+
+            if (!drag.detached && (snappedDx !== 0 || snappedDy !== 0)) {
+                // Dragging a wire segment translates both endpoints; detach any terminal bindings.
+                delete wire.aRef;
+                delete wire.bRef;
+                drag.detached = true;
+            }
+
+            if (snappedDx === drag.lastDx && snappedDy === drag.lastDy) {
+                return;
+            }
+            drag.lastDx = snappedDx;
+            drag.lastDy = snappedDy;
+
+            wire.a = { x: (drag.startA?.x || 0) + snappedDx, y: (drag.startA?.y || 0) + snappedDy };
+            wire.b = { x: (drag.startB?.x || 0) + snappedDx, y: (drag.startB?.y || 0) + snappedDy };
+            this.renderer.refreshWire(drag.wireId);
+            return;
+        }
         
         // 拖动元器件（平滑移动 + 对齐辅助）
         if (this.isDragging && this.dragTarget) {
@@ -619,11 +806,17 @@ export class InteractionManager {
                         this.renderer.updateComponentTransform(inner);
                     }
 
-                    // 移动内部导线控制点（两端都在组内的导线）
-                    for (const wireId of this.dragGroup.internalWireIds) {
+                    // 移动与黑箱组相关的导线端点（按拖动开始时的 inside mask）
+                    for (const wireId of this.dragGroup.connectedWireIds) {
                         const wire = this.circuit.getWire(wireId);
-                        if (!wire || !Array.isArray(wire.controlPoints)) continue;
-                        wire.controlPoints = wire.controlPoints.map((p) => ({ x: (p.x || 0) + dx, y: (p.y || 0) + dy }));
+                        const mask = this.dragGroup.wireEndpointMask?.get(wireId);
+                        if (!wire || !mask) continue;
+                        if (mask.aInside && wire.a) {
+                            wire.a = { x: (wire.a.x || 0) + dx, y: (wire.a.y || 0) + dy };
+                        }
+                        if (mask.bInside && wire.b) {
+                            wire.b = { x: (wire.b.x || 0) + dx, y: (wire.b.y || 0) + dy };
+                        }
                     }
 
                     // 更新黑箱自身 transform
@@ -647,20 +840,7 @@ export class InteractionManager {
         
         // 连线预览
         if (this.isWiring && this.wireStart && this.tempWire) {
-            let startPos;
-            if (this.wireStart.isWireNode) {
-                // 从导线节点开始
-                startPos = this.wireStart.position;
-            } else {
-                // 从端子开始
-                startPos = this.renderer.getTerminalPosition(
-                    this.wireStart.componentId, 
-                    this.wireStart.terminalIndex
-                );
-            }
-            if (startPos) {
-                this.renderer.updateTempWire(this.tempWire, startPos.x, startPos.y, canvasX, canvasY);
-            }
+            this.renderer.updateTempWire(this.tempWire, this.wireStart.x, this.wireStart.y, canvasX, canvasY);
         }
     }
 
@@ -672,6 +852,22 @@ export class InteractionManager {
         if (this.isPanning) {
             this.isPanning = false;
             this.svg.style.cursor = '';
+            return;
+        }
+
+        // 结束导线端点拖动
+        if (this.isDraggingWireEndpoint) {
+            this.isDraggingWireEndpoint = false;
+            this.wireEndpointDrag = null;
+            this.circuit.rebuildNodes();
+            return;
+        }
+
+        // 结束导线整体拖动
+        if (this.isDraggingWire) {
+            this.isDraggingWire = false;
+            this.wireDrag = null;
+            this.circuit.rebuildNodes();
             return;
         }
         
@@ -693,18 +889,31 @@ export class InteractionManager {
                 if (componentG) {
                     const componentId = componentG.dataset.id;
                     const terminalIndex = parseInt(target.dataset.terminal);
-                    this.endWiring(componentId, terminalIndex);
+                    const pos = this.renderer.getTerminalPosition(componentId, terminalIndex);
+                    if (pos) {
+                        this.finishWiringToPoint(pos);
+                    } else {
+                        this.cancelWiring();
+                    }
                 }
-            } else if (target.classList.contains('wire-node-point')) {
-                // 连接到导线节点
+                return;
+            } else if (target.classList.contains('wire-endpoint')) {
                 const wireGroup = target.closest('.wire-group');
                 if (wireGroup) {
                     const wireId = wireGroup.dataset.id;
-                    const nodeIndex = parseInt(target.dataset.index, 10);
-                    this.endWiringToNode(wireId, nodeIndex);
+                    const end = target.dataset.end;
+                    const wire = this.circuit.getWire(wireId);
+                    const pos = wire && (end === 'a' || end === 'b') ? wire[end] : null;
+                    if (pos) {
+                        this.finishWiringToPoint(pos);
+                        return;
+                    }
                 }
             } else {
-                this.cancelWiring();
+                const canvasCoords = this.screenToCanvas(e.clientX, e.clientY);
+                const snapped = this.snapPoint(canvasCoords.x, canvasCoords.y);
+                this.finishWiringToPoint(snapped);
+                return;
             }
         }
     }
@@ -713,6 +922,20 @@ export class InteractionManager {
      * 鼠标离开事件
      */
     onMouseLeave(e) {
+        if (this.isPanning) {
+            this.isPanning = false;
+            this.svg.style.cursor = '';
+        }
+        if (this.isDraggingWireEndpoint) {
+            this.isDraggingWireEndpoint = false;
+            this.wireEndpointDrag = null;
+            this.circuit.rebuildNodes();
+        }
+        if (this.isDraggingWire) {
+            this.isDraggingWire = false;
+            this.wireDrag = null;
+            this.circuit.rebuildNodes();
+        }
         if (this.isDragging) {
             this.isDragging = false;
             this.dragTarget = null;
@@ -723,48 +946,36 @@ export class InteractionManager {
     /**
      * 右键菜单事件
      */
-    onContextMenu(e) {
-        e.preventDefault();
-        
-        const componentG = e.target.closest('.component');
-        if (componentG) {
-            const id = componentG.dataset.id;
-            this.selectComponent(id);
-            this.showContextMenu(e, id);
-        } else if (e.target.classList.contains('wire')) {
-            const id = e.target.dataset.id;
-            this.selectWire(id);
-            this.showWireContextMenu(e, id);
-        } else {
-            this.hideContextMenu();
-        }
-    }
+	    onContextMenu(e) {
+	        e.preventDefault();
+	        
+	        const componentG = e.target.closest('.component');
+	        if (componentG) {
+	            const id = componentG.dataset.id;
+	            this.selectComponent(id);
+	            this.showContextMenu(e, id);
+	        } else {
+	            const wireGroup = e.target.closest('.wire-group');
+	            if (wireGroup) {
+	                const id = wireGroup.dataset.id;
+	                this.selectWire(id);
+	                this.showWireContextMenu(e, id);
+	            } else {
+	                this.hideContextMenu();
+	            }
+	        }
+	    }
 
     /**
      * 双击事件
      */
     onDoubleClick(e) {
-        // 双击控制点删除它
-        if (e.target.classList.contains('wire-control-point') || e.target.classList.contains('wire-node-point')) {
-            const wireGroup = e.target.closest('.wire-group');
-            if (wireGroup) {
-                const wireId = wireGroup.dataset.id;
-                const pointIndex = parseInt(e.target.dataset.index, 10);
-                this.removeWireControlPoint(wireId, pointIndex);
-                return;
-            }
-        }
-        
-        // 双击导线添加节点
+        // 双击导线：在该位置分割成两段（形成显式端点/连接点）
         if (e.target.classList.contains('wire') || e.target.classList.contains('wire-hit-area')) {
             const wireGroup = e.target.closest('.wire-group');
             const wireId = wireGroup ? wireGroup.dataset.id : e.target.dataset.id;
-            
-            // 获取点击位置
             const canvasCoords = this.screenToCanvas(e.clientX, e.clientY);
-            
-            // 在点击位置添加控制点
-            this.addWireNodeAtPosition(wireId, canvasCoords.x, canvasCoords.y, e);
+            this.splitWireAtPoint(wireId, canvasCoords.x, canvasCoords.y);
             return;
         }
         
@@ -802,14 +1013,8 @@ export class InteractionManager {
     deleteComponent(id) {
         this.circuit.removeComponent(id);
         this.renderer.removeComponent(id);
-        
-        // 删除相关导线的渲染
-        for (const wire of this.circuit.getAllWires()) {
-            if (wire.startComponentId === id || wire.endComponentId === id) {
-                this.renderer.removeWire(wire.id);
-            }
-        }
-        
+
+        // Model C: wires are independent segments; deleting a component does not delete wires.
         this.renderer.renderWires();
         this.clearSelection();
         this.app.observationPanel?.refreshComponentOptions();
@@ -874,29 +1079,27 @@ export class InteractionManager {
             y: canvasCoords.y - comp.y
         };
 
-        // 黑箱：准备整体移动信息（盒内元件 + 内部导线控制点）
+        // 黑箱：准备整体移动信息（盒内元件 + 与盒相关的导线端点）
         if (comp.type === 'BlackBox') {
             const componentIds = this.getBlackBoxContainedComponentIds(comp, { includeBoxes: true });
-            const groupIds = new Set([comp.id, ...componentIds]);
-            const internalWireIds = [];
             const connectedWireIds = new Set();
+            const wireEndpointMask = new Map(); // wireId -> {aInside,bInside}
+            const inside = (pt) => this.renderer.isPointInsideBlackBox(pt, comp);
 
             for (const wire of this.circuit.getAllWires()) {
-                const inGroupStart = groupIds.has(wire.startComponentId);
-                const inGroupEnd = groupIds.has(wire.endComponentId);
-                if (inGroupStart || inGroupEnd) {
+                const aInside = !!(wire?.a && inside(wire.a));
+                const bInside = !!(wire?.b && inside(wire.b));
+                if (aInside || bInside) {
                     connectedWireIds.add(wire.id);
-                }
-                if (inGroupStart && inGroupEnd) {
-                    internalWireIds.push(wire.id);
+                    wireEndpointMask.set(wire.id, { aInside, bInside });
                 }
             }
 
             this.dragGroup = {
                 boxId: comp.id,
                 componentIds,
-                internalWireIds,
-                connectedWireIds: Array.from(connectedWireIds)
+                connectedWireIds: Array.from(connectedWireIds),
+                wireEndpointMask
             };
         }
         
@@ -904,21 +1107,295 @@ export class InteractionManager {
     }
 
     /**
-     * 开始连线
+     * 从任意画布点开始连线（Model C）
+     * @param {{x:number,y:number}} point
+     * @param {MouseEvent|null} e
      */
-    startWiring(componentId, terminalIndex, e) {
+    startWiringFromPoint(point, e = null) {
+        if (!point) return;
+
+        // 确保清除任何残留的辅助线和高亮
+        this.hideAlignmentGuides();
+        this.renderer.clearTerminalHighlight();
+
+        const start = this.snapPoint(point.x, point.y);
+
         this.isWiring = true;
-        this.wireStart = { componentId, terminalIndex };
-        
+        this.wireStart = { x: start.x, y: start.y, snap: start.snap || null };
+
         // 创建临时导线
         this.tempWire = this.renderer.createTempWire();
-        
-        const startPos = this.renderer.getTerminalPosition(componentId, terminalIndex);
-        if (startPos) {
-            // 使用统一的坐标转换
-            const canvasCoords = this.screenToCanvas(e.clientX, e.clientY);
-            this.renderer.updateTempWire(this.tempWire, startPos.x, startPos.y, canvasCoords.x, canvasCoords.y);
+
+        const cursor = e ? this.screenToCanvas(e.clientX, e.clientY) : start;
+        this.renderer.updateTempWire(this.tempWire, start.x, start.y, cursor.x, cursor.y);
+    }
+
+    /**
+     * 结束连线到某一点（Model C）
+     * @param {{x:number,y:number}} point
+     */
+    finishWiringToPoint(point) {
+        if (!this.wireStart || !point) {
+            this.cancelWiring();
+            return;
         }
+
+        const start = { x: this.wireStart.x, y: this.wireStart.y };
+        const end = this.snapPoint(point.x, point.y);
+        const dist = Math.hypot(end.x - start.x, end.y - start.y);
+        if (dist < 1e-6) {
+            this.cancelWiring();
+            return;
+        }
+
+        const ensureUniqueWireId = (baseId) => {
+            if (!this.circuit.getWire(baseId)) return baseId;
+            let i = 1;
+            while (this.circuit.getWire(`${baseId}_${i}`)) i++;
+            return `${baseId}_${i}`;
+        };
+
+        // Auto-route: prefer orthogonal (Manhattan) wiring with a single corner.
+        const points = [{ x: start.x, y: start.y }];
+        if (start.x !== end.x && start.y !== end.y) {
+            const dx = end.x - start.x;
+            const dy = end.y - start.y;
+            const horizontalFirst = Math.abs(dx) >= Math.abs(dy);
+            const corner = horizontalFirst
+                ? { x: end.x, y: start.y }
+                : { x: start.x, y: end.y };
+            points.push(corner);
+        }
+        points.push({ x: end.x, y: end.y });
+
+        const baseId = `wire_${Date.now()}`;
+        const createdIds = [];
+        for (let i = 0; i < points.length - 1; i++) {
+            const a = points[i];
+            const b = points[i + 1];
+            const segDist = Math.hypot(b.x - a.x, b.y - a.y);
+            if (segDist < 1e-6) continue;
+
+            const id = ensureUniqueWireId(i === 0 ? baseId : `${baseId}_${i}`);
+            const wire = {
+                id,
+                a: { x: a.x, y: a.y },
+                b: { x: b.x, y: b.y }
+            };
+
+            // Bind only the outer endpoints to terminals so wires follow component moves/terminal extension.
+            if (i === 0 && this.wireStart.snap && this.wireStart.snap.type === 'terminal') {
+                wire.aRef = {
+                    componentId: this.wireStart.snap.componentId,
+                    terminalIndex: this.wireStart.snap.terminalIndex
+                };
+            }
+            if (i === points.length - 2 && end.snap && end.snap.type === 'terminal') {
+                wire.bRef = {
+                    componentId: end.snap.componentId,
+                    terminalIndex: end.snap.terminalIndex
+                };
+            }
+
+            this.circuit.addWire(wire);
+            this.renderer.addWire(wire);
+            createdIds.push(id);
+        }
+
+        this.cancelWiring();
+        if (createdIds.length > 0) {
+            this.selectWire(createdIds[createdIds.length - 1]);
+        }
+        this.updateStatus('已添加导线');
+    }
+
+    /**
+     * 从工具箱创建一条独立导线（Model C）
+     */
+    addWireAt(x, y) {
+        const start = { x: x - 30, y };
+        const end = { x: x + 30, y };
+        const wire = {
+            id: `wire_${Date.now()}`,
+            a: start,
+            b: end
+        };
+        this.circuit.addWire(wire);
+        this.renderer.addWire(wire);
+        this.selectWire(wire.id);
+        this.updateStatus('已添加导线');
+    }
+
+    /**
+     * 拖动整条导线（Model C）
+     */
+    startWireDrag(wireId, e) {
+        const wire = this.circuit.getWire(wireId);
+        if (!wire || !wire.a || !wire.b) return;
+
+        this.isDraggingWire = true;
+        this.wireDrag = {
+            wireId,
+            startCanvas: this.screenToCanvas(e.clientX, e.clientY),
+            startClient: { x: e.clientX, y: e.clientY },
+            startA: { x: wire.a.x, y: wire.a.y },
+            startB: { x: wire.b.x, y: wire.b.y },
+            detached: false,
+            lastDx: 0,
+            lastDy: 0
+        };
+
+        this.selectWire(wireId);
+        e.preventDefault();
+        e.stopPropagation();
+    }
+
+    /**
+     * 拖动导线端点（Model C）
+     */
+	    startWireEndpointDrag(wireId, end, e) {
+	        const wire = this.circuit.getWire(wireId);
+	        if (!wire || (end !== 'a' && end !== 'b')) return;
+
+	        const origin = wire[end];
+	        if (!origin) return;
+
+	        // Default: drag the whole junction (all endpoints at the same coordinate).
+	        // Hold Alt while dragging to detach and move only this single endpoint.
+	        const keyOf = (pt) => `${Math.round(pt.x)},${Math.round(pt.y)}`;
+	        const originKey = keyOf(origin);
+	        const affected = [];
+	        if (e && e.altKey) {
+	            affected.push({ wireId, end });
+	        } else {
+	            for (const w of this.circuit.getAllWires()) {
+	                if (!w) continue;
+	                for (const which of ['a', 'b']) {
+	                    const pt = w[which];
+	                    if (!pt) continue;
+	                    if (keyOf(pt) === originKey) {
+	                        affected.push({ wireId: w.id, end: which });
+	                    }
+	                }
+	            }
+	            if (affected.length === 0) {
+	                affected.push({ wireId, end });
+	            }
+	        }
+
+	        this.isDraggingWireEndpoint = true;
+	        this.wireEndpointDrag = {
+	            wireId,
+	            end,
+	            origin: { x: origin.x, y: origin.y },
+	            affected,
+	            detached: false
+	        };
+	        this.selectWire(wireId);
+	        e.preventDefault();
+	        e.stopPropagation();
+	    }
+
+    /**
+     * 吸附点：优先吸附到端子/导线端点，否则吸附到网格
+     */
+	    snapPoint(x, y, options = {}) {
+	        const threshold = 15;
+
+        const nearbyTerminal = this.findNearbyTerminal(x, y, threshold);
+        if (nearbyTerminal) {
+            const pos = this.renderer.getTerminalPosition(nearbyTerminal.componentId, nearbyTerminal.terminalIndex);
+            if (pos) {
+                return {
+                    x: pos.x,
+                    y: pos.y,
+                    snap: {
+                        type: 'terminal',
+                        componentId: nearbyTerminal.componentId,
+                        terminalIndex: nearbyTerminal.terminalIndex
+                    }
+                };
+            }
+        }
+
+	        const nearbyEndpoint = this.findNearbyWireEndpoint(
+	            x,
+	            y,
+	            threshold,
+	            options.excludeWireId,
+	            options.excludeEnd,
+	            options.excludeWireEndpoints
+	        );
+        if (nearbyEndpoint) {
+            return {
+                x: nearbyEndpoint.x,
+                y: nearbyEndpoint.y,
+                snap: { type: 'wire-endpoint', wireId: nearbyEndpoint.wireId, end: nearbyEndpoint.end }
+            };
+        }
+
+        return {
+            x: Math.round(x / 20) * 20,
+            y: Math.round(y / 20) * 20,
+            snap: { type: 'grid' }
+        };
+	    }
+
+	    findNearbyWireEndpoint(x, y, threshold, excludeWireId = null, excludeEnd = null, excludeWireEndpoints = null) {
+	        let best = null;
+	        let bestDist = Infinity;
+
+	        for (const wire of this.circuit.getAllWires()) {
+	            if (!wire) continue;
+	            for (const end of ['a', 'b']) {
+	                if (excludeWireEndpoints && excludeWireEndpoints.has(`${wire.id}:${end}`)) continue;
+	                if (excludeWireId && wire.id === excludeWireId && excludeEnd === end) continue;
+	                const pt = wire[end];
+	                if (!pt) continue;
+	                const dist = Math.hypot(x - pt.x, y - pt.y);
+                if (dist < threshold && dist < bestDist) {
+                    bestDist = dist;
+                    best = { wireId: wire.id, end, x: pt.x, y: pt.y };
+                }
+            }
+        }
+        return best;
+    }
+
+    /**
+     * 双击导线：在指定位置分割为两段（Model C）
+     */
+    splitWireAtPoint(wireId, x, y) {
+        const wire = this.circuit.getWire(wireId);
+        if (!wire || !wire.a || !wire.b) return;
+
+        const split = this.snapPoint(x, y, { excludeWireId: wireId });
+
+        // Keep split aligned for axis-aligned wires.
+        if (wire.a.x === wire.b.x) split.x = wire.a.x;
+        if (wire.a.y === wire.b.y) split.y = wire.a.y;
+
+        const tooClose =
+            Math.hypot(split.x - wire.a.x, split.y - wire.a.y) < 5 ||
+            Math.hypot(split.x - wire.b.x, split.y - wire.b.y) < 5;
+        if (tooClose) return;
+
+        const oldB = { x: wire.b.x, y: wire.b.y };
+        const oldBRef = wire.bRef ? { ...wire.bRef } : null;
+        wire.b = { x: split.x, y: split.y };
+        delete wire.bRef;
+        this.renderer.refreshWire(wireId);
+
+        const newWire = {
+            id: `wire_${Date.now()}`,
+            a: { x: split.x, y: split.y },
+            b: oldB
+        };
+        if (oldBRef) newWire.bRef = oldBRef;
+
+        this.circuit.addWire(newWire);
+        this.renderer.addWire(newWire);
+        this.updateStatus('导线已分割');
     }
 
     /**
@@ -1274,7 +1751,7 @@ export class InteractionManager {
     startTerminalExtend(componentId, terminalIndex, e) {
         const comp = this.circuit.getComponent(componentId);
         if (!comp) return;
-        
+
         // 初始化端子延长数据
         if (!comp.terminalExtensions) {
             comp.terminalExtensions = {};
@@ -1282,70 +1759,61 @@ export class InteractionManager {
         if (!comp.terminalExtensions[terminalIndex]) {
             comp.terminalExtensions[terminalIndex] = { x: 0, y: 0 };
         }
-        
+
         const startX = e.clientX;
         const startY = e.clientY;
         const startExtX = comp.terminalExtensions[terminalIndex].x;
         const startExtY = comp.terminalExtensions[terminalIndex].y;
         const rotation = (comp.rotation || 0) * Math.PI / 180;
-        
+
         const onMove = (moveE) => {
             // 计算鼠标移动向量（屏幕坐标，考虑缩放）
             const dx = (moveE.clientX - startX) / this.scale;
             const dy = (moveE.clientY - startY) / this.scale;
-            
+
             // 将移动向量转换到元器件本地坐标系
             const cos = Math.cos(-rotation);
             const sin = Math.sin(-rotation);
             const localDx = dx * cos - dy * sin;
             const localDy = dx * sin + dy * cos;
-            
+
             // 计算新的延长偏移（平滑移动，不强制对齐网格）
             let newExtX = startExtX + localDx;
             let newExtY = startExtY + localDy;
-            
-            // 检测对齐（可选：与网格对齐）
+
+            // 与网格轻微吸附，便于对齐
             const snapThreshold = 8;
             const gridX = Math.round(newExtX / 20) * 20;
             const gridY = Math.round(newExtY / 20) * 20;
-            
-            let guideLines = [];
-            if (Math.abs(newExtX - gridX) < snapThreshold) {
-                newExtX = gridX;
-            }
-            if (Math.abs(newExtY - gridY) < snapThreshold) {
-                newExtY = gridY;
-            }
-            
+            if (Math.abs(newExtX - gridX) < snapThreshold) newExtX = gridX;
+            if (Math.abs(newExtY - gridY) < snapThreshold) newExtY = gridY;
+
             // 检测与水平/垂直方向的对齐
-            if (Math.abs(newExtY) < snapThreshold) {
-                newExtY = 0;
-                // 可以添加水平辅助线
-            }
-            if (Math.abs(newExtX) < snapThreshold) {
-                newExtX = 0;
-            }
-            
+            if (Math.abs(newExtY) < snapThreshold) newExtY = 0;
+            if (Math.abs(newExtX) < snapThreshold) newExtX = 0;
+
             comp.terminalExtensions[terminalIndex] = { x: newExtX, y: newExtY };
-            
+
             // 重新渲染元器件
             this.renderer.refreshComponent(comp);
             this.renderer.setSelected(componentId, true);
-            
+
             // 更新连接到该元器件的所有导线
             this.renderer.updateConnectedWires(componentId);
         };
-        
+
         const onUp = () => {
             document.removeEventListener('mousemove', onMove);
             document.removeEventListener('mouseup', onUp);
             this.hideAlignmentGuides();
+            // 端子位置会影响坐标拓扑，需重建节点
+            this.circuit.rebuildNodes();
             this.updateStatus('端子位置已调整');
         };
-        
+
         document.addEventListener('mousemove', onMove);
         document.addEventListener('mouseup', onUp);
-        
+
         e.preventDefault();
         e.stopPropagation();
     }
@@ -1476,7 +1944,7 @@ export class InteractionManager {
     }
 
     /**
-     * 选择导线（3秒后自动取消选择隐藏节点）
+     * 选择导线（10 秒后自动取消选择）
      */
     selectWire(id) {
         this.clearSelection();
@@ -1508,21 +1976,35 @@ export class InteractionManager {
         }, 10000);
         
         const wire = this.circuit.getWire(id);
-        const controlPointCount = wire && wire.controlPoints ? wire.controlPoints.length : 0;
+        const fmtEnd = (which) => {
+            const ref = which === 'a' ? wire?.aRef : wire?.bRef;
+            if (ref && ref.componentId !== undefined && ref.componentId !== null) {
+                return `${ref.componentId}:${ref.terminalIndex}`;
+            }
+            const pt = which === 'a' ? wire?.a : wire?.b;
+            if (pt && Number.isFinite(Number(pt.x)) && Number.isFinite(Number(pt.y))) {
+                return `(${Math.round(Number(pt.x))},${Math.round(Number(pt.y))})`;
+            }
+            return '?';
+        };
+        const length = wire?.a && wire?.b ? Math.hypot(wire.a.x - wire.b.x, wire.a.y - wire.b.y) : 0;
         
         // 显示导线信息（使用安全的 DOM 操作）
         const content = document.getElementById('property-content');
         clearElement(content);
         
         content.appendChild(createPropertyRow('类型', '导线'));
-        content.appendChild(createPropertyRow('控制点', `${controlPointCount} 个`));
-        content.appendChild(createHintParagraph([
-            '双击导线添加蓝色节点',
-            '拖动节点到端点可创建连接',
-            '双击节点删除该节点',
-            '3秒无操作节点自动隐藏'
-        ]));
-    }
+        content.appendChild(createPropertyRow('端点 A', fmtEnd('a')));
+        content.appendChild(createPropertyRow('端点 B', fmtEnd('b')));
+        content.appendChild(createPropertyRow('长度', `${length.toFixed(1)} px`));
+	        content.appendChild(createHintParagraph([
+	            '拖动导线可整体平移（按网格移动）',
+	            '拖动两端圆点可移动端点（默认拖动整节点，按 Alt 仅拖动单端点）',
+	            '双击导线可在该处分割成两段',
+	            'Shift + 点击空白处可从任意位置开始画导线（允许独立导线）',
+	            'Alt + 拖动端子可伸长/缩短元器件引脚'
+	        ]));
+	    }
     
     /**
      * 处理导线节点的点击：拖动移动或点击连线
@@ -2384,12 +2866,13 @@ export class InteractionManager {
         content.appendChild(createPropertyRow('电压', `${(comp.voltageValue || 0).toFixed(4)} V`, { valueId: 'measure-voltage' }));
         content.appendChild(createPropertyRow('功率', `${(comp.powerValue || 0).toFixed(4)} W`, { valueId: 'measure-power' }));
         
-        content.appendChild(createHintParagraph([
-            '双击或右键编辑属性',
-            '按 R 旋转，按 Delete 删除',
-            '<b>Alt + 拖动端子</b> 延长引脚'
-        ]));
-    }
+	        content.appendChild(createHintParagraph([
+	            '双击或右键编辑属性',
+	            '按 R 旋转，按 Delete 删除',
+	            'Shift + 点击空白处开始画导线',
+	            'Alt + 拖动端子可伸长/缩短元器件引脚'
+	        ]));
+	    }
 
     /**
      * 仅更新属性面板里的“实时测量”等动态值，避免每帧重建 DOM 导致闪烁/输入框失焦
@@ -3091,15 +3574,58 @@ export class InteractionManager {
         menu.className = 'context-menu';
         menu.style.left = e.clientX + 'px';
         menu.style.top = e.clientY + 'px';
-        
-        const menuItem = document.createElement('div');
-        menuItem.className = 'context-menu-item danger';
-        menuItem.textContent = '删除导线 (Del)';
-        menuItem.addEventListener('click', () => {
-            this.deleteWire(wireId);
-            this.hideContextMenu();
+
+        const wire = this.circuit.getWire(wireId);
+        const canvas = this.screenToCanvas(e.clientX, e.clientY);
+
+        // Decide which endpoint to keep fixed for "straighten" actions based on click proximity.
+        let anchorEnd = 'a';
+        if (wire && wire.a && wire.b) {
+            const dA = Math.hypot(canvas.x - wire.a.x, canvas.y - wire.a.y);
+            const dB = Math.hypot(canvas.x - wire.b.x, canvas.y - wire.b.y);
+            anchorEnd = dA <= dB ? 'a' : 'b';
+        }
+
+        const straightenWire = (mode) => {
+            const w = this.circuit.getWire(wireId);
+            if (!w || !w.a || !w.b) return;
+            const fixed = anchorEnd === 'a' ? w.a : w.b;
+            const moveEnd = anchorEnd === 'a' ? 'b' : 'a';
+            const moving = w[moveEnd];
+            if (!moving) return;
+
+            if (mode === 'horizontal') {
+                w[moveEnd] = { x: moving.x, y: fixed.y };
+            } else if (mode === 'vertical') {
+                w[moveEnd] = { x: fixed.x, y: moving.y };
+            }
+
+            // Moving an endpoint manually detaches it from any terminal binding.
+            const refKey = moveEnd === 'a' ? 'aRef' : 'bRef';
+            delete w[refKey];
+
+            this.renderer.refreshWire(wireId);
+            this.circuit.rebuildNodes();
+            this.updateStatus(mode === 'horizontal' ? '已水平拉直导线' : '已垂直拉直导线');
+        };
+
+        const menuItems = [
+            { label: '在此处分割', action: () => this.splitWireAtPoint(wireId, canvas.x, canvas.y) },
+            { label: '拉直为水平', action: () => straightenWire('horizontal') },
+            { label: '拉直为垂直', action: () => straightenWire('vertical') },
+            { label: '删除导线 (Del)', action: () => this.deleteWire(wireId), className: 'danger' }
+        ];
+
+        menuItems.forEach(item => {
+            const menuItem = document.createElement('div');
+            menuItem.className = 'context-menu-item' + (item.className ? ' ' + item.className : '');
+            menuItem.textContent = item.label;
+            menuItem.addEventListener('click', () => {
+                item.action();
+                this.hideContextMenu();
+            });
+            menu.appendChild(menuItem);
         });
-        menu.appendChild(menuItem);
         
         document.body.appendChild(menu);
         
