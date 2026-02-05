@@ -124,9 +124,20 @@ export class CircuitExplainer {
         state += `电路共有 ${wires.length} 条导线连接。\n`;
         if (includeTopology && wires.length > 0) {
             state += '【连接拓扑】\n';
+            const fmtEnd = (wire, which) => {
+                const ref = which === 'a' ? wire.aRef : wire.bRef;
+                if (ref && ref.componentId !== undefined && ref.componentId !== null) {
+                    return `${ref.componentId}:${ref.terminalIndex}`;
+                }
+                const pt = which === 'a' ? wire.a : wire.b;
+                if (pt && Number.isFinite(Number(pt.x)) && Number.isFinite(Number(pt.y))) {
+                    return `(${Math.round(Number(pt.x))},${Math.round(Number(pt.y))})`;
+                }
+                return '?';
+            };
             for (const wire of wires) {
                 const wid = wire.id || 'wire';
-                state += `  ${wid}: ${wire.startComponentId}:${wire.startTerminalIndex} -> ${wire.endComponentId}:${wire.endTerminalIndex}\n`;
+                state += `  ${wid}: ${fmtEnd(wire, 'a')} -> ${fmtEnd(wire, 'b')}\n`;
             }
         }
 
