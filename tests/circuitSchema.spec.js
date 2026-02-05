@@ -17,6 +17,19 @@ describe('validateCircuitJSON', () => {
         expect(validateCircuitJSON(base)).toBe(true);
     });
 
+    it('accepts v2 wires with explicit endpoints', () => {
+        const v2 = {
+            meta: { version: '2.0' },
+            components: base.components,
+            wires: [{
+                id: 'w1',
+                a: { x: 0, y: 0 },
+                b: { x: 20, y: 0 }
+            }]
+        };
+        expect(validateCircuitJSON(v2)).toBe(true);
+    });
+
     it('throws when components missing', () => {
         expect(() => validateCircuitJSON({ ...base, components: [] }))
             .toThrow(/组件列表缺失/);
