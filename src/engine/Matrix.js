@@ -69,7 +69,8 @@ export class Matrix {
             }
 
             // 如果主元为零或接近零，矩阵可能奇异
-            if (maxVal < 1e-12) {
+            // 注意：gmin 稳定化可能会让对角元达到 1e-12 量级；阈值应更小以避免误判。
+            if (maxVal < 1e-15) {
                 console.warn('Matrix is singular or nearly singular');
                 return null;
             }
