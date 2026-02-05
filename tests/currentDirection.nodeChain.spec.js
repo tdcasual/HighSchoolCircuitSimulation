@@ -12,9 +12,9 @@ describe('Node-level topology propagation', () => {
         const r2 = addComponent(circuit, 'Resistor', 'R2', { resistance: 100 });
 
         connectWire(circuit, 'w-pos-1', source, 0, r1, 0);
-        const chained = connectWire(circuit, 'w-pos-chain', r1, 1, r2, 0);
+        const chained = connectWire(circuit, 'w-pos-chain', r1, 0, r2, 0);
         connectWire(circuit, 'w-neg-1', r1, 1, source, 1);
-        connectWire(circuit, 'w-neg-chain', r2, 1, r1, 1);
+        connectWire(circuit, 'w-neg-2', r2, 1, source, 1);
 
         const results = solveCircuit(circuit);
         expect(results.valid).toBe(true);
