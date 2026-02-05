@@ -360,7 +360,7 @@ ${circuitState}`;
 1. 识别类型：PowerSource, Resistor, Rheostat(3端), Capacitor, Bulb, Switch, Ammeter, Voltmeter, Motor
 2. 生成矩形/正交布局：x 递增表示从左到右，y 递增表示从上到下；rotation 0=水平，90=竖直，电源推荐 270（正极在上）
 3. 每个元件必须有 label（E1/R1/R2/A1/V1 等），并填写合理属性（voltage/resistance/position 等）
-4. wires 使用 {start:{componentId,terminalIndex},end:{...},controlPoints:[]} 连接正确端子
+4. wires 推荐使用 {start:{componentId,terminalIndex},end:{...},controlPoints:[]}；也可使用 v2 {a:{x,y},b:{x,y}}（可选 aRef/bRef）
 5. 端子约定：电源 0=负极 1=正极；电阻/电容 0=左或上端 1=右或下端；滑变 0=a 1=b 2=滑片
 
 6. rotation 只能是 0/90/180/270；坐标可取整数
