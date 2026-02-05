@@ -8,6 +8,7 @@ import { Renderer } from './ui/Renderer.js';
 import { InteractionManager } from './ui/Interaction.js';
 import { AIPanel } from './ui/AIPanel.js';
 import { ObservationPanel } from './ui/ObservationPanel.js';
+import { ExerciseBoard } from './ui/ExerciseBoard.js';
 import { resetIdCounter, updateIdCounterFromExisting } from './components/Component.js';
 
 class CircuitSimulatorApp {
@@ -29,6 +30,9 @@ class CircuitSimulatorApp {
         
         // 初始化 AI 助手面板
         this.aiPanel = new AIPanel(this);
+
+        // 初始化习题板
+        this.exerciseBoard = new ExerciseBoard(this);
         
         // 尝试从 localStorage 恢复电路
         this.loadCircuitFromStorage();
@@ -206,6 +210,7 @@ class CircuitSimulatorApp {
         this.interaction.clearSelection();
         this.observationPanel?.clearAllPlots();
         this.observationPanel?.refreshDialGauges();
+        this.exerciseBoard?.reset();
             
         // 清除缓存
         localStorage.removeItem('saved_circuit');
@@ -217,7 +222,7 @@ class CircuitSimulatorApp {
      * 导出电路
      */
     exportCircuit() {
-        const data = this.circuit.toJSON();
+        const data = this.buildSaveData();
         const json = JSON.stringify(data, null, 2);
         
         // 创建下载链接
@@ -251,6 +256,7 @@ class CircuitSimulatorApp {
                 
                 this.stopSimulation();
                 this.circuit.fromJSON(data);
+                this.exerciseBoard?.fromJSON(data.meta?.exerciseBoard);
                 
                 // 更新ID计数器以防止冲突
                 const allIds = [
@@ -286,26 +292,38 @@ class CircuitSimulatorApp {
      * 设置自动保存
      */
     setupAutoSave() {
-        // 监听电路变化并自动保存
         const saveCircuit = () => {
-            if (this.circuit.components.size > 0) {
-                try {
-                    const circuitJSON = this.circuit.toJSON();
-                    localStorage.setItem('saved_circuit', JSON.stringify(circuitJSON));
-                } catch (e) {
-                    console.error('Auto-save failed:', e);
-                }
+            try {
+                const payload = this.buildSaveData();
+                localStorage.setItem('saved_circuit', JSON.stringify(payload));
+            } catch (e) {
+                console.error('Auto-save failed:', e);
             }
         };
-        
-        // 使用防抖，避免频繁保存
-        let saveTimeout;
+
+        // 防抖，避免频繁保存（模拟运行时也不会疯狂写 localStorage）
+        let saveTimeout = null;
+        this.scheduleSave = (delayMs = 1000) => {
+            clearTimeout(saveTimeout);
+            saveTimeout = setTimeout(saveCircuit, delayMs);
+        };
+
         this.circuit.onUpdate = (results) => {
             this.onCircuitUpdate(results);
-            
-            clearTimeout(saveTimeout);
-            saveTimeout = setTimeout(saveCircuit, 1000);
+            this.scheduleSave(1000);
         };
+    }
+
+    /**
+     * 统一构建“可保存/可导出”的电路 JSON（包含习题板等 UI 元信息）
+     */
+    buildSaveData() {
+        const data = this.circuit.toJSON();
+        data.meta = data.meta && typeof data.meta === 'object' ? data.meta : {};
+        if (this.exerciseBoard?.toJSON) {
+            data.meta.exerciseBoard = this.exerciseBoard.toJSON();
+        }
+        return data;
     }
     
     /**
@@ -317,6 +335,7 @@ class CircuitSimulatorApp {
             if (saved) {
                 const circuitJSON = JSON.parse(saved);
                 this.circuit.fromJSON(circuitJSON);
+                this.exerciseBoard?.fromJSON(circuitJSON.meta?.exerciseBoard);
                 
                 // 更新 ID 计数器
                 const allIds = [

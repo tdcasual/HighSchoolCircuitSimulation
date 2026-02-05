@@ -451,6 +451,40 @@ export class MNASolver {
         if (comp._isShorted) {
             return 0;
         }
+
+        // IMPORTANT: Components that are not fully wired into the circuit have invalid node indices (-1).
+        // They are skipped during stamping, so their current must be forced to 0 here as well.
+        // Otherwise we can leak "phantom" currents into wire animation logic via results.currents.
+        const isValidNode = (nodeIdx) => nodeIdx !== undefined && nodeIdx !== null && nodeIdx >= 0;
+        if (comp.type !== 'Rheostat') {
+            if (!comp.nodes || !isValidNode(comp.nodes[0]) || !isValidNode(comp.nodes[1])) {
+                return 0;
+            }
+        } else {
+            const mode = comp.connectionMode || 'none';
+            const nLeft = comp.nodes?.[0];
+            const nRight = comp.nodes?.[1];
+            const nSlider = comp.nodes?.[2];
+            const leftValid = isValidNode(nLeft);
+            const rightValid = isValidNode(nRight);
+            const sliderValid = isValidNode(nSlider);
+            switch (mode) {
+                case 'left-slider':
+                    if (!leftValid || !sliderValid) return 0;
+                    break;
+                case 'right-slider':
+                    if (!rightValid || !sliderValid) return 0;
+                    break;
+                case 'left-right':
+                    if (!leftValid || !rightValid) return 0;
+                    break;
+                case 'all':
+                    if (!leftValid || !rightValid || !sliderValid) return 0;
+                    break;
+                default:
+                    return 0;
+            }
+        }
         
         const v1 = voltages[comp.nodes[0]] || 0;
         const v2 = voltages[comp.nodes[1]] || 0;

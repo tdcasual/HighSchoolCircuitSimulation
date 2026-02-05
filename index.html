@@ -140,6 +140,7 @@
                 <button id="btn-clear" class="action-btn">清空电路</button>
                 <button id="btn-export" class="action-btn">导出JSON</button>
                 <button id="btn-import" class="action-btn">导入JSON</button>
+                <button id="btn-exercise-board" class="action-btn">习题板</button>
                 <input type="file" id="file-import" accept=".json" style="display:none"/>
             </div>
         </aside>
@@ -220,6 +221,23 @@
         </div>
     </div>
 
+    <!-- 习题板 -->
+    <div id="exercise-board-panel" class="hidden">
+        <div id="exercise-board-header">
+            <h3>习题板</h3>
+            <div id="exercise-board-actions">
+                <button id="exercise-board-mode-btn" title="编辑/预览">预览</button>
+                <button id="exercise-board-hide-btn" title="隐藏">×</button>
+            </div>
+        </div>
+        <div id="exercise-board-content">
+            <textarea id="exercise-board-editor" spellcheck="false"
+                placeholder="在这里写习题/讲解（支持 Markdown + LaTeX：$...$ / $$...$$）"></textarea>
+            <div id="exercise-board-preview" class="hidden"></div>
+        </div>
+        <div id="exercise-board-resize-handle" aria-hidden="true"></div>
+    </div>
+
     <!-- AI助手面板 -->
     <div id="ai-assistant-panel" class="collapsed">
         <div id="ai-panel-header">
@@ -241,7 +259,7 @@
                     <input type="file" id="circuit-image-input" accept="image/*" hidden>
                     <div id="image-drop-area">
                         <div id="image-preview-area" class="hidden">
-                            <img id="image-preview" alt="Circuit preview">
+                            <img id="image-preview" alt="电路预览">
                             <button id="image-remove-btn">×</button>
                         </div>
                         <div id="image-upload-prompt">

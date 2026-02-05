@@ -23,7 +23,8 @@
 }
 
 body {
-    font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+    /* Prefer CJK-capable fonts to avoid tofu on minimal Linux installs */
+    font-family: 'Noto Sans SC', 'Noto Sans CJK SC', 'WenQuanYi Micro Hei', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', 'Segoe UI', sans-serif;
     background: var(--bg-color);
     color: var(--text-color);
     overflow: hidden;
@@ -820,14 +821,23 @@ body {
     transition: stroke 0.2s ease;
 }
 
-.wire-group:hover .wire {
+.wire-group:hover .wire:not(.flowing) {
     stroke: #2196F3;
     stroke-width: 3;
 }
 
-.wire-group.selected .wire {
+/* Keep current intensity colors when flowing; use a glow to indicate hover/selection instead */
+.wire-group:hover .wire.flowing {
+    filter: drop-shadow(0 0 2px rgba(33, 150, 243, 0.6));
+}
+
+.wire-group.selected .wire:not(.flowing) {
     stroke: #FF5722;
     stroke-width: 3;
+}
+
+.wire-group.selected .wire.flowing {
+    filter: drop-shadow(0 0 3px rgba(255, 87, 34, 0.8));
 }
 
 /* 导线控制点 */
@@ -1388,6 +1398,192 @@ body {
     font-size: 10px;
     pointer-events: none;
     user-select: none;
+}
+
+/* ==========================================
+   习题板 - Markdown + LaTeX
+   ========================================== */
+#exercise-board-panel {
+    position: fixed;
+    top: 16px;
+    left: 220px;
+    width: 420px;
+    height: 360px;
+    min-width: 320px;
+    min-height: 240px;
+    max-width: calc(100vw - 32px);
+    max-height: calc(100vh - 32px);
+    background: var(--panel-bg);
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow);
+    z-index: 110;
+    border-radius: 10px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+#exercise-board-panel.hidden {
+    display: none;
+}
+
+#exercise-board-panel.resizing,
+#exercise-board-panel.dragging {
+    box-shadow: 0 6px 18px rgba(0,0,0,0.25);
+}
+
+#exercise-board-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 14px;
+    background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+    border-bottom: 1px solid #f0f0f0;
+    user-select: none;
+    cursor: move;
+}
+
+#exercise-board-header h3 {
+    font-size: 14px;
+    font-weight: 600;
+    margin: 0;
+    color: var(--text-color);
+    letter-spacing: -0.3px;
+}
+
+#exercise-board-actions {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+#exercise-board-actions button {
+    background: #f7f9ff;
+    border: 1px solid var(--border-color);
+    color: var(--text-color);
+    padding: 6px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#exercise-board-actions button:hover {
+    background: #e8f2ff;
+    color: var(--primary-dark);
+    border-color: var(--primary-color);
+}
+
+#exercise-board-content {
+    flex: 1;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    min-height: 160px;
+}
+
+#exercise-board-editor {
+    flex: 1;
+    width: 100%;
+    border: none;
+    outline: none;
+    padding: 12px 14px;
+    font-size: 13px;
+    line-height: 1.55;
+    color: var(--text-color);
+    background: #fbfdff;
+    resize: none;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', 'Noto Sans SC', sans-serif;
+}
+
+#exercise-board-editor.hidden {
+    display: none;
+}
+
+#exercise-board-preview {
+    flex: 1;
+    overflow: auto;
+    padding: 14px 16px;
+    font-size: 13px;
+    line-height: 1.7;
+    color: var(--text-color);
+}
+
+#exercise-board-preview.hidden {
+    display: none;
+}
+
+#exercise-board-preview h1,
+#exercise-board-preview h2,
+#exercise-board-preview h3 {
+    margin: 10px 0 8px;
+    line-height: 1.25;
+}
+
+#exercise-board-preview h1 { font-size: 18px; }
+#exercise-board-preview h2 { font-size: 16px; }
+#exercise-board-preview h3 { font-size: 14px; }
+
+#exercise-board-preview p {
+    margin: 8px 0;
+}
+
+#exercise-board-preview ul,
+#exercise-board-preview ol {
+    padding-left: 20px;
+    margin: 8px 0;
+}
+
+#exercise-board-preview blockquote {
+    border-left: 3px solid rgba(33, 150, 243, 0.7);
+    padding: 6px 10px;
+    margin: 10px 0;
+    background: rgba(33, 150, 243, 0.06);
+    border-radius: 6px;
+    color: var(--text-light);
+}
+
+#exercise-board-preview pre {
+    background: #f7f9ff;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 10px 12px;
+    overflow: auto;
+    margin: 10px 0;
+}
+
+#exercise-board-preview code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+    background: rgba(33, 150, 243, 0.08);
+    padding: 1px 4px;
+    border-radius: 6px;
+}
+
+#exercise-board-preview pre code {
+    background: transparent;
+    padding: 0;
+}
+
+#exercise-board-resize-handle {
+    height: 16px;
+    display: flex;
+    justify-content: flex-end;
+    align-items: flex-end;
+    padding: 0 10px 6px 0;
+    cursor: nwse-resize;
+}
+
+#exercise-board-resize-handle::after {
+    content: '';
+    width: 14px;
+    height: 14px;
+    border-right: 2px solid var(--border-color);
+    border-bottom: 2px solid var(--border-color);
+    border-radius: 2px;
+    opacity: 0.8;
 }
 
 /* ==========================================

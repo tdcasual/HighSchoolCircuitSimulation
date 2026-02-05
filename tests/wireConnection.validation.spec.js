@@ -125,4 +125,36 @@ describe('Wire connection validation - prevents phantom current', () => {
         // Should have current
         expect(wireInfo.current).toBeGreaterThan(0);
     });
+
+    it('should allow current to pass through an incomplete component terminal used as a junction', () => {
+        const circuit = createTestCircuit();
+        const source = addComponent(circuit, 'PowerSource', 'V1', { voltage: 12, internalResistance: 0 });
+        const load = addComponent(circuit, 'Resistor', 'Rload', { resistance: 100 });
+        const stub = addComponent(circuit, 'Resistor', 'Rstub', { resistance: 100 });
+
+        // Use stub.terminal0 as a junction on the hot node: V1(0) -> stub(0) -> load(0)
+        const w1 = connectWire(circuit, 'W1', source, 0, stub, 0);
+        const w2 = connectWire(circuit, 'W2', stub, 0, load, 0);
+        connectWire(circuit, 'Wret', load, 1, source, 1);
+
+        circuit.rebuildNodes();
+
+        // Stub is incomplete (only one terminal is wired), but its terminal0 has 2 wires (junction).
+        expect(circuit.isComponentConnected(stub.id)).toBe(false);
+        expect(circuit.terminalConnectionMap.get('Rstub:0')).toBe(2);
+
+        const results = solveCircuit(circuit);
+        expect(results.valid).toBe(true);
+
+        // Solver must not report phantom current for the incomplete component.
+        expect(results.currents.get(stub.id) || 0).toBe(0);
+
+        const info1 = circuit.getWireCurrentInfo(w1, results);
+        const info2 = circuit.getWireCurrentInfo(w2, results);
+
+        expect(info1.current).toBeGreaterThan(0);
+        expect(info2.current).toBeGreaterThan(0);
+        expect(info1.flowDirection).not.toBe(0);
+        expect(info2.flowDirection).not.toBe(0);
+    });
 });

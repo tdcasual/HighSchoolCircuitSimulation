@@ -385,7 +385,17 @@ export class Renderer {
             wirePath.classList.remove('flowing', 'flowing-forward', 'flowing-reverse', 
                 'current-low', 'current-medium', 'current-high', 'short-circuit');
             
-            if (!isRunning || !results || !results.valid) {
+            if (!isRunning || !wire) {
+                continue;
+            }
+
+            // Short-circuit warning should still show even if the solver cannot provide a valid solution.
+            if (this.circuit.isWireInShortCircuit(wire)) {
+                wirePath.classList.add('short-circuit');
+                continue;
+            }
+
+            if (!results || !results.valid) {
                 continue;
             }
             

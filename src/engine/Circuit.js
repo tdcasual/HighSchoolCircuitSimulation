@@ -20,6 +20,7 @@ export class Circuit {
         this.simTime = 0;             // 仿真时间（秒）
         this._wireFlowCache = { version: null, map: new Map() };
         this.terminalConnectionMap = new Map();
+        this.shortedPowerNodes = new Set(); // node indices that contain a shorted PowerSource
         this.debugMode = false;
         this.loadDebugFlag();
         this.solver.debugMode = this.debugMode;
@@ -235,6 +236,20 @@ export class Circuit {
         
         // 检测滑动变阻器的连接模式
         this.detectRheostatConnections();
+
+        // Track nodes that contain a shorted power source (both terminals on the same electrical node).
+        // Used by the renderer to show a short-circuit warning even when the solver cannot produce
+        // a meaningful current value (ideal source shorted).
+        const shorted = new Set();
+        for (const comp of this.components.values()) {
+            if (comp.type !== 'PowerSource') continue;
+            const n0 = comp.nodes?.[0];
+            const n1 = comp.nodes?.[1];
+            if (n0 !== undefined && n0 >= 0 && n0 === n1) {
+                shorted.add(n0);
+            }
+        }
+        this.shortedPowerNodes = shorted;
     }
 
     /**
@@ -875,8 +890,13 @@ export class Circuit {
             const endComp = this.components.get(endpoints.endKey.split(':')[0]);
             const startShorted = !!startComp?._isShorted;
             const endShorted = !!endComp?._isShorted;
-            const hasTinyStart = startMag < eps && !startShorted;
-            const hasTinyEnd = endMag < eps && !endShorted;
+            // "Tiny" only means "dead end" when the terminal is NOT a junction.
+            // A junction terminal can legitimately have 0 net injection while still carrying current
+            // from one wire segment to another.
+            const startIsJunction = (adjacency.get(endpoints.startKey) || []).length >= 2;
+            const endIsJunction = (adjacency.get(endpoints.endKey) || []).length >= 2;
+            const hasTinyStart = startMag < eps && !startShorted && !startIsJunction;
+            const hasTinyEnd = endMag < eps && !endShorted && !endIsJunction;
             // If a branch endpoint is effectively open, don't borrow the larger trunk current;
             // shorted components still propagate the bus magnitude
             const magnitude = (directAssignments.has(wireId) && directAssignments.get(wireId).currentMagnitude !== undefined)
@@ -990,6 +1010,26 @@ export class Circuit {
     }
 
     /**
+     * Whether a wire is on a node that contains a shorted power source.
+     * This is a topology-only check; it does not depend on the solver result.
+     * @param {Object} wire
+     * @returns {boolean}
+     */
+    isWireInShortCircuit(wire) {
+        if (!wire) return false;
+        const startComp = this.components.get(wire.startComponentId);
+        const endComp = this.components.get(wire.endComponentId);
+        if (!startComp || !endComp) return false;
+        const startNode = startComp.nodes?.[wire.startTerminalIndex];
+        const endNode = endComp.nodes?.[wire.endTerminalIndex];
+        const node = (startNode !== undefined && startNode >= 0) ? startNode
+            : (endNode !== undefined && endNode >= 0) ? endNode
+                : -1;
+        if (node < 0) return false;
+        return !!(this.shortedPowerNodes && this.shortedPowerNodes.has(node));
+    }
+
+    /**
      * 获取导线的电流信息
      * @param {Object} wire - 导线对象
      * @param {Object} results - 求解结果
@@ -1002,12 +1042,16 @@ export class Circuit {
         const endComp = this.components.get(wire.endComponentId);
         if (!startComp || !endComp) return null;
         
-        // CRITICAL: Both components must be fully connected (both terminals wired) before showing current
-        // This prevents phantom current animations on incomplete connections
-        const startConnected = this.isComponentConnected(wire.startComponentId);
-        const endConnected = this.isComponentConnected(wire.endComponentId);
-        if (!startConnected || !endConnected) {
-            // Return zero current info if either component is not fully connected
+        // Gate on connection quality to avoid phantom currents on dangling branches.
+        // NOTE: Allow "pass-through" junction terminals even if the component itself is incomplete:
+        // when a terminal has >=2 wires, it behaves like a node that can carry current across wires.
+        const startKey = `${wire.startComponentId}:${wire.startTerminalIndex}`;
+        const endKey = `${wire.endComponentId}:${wire.endTerminalIndex}`;
+        const startDegree = this.terminalConnectionMap.get(startKey) || 0;
+        const endDegree = this.terminalConnectionMap.get(endKey) || 0;
+        const startEligible = this.isComponentConnected(wire.startComponentId) || startDegree >= 2;
+        const endEligible = this.isComponentConnected(wire.endComponentId) || endDegree >= 2;
+        if (!startEligible || !endEligible) {
             return {
                 current: 0,
                 voltage1: 0,
@@ -1029,7 +1073,18 @@ export class Circuit {
         const voltage1 = getVoltage(startNode);
         const voltage2 = getVoltage(endNode);
         const voltageDiff = voltage1 - voltage2;
-        const isShorted = false;
+        const isShorted = this.isWireInShortCircuit(wire);
+
+        if (isShorted) {
+            return {
+                current: 0,
+                voltage1,
+                voltage2,
+                isShorted: true,
+                flowDirection: 0,
+                voltageDiff
+            };
+        }
 
         const startFlow = this.getTerminalCurrentFlow(startComp, wire.startTerminalIndex, results);
         const endFlow = this.getTerminalCurrentFlow(endComp, wire.endTerminalIndex, results);
@@ -1038,8 +1093,10 @@ export class Circuit {
         const flowEps = 1e-9;
         const startShorted = !!startComp._isShorted;
         const endShorted = !!endComp._isShorted;
-        const hasTinyStart = startMag < flowEps && !startShorted;
-        const hasTinyEnd = endMag < flowEps && !endShorted;
+        const startIsJunction = startDegree >= 2;
+        const endIsJunction = endDegree >= 2;
+        const hasTinyStart = startMag < flowEps && !startShorted && !startIsJunction;
+        const hasTinyEnd = endMag < flowEps && !endShorted && !endIsJunction;
         // Avoid leaking trunk current into a dead branch (open switch/charged cap) but still
         // propagate through shorted components that simply sit on the bus
         const baseCurrent = (hasTinyStart || hasTinyEnd)
@@ -1134,6 +1191,9 @@ export class Circuit {
         this.wires.clear();
         this.nodes = [];
         this.lastResults = null;
+        this.terminalConnectionMap = new Map();
+        this._wireFlowCache = { version: null, map: new Map() };
+        this.shortedPowerNodes = new Set();
     }
 
     /**

@@ -217,6 +217,7 @@ export class AIPanel {
             this.circuit.fromJSON(circuitJSON);
             this.app.renderer.render();
             this.app.interaction.clearSelection();
+            this.app.exerciseBoard?.fromJSON?.(circuitJSON.meta?.exerciseBoard);
 
             // 自动求解一次，提前暴露潜在问题
             this.circuit.startSimulation();
@@ -760,7 +761,9 @@ export class AIPanel {
      */
     saveCircuitToLocalStorage(circuitJSON) {
         try {
-            localStorage.setItem('saved_circuit', JSON.stringify(circuitJSON));
+            // Prefer app-level serializer so extra UI state (e.g. 习题板) can be persisted together.
+            const payload = this.app?.buildSaveData ? this.app.buildSaveData() : circuitJSON;
+            localStorage.setItem('saved_circuit', JSON.stringify(payload));
         } catch (e) {
             console.error('Failed to save circuit:', e);
         }
@@ -776,6 +779,7 @@ export class AIPanel {
                 const circuitJSON = JSON.parse(saved);
                 this.circuit.fromJSON(circuitJSON);
                 this.app.renderer.render();
+                this.app.exerciseBoard?.fromJSON?.(circuitJSON.meta?.exerciseBoard);
                 this.app.updateStatus('已从缓存恢复电路');
                 return true;
             }
