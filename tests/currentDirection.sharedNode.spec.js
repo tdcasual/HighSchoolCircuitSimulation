@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { createTestCircuit, addComponent, connectWire, solveCircuit } from './helpers/circuitTestUtils.js';
 
 describe('Wire flow heuristics on shared nodes', () => {
-    it('still emits a forward direction when both terminals source the same node', () => {
+    it('shows zero current on a redundant wire between equipotential terminals', () => {
         const circuit = createTestCircuit();
         const source = addComponent(circuit, 'PowerSource', 'V1', {
             voltage: 12,
@@ -22,7 +22,7 @@ describe('Wire flow heuristics on shared nodes', () => {
         expect(results.valid).toBe(true);
 
         const info = circuit.getWireCurrentInfo(sharedReturn, results);
-        expect(info.current).toBeGreaterThan(0);
-        expect(info.flowDirection).toBe(1);
+        expect(info.current).toBe(0);
+        expect(info.flowDirection).toBe(0);
     });
 });
