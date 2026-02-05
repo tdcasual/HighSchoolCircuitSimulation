@@ -741,7 +741,7 @@ export const SVGRenderer = {
     },
 
     /**
-     * 辅助方法：添加端子（支持延长）
+     * 辅助方法：添加端子
      */
     addTerminal(g, x, y, index, comp = null) {
         // 获取端子延长偏移
@@ -763,16 +763,13 @@ export const SVGRenderer = {
             extLine.setAttribute('class', 'terminal-extension');
             g.appendChild(extLine);
         }
-        
-        // 端子圆圈放在延长后的位置
+
         const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
         circle.setAttribute('cx', x + extX);
         circle.setAttribute('cy', y + extY);
         circle.setAttribute('r', 5);
         circle.setAttribute('class', 'terminal');
         circle.setAttribute('data-terminal', index);
-        circle.setAttribute('data-base-x', x); // 保存原始位置
-        circle.setAttribute('data-base-y', y);
         // 确保端子可以接收鼠标事件
         circle.style.pointerEvents = 'all';
         circle.setAttribute('draggable', 'false');
@@ -1049,7 +1046,7 @@ export const SVGRenderer = {
     /**
      * 创建导线SVG
      */
-    createWire(wire, getTerminalPosition) {
+    createWire(wire, getWireEndpointPosition = null) {
         const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
         g.setAttribute('class', 'wire-group');
         g.setAttribute('data-id', wire.id);
@@ -1066,51 +1063,39 @@ export const SVGRenderer = {
         path.setAttribute('data-id', wire.id);
         g.appendChild(path);
         
-        // 初始化控制点数组（如果没有）
-        if (!wire.controlPoints) {
-            wire.controlPoints = [];
-        }
-        
-        this.updateWirePathWithGroup(g, wire, getTerminalPosition);
+        this.updateWirePathWithGroup(g, wire, getWireEndpointPosition);
         
         return g;
     },
 
     /**
-     * 更新导线路径（包含控制点）
+     * 更新导线路径
      */
-    updateWirePath(pathOrGroup, wire, getTerminalPosition) {
-        // 兼容旧代码：如果传入的是path元素
-        if (pathOrGroup.tagName === 'path') {
-            const start = getTerminalPosition(wire.startComponentId, wire.startTerminalIndex);
-            const end = getTerminalPosition(wire.endComponentId, wire.endTerminalIndex);
-            if (start && end) {
-                const points = [start, ...(wire.controlPoints || []), end];
-                const d = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
-                pathOrGroup.setAttribute('d', d);
-            }
-        } else {
-            this.updateWirePathWithGroup(pathOrGroup, wire, getTerminalPosition);
-        }
+    updateWirePath(pathOrGroup, wire, getWireEndpointPosition = null) {
+        this.updateWirePathWithGroup(pathOrGroup, wire, getWireEndpointPosition);
     },
 
     /**
-     * 更新导线组（路径+控制点）
+     * 更新导线组（路径+端点）
      */
-    updateWirePathWithGroup(g, wire, getTerminalPosition) {
+    updateWirePathWithGroup(g, wire, getWireEndpointPosition = null) {
         const path = g.querySelector('path.wire');
         const hitArea = g.querySelector('path.wire-hit-area');
         if (!path) return;
-        
-        const start = getTerminalPosition(wire.startComponentId, wire.startTerminalIndex);
-        const end = getTerminalPosition(wire.endComponentId, wire.endTerminalIndex);
-        
-        if (!start || !end) return;
-        
-        // 构建路径点
-        const controlPoints = wire.controlPoints || [];
-        const points = [start, ...controlPoints, end];
-        const d = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+
+        const getEnd = (which) => {
+            if (typeof getWireEndpointPosition === 'function') {
+                return getWireEndpointPosition(wire, which);
+            }
+            return which === 'a' ? wire?.a : wire?.b;
+        };
+
+        const a = getEnd('a');
+        const b = getEnd('b');
+
+        if (!a || !b) return;
+
+        const d = `M ${a.x} ${a.y} L ${b.x} ${b.y}`;
         path.setAttribute('d', d);
         
         // 更新点击区域
@@ -1118,22 +1103,23 @@ export const SVGRenderer = {
             hitArea.setAttribute('d', d);
         }
         
-        // 移除旧的控制点圆圈
-        g.querySelectorAll('.wire-control-point, .wire-add-point, .wire-node-point').forEach(el => el.remove());
+        // 移除旧的端点
+        g.querySelectorAll('.wire-endpoint').forEach(el => el.remove());
         
-        // 如果导线被选中，显示控制点
+        // 如果导线被选中，显示端点（可拖动）
         if (g.classList.contains('selected')) {
-            // 显示现有控制点（蓝色大圆，可拖动和连接）
-            controlPoints.forEach((cp, i) => {
+            const makeEndpoint = (pt, which) => {
                 const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-                circle.setAttribute('cx', cp.x);
-                circle.setAttribute('cy', cp.y);
+                circle.setAttribute('cx', pt.x);
+                circle.setAttribute('cy', pt.y);
                 circle.setAttribute('r', 7);
-                circle.setAttribute('class', 'wire-node-point');
-                circle.setAttribute('data-index', i);
+                circle.setAttribute('class', 'wire-endpoint');
+                circle.setAttribute('data-end', which);
                 circle.style.cursor = 'move';
                 g.appendChild(circle);
-            });
+            };
+            makeEndpoint(a, 'a');
+            makeEndpoint(b, 'b');
         }
     }
 };
