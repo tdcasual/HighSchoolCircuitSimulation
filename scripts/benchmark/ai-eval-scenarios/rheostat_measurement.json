@@ -1,0 +1,98 @@
+{
+  "id": "rheostat_measurement",
+  "name": "滑变与仪表测量电路",
+  "description": "含滑动变阻器、电流表、电压表的教学典型电路",
+  "circuit": {
+    "meta": {
+      "version": "2.0",
+      "name": "Rheostat Measurement"
+    },
+    "components": [
+      {
+        "id": "PowerSource_1",
+        "type": "PowerSource",
+        "label": "E1",
+        "x": 120,
+        "y": 220,
+        "rotation": 270,
+        "properties": {
+          "voltage": 6,
+          "internalResistance": 0.3
+        }
+      },
+      {
+        "id": "Ammeter_1",
+        "type": "Ammeter",
+        "label": "A1",
+        "x": 260,
+        "y": 220,
+        "rotation": 0,
+        "properties": {
+          "resistance": 0.02,
+          "range": 3
+        }
+      },
+      {
+        "id": "Rheostat_1",
+        "type": "Rheostat",
+        "label": "P1",
+        "x": 420,
+        "y": 220,
+        "rotation": 0,
+        "properties": {
+          "minResistance": 0,
+          "maxResistance": 20,
+          "position": 0.35,
+          "connectionMode": "left-slider"
+        }
+      },
+      {
+        "id": "Resistor_1",
+        "type": "Resistor",
+        "label": "R1",
+        "x": 620,
+        "y": 220,
+        "rotation": 0,
+        "properties": {
+          "resistance": 12
+        }
+      },
+      {
+        "id": "Voltmeter_1",
+        "type": "Voltmeter",
+        "label": "V1",
+        "x": 620,
+        "y": 90,
+        "rotation": 90,
+        "properties": {
+          "resistance": 1000000,
+          "range": 15
+        }
+      }
+    ],
+    "wires": [
+      { "id": "w1", "start": { "componentId": "PowerSource_1", "terminalIndex": 1 }, "end": { "componentId": "Ammeter_1", "terminalIndex": 0 } },
+      { "id": "w2", "start": { "componentId": "Ammeter_1", "terminalIndex": 1 }, "end": { "componentId": "Rheostat_1", "terminalIndex": 0 } },
+      { "id": "w3", "start": { "componentId": "Rheostat_1", "terminalIndex": 2 }, "end": { "componentId": "Resistor_1", "terminalIndex": 0 } },
+      { "id": "w4", "start": { "componentId": "Resistor_1", "terminalIndex": 1 }, "end": { "componentId": "PowerSource_1", "terminalIndex": 0 } },
+      { "id": "w5", "start": { "componentId": "Voltmeter_1", "terminalIndex": 0 }, "end": { "componentId": "Resistor_1", "terminalIndex": 0 } },
+      { "id": "w6", "start": { "componentId": "Voltmeter_1", "terminalIndex": 1 }, "end": { "componentId": "Resistor_1", "terminalIndex": 1 } }
+    ]
+  },
+  "questions": [
+    {
+      "id": "q1",
+      "question": "A1 读数大约是多少 A？",
+      "targets": [
+        { "component": "A1", "quantity": "current" }
+      ]
+    },
+    {
+      "id": "q2",
+      "question": "V1 读数大约是多少 V？",
+      "targets": [
+        { "component": "V1", "quantity": "voltage" }
+      ]
+    }
+  ]
+}
