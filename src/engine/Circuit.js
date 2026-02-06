@@ -5,7 +5,7 @@
 
 import { MNASolver } from './Solver.js';
 import { Matrix } from './Matrix.js';
-import { createComponent } from '../components/Component.js';
+import { createComponent, getComponentTerminalCount } from '../components/Component.js';
 import { computeOverlapFractionFromOffsetPx, computeParallelPlateCapacitance } from '../utils/Physics.js';
 import { getTerminalWorldPosition } from '../utils/TerminalGeometry.js';
 import { normalizeCanvasPoint, pointKey, toCanvasInt } from '../utils/CanvasCoords.js';
@@ -14,6 +14,7 @@ export class Circuit {
     constructor() {
         this.components = new Map();  // id -> component
         this.wires = new Map();       // id -> wire
+        this.observationProbes = new Map(); // id -> probe
         this.nodes = [];              // 电气节点列表
         this.solver = new MNASolver();
         this.isRunning = false;
@@ -189,6 +190,7 @@ export class Circuit {
      */
     removeWire(id) {
         this.wires.delete(id);
+        this.removeObservationProbesByWireId(id);
         this.requestTopologyRebuild();
     }
 
@@ -199,6 +201,72 @@ export class Circuit {
      */
     getWire(id) {
         return this.wires.get(id);
+    }
+
+    ensureUniqueObservationProbeId(baseId = `probe_${Date.now()}`) {
+        if (!this.observationProbes.has(baseId)) return baseId;
+        let i = 1;
+        while (this.observationProbes.has(`${baseId}_${i}`)) i += 1;
+        return `${baseId}_${i}`;
+    }
+
+    normalizeObservationProbe(probe) {
+        if (!probe || typeof probe !== 'object') return null;
+        const type = probe.type;
+        if (type !== 'NodeVoltageProbe' && type !== 'WireCurrentProbe') return null;
+        if (!probe.id) return null;
+        if (!probe.wireId) return null;
+        return {
+            id: String(probe.id),
+            type,
+            wireId: String(probe.wireId),
+            label: typeof probe.label === 'string' ? probe.label : null
+        };
+    }
+
+    addObservationProbe(probe) {
+        const normalized = this.normalizeObservationProbe(probe);
+        if (!normalized) return null;
+        this.observationProbes.set(normalized.id, normalized);
+        return normalized;
+    }
+
+    removeObservationProbe(id) {
+        if (!id) return false;
+        return this.observationProbes.delete(String(id));
+    }
+
+    removeObservationProbesByWireId(wireId) {
+        if (!wireId) return;
+        const target = String(wireId);
+        for (const [id, probe] of this.observationProbes.entries()) {
+            if (probe?.wireId === target) {
+                this.observationProbes.delete(id);
+            }
+        }
+    }
+
+    remapObservationProbeWireIds(replacementByRemovedId = {}) {
+        if (!replacementByRemovedId || typeof replacementByRemovedId !== 'object') return;
+        for (const probe of this.observationProbes.values()) {
+            if (!probe?.wireId) continue;
+            let current = probe.wireId;
+            const seen = new Set();
+            while (replacementByRemovedId[current] && !seen.has(current)) {
+                seen.add(current);
+                current = replacementByRemovedId[current];
+            }
+            probe.wireId = current;
+        }
+    }
+
+    getObservationProbe(id) {
+        if (!id) return undefined;
+        return this.observationProbes.get(String(id));
+    }
+
+    getAllObservationProbes() {
+        return Array.from(this.observationProbes.values());
     }
 
     /**
@@ -265,7 +333,7 @@ export class Circuit {
 
         const terminalCoordKeys = new Set();
         for (const [, comp] of this.components) {
-            const terminalCount = comp.type === 'Rheostat' ? 3 : 2;
+            const terminalCount = getComponentTerminalCount(comp.type);
             for (let terminalIndex = 0; terminalIndex < terminalCount; terminalIndex++) {
                 const pos = getTerminalWorldPosition(comp, terminalIndex);
                 const key = pointKey(pos);
@@ -430,10 +498,9 @@ export class Circuit {
 
         // Register all component terminals (even if isolated; we will later mark unconnected ones as -1).
         for (const [id, comp] of this.components) {
-            registerTerminal(id, 0, comp);
-            registerTerminal(id, 1, comp);
-            if (comp.type === 'Rheostat') {
-                registerTerminal(id, 2, comp);
+            const terminalCount = getComponentTerminalCount(comp.type);
+            for (let terminalIndex = 0; terminalIndex < terminalCount; terminalIndex++) {
+                registerTerminal(id, terminalIndex, comp);
             }
         }
 
@@ -459,7 +526,7 @@ export class Circuit {
         // Build terminal "degree" map (junction degree at the coordinate point).
         const connectedTerminals = new Map();
         for (const [id, comp] of this.components) {
-            const terminalCount = comp.type === 'Rheostat' ? 3 : 2;
+            const terminalCount = getComponentTerminalCount(comp.type);
             for (let ti = 0; ti < terminalCount; ti++) {
                 const tKey = `${id}:${ti}`;
                 const coordKey = terminalCoordKey.get(tKey);
@@ -481,9 +548,27 @@ export class Circuit {
 
         const getTerminalPostId = (componentId, terminalIndex) => `T:${componentId}:${terminalIndex}`;
 
-        // Prefer power source negative terminal as ground if it is actually connected.
+        // Prefer explicit Ground terminal as reference node.
         let groundRoot = null;
+        let fallbackGroundRoot = null;
         for (const [id, comp] of this.components) {
+            if (comp.type !== 'Ground') continue;
+            const tKey = `${id}:0`;
+            const postId = getTerminalPostId(id, 0);
+            const root = find(postId);
+            if (!fallbackGroundRoot) {
+                fallbackGroundRoot = root;
+            }
+            if (connectedTerminals.has(tKey)) {
+                groundRoot = root;
+                assignNodeIfNeeded(root);
+                break;
+            }
+        }
+
+        // Fallback: connected power source negative terminal.
+        for (const [id, comp] of this.components) {
+            if (groundRoot) break;
             if (comp.type !== 'PowerSource') continue;
             const negKey = `${id}:1`;
             const negPostId = getTerminalPostId(id, 1);
@@ -507,6 +592,12 @@ export class Circuit {
             }
         }
 
+        // If explicit Ground exists but is currently isolated, still use it as reference.
+        if (!groundRoot && fallbackGroundRoot) {
+            groundRoot = fallbackGroundRoot;
+            assignNodeIfNeeded(groundRoot);
+        }
+
         // If still none (completely disconnected layout), fall back to first power source negative terminal if any.
         if (!groundRoot) {
             for (const [id, comp] of this.components) {
@@ -528,7 +619,7 @@ export class Circuit {
 
         // Update component node references. Unconnected terminals remain -1 to avoid phantom currents.
         for (const [id, comp] of this.components) {
-            const terminalCount = comp.type === 'Rheostat' ? 3 : 2;
+            const terminalCount = getComponentTerminalCount(comp.type);
             comp.nodes = Array.from({ length: terminalCount }, () => -1);
             for (let ti = 0; ti < terminalCount; ti++) {
                 const tKey = `${id}:${ti}`;
@@ -583,7 +674,7 @@ export class Circuit {
         // Track nodes that contain a shorted power source (both terminals on the same electrical node).
         const shorted = new Set();
         for (const comp of this.components.values()) {
-            if (comp.type !== 'PowerSource') continue;
+            if (comp.type !== 'PowerSource' && comp.type !== 'ACVoltageSource') continue;
             const n0 = comp.nodes?.[0];
             const n1 = comp.nodes?.[1];
             if (n0 !== undefined && n0 >= 0 && n0 === n1) {
@@ -721,6 +812,7 @@ export class Circuit {
     isComponentConnected(componentId) {
         const comp = this.components.get(componentId);
         if (!comp || !Array.isArray(comp.nodes)) return false;
+        const terminalCount = getComponentTerminalCount(comp.type);
 
         const hasValidNode = (idx) => idx !== undefined && idx !== null && idx >= 0;
         const hasTerminalWire = (terminalIndex) => {
@@ -728,7 +820,12 @@ export class Circuit {
             return (this.terminalConnectionMap.get(key) || 0) > 0;
         };
 
+        if (comp.type === 'Ground') {
+            return hasValidNode(comp.nodes[0]) && hasTerminalWire(0);
+        }
+
         if (comp.type !== 'Rheostat') {
+            if (terminalCount < 2) return false;
             return hasValidNode(comp.nodes[0]) && hasValidNode(comp.nodes[1])
                 && hasTerminalWire(0) && hasTerminalWire(1);
         }
@@ -762,6 +859,10 @@ export class Circuit {
             if (comp.type === 'Capacitor' || comp.type === 'ParallelPlateCapacitor') {
                 comp.prevVoltage = 0;
                 comp.prevCharge = 0;
+            }
+            if (comp.type === 'Inductor') {
+                const initialCurrent = Number.isFinite(comp.initialCurrent) ? comp.initialCurrent : 0;
+                comp.prevCurrent = initialCurrent;
             }
             if (comp.type === 'Motor') {
                 comp.speed = 0;
@@ -801,7 +902,7 @@ export class Circuit {
         this.solver.debugMode = this.debugMode;
 
         // 求解
-        this.lastResults = this.solver.solve(this.dt);
+        this.lastResults = this.solver.solve(this.dt, this.simTime);
         
         // 调试输出
         if (this.debugMode) {
@@ -837,6 +938,13 @@ export class Circuit {
                     }
                     continue;
                 }
+
+                if (comp.type === 'Ground') {
+                    comp.currentValue = 0;
+                    comp.voltageValue = 0;
+                    comp.powerValue = 0;
+                    continue;
+                }
                 
                 // 检查元器件是否被短路（两端节点相同）
                 if (comp._isShorted) {
@@ -857,7 +965,7 @@ export class Circuit {
                 }
                 
                 // 对于电源，显示的电压应该是端子电压
-                if (comp.type === 'PowerSource') {
+                if (comp.type === 'PowerSource' || comp.type === 'ACVoltageSource') {
                     // 端子电压直接从节点电压差获取（诺顿模型下这就是正确的端子电压）
                     const terminalVoltage = Math.abs(v1 - v2);
                     comp.voltageValue = terminalVoltage;
@@ -981,6 +1089,7 @@ export class Circuit {
         // 判定为"主动"器件的列表（正电流表示端子0向外输出）
         const isActiveSource = (
             comp.type === 'PowerSource' ||
+            comp.type === 'ACVoltageSource' ||
             comp.type === 'Motor' ||
             (comp.type === 'Ammeter' && (!comp.resistance || comp.resistance <= 0))
         );
@@ -1399,9 +1508,21 @@ export class Circuit {
      */
     getComponentProperties(comp) {
         switch (comp.type) {
+            case 'Ground':
+                return {
+                    isReference: true
+                };
             case 'PowerSource':
                 return {
                     voltage: comp.voltage,
+                    internalResistance: comp.internalResistance
+                };
+            case 'ACVoltageSource':
+                return {
+                    rmsVoltage: comp.rmsVoltage,
+                    frequency: comp.frequency,
+                    phase: comp.phase,
+                    offset: comp.offset,
                     internalResistance: comp.internalResistance
                 };
             case 'Resistor':
@@ -1419,6 +1540,11 @@ export class Circuit {
                 };
             case 'Capacitor':
                 return { capacitance: comp.capacitance };
+            case 'Inductor':
+                return {
+                    inductance: comp.inductance,
+                    initialCurrent: comp.initialCurrent
+                };
             case 'ParallelPlateCapacitor':
                 return {
                     plateArea: comp.plateArea,
@@ -1495,6 +1621,10 @@ export class Circuit {
                     dielectricConstant: comp.dielectricConstant,
                     overlapFraction
                 });
+            }
+
+            if (comp.type === 'Inductor') {
+                comp.prevCurrent = Number.isFinite(comp.initialCurrent) ? comp.initialCurrent : 0;
             }
 
             // 恢复数值显示开关（单元件配置）
