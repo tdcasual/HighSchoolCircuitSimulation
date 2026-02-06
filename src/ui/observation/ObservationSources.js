@@ -7,6 +7,7 @@ import { ComponentNames } from '../../components/Component.js';
 import { computeOverlapFractionFromOffsetPx } from '../../utils/Physics.js';
 
 export const TIME_SOURCE_ID = '__time__';
+export const PROBE_SOURCE_PREFIX = '__probe__:';
 
 export const QuantityIds = /** @type {const} */ ({
     Time: 't',
@@ -35,6 +36,33 @@ const baseQuantityDefs = [
     { id: QuantityIds.Power, label: '功率 P (W)', unit: 'W' }
 ];
 
+function toProbeSourceId(probeId) {
+    return `${PROBE_SOURCE_PREFIX}${probeId}`;
+}
+
+function parseProbeSourceId(sourceId) {
+    if (typeof sourceId !== 'string') return null;
+    if (!sourceId.startsWith(PROBE_SOURCE_PREFIX)) return null;
+    const probeId = sourceId.slice(PROBE_SOURCE_PREFIX.length).trim();
+    return probeId || null;
+}
+
+function getProbeTypeLabel(type) {
+    if (type === 'NodeVoltageProbe') return '节点电压探针';
+    if (type === 'WireCurrentProbe') return '支路电流探针';
+    return '探针';
+}
+
+function resolveObservationProbe(circuit, sourceId) {
+    if (!circuit || typeof circuit.getObservationProbe !== 'function') return null;
+    const prefixedId = parseProbeSourceId(sourceId);
+    if (prefixedId) {
+        return circuit.getObservationProbe(prefixedId) || null;
+    }
+    if (circuit.components?.get?.(sourceId)) return null;
+    return circuit.getObservationProbe(sourceId) || null;
+}
+
 export function getSourceOptions(circuit) {
     const options = [{ id: TIME_SOURCE_ID, label: '时间 t (s)' }];
     if (!circuit || !circuit.components) return options;
@@ -47,12 +75,37 @@ export function getSourceOptions(circuit) {
             label: `${label} · ${typeName}`
         });
     }
+
+    const probes = typeof circuit.getAllObservationProbes === 'function'
+        ? circuit.getAllObservationProbes()
+        : [];
+    for (const probe of probes) {
+        if (!probe?.id || !probe?.type) continue;
+        const typeLabel = getProbeTypeLabel(probe.type);
+        const probeLabel = probe.label?.trim() || probe.id;
+        const wireExists = !!circuit.getWire?.(probe.wireId);
+        const wireLabel = wireExists ? probe.wireId : `${probe.wireId}（导线不存在）`;
+        options.push({
+            id: toProbeSourceId(probe.id),
+            label: `${probeLabel} · ${typeLabel} · ${wireLabel}`
+        });
+    }
     return options;
 }
 
 export function getQuantitiesForSource(sourceId, circuit) {
     if (sourceId === TIME_SOURCE_ID) {
         return [{ id: QuantityIds.Time, label: '时间 t', unit: 's' }];
+    }
+
+    const probe = resolveObservationProbe(circuit, sourceId);
+    if (probe) {
+        if (probe.type === 'NodeVoltageProbe') {
+            return [{ id: QuantityIds.Voltage, label: '节点电压 U', unit: 'V' }];
+        }
+        if (probe.type === 'WireCurrentProbe') {
+            return [{ id: QuantityIds.Current, label: '支路电流 I', unit: 'A' }];
+        }
     }
 
     const comp = circuit?.components?.get(sourceId);
@@ -105,6 +158,32 @@ export function getQuantitiesForSource(sourceId, circuit) {
 export function evaluateSourceQuantity(circuit, sourceId, quantityId) {
     if (sourceId === TIME_SOURCE_ID) {
         return Number.isFinite(circuit?.simTime) ? circuit.simTime : 0;
+    }
+
+    const probe = resolveObservationProbe(circuit, sourceId);
+    if (probe) {
+        const wire = circuit?.getWire?.(probe.wireId);
+        const results = circuit?.lastResults;
+        if (!wire) return null;
+
+        if (probe.type === 'NodeVoltageProbe') {
+            if (quantityId !== QuantityIds.Voltage) return null;
+            if (!results?.valid) return 0;
+            const nodeIndex = Number.isFinite(wire.nodeIndex) ? wire.nodeIndex : -1;
+            if (nodeIndex < 0) return 0;
+            const nodeVoltage = results.voltages?.[nodeIndex];
+            return Number.isFinite(nodeVoltage) ? nodeVoltage : 0;
+        }
+
+        if (probe.type === 'WireCurrentProbe') {
+            if (quantityId !== QuantityIds.Current) return null;
+            if (!results?.valid || typeof circuit?.getWireCurrentInfo !== 'function') return 0;
+            const info = circuit.getWireCurrentInfo(wire, results);
+            if (!info) return 0;
+            const magnitude = Number.isFinite(info.current) ? info.current : 0;
+            const flowDirection = Number.isFinite(info.flowDirection) ? info.flowDirection : 0;
+            return flowDirection * magnitude;
+        }
     }
 
     const comp = circuit?.components?.get(sourceId);
