@@ -28,6 +28,7 @@ export class Renderer {
         // 元器件SVG元素映射
         this.componentElements = new Map();
         this.wireElements = new Map();
+        this.valueDisplaySnapshot = new Map();
     }
 
     /**
@@ -37,7 +38,7 @@ export class Renderer {
         this.renderComponents();
         this.renderWires();
         // Ensure value displays are populated even before the simulation starts.
-        this.updateValues();
+        this.updateValues(true);
     }
 
     getOpaqueBlackBoxes() {
@@ -78,6 +79,7 @@ export class Renderer {
         // 清空图层
         this.componentLayer.innerHTML = '';
         this.componentElements.clear();
+        this.valueDisplaySnapshot.clear();
 
         const opaqueBoxes = this.getOpaqueBlackBoxes();
         const hiddenComponentIds = this.computeHiddenComponentIds(opaqueBoxes);
@@ -132,6 +134,10 @@ export class Renderer {
         const showVoltage = display.voltage ?? this.defaultDisplay.voltage;
         const showPower = display.power ?? this.defaultDisplay.power;
         SVGRenderer.updateValueDisplay(g, comp, showCurrent, showVoltage, showPower);
+        this.valueDisplaySnapshot.set(
+            comp.id,
+            this.buildValueDisplaySnapshot(comp, showCurrent, showVoltage, showPower)
+        );
         return g;
     }
 
@@ -144,6 +150,7 @@ export class Renderer {
             g.remove();
             this.componentElements.delete(id);
         }
+        this.valueDisplaySnapshot.delete(id);
     }
 
     /**
@@ -243,19 +250,60 @@ export class Renderer {
         return normalizeCanvasPoint(getTerminalWorldPosition(comp, terminalIndex));
     }
 
+    formatValueSnapshotNumber(value) {
+        if (typeof value === 'number') {
+            if (Number.isNaN(value)) return 'NaN';
+            if (!Number.isFinite(value)) return value > 0 ? 'Infinity' : '-Infinity';
+            if (Object.is(value, -0)) return '0';
+            return value.toPrecision(12);
+        }
+        if (value === undefined) return 'undefined';
+        if (value === null) return 'null';
+        return String(value);
+    }
+
+    buildValueDisplaySnapshot(comp, showCurrent, showVoltage, showPower) {
+        return [
+            comp?.type || 'Unknown',
+            showCurrent ? '1' : '0',
+            showVoltage ? '1' : '0',
+            showPower ? '1' : '0',
+            this.formatValueSnapshotNumber(comp?.currentValue),
+            this.formatValueSnapshotNumber(comp?.voltageValue),
+            this.formatValueSnapshotNumber(comp?.powerValue),
+            this.formatValueSnapshotNumber(comp?.voltageSegLeft),
+            this.formatValueSnapshotNumber(comp?.voltageSegRight),
+            this.formatValueSnapshotNumber(comp?.ratedPower),
+            this.formatValueSnapshotNumber(comp?.boxHeight)
+        ].join('|');
+    }
+
     /**
      * 更新数值显示
      */
-    updateValues() {
+    updateValues(force = false) {
+        if (!(this.valueDisplaySnapshot instanceof Map)) {
+            this.valueDisplaySnapshot = new Map();
+        }
+        const staleIds = new Set(this.valueDisplaySnapshot.keys());
         for (const [id, g] of this.componentElements) {
             const comp = this.circuit.getComponent(id);
             if (comp) {
+                staleIds.delete(id);
                 const display = comp.display || {};
                 const showCurrent = display.current ?? this.defaultDisplay.current;
                 const showVoltage = display.voltage ?? this.defaultDisplay.voltage;
                 const showPower = display.power ?? this.defaultDisplay.power;
+                const snapshot = this.buildValueDisplaySnapshot(comp, showCurrent, showVoltage, showPower);
+                if (!force && this.valueDisplaySnapshot.get(id) === snapshot) {
+                    continue;
+                }
                 SVGRenderer.updateValueDisplay(g, comp, showCurrent, showVoltage, showPower);
+                this.valueDisplaySnapshot.set(id, snapshot);
             }
+        }
+        for (const staleId of staleIds) {
+            this.valueDisplaySnapshot.delete(staleId);
         }
     }
 
@@ -425,6 +473,10 @@ export class Renderer {
             const showVoltage = display.voltage ?? this.defaultDisplay.voltage;
             const showPower = display.power ?? this.defaultDisplay.power;
             SVGRenderer.updateValueDisplay(newG, comp, showCurrent, showVoltage, showPower);
+            this.valueDisplaySnapshot.set(
+                comp.id,
+                this.buildValueDisplaySnapshot(comp, showCurrent, showVoltage, showPower)
+            );
         }
     }
 
