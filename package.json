@@ -7,7 +7,11 @@
     "test:watch": "vitest",
     "benchmark:p0": "node scripts/benchmark/p0-baseline.mjs",
     "baseline:p0": "node scripts/benchmark/p0-electrical-regression.mjs",
-    "baseline:p0:update": "node scripts/benchmark/p0-electrical-regression.mjs --update"
+    "baseline:p0:update": "node scripts/benchmark/p0-electrical-regression.mjs --update",
+    "baseline:circuitjs": "node scripts/benchmark/circuitjs-golden-regression.mjs",
+    "baseline:circuitjs:update": "node scripts/benchmark/circuitjs-golden-regression.mjs --update",
+    "baseline:ai": "node scripts/benchmark/ai-eval-regression.mjs",
+    "baseline:ai:update": "node scripts/benchmark/ai-eval-regression.mjs --update"
   },
   "devDependencies": {
     "vitest": "^1.6.0"
