@@ -6,17 +6,22 @@
 import { createElement, clearElement } from '../utils/SafeDOM.js';
 import { applyTransform, computeNiceTicks, computeRangeFromBuffer, formatNumberCompact, RingBuffer2D, TransformIds, TransformOptions } from './observation/ObservationMath.js';
 import { evaluateSourceQuantity, getQuantitiesForSource, getSourceOptions, QuantityIds, TIME_SOURCE_ID } from './observation/ObservationSources.js';
+import { createDefaultPlotState, DEFAULT_SAMPLE_INTERVAL_MS, normalizeObservationState, normalizeSampleIntervalMs, shouldSampleAtTime } from './observation/ObservationState.js';
 
 function setSelectOptions(selectEl, options, selectedId) {
-    if (!selectEl) return;
+    if (!selectEl) return null;
     clearElement(selectEl);
     options.forEach((opt) => {
         const optionEl = createElement('option', { textContent: opt.label, attrs: { value: opt.id } });
         selectEl.appendChild(optionEl);
     });
-    if (selectedId != null) {
+    const hasSelected = selectedId != null && options.some((opt) => opt.id === selectedId);
+    if (hasSelected) {
         selectEl.value = selectedId;
+    } else if (options.length > 0) {
+        selectEl.value = options[0].id;
     }
+    return selectEl.value || null;
 }
 
 function createSelectGroup(labelText, selectId, hintText = null) {
@@ -46,8 +51,10 @@ export class ObservationPanel {
         this.plots = [];
         this.gauges = new Map(); // componentId -> gauge state
         this.nextPlotIndex = 1;
+        this.sampleIntervalMs = DEFAULT_SAMPLE_INTERVAL_MS;
         this._renderRaf = 0;
         this._lastSimTime = 0;
+        this._lastSampleTime = Number.NEGATIVE_INFINITY;
 
         if (!this.root) return;
 
@@ -63,6 +70,22 @@ export class ObservationPanel {
             }
             this.requestRender({ onlyIfActive: true });
         });
+    }
+
+    schedulePersist(delayMs = 0) {
+        this.app.scheduleSave?.(delayMs);
+    }
+
+    setRuntimeStatus(message = '') {
+        if (!this.runtimeStatusEl) return;
+        const text = String(message || '').trim();
+        if (!text) {
+            this.runtimeStatusEl.textContent = '';
+            this.runtimeStatusEl.style.display = 'none';
+            return;
+        }
+        this.runtimeStatusEl.textContent = text;
+        this.runtimeStatusEl.style.display = 'block';
     }
 
     initializeUI() {
@@ -92,6 +115,38 @@ export class ObservationPanel {
             className: 'hint',
             textContent: '运行模拟后将持续采样并绘制：y(x) 为参数曲线；也可将 X 设为时间 t 绘制波形。'
         }));
+
+        this.runtimeStatusEl = createElement('p', {
+            className: 'hint observation-runtime-status',
+            textContent: ''
+        });
+        this.runtimeStatusEl.style.display = 'none';
+        this.root.appendChild(this.runtimeStatusEl);
+
+        const sampleGroup = createElement('div', { className: 'form-group' });
+        sampleGroup.appendChild(createElement('label', { textContent: '采样间隔 (ms)' }));
+        const sampleInput = createElement('input', {
+            attrs: {
+                type: 'number',
+                min: '0',
+                max: '5000',
+                step: '1',
+                value: String(this.sampleIntervalMs)
+            }
+        });
+        sampleGroup.appendChild(sampleInput);
+        sampleGroup.appendChild(createElement('p', {
+            className: 'hint',
+            textContent: '0 表示每个仿真步都采样；建议 20~100ms。'
+        }));
+        this.root.appendChild(sampleGroup);
+        this.sampleIntervalInput = sampleInput;
+        sampleInput.addEventListener('change', () => {
+            const normalized = normalizeSampleIntervalMs(sampleInput.value, this.sampleIntervalMs);
+            this.sampleIntervalMs = normalized;
+            sampleInput.value = String(normalized);
+            this.schedulePersist(0);
+        });
 
         // 指针表盘区（电流表/电压表自主读数）
         this.gaugeSectionEl = createElement('div', { className: 'observation-gauge-section' });
@@ -140,31 +195,38 @@ export class ObservationPanel {
         return TIME_SOURCE_ID;
     }
 
-    addPlot() {
+    addPlot(options = {}) {
         const plotId = `plot_${Date.now()}_${Math.random().toString(16).slice(2)}`;
-        const defaultYSource = this.getDefaultComponentId();
-        const defaultYQuantity = defaultYSource === TIME_SOURCE_ID ? QuantityIds.Time : QuantityIds.Current;
+        const defaultConfig = createDefaultPlotState(this.nextPlotIndex, this.getDefaultComponentId());
+        const config = options.config
+            ? normalizeObservationState(
+                { sampleIntervalMs: this.sampleIntervalMs, plots: [options.config] },
+                { defaultYSourceId: this.getDefaultComponentId(), defaultPlotCount: 1 }
+            ).plots[0]
+            : defaultConfig;
+
+        this.nextPlotIndex += 1;
 
         const plot = {
             id: plotId,
-            name: `图像 ${this.nextPlotIndex++}`,
-            maxPoints: 3000,
-            buffer: new RingBuffer2D(3000),
+            name: config.name,
+            maxPoints: config.maxPoints,
+            buffer: new RingBuffer2D(config.maxPoints),
             x: {
-                sourceId: TIME_SOURCE_ID,
-                quantityId: QuantityIds.Time,
-                transformId: TransformIds.Identity,
-                autoRange: true,
-                min: null,
-                max: null
+                sourceId: config.x.sourceId,
+                quantityId: config.x.quantityId,
+                transformId: config.x.transformId,
+                autoRange: config.x.autoRange,
+                min: config.x.min,
+                max: config.x.max
             },
             y: {
-                sourceId: defaultYSource,
-                quantityId: defaultYQuantity,
-                transformId: TransformIds.Abs,
-                autoRange: true,
-                min: null,
-                max: null
+                sourceId: config.y.sourceId,
+                quantityId: config.y.quantityId,
+                transformId: config.y.transformId,
+                autoRange: config.y.autoRange,
+                min: config.y.min,
+                max: config.y.max
             },
             elements: {},
             _needsRedraw: true
@@ -174,13 +236,76 @@ export class ObservationPanel {
         this.plotListEl.appendChild(card);
         this.plots.push(plot);
 
-        this.refreshComponentOptions();
-        this.requestRender({ onlyIfActive: true });
+        if (!options.skipRefresh) {
+            this.refreshComponentOptions();
+            this.requestRender({ onlyIfActive: true });
+            this.schedulePersist(0);
+        }
     }
 
     clearAllPlots() {
         for (const plot of this.plots) {
             plot.buffer.clear();
+            plot._needsRedraw = true;
+        }
+        this.requestRender({ onlyIfActive: true });
+    }
+
+    clearPlotCards() {
+        for (const plot of this.plots) {
+            plot.elements.card?.remove();
+        }
+        this.plots = [];
+    }
+
+    toJSON() {
+        return {
+            sampleIntervalMs: normalizeSampleIntervalMs(this.sampleIntervalMs, DEFAULT_SAMPLE_INTERVAL_MS),
+            plots: this.plots.map((plot) => ({
+                name: plot.name,
+                maxPoints: plot.maxPoints,
+                x: {
+                    sourceId: plot.x.sourceId,
+                    quantityId: plot.x.quantityId,
+                    transformId: plot.x.transformId,
+                    autoRange: !!plot.x.autoRange,
+                    min: plot.x.autoRange ? null : parseOptionalNumber(plot.x.min),
+                    max: plot.x.autoRange ? null : parseOptionalNumber(plot.x.max)
+                },
+                y: {
+                    sourceId: plot.y.sourceId,
+                    quantityId: plot.y.quantityId,
+                    transformId: plot.y.transformId,
+                    autoRange: !!plot.y.autoRange,
+                    min: plot.y.autoRange ? null : parseOptionalNumber(plot.y.min),
+                    max: plot.y.autoRange ? null : parseOptionalNumber(plot.y.max)
+                }
+            }))
+        };
+    }
+
+    fromJSON(rawState) {
+        if (!this.root) return;
+        const normalized = normalizeObservationState(rawState, {
+            defaultYSourceId: this.getDefaultComponentId(),
+            defaultPlotCount: 1
+        });
+
+        this.sampleIntervalMs = normalized.sampleIntervalMs;
+        if (this.sampleIntervalInput) {
+            this.sampleIntervalInput.value = String(this.sampleIntervalMs);
+        }
+
+        this.clearPlotCards();
+        this.nextPlotIndex = 1;
+        this._lastSampleTime = Number.NEGATIVE_INFINITY;
+
+        for (const plotState of normalized.plots) {
+            this.addPlot({ config: plotState, skipRefresh: true });
+        }
+
+        this.refreshComponentOptions();
+        for (const plot of this.plots) {
             plot._needsRedraw = true;
         }
         this.requestRender({ onlyIfActive: true });
@@ -193,6 +318,7 @@ export class ObservationPanel {
         plot.elements.card?.remove();
         this.plots.splice(idx, 1);
         this.requestRender({ onlyIfActive: true });
+        this.schedulePersist(0);
     }
 
     createPlotCard(plot) {
@@ -281,6 +407,7 @@ export class ObservationPanel {
 
         titleInput.addEventListener('change', () => {
             plot.name = String(titleInput.value || '').trim() || plot.name;
+            this.schedulePersist(0);
         });
         removeBtn.addEventListener('click', () => this.removePlot(plot.id));
         clearBtn.addEventListener('click', () => {
@@ -296,11 +423,13 @@ export class ObservationPanel {
             plot.x.transformId = plot.elements.xTransformSelect.value;
             plot._needsRedraw = true;
             this.requestRender({ onlyIfActive: true });
+            this.schedulePersist(0);
         });
         plot.elements.yTransformSelect?.addEventListener('change', () => {
             plot.y.transformId = plot.elements.yTransformSelect.value;
             plot._needsRedraw = true;
             this.requestRender({ onlyIfActive: true });
+            this.schedulePersist(0);
         });
 
         plot.elements.xSourceSelect?.addEventListener('change', () => {
@@ -308,22 +437,26 @@ export class ObservationPanel {
             this.refreshQuantityOptionsForAxis(plot, 'x');
             plot._needsRedraw = true;
             this.requestRender({ onlyIfActive: true });
+            this.schedulePersist(0);
         });
         plot.elements.ySourceSelect?.addEventListener('change', () => {
             plot.y.sourceId = plot.elements.ySourceSelect.value;
             this.refreshQuantityOptionsForAxis(plot, 'y');
             plot._needsRedraw = true;
             this.requestRender({ onlyIfActive: true });
+            this.schedulePersist(0);
         });
         plot.elements.xQuantitySelect?.addEventListener('change', () => {
             plot.x.quantityId = plot.elements.xQuantitySelect.value;
             plot._needsRedraw = true;
             this.requestRender({ onlyIfActive: true });
+            this.schedulePersist(0);
         });
         plot.elements.yQuantitySelect?.addEventListener('change', () => {
             plot.y.quantityId = plot.elements.yQuantitySelect.value;
             plot._needsRedraw = true;
             this.requestRender({ onlyIfActive: true });
+            this.schedulePersist(0);
         });
 
         pointsInput.addEventListener('change', () => {
@@ -339,6 +472,7 @@ export class ObservationPanel {
             plot.buffer = nextBuffer;
             plot._needsRedraw = true;
             this.requestRender({ onlyIfActive: true });
+            this.schedulePersist(0);
         });
 
         // 初始化 canvas size
@@ -393,17 +527,20 @@ export class ObservationPanel {
             syncVisibility();
             plot._needsRedraw = true;
             this.requestRender({ onlyIfActive: true });
+            this.schedulePersist(0);
         });
 
         minInput.addEventListener('change', () => {
             axis.min = parseOptionalNumber(minInput.value);
             plot._needsRedraw = true;
             this.requestRender({ onlyIfActive: true });
+            this.schedulePersist(0);
         });
         maxInput.addEventListener('change', () => {
             axis.max = parseOptionalNumber(maxInput.value);
             plot._needsRedraw = true;
             this.requestRender({ onlyIfActive: true });
+            this.schedulePersist(0);
         });
 
         return group;
@@ -412,8 +549,14 @@ export class ObservationPanel {
     refreshComponentOptions() {
         const options = getSourceOptions(this.circuit);
         for (const plot of this.plots) {
-            setSelectOptions(plot.elements.xSourceSelect, options, plot.x.sourceId);
-            setSelectOptions(plot.elements.ySourceSelect, options, plot.y.sourceId);
+            const resolvedXSource = setSelectOptions(plot.elements.xSourceSelect, options, plot.x.sourceId);
+            const resolvedYSource = setSelectOptions(plot.elements.ySourceSelect, options, plot.y.sourceId);
+            if (resolvedXSource && resolvedXSource !== plot.x.sourceId) {
+                plot.x.sourceId = resolvedXSource;
+            }
+            if (resolvedYSource && resolvedYSource !== plot.y.sourceId) {
+                plot.y.sourceId = resolvedYSource;
+            }
             this.refreshQuantityOptionsForAxis(plot, 'x');
             this.refreshQuantityOptionsForAxis(plot, 'y');
         }
@@ -470,6 +613,7 @@ export class ObservationPanel {
                 comp.selfReading = false;
                 this.refreshDialGauges();
                 this.app.updateStatus('已关闭自主读数');
+                this.schedulePersist(0);
             });
 
             this.gaugeListEl.appendChild(card);
@@ -492,13 +636,9 @@ export class ObservationPanel {
         const axis = axisKey === 'x' ? plot.x : plot.y;
         const select = axisKey === 'x' ? plot.elements.xQuantitySelect : plot.elements.yQuantitySelect;
         const quantities = getQuantitiesForSource(axis.sourceId, this.circuit);
-        setSelectOptions(select, quantities, axis.quantityId);
-
-        // 如果当前 quantity 不存在，回退到第一项
-        const selectedOk = quantities.some((q) => q.id === axis.quantityId);
-        if (!selectedOk && quantities.length > 0) {
-            axis.quantityId = quantities[0].id;
-            if (select) select.value = axis.quantityId;
+        const resolvedQuantityId = setSelectOptions(select, quantities, axis.quantityId);
+        if (resolvedQuantityId && resolvedQuantityId !== axis.quantityId) {
+            axis.quantityId = resolvedQuantityId;
         }
     }
 
@@ -523,17 +663,28 @@ export class ObservationPanel {
         const t = Number.isFinite(this.circuit.simTime) ? this.circuit.simTime : 0;
         if (t + 1e-9 < this._lastSimTime) {
             this.clearAllPlots();
+            this._lastSampleTime = Number.NEGATIVE_INFINITY;
         }
         this._lastSimTime = t;
 
         if (!results || !results.valid) {
+            if (this.circuit?.isRunning) {
+                this.setRuntimeStatus('当前解无效，观察数据已暂停更新。请检查电路连接与参数设置。');
+            } else {
+                this.setRuntimeStatus('');
+            }
             return;
         }
+        this.setRuntimeStatus('');
 
         // 采样 & 请求绘制
         const canRenderNow = this.isObservationActive();
-        for (const plot of this.plots) {
-            this.samplePlot(plot, { updateLatestText: canRenderNow });
+        const shouldSample = shouldSampleAtTime(t, this._lastSampleTime, this.sampleIntervalMs);
+        if (shouldSample) {
+            for (const plot of this.plots) {
+                this.samplePlot(plot, { updateLatestText: canRenderNow });
+            }
+            this._lastSampleTime = t;
         }
 
         // 表盘读数（只在“观察”页可见时刷新 DOM/Canvas）
