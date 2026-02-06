@@ -3,18 +3,36 @@
  * 处理拖放、连线、选择等用户交互
  */
 
-import { createComponent, ComponentNames, ComponentDefaults, SVGRenderer, getComponentTerminalCount, updateIdCounterFromExisting } from '../components/Component.js';
+import { createComponent, ComponentNames, ComponentDefaults, SVGRenderer, getComponentTerminalCount } from '../components/Component.js';
 import { 
     createElement, 
     createPropertyRow, 
     createHintParagraph,
     createFormGroup,
+    createSelectFormGroup,
     createSliderFormGroup,
     createSwitchToggleGroup,
     clearElement
 } from '../utils/SafeDOM.js';
 import { computeOverlapFractionFromOffsetPx, computeParallelPlateCapacitance } from '../utils/Physics.js';
 import { GRID_SIZE, normalizeCanvasPoint, snapToGrid, toCanvasInt } from '../utils/CanvasCoords.js';
+import { HistoryManager } from './interaction/HistoryManager.js';
+import * as WireInteractions from './interaction/WireInteractions.js';
+import * as DragBehaviors from './interaction/DragBehaviors.js';
+import * as SelectionPanelController from './interaction/SelectionPanelController.js';
+
+const INTEGRATION_METHOD_OPTIONS = Object.freeze([
+    { value: 'auto', label: '自动（默认梯形法）' },
+    { value: 'trapezoidal', label: '梯形法' },
+    { value: 'backward-euler', label: '后向欧拉' }
+]);
+
+function resolveIntegrationMethodLabel(method) {
+    const normalized = typeof method === 'string' ? method.toLowerCase() : 'auto';
+    if (normalized === 'trapezoidal') return '梯形法';
+    if (normalized === 'backward-euler') return '后向欧拉';
+    return '自动';
+}
 
 function isOrthogonalWire(wire) {
     if (!wire || !wire.a || !wire.b) return false;
@@ -42,11 +60,7 @@ export class InteractionManager {
         this.selectedWire = null;
 
         // Undo/Redo history (circuit state snapshots)
-        this.historyUndo = [];
-        this.historyRedo = [];
-        this.historyMax = 100;
-        this.historyTransaction = null; // { label, beforeState, beforeKey, selectionBefore }
-        this.isRestoringHistory = false;
+        this.historyManager = new HistoryManager(this, { maxEntries: 100 });
 
         // 平行板电容探索模式：拖动极板（使用局部 document 监听实现）
         
@@ -806,6 +820,11 @@ export class InteractionManager {
         return null;
     }
 
+    resolveProbeMarkerTarget(target) {
+        if (!target || typeof target.closest !== 'function') return null;
+        return target.closest('.wire-probe-marker');
+    }
+
     resolvePointerType(event) {
         const pointerType = event?.pointerType;
         if (pointerType === 'mouse' || pointerType === 'touch' || pointerType === 'pen') {
@@ -837,6 +856,7 @@ export class InteractionManager {
         this.lastPrimaryPointerType = this.resolvePointerType(e);
 
 	    const target = e.target;
+        const probeMarker = this.resolveProbeMarkerTarget(target);
         const terminalTarget = this.resolveTerminalTarget(target);
         const componentGroup = target.closest('.component');
 
@@ -868,6 +888,12 @@ export class InteractionManager {
 	            // 连线模式下的 mousedown 不做特殊处理，让 mouseup 来处理
 	            return;
 	        }
+
+        if (probeMarker && e.button === 0) {
+            const wireId = probeMarker.dataset.wireId;
+            if (wireId) this.selectWire(wireId);
+            return;
+        }
 
 	        // 端子交互：默认拖动端子即延长/缩短引脚
 	        if (terminalTarget) {
@@ -1431,7 +1457,15 @@ export class InteractionManager {
      */
 	    onContextMenu(e) {
 	        e.preventDefault();
-	        
+            const probeMarker = this.resolveProbeMarkerTarget(e.target);
+            if (probeMarker) {
+                const probeId = probeMarker.dataset.probeId;
+                const wireId = probeMarker.dataset.wireId;
+                if (wireId) this.selectWire(wireId);
+                this.showProbeContextMenu(e, probeId, wireId);
+                return;
+            }
+
 	        const componentG = e.target.closest('.component');
 	        if (componentG) {
 	            const id = componentG.dataset.id;
@@ -1453,6 +1487,15 @@ export class InteractionManager {
      * 双击事件
      */
     onDoubleClick(e) {
+        const probeMarker = this.resolveProbeMarkerTarget(e.target);
+        if (probeMarker) {
+            const probeId = probeMarker.dataset.probeId;
+            if (probeId) {
+                this.renameObservationProbe(probeId);
+            }
+            return;
+        }
+
         // 双击元器件打开属性编辑
         const componentG = e.target.closest('.component');
         if (componentG) {
@@ -1601,26 +1644,7 @@ export class InteractionManager {
      * @param {boolean} armMouseUpGuard
      */
     startWiringFromPoint(point, e = null, armMouseUpGuard = false) {
-        if (!point) return;
-
-        // 确保清除任何残留的辅助线和高亮
-        this.hideAlignmentGuides();
-        this.renderer.clearTerminalHighlight();
-
-        const start = this.snapPoint(point.x, point.y, {
-            allowWireSegmentSnap: false,
-            pointerType: this.resolvePointerType(e)
-        });
-
-        this.isWiring = true;
-        this.wireStart = { x: start.x, y: start.y, snap: start.snap || null };
-
-        // 创建临时导线
-        this.tempWire = this.renderer.createTempWire();
-
-        const cursor = e ? this.screenToCanvas(e.clientX, e.clientY) : start;
-        this.renderer.updateTempWire(this.tempWire, start.x, start.y, cursor.x, cursor.y);
-        this.ignoreNextWireMouseUp = !!armMouseUpGuard;
+        return WireInteractions.startWiringFromPoint.call(this, point, e, armMouseUpGuard);
     }
 
     /**
@@ -1628,229 +1652,36 @@ export class InteractionManager {
      * @param {{x:number,y:number}} point
      */
     finishWiringToPoint(point, options = {}) {
-        if (!this.wireStart || !point) {
-            this.cancelWiring();
-            return;
-        }
-
-        const start = { x: this.wireStart.x, y: this.wireStart.y };
-        const end = this.snapPoint(point.x, point.y, {
-            allowWireSegmentSnap: false,
-            pointerType: options.pointerType
-        });
-        const dist = Math.hypot(end.x - start.x, end.y - start.y);
-        if (dist < 1e-6) {
-            this.cancelWiring();
-            return;
-        }
-
-        this.runWithHistory('添加导线', () => {
-            this.circuit.beginTopologyBatch();
-            try {
-                const ensureUniqueWireId = (baseId = `wire_${Date.now()}`) => {
-                    if (!this.circuit.getWire(baseId)) return baseId;
-                    let i = 1;
-                    while (this.circuit.getWire(`${baseId}_${i}`)) i++;
-                    return `${baseId}_${i}`;
-                };
-
-                const startPoint = { x: start.x, y: start.y };
-                const endPoint = { x: end.x, y: end.y };
-
-                if (Math.hypot(endPoint.x - startPoint.x, endPoint.y - startPoint.y) < 1e-6) {
-                    this.cancelWiring();
-                    return;
-                }
-
-                // Auto-route: prefer orthogonal (Manhattan) wiring with a single corner.
-                const points = [{ x: startPoint.x, y: startPoint.y }];
-                if (startPoint.x !== endPoint.x && startPoint.y !== endPoint.y) {
-                    const dx = endPoint.x - startPoint.x;
-                    const dy = endPoint.y - startPoint.y;
-                    const horizontalFirst = Math.abs(dx) >= Math.abs(dy);
-                    const corner = horizontalFirst
-                        ? { x: endPoint.x, y: startPoint.y }
-                        : { x: startPoint.x, y: endPoint.y };
-                    points.push(corner);
-                }
-                points.push({ x: endPoint.x, y: endPoint.y });
-
-                const baseId = `wire_${Date.now()}`;
-                const createdIds = [];
-                for (let i = 0; i < points.length - 1; i++) {
-                    const a = points[i];
-                    const b = points[i + 1];
-                    const segDist = Math.hypot(b.x - a.x, b.y - a.y);
-                    if (segDist < 1e-6) continue;
-
-                    const id = ensureUniqueWireId(i === 0 ? baseId : `${baseId}_${i}`);
-                    const wire = {
-                        id,
-                        a: { x: a.x, y: a.y },
-                        b: { x: b.x, y: b.y }
-                    };
-
-                    // Bind only the outer endpoints to terminals so wires follow component moves/terminal extension.
-                    if (i === 0 && this.wireStart.snap && this.wireStart.snap.type === 'terminal') {
-                        wire.aRef = {
-                            componentId: this.wireStart.snap.componentId,
-                            terminalIndex: this.wireStart.snap.terminalIndex
-                        };
-                    }
-                    if (i === points.length - 2 && end.snap && end.snap.type === 'terminal') {
-                        wire.bRef = {
-                            componentId: end.snap.componentId,
-                            terminalIndex: end.snap.terminalIndex
-                        };
-                    }
-
-                    this.circuit.addWire(wire);
-                    this.renderer.addWire(wire);
-                    createdIds.push(id);
-                }
-
-                let selectedWireId = createdIds.length > 0 ? createdIds[createdIds.length - 1] : null;
-                if (createdIds.length > 0) {
-                    const compacted = this.compactWiresAndRefresh({
-                        preferredWireId: selectedWireId,
-                        scopeWireIds: createdIds
-                    });
-                    selectedWireId = compacted.resolvedWireId || selectedWireId;
-                }
-
-                this.cancelWiring();
-                if (selectedWireId && this.circuit.getWire(selectedWireId)) {
-                    this.selectWire(selectedWireId);
-                }
-                this.updateStatus('已添加导线');
-            } finally {
-                this.circuit.endTopologyBatch();
-            }
-        });
+        return WireInteractions.finishWiringToPoint.call(this, point, options);
     }
 
     /**
      * 从工具箱创建一条独立导线（Model C）
      */
     addWireAt(x, y) {
-        this.runWithHistory('添加导线', () => {
-            const cy = toCanvasInt(y);
-            const start = { x: toCanvasInt(x - 30), y: cy };
-            const end = { x: toCanvasInt(x + 30), y: cy };
-            const wire = {
-                id: `wire_${Date.now()}`,
-                a: start,
-                b: end
-            };
-            this.circuit.addWire(wire);
-            this.renderer.addWire(wire);
-            this.selectWire(wire.id);
-            this.updateStatus('已添加导线');
-        });
+        return WireInteractions.addWireAt.call(this, x, y);
     }
 
     /**
      * 拖动整条导线（Model C）
      */
     startWireDrag(wireId, e) {
-        const wire = this.circuit.getWire(wireId);
-        if (!wire || !wire.a || !wire.b) return;
-
-        this.beginHistoryTransaction('移动导线');
-
-        this.isDraggingWire = true;
-        this.wireDrag = {
-            wireId,
-            startCanvas: this.screenToCanvas(e.clientX, e.clientY),
-            startClient: { x: e.clientX, y: e.clientY },
-            startA: { x: wire.a.x, y: wire.a.y },
-            startB: { x: wire.b.x, y: wire.b.y },
-            detached: false,
-            lastDx: 0,
-            lastDy: 0
-        };
-
-        this.selectWire(wireId);
-        e.preventDefault();
-        e.stopPropagation();
+        return WireInteractions.startWireDrag.call(this, wireId, e);
     }
 
     /**
      * 拖动导线端点（Model C）
      */
     startWireEndpointDrag(wireId, end, e) {
-        const wire = this.circuit.getWire(wireId);
-        if (!wire || (end !== 'a' && end !== 'b')) return;
-
-	        this.beginHistoryTransaction('移动导线端点');
-
-	        const origin = wire[end];
-	        if (!origin) return;
-
-        // Touch-first behavior: dragging a wire endpoint moves this endpoint by default.
-        // Hold Shift to drag the whole junction (all endpoints sharing the same coordinate).
-        const keyOf = (pt) => `${toCanvasInt(pt.x)},${toCanvasInt(pt.y)}`;
-        const originKey = keyOf(origin);
-        const affected = [];
-        if (e && e.shiftKey) {
-            for (const w of this.circuit.getAllWires()) {
-                if (!w) continue;
-                for (const which of ['a', 'b']) {
-                    const pt = w[which];
-                    if (!pt) continue;
-                    if (keyOf(pt) === originKey) {
-                        affected.push({ wireId: w.id, end: which });
-                    }
-                }
-            }
-            if (affected.length === 0) {
-                affected.push({ wireId, end });
-            }
-        } else {
-            affected.push({ wireId, end });
-        }
-
-	        this.isDraggingWireEndpoint = true;
-	        this.wireEndpointDrag = {
-	            wireId,
-	            end,
-	            origin: { x: origin.x, y: origin.y },
-	            affected,
-	            detached: false
-	        };
-	        this.selectWire(wireId);
-	        e.preventDefault();
-	        e.stopPropagation();
-	    }
+        return WireInteractions.startWireEndpointDrag.call(this, wireId, end, e);
+    }
 
     resolveCompactedWireId(wireId, replacementByRemovedId = {}) {
-        if (!wireId) return null;
-        let current = wireId;
-        let guard = 0;
-        while (replacementByRemovedId && replacementByRemovedId[current] && guard < 32) {
-            current = replacementByRemovedId[current];
-            guard += 1;
-        }
-        return current;
+        return WireInteractions.resolveCompactedWireId.call(this, wireId, replacementByRemovedId);
     }
 
     compactWiresAndRefresh(options = {}) {
-        const preferredWireId = options.preferredWireId || this.selectedWire || null;
-        const scopeWireIds = options.scopeWireIds || null;
-        const result = this.circuit.compactWires({ scopeWireIds });
-        const resolvedWireId = this.resolveCompactedWireId(preferredWireId, result.replacementByRemovedId);
-
-        if (result.changed) {
-            this.renderer.renderWires();
-            if (resolvedWireId && this.circuit.getWire(resolvedWireId)) {
-                this.selectWire(resolvedWireId);
-            } else if (preferredWireId && !this.circuit.getWire(preferredWireId)) {
-                this.selectedWire = null;
-            }
-            this.app.observationPanel?.refreshComponentOptions();
-        }
-
-        return { ...result, resolvedWireId };
+        return WireInteractions.compactWiresAndRefresh.call(this, options);
     }
 
     /**
@@ -1919,333 +1750,61 @@ export class InteractionManager {
 	    }
 
 	    findNearbyWireEndpoint(x, y, threshold, excludeWireId = null, excludeEnd = null, excludeWireEndpoints = null) {
-	        let best = null;
-	        let bestDist = Infinity;
-
-	        for (const wire of this.circuit.getAllWires()) {
-	            if (!wire) continue;
-	            for (const end of ['a', 'b']) {
-	                if (excludeWireEndpoints && excludeWireEndpoints.has(`${wire.id}:${end}`)) continue;
-	                if (excludeWireId && wire.id === excludeWireId && excludeEnd === end) continue;
-	                const pt = normalizeCanvasPoint(wire[end]);
-	                if (!pt) continue;
-	                const dist = Math.hypot(x - pt.x, y - pt.y);
-                if (dist < threshold && dist < bestDist) {
-                    bestDist = dist;
-                    best = { wireId: wire.id, end, x: pt.x, y: pt.y };
-                }
-            }
-        }
-	        return best;
+	        return WireInteractions.findNearbyWireEndpoint.call(
+                this,
+                x,
+                y,
+                threshold,
+                excludeWireId,
+                excludeEnd,
+                excludeWireEndpoints
+            );
 	    }
 
     /**
      * 查找附近导线线段上的最近点（用于显式分割）
      */
     findNearbyWireSegment(x, y, threshold, excludeWireId = null) {
-        let best = null;
-        let bestDist = Infinity;
-
-        for (const wire of this.circuit.getAllWires()) {
-            if (!wire || !wire.a || !wire.b) continue;
-            if (excludeWireId && wire.id === excludeWireId) continue;
-
-            const a = normalizeCanvasPoint(wire.a);
-            const b = normalizeCanvasPoint(wire.b);
-            if (!a || !b) continue;
-
-            const dx = b.x - a.x;
-            const dy = b.y - a.y;
-            const len2 = dx * dx + dy * dy;
-            if (len2 < 1e-9) continue;
-
-            const tRaw = ((x - a.x) * dx + (y - a.y) * dy) / len2;
-            const t = Math.max(0, Math.min(1, tRaw));
-            const projX = toCanvasInt(a.x + dx * t);
-            const projY = toCanvasInt(a.y + dy * t);
-            const dist = Math.hypot(x - projX, y - projY);
-            if (dist >= threshold || dist >= bestDist) continue;
-
-            // 贴近端点的情况交给端点吸附处理
-            const distToA = Math.hypot(projX - a.x, projY - a.y);
-            const distToB = Math.hypot(projX - b.x, projY - b.y);
-            if (distToA < 3 || distToB < 3) continue;
-
-            bestDist = dist;
-            best = { wireId: wire.id, x: projX, y: projY };
-        }
-
-        return best;
+        return WireInteractions.findNearbyWireSegment.call(this, x, y, threshold, excludeWireId);
     }
 
     /**
      * 在指定位置分割导线为两段
      */
     splitWireAtPoint(wireId, x, y) {
-        const wire = this.circuit.getWire(wireId);
-        if (!wire || !wire.a || !wire.b) return;
-        if (!isOrthogonalWire(wire)) {
-            this.updateStatus('仅支持水平/垂直导线分割');
-            return;
-        }
-
-        this.runWithHistory('分割导线', () => {
-            const result = this.splitWireAtPointInternal(wireId, x, y);
-            if (result?.created) {
-                this.updateStatus('导线已分割');
-            }
-        });
+        return WireInteractions.splitWireAtPoint.call(this, wireId, x, y);
     }
 
     /**
      * 分割导线内部实现（不记录历史）。
      */
     splitWireAtPointInternal(wireId, x, y, options = {}) {
-        const wire = this.circuit.getWire(wireId);
-        if (!wire || !wire.a || !wire.b) return null;
-        if (!isOrthogonalWire(wire)) return null;
-
-        const makeId = typeof options.ensureUniqueWireId === 'function'
-            ? options.ensureUniqueWireId
-            : (baseId = `wire_${Date.now()}`) => {
-                if (!this.circuit.getWire(baseId)) return baseId;
-                let i = 1;
-                while (this.circuit.getWire(`${baseId}_${i}`)) i++;
-                return `${baseId}_${i}`;
-            };
-
-        const a = normalizeCanvasPoint(wire.a);
-        const b = normalizeCanvasPoint(wire.b);
-        if (!a || !b) return null;
-
-        const dx = b.x - a.x;
-        const dy = b.y - a.y;
-        const len2 = dx * dx + dy * dy;
-        if (len2 < 1e-9) return null;
-
-        // Project click point to the segment for stable split placement.
-        const tRaw = ((x - a.x) * dx + (y - a.y) * dy) / len2;
-        const t = Math.max(0, Math.min(1, tRaw));
-        const split = {
-            x: toCanvasInt(a.x + dx * t),
-            y: toCanvasInt(a.y + dy * t)
-        };
-
-        if (a.x === b.x) split.x = a.x;
-        if (a.y === b.y) split.y = a.y;
-
-        const tooClose =
-            Math.hypot(split.x - a.x, split.y - a.y) < 5 ||
-            Math.hypot(split.x - b.x, split.y - b.y) < 5;
-        if (tooClose) {
-            return { created: false, point: split };
-        }
-
-        const oldB = { x: b.x, y: b.y };
-        const oldBRef = wire.bRef ? { ...wire.bRef } : null;
-        wire.b = { x: split.x, y: split.y };
-        delete wire.bRef;
-        this.renderer.refreshWire(wireId);
-
-        const newWire = {
-            id: makeId(`wire_${Date.now()}`),
-            a: { x: split.x, y: split.y },
-            b: oldB
-        };
-        if (oldBRef) newWire.bRef = oldBRef;
-
-        this.circuit.addWire(newWire);
-        this.renderer.addWire(newWire);
-        return { created: true, point: split, newWireId: newWire.id };
+        return WireInteractions.splitWireAtPointInternal.call(this, wireId, x, y, options);
     }
 
     /**
      * 取消连线
      */
     cancelWiring() {
-        this.isWiring = false;
-        this.wireStart = null;
-        this.ignoreNextWireMouseUp = false;
-        if (this.tempWire) {
-            this.renderer.removeTempWire(this.tempWire);
-            this.tempWire = null;
-        }
-        // 确保清除辅助线和高亮
-        this.hideAlignmentGuides();
-        this.renderer.clearTerminalHighlight();
+        return WireInteractions.cancelWiring.call(this);
     }
 
     registerDragListeners(startEvent, onMove, onUp) {
-        const supportsPointer = typeof window !== 'undefined' && 'PointerEvent' in window;
-        const pointerId = Number.isInteger(startEvent?.pointerId) ? startEvent.pointerId : null;
-
-        if (supportsPointer && pointerId !== null) {
-            const moveHandler = (event) => {
-                if (event.pointerId !== pointerId) return;
-                onMove(event);
-            };
-            const upHandler = (event) => {
-                if (event.pointerId !== pointerId) return;
-                cleanup();
-                onUp(event);
-            };
-            const cancelHandler = (event) => {
-                if (event.pointerId !== pointerId) return;
-                cleanup();
-                onUp(event);
-            };
-            const cleanup = () => {
-                document.removeEventListener('pointermove', moveHandler);
-                document.removeEventListener('pointerup', upHandler);
-                document.removeEventListener('pointercancel', cancelHandler);
-            };
-
-            document.addEventListener('pointermove', moveHandler, { passive: false });
-            document.addEventListener('pointerup', upHandler);
-            document.addEventListener('pointercancel', cancelHandler);
-            return cleanup;
-        }
-
-        const moveHandler = (event) => onMove(event);
-        const upHandler = (event) => {
-            cleanup();
-            onUp(event);
-        };
-        const cleanup = () => {
-            document.removeEventListener('mousemove', moveHandler);
-            document.removeEventListener('mouseup', upHandler);
-        };
-
-        document.addEventListener('mousemove', moveHandler);
-        document.addEventListener('mouseup', upHandler);
-        return cleanup;
+        return DragBehaviors.registerDragListeners.call(this, startEvent, onMove, onUp);
     }
 
     /**
      * 端子延长拖动（平滑移动，支持对齐）
      */
     startTerminalExtend(componentId, terminalIndex, e) {
-        const comp = this.circuit.getComponent(componentId);
-        if (!comp) return;
-
-        this.beginHistoryTransaction('调整端子长度');
-
-        // 初始化端子延长数据
-        if (!comp.terminalExtensions) {
-            comp.terminalExtensions = {};
-        }
-        if (!comp.terminalExtensions[terminalIndex]) {
-            comp.terminalExtensions[terminalIndex] = { x: 0, y: 0 };
-        }
-
-        const startX = e.clientX;
-        const startY = e.clientY;
-        const startExtX = comp.terminalExtensions[terminalIndex].x;
-        const startExtY = comp.terminalExtensions[terminalIndex].y;
-        const rotation = (comp.rotation || 0) * Math.PI / 180;
-        let cleanupDrag = null;
-
-        const onMove = (moveE) => {
-            // 计算鼠标移动向量（屏幕坐标，考虑缩放）
-            const dx = (moveE.clientX - startX) / this.scale;
-            const dy = (moveE.clientY - startY) / this.scale;
-
-            // 将移动向量转换到元器件本地坐标系
-            const cos = Math.cos(-rotation);
-            const sin = Math.sin(-rotation);
-            const localDx = dx * cos - dy * sin;
-            const localDy = dx * sin + dy * cos;
-
-            // 计算新的延长偏移（平滑移动，不强制对齐网格）
-            let newExtX = startExtX + localDx;
-            let newExtY = startExtY + localDy;
-
-            // 与网格轻微吸附，便于对齐
-            const snapThreshold = 8;
-            const gridX = snapToGrid(newExtX, GRID_SIZE);
-            const gridY = snapToGrid(newExtY, GRID_SIZE);
-            if (Math.abs(newExtX - gridX) < snapThreshold) newExtX = gridX;
-            if (Math.abs(newExtY - gridY) < snapThreshold) newExtY = gridY;
-
-            // 检测与水平/垂直方向的对齐
-            if (Math.abs(newExtY) < snapThreshold) newExtY = 0;
-            if (Math.abs(newExtX) < snapThreshold) newExtX = 0;
-
-            // Normalize to integer pixels to keep topology stable.
-            comp.terminalExtensions[terminalIndex] = { x: toCanvasInt(newExtX), y: toCanvasInt(newExtY) };
-
-            // 重新渲染元器件
-            this.renderer.refreshComponent(comp);
-            this.renderer.setSelected(componentId, true);
-
-            // 更新连接到该元器件的所有导线
-            this.renderer.updateConnectedWires(componentId);
-        };
-
-        const onUp = () => {
-            if (typeof cleanupDrag === 'function') cleanupDrag();
-            this.hideAlignmentGuides();
-            // 端子位置会影响坐标拓扑，需重建节点
-            this.circuit.rebuildNodes();
-            this.commitHistoryTransaction();
-            this.updateStatus('端子位置已调整');
-        };
-
-        cleanupDrag = this.registerDragListeners(e, onMove, onUp);
-
-        e.preventDefault();
-        e.stopPropagation();
+        return DragBehaviors.startTerminalExtend.call(this, componentId, terminalIndex, e);
     }
 
     /**
      * 滑动变阻器拖动
      */
     startRheostatDrag(componentId, e) {
-        const comp = this.circuit.getComponent(componentId);
-        if (!comp || comp.type !== 'Rheostat') return;
-        
-        // 记录初始位置和初始position
-        const startX = e.clientX;
-        const startY = e.clientY;
-        const startPosition = comp.position;
-        const rotation = (comp.rotation || 0) * Math.PI / 180;
-        let cleanupDrag = null;
-        
-        const onMove = (moveE) => {
-            // 计算鼠标移动向量
-            const dx = moveE.clientX - startX;
-            const dy = moveE.clientY - startY;
-            
-            // 将鼠标移动向量旋转到元器件本地坐标系
-            // 元器件旋转了rotation角度，所以鼠标移动要反向旋转
-            const cos = Math.cos(-rotation);
-            const sin = Math.sin(-rotation);
-            const localDx = dx * cos - dy * sin;
-            
-            // 根据本地X方向移动距离计算新位置
-            const width = 70; // 滑动范围（像素）
-            const positionDelta = localDx / width;
-            let position = Math.max(0, Math.min(1, startPosition + positionDelta));
-            comp.position = position;
-            
-            // 重新渲染元器件
-            this.renderer.refreshComponent(comp);
-            this.renderer.setSelected(componentId, true);
-            
-            // 更新连接到该元器件的所有导线（特别是连接到滑动触点的导线）
-            this.renderer.updateConnectedWires(componentId);
-            
-            // 只更新属性面板中的动态值，避免整体刷新导致闪烁
-            this.updateRheostatPanelValues(comp);
-        };
-        
-        const onUp = () => {
-            if (typeof cleanupDrag === 'function') cleanupDrag();
-            // 拖动结束后完整刷新一次属性面板
-            this.updatePropertyPanel(comp);
-        };
-        
-        cleanupDrag = this.registerDragListeners(e, onMove, onUp);
+        return DragBehaviors.startRheostatDrag.call(this, componentId, e);
     }
 
     /**
@@ -2254,134 +1813,22 @@ export class InteractionManager {
      * - 上下拖动：改变重叠面积（通过纵向错位近似）
      */
     startParallelPlateCapacitorDrag(componentId, e) {
-        const comp = this.circuit.getComponent(componentId);
-        if (!comp || comp.type !== 'ParallelPlateCapacitor' || !comp.explorationMode) return;
-
-        // 选中以便同步右侧面板
-        if (this.selectedComponent !== componentId) {
-            this.selectComponent(componentId);
-        }
-
-        const plateLengthPx = 24;
-        const pxPerMm = 10;
-        const minGapPx = 6;
-        const maxGapPx = 30;
-
-        const startCanvas = this.screenToCanvas(e.clientX, e.clientY);
-        const startLocal = this.canvasToComponentLocal(comp, startCanvas);
-
-        const startDistanceMm = (comp.plateDistance ?? 0.001) * 1000;
-        const startGapPx = Math.min(maxGapPx, Math.max(minGapPx, startDistanceMm * pxPerMm));
-        const startOffsetY = comp.plateOffsetYPx ?? 0;
-        let cleanupDrag = null;
-
-        const onMove = (moveE) => {
-            const canvas = this.screenToCanvas(moveE.clientX, moveE.clientY);
-            const local = this.canvasToComponentLocal(comp, canvas);
-            const dx = local.x - startLocal.x;
-            const dy = local.y - startLocal.y;
-
-            const gapPx = Math.min(maxGapPx, Math.max(minGapPx, startGapPx + dx));
-            const distanceMm = gapPx / pxPerMm;
-            comp.plateDistance = distanceMm / 1000;
-            comp.plateOffsetYPx = Math.min(plateLengthPx, Math.max(-plateLengthPx, startOffsetY + dy));
-
-            this.recomputeParallelPlateCapacitance(comp, { updateVisual: true, updatePanel: true });
-            this.renderer.setSelected(componentId, true);
-        };
-
-        const onUp = () => {
-            if (typeof cleanupDrag === 'function') cleanupDrag();
-            this.updateStatus('已调整平行板电容参数');
-        };
-
-        cleanupDrag = this.registerDragListeners(e, onMove, onUp);
-
-        e.preventDefault();
-        e.stopPropagation();
+        return DragBehaviors.startParallelPlateCapacitorDrag.call(this, componentId, e);
     }
 
     /**
      * 选择元器件
      */
     selectComponent(id) {
-        this.clearSelection();
-        this.selectedComponent = id;
-        this.selectedWire = null;
-        this.renderer.setSelected(id, true);
-
-        if (typeof this.activateSidePanelTab === 'function' && !this.isObservationTabActive()) {
-            this.activateSidePanelTab('properties');
-        }
-        
-        const comp = this.circuit.getComponent(id);
-        if (comp) {
-            this.updatePropertyPanel(comp);
-        }
+        return SelectionPanelController.selectComponent.call(this, id);
     }
 
     /**
      * 选择导线（10 秒后自动取消选择）
      */
     selectWire(id) {
-        this.clearSelection();
-        this.selectedWire = id;
-        this.selectedComponent = null;
-        this.renderer.setWireSelected(id, true);
-
-        if (typeof this.activateSidePanelTab === 'function' && !this.isObservationTabActive()) {
-            this.activateSidePanelTab('properties');
-        }
-        
-        // 清除之前的自动隐藏计时器
-        if (this.wireAutoHideTimer) {
-            clearTimeout(this.wireAutoHideTimer);
-            this.wireAutoHideTimer = null;
-        }
-        
-        // 设置10秒后自动取消选择
-        this.wireAutoHideTimer = setTimeout(() => {
-            if (this.selectedWire === id) {
-                this.renderer.setWireSelected(id, false);
-                this.selectedWire = null;
-                // 恢复属性面板
-                const content = document.getElementById('property-content');
-                clearElement(content);
-                const hint = createElement('p', { className: 'hint', textContent: '选择一个元器件查看和编辑属性' });
-                content.appendChild(hint);
-            }
-        }, 10000);
-        
-        const wire = this.circuit.getWire(id);
-        const fmtEnd = (which) => {
-            const ref = which === 'a' ? wire?.aRef : wire?.bRef;
-            if (ref && ref.componentId !== undefined && ref.componentId !== null) {
-                return `${ref.componentId}:${ref.terminalIndex}`;
-            }
-            const pt = which === 'a' ? wire?.a : wire?.b;
-            if (pt && Number.isFinite(Number(pt.x)) && Number.isFinite(Number(pt.y))) {
-                return `(${Math.round(Number(pt.x))},${Math.round(Number(pt.y))})`;
-            }
-            return '?';
-        };
-        const length = wire?.a && wire?.b ? Math.hypot(wire.a.x - wire.b.x, wire.a.y - wire.b.y) : 0;
-        
-        // 显示导线信息（使用安全的 DOM 操作）
-        const content = document.getElementById('property-content');
-        clearElement(content);
-        
-        content.appendChild(createPropertyRow('类型', '导线'));
-        content.appendChild(createPropertyRow('端点 A', fmtEnd('a')));
-        content.appendChild(createPropertyRow('端点 B', fmtEnd('b')));
-        content.appendChild(createPropertyRow('长度', `${length.toFixed(1)} px`));
-	        content.appendChild(createHintParagraph([
-	            '拖动导线可整体平移（按网格移动）',
-	            '拖动两端圆点可移动端点（默认仅拖动当前端点，按 Shift 拖动整节点）',
-	            'Ctrl/Cmd + 点击导线可在该处分割成两段',
-	            'Shift + 点击空白处可从任意位置开始画导线（允许独立导线）',
-	            '拖动端子可伸长/缩短元器件引脚'
-	        ]));
-	    }
+        return SelectionPanelController.selectWire.call(this, id);
+    }
     
     /**
      * 查找附近的端点
@@ -2411,20 +1858,7 @@ export class InteractionManager {
      * 清除选择
      */
     clearSelection() {
-        // 清除自动隐藏计时器
-        if (this.wireAutoHideTimer) {
-            clearTimeout(this.wireAutoHideTimer);
-            this.wireAutoHideTimer = null;
-        }
-        
-        this.renderer.clearSelection();
-        this.selectedComponent = null;
-        this.selectedWire = null;
-        
-        const content = document.getElementById('property-content');
-        clearElement(content);
-        const hint = createElement('p', { className: 'hint', textContent: '选择一个元器件查看和编辑属性' });
-        content.appendChild(hint);
+        return SelectionPanelController.clearSelection.call(this);
     }
 
     /**
@@ -2570,11 +2004,13 @@ export class InteractionManager {
                 
             case 'Capacitor':
                 content.appendChild(createPropertyRow('电容值', `${(comp.capacitance * 1000000).toFixed(0)} μF`));
+                content.appendChild(createPropertyRow('积分方法', resolveIntegrationMethodLabel(comp.integrationMethod)));
                 break;
 
             case 'Inductor':
                 content.appendChild(createPropertyRow('电感值', `${comp.inductance} H`));
                 content.appendChild(createPropertyRow('初始电流', `${(comp.initialCurrent || 0).toFixed(3)} A`));
+                content.appendChild(createPropertyRow('积分方法', resolveIntegrationMethodLabel(comp.integrationMethod)));
                 break;
 
             case 'ParallelPlateCapacitor': {
@@ -3121,6 +2557,11 @@ export class InteractionManager {
                     step: 100,
                     unit: 'μF'
                 }));
+                content.appendChild(createSelectFormGroup('积分方法', {
+                    id: 'edit-integration-method',
+                    value: comp.integrationMethod || 'auto',
+                    options: INTEGRATION_METHOD_OPTIONS
+                }, '自动模式会在含开关场景回退为后向欧拉。'));
                 break;
 
             case 'Inductor':
@@ -3137,6 +2578,11 @@ export class InteractionManager {
                     step: 0.01,
                     unit: 'A'
                 }));
+                content.appendChild(createSelectFormGroup('积分方法', {
+                    id: 'edit-integration-method',
+                    value: comp.integrationMethod || 'auto',
+                    options: INTEGRATION_METHOD_OPTIONS
+                }, '自动模式会在含开关场景回退为后向欧拉。'));
                 break;
 
             case 'ParallelPlateCapacitor': {
@@ -3421,6 +2867,8 @@ export class InteractionManager {
                         document.getElementById('edit-capacitance').value, 1000, 0.001, 1e12
                     );
                     comp.capacitance = capValue / 1000000;
+                    comp.integrationMethod = document.getElementById('edit-integration-method')?.value || 'auto';
+                    comp._dynamicHistoryReady = false;
                     break;
 
                 case 'Inductor':
@@ -3431,6 +2879,9 @@ export class InteractionManager {
                         document.getElementById('edit-initial-current').value, 0, -1e6, 1e6
                     );
                     comp.prevCurrent = comp.initialCurrent;
+                    comp.prevVoltage = 0;
+                    comp.integrationMethod = document.getElementById('edit-integration-method')?.value || 'auto';
+                    comp._dynamicHistoryReady = false;
                     break;
 
                 case 'ParallelPlateCapacitor': {
@@ -3693,6 +3144,97 @@ export class InteractionManager {
         }, 0);
     }
 
+    showProbeContextMenu(e, probeId, wireId) {
+        this.hideContextMenu();
+        const probe = this.circuit.getObservationProbe(probeId);
+        if (!probe) return;
+
+        const menu = document.createElement('div');
+        menu.id = 'context-menu';
+        menu.className = 'context-menu';
+        menu.style.left = e.clientX + 'px';
+        menu.style.top = e.clientY + 'px';
+
+        const menuItems = [
+            { label: '重命名探针', action: () => this.renameObservationProbe(probeId) },
+            { label: '加入观察图像', action: () => this.addProbePlot(probeId) },
+            { label: '删除探针', action: () => this.deleteObservationProbe(probeId), className: 'danger' }
+        ];
+        if (wireId && wireId !== this.selectedWire) {
+            menuItems.unshift({ label: '选中所属导线', action: () => this.selectWire(wireId) });
+        }
+
+        menuItems.forEach((item) => {
+            const menuItem = document.createElement('div');
+            menuItem.className = 'context-menu-item' + (item.className ? ` ${item.className}` : '');
+            menuItem.textContent = item.label;
+            menuItem.addEventListener('click', () => {
+                item.action();
+                this.hideContextMenu();
+            });
+            menu.appendChild(menuItem);
+        });
+
+        document.body.appendChild(menu);
+        setTimeout(() => {
+            document.addEventListener('click', this.hideContextMenuHandler);
+        }, 0);
+    }
+
+    renameObservationProbe(probeId, nextLabel = null) {
+        const probe = this.circuit.getObservationProbe(probeId);
+        if (!probe) return false;
+
+        let resolvedLabel = nextLabel;
+        if (resolvedLabel === null && typeof window !== 'undefined' && typeof window.prompt === 'function') {
+            const currentLabel = probe.label && String(probe.label).trim() ? String(probe.label).trim() : probe.id;
+            resolvedLabel = window.prompt('输入探针名称（留空使用ID）', currentLabel);
+        }
+        if (resolvedLabel === null) return false;
+
+        const normalized = String(resolvedLabel).trim();
+        this.runWithHistory('重命名探针', () => {
+            probe.label = normalized || null;
+            this.renderer.renderWires();
+            this.app.observationPanel?.refreshComponentOptions();
+            this.app.observationPanel?.requestRender?.({ onlyIfActive: false });
+            this.updateStatus('探针名称已更新');
+        });
+        return true;
+    }
+
+    deleteObservationProbe(probeId) {
+        const probe = this.circuit.getObservationProbe(probeId);
+        if (!probe) return false;
+
+        this.runWithHistory('删除探针', () => {
+            this.circuit.removeObservationProbe(probeId);
+            this.renderer.renderWires();
+            this.app.observationPanel?.refreshComponentOptions();
+            this.app.observationPanel?.requestRender?.({ onlyIfActive: false });
+            this.updateStatus('已删除探针');
+        });
+        return true;
+    }
+
+    addProbePlot(probeId) {
+        const probe = this.circuit.getObservationProbe(probeId);
+        if (!probe) return false;
+        const panel = this.app.observationPanel;
+        if (!panel || typeof panel.addPlotForSource !== 'function') {
+            this.updateStatus('观察面板不可用');
+            return false;
+        }
+
+        if (typeof this.activateSidePanelTab === 'function' && !this.isObservationTabActive()) {
+            this.activateSidePanelTab('observation');
+        }
+        panel.addPlotForSource(probeId);
+        panel.requestRender?.({ onlyIfActive: false });
+        this.updateStatus('已添加探针观察图像');
+        return true;
+    }
+
     addObservationProbeForWire(wireId, probeType) {
         const wire = this.circuit.getWire(wireId);
         if (!wire) return;
@@ -3716,6 +3258,7 @@ export class InteractionManager {
                 return;
             }
 
+            this.renderer.renderWires();
             this.app.observationPanel?.refreshComponentOptions();
             if (typeof this.activateSidePanelTab === 'function' && !this.isObservationTabActive()) {
                 this.activateSidePanelTab('observation');
@@ -3760,148 +3303,47 @@ export class InteractionManager {
      * =========================
      */
     captureHistoryState() {
-        const json = this.circuit.toJSON();
-        const components = Array.isArray(json.components) ? [...json.components] : [];
-        const wires = Array.isArray(json.wires) ? [...json.wires] : [];
-        const probes = Array.isArray(json.probes) ? [...json.probes] : [];
-        components.sort((a, b) => String(a.id).localeCompare(String(b.id)));
-        wires.sort((a, b) => String(a.id).localeCompare(String(b.id)));
-        probes.sort((a, b) => String(a.id).localeCompare(String(b.id)));
-        return { components, wires, probes };
+        return this.historyManager.captureState();
     }
 
     historyKey(state) {
-        return JSON.stringify(state);
+        return this.historyManager.stateKey(state);
     }
 
     getSelectionSnapshot() {
-        return {
-            componentId: this.selectedComponent || null,
-            wireId: this.selectedWire || null
-        };
+        return this.historyManager.getSelectionSnapshot();
     }
 
     restoreSelectionSnapshot(snapshot) {
-        const compId = snapshot?.componentId;
-        const wireId = snapshot?.wireId;
-        if (compId && this.circuit.getComponent(compId)) {
-            this.selectComponent(compId);
-            return;
-        }
-        if (wireId && this.circuit.getWire(wireId)) {
-            this.selectWire(wireId);
-            return;
-        }
-        this.clearSelection();
+        this.historyManager.restoreSelectionSnapshot(snapshot);
     }
 
     pushHistoryEntry(entry) {
-        if (!entry) return;
-        this.historyUndo.push(entry);
-        if (this.historyUndo.length > this.historyMax) {
-            this.historyUndo.shift();
-        }
-        this.historyRedo = [];
+        this.historyManager.pushEntry(entry);
     }
 
     runWithHistory(label, action) {
-        if (this.isRestoringHistory) {
-            action();
-            return;
-        }
-
-        const before = this.captureHistoryState();
-        const beforeKey = this.historyKey(before);
-        const selectionBefore = this.getSelectionSnapshot();
-
-        action();
-
-        const after = this.captureHistoryState();
-        const afterKey = this.historyKey(after);
-        const selectionAfter = this.getSelectionSnapshot();
-
-        if (beforeKey !== afterKey) {
-            this.pushHistoryEntry({ label, before, after, selectionBefore, selectionAfter });
-        }
+        this.historyManager.runWithHistory(label, action);
     }
 
     beginHistoryTransaction(label) {
-        if (this.isRestoringHistory) return;
-        if (this.historyTransaction) return;
-        const before = this.captureHistoryState();
-        this.historyTransaction = {
-            label,
-            beforeState: before,
-            beforeKey: this.historyKey(before),
-            selectionBefore: this.getSelectionSnapshot()
-        };
+        this.historyManager.beginTransaction(label);
     }
 
     commitHistoryTransaction() {
-        const tx = this.historyTransaction;
-        if (!tx) return;
-        this.historyTransaction = null;
-        if (this.isRestoringHistory) return;
-
-        const after = this.captureHistoryState();
-        const afterKey = this.historyKey(after);
-        if (tx.beforeKey === afterKey) return;
-
-        this.pushHistoryEntry({
-            label: tx.label,
-            before: tx.beforeState,
-            after,
-            selectionBefore: tx.selectionBefore,
-            selectionAfter: this.getSelectionSnapshot()
-        });
+        this.historyManager.commitTransaction();
     }
 
     applyHistoryState(state, selection) {
-        if (!state) return;
-
-        // Editing during simulation is error-prone; keep semantics simple.
-        if (this.app?.circuit?.isRunning) {
-            this.app.stopSimulation();
-        }
-
-        this.isRestoringHistory = true;
-        try {
-            this.circuit.fromJSON({
-                components: state.components || [],
-                wires: state.wires || [],
-                probes: state.probes || []
-            });
-
-            const allIds = [
-                ...(state.components || []).map((c) => c.id),
-                ...(state.wires || []).map((w) => w.id)
-            ].filter(Boolean);
-            updateIdCounterFromExisting(allIds);
-
-            this.renderer.render();
-            this.app.observationPanel?.refreshComponentOptions?.();
-            this.app.observationPanel?.refreshDialGauges?.();
-
-            this.restoreSelectionSnapshot(selection);
-        } finally {
-            this.isRestoringHistory = false;
-        }
+        this.historyManager.applyState(state, selection);
     }
 
     undo() {
-        const entry = this.historyUndo.pop();
-        if (!entry) return;
-        this.historyRedo.push(entry);
-        this.applyHistoryState(entry.before, entry.selectionBefore);
-        this.updateStatus(entry.label ? `撤销：${entry.label}` : '已撤销');
+        this.historyManager.undo();
     }
 
     redo() {
-        const entry = this.historyRedo.pop();
-        if (!entry) return;
-        this.historyUndo.push(entry);
-        this.applyHistoryState(entry.after, entry.selectionAfter);
-        this.updateStatus(entry.label ? `重做：${entry.label}` : '已重做');
+        this.historyManager.redo();
     }
 
     /**
