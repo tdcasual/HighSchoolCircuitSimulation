@@ -422,6 +422,15 @@ export class Circuit {
             }
         }
 
+        if (changed) {
+            for (const removedId of removedIds) {
+                if (!replacementByRemovedId[removedId]) {
+                    this.removeObservationProbesByWireId(removedId);
+                }
+            }
+            this.remapObservationProbeWireIds(replacementByRemovedId);
+        }
+
         return { changed, removedIds, replacementByRemovedId };
     }
 
@@ -1429,6 +1438,7 @@ export class Circuit {
         this.stopSimulation();
         this.components.clear();
         this.wires.clear();
+        this.observationProbes.clear();
         this.nodes = [];
         this.lastResults = null;
         this.terminalConnectionMap = new Map();
@@ -1497,7 +1507,15 @@ export class Circuit {
                 b: { x: toCanvasInt(wire?.b?.x ?? 0), y: toCanvasInt(wire?.b?.y ?? 0) },
                 ...(wire?.aRef ? { aRef: wire.aRef } : {}),
                 ...(wire?.bRef ? { bRef: wire.bRef } : {})
-            }))
+            })),
+            probes: this.getAllObservationProbes()
+                .filter((probe) => probe?.wireId && this.wires.has(probe.wireId))
+                .map((probe) => ({
+                    id: probe.id,
+                    type: probe.type,
+                    wireId: probe.wireId,
+                    ...(probe.label ? { label: probe.label } : {})
+                }))
         };
     }
 
@@ -1593,9 +1611,12 @@ export class Circuit {
      */
     fromJSON(json) {
         this.clear();
+        const componentList = Array.isArray(json?.components) ? json.components : [];
+        const wireList = Array.isArray(json?.wires) ? json.wires : [];
+        const probeList = Array.isArray(json?.probes) ? json.probes : [];
         
         // 导入元器件 - 使用 createComponent 确保完整初始化
-        for (const compData of json.components) {
+        for (const compData of componentList) {
             // 使用 createComponent 创建完整的元器件对象
             const comp = createComponent(
                 compData.type,
@@ -1669,7 +1690,7 @@ export class Circuit {
             return safePoint(getTerminalWorldPosition(comp, terminalIndex));
         };
 
-        for (const wireData of json.wires || []) {
+        for (const wireData of wireList) {
             if (!wireData || !wireData.id) continue;
 
             // v2 format: explicit endpoints (a/b points)
@@ -1718,6 +1739,14 @@ export class Circuit {
                 if (i === poly.length - 2) seg.bRef = endRef;
                 this.wires.set(id, seg);
             }
+        }
+
+        for (const probeData of probeList) {
+            const normalized = this.normalizeObservationProbe(probeData);
+            if (!normalized) continue;
+            if (!this.wires.has(normalized.wireId)) continue;
+            const probeId = this.ensureUniqueObservationProbeId(normalized.id);
+            this.observationProbes.set(probeId, { ...normalized, id: probeId });
         }
 
         this.rebuildNodes();
