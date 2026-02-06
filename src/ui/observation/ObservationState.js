@@ -9,6 +9,11 @@ export const MIN_MAX_POINTS = 100;
 export const MAX_MAX_POINTS = 200000;
 
 const VALID_TRANSFORM_IDS = new Set(Object.values(TransformIds));
+export const ObservationDisplayModes = /** @type {const} */ ({
+    Signed: 'signed',
+    Magnitude: 'magnitude'
+});
+const VALID_DISPLAY_MODES = new Set(Object.values(ObservationDisplayModes));
 
 function toFiniteOrNull(value) {
     if (value == null) return null;
@@ -41,6 +46,7 @@ export function createDefaultPlotState(index = 1, defaultYSourceId = TIME_SOURCE
     return {
         name: `图像 ${Math.max(1, Math.floor(Number(index) || 1))}`,
         maxPoints: DEFAULT_MAX_POINTS,
+        yDisplayMode: ObservationDisplayModes.Signed,
         x: createDefaultAxisState({
             sourceId: TIME_SOURCE_ID,
             quantityId: QuantityIds.Time,
@@ -50,7 +56,7 @@ export function createDefaultPlotState(index = 1, defaultYSourceId = TIME_SOURCE
         y: createDefaultAxisState({
             sourceId: ySourceId,
             quantityId: yQuantityId,
-            transformId: TransformIds.Abs,
+            transformId: TransformIds.Identity,
             autoRange: true
         })
     };
@@ -99,10 +105,15 @@ export function normalizePlotState(plotRaw, fallbackPlot) {
     const maxPointsRaw = Number(plotRaw?.maxPoints);
     const maxPointsBase = Number.isFinite(maxPointsRaw) ? Math.floor(maxPointsRaw) : fallback.maxPoints;
     const maxPoints = Math.max(MIN_MAX_POINTS, Math.min(MAX_MAX_POINTS, maxPointsBase));
+    const yDisplayModeRaw = plotRaw?.yDisplayMode;
+    const yDisplayMode = VALID_DISPLAY_MODES.has(yDisplayModeRaw)
+        ? yDisplayModeRaw
+        : (fallback.yDisplayMode || ObservationDisplayModes.Signed);
 
     return {
         name,
         maxPoints,
+        yDisplayMode,
         x: normalizeAxisState(plotRaw?.x, fallback.x),
         y: normalizeAxisState(plotRaw?.y, fallback.y)
     };
@@ -110,7 +121,10 @@ export function normalizePlotState(plotRaw, fallbackPlot) {
 
 export function normalizeObservationState(rawState, options = {}) {
     const defaultYSourceId = options.defaultYSourceId ?? TIME_SOURCE_ID;
-    const defaultPlotCount = Math.max(1, Math.floor(Number(options.defaultPlotCount) || 1));
+    const normalizedDefaultPlotCount = Math.floor(Number(options.defaultPlotCount));
+    const defaultPlotCount = Math.max(1, Number.isFinite(normalizedDefaultPlotCount) ? normalizedDefaultPlotCount : 1);
+    const hasExplicitPlots = Array.isArray(rawState?.plots);
+    const minPlotCount = options.allowEmptyPlots && hasExplicitPlots ? 0 : defaultPlotCount;
     const sampleIntervalMs = normalizeSampleIntervalMs(rawState?.sampleIntervalMs, DEFAULT_SAMPLE_INTERVAL_MS);
 
     const rawPlots = Array.isArray(rawState?.plots) ? rawState.plots : [];
@@ -119,7 +133,7 @@ export function normalizeObservationState(rawState, options = {}) {
         return normalizePlotState(rawPlot, fallbackPlot);
     });
 
-    while (plots.length < defaultPlotCount) {
+    while (plots.length < minPlotCount) {
         plots.push(createDefaultPlotState(plots.length + 1, defaultYSourceId));
     }
 
