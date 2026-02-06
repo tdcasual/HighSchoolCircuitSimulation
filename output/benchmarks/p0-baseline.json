@@ -1,0 +1,176 @@
+{
+  "generatedAt": "2026-02-06T02:08:29.716Z",
+  "runtime": {
+    "node": "v25.5.0",
+    "platform": "darwin arm64"
+  },
+  "scenarios": [
+    {
+      "name": "series_20",
+      "resistorCount": 20,
+      "components": 21,
+      "wires": 21,
+      "nodes": 21,
+      "metrics": {
+        "importMs": {
+          "label": "series_20:import",
+          "iterations": 60,
+          "avg": 0.11395280000000033,
+          "p50": 0.10062500000000085,
+          "p95": 0.18200000000000216,
+          "min": 0.07862500000000239,
+          "max": 0.20699999999999363
+        },
+        "rebuildMs": {
+          "label": "series_20:rebuildNodes",
+          "iterations": 220,
+          "avg": 0.06527163181818128,
+          "p50": 0.06441699999999884,
+          "p95": 0.08804200000000151,
+          "min": 0.04787499999999767,
+          "max": 0.19337500000000318
+        },
+        "solveMs": {
+          "label": "series_20:solve",
+          "iterations": 320,
+          "avg": 0.011679287500000513,
+          "p50": 0.009000000000000341,
+          "p95": 0.019082999999994854,
+          "min": 0.007707999999993831,
+          "max": 0.11050000000000182
+        },
+        "stepMs": {
+          "label": "series_20:step",
+          "iterations": 220,
+          "avg": 0.08521911818181888,
+          "p50": 0.08724999999999739,
+          "p95": 0.11133399999999938,
+          "min": 0.02008299999999963,
+          "max": 0.1723750000000024
+        }
+      },
+      "invalidRates": {
+        "solveInvalidRate": 0,
+        "stepInvalidRate": 0
+      }
+    },
+    {
+      "name": "series_60",
+      "resistorCount": 60,
+      "components": 61,
+      "wires": 61,
+      "nodes": 61,
+      "metrics": {
+        "importMs": {
+          "label": "series_60:import",
+          "iterations": 40,
+          "avg": 0.23783230000000052,
+          "p50": 0.2260829999999885,
+          "p95": 0.3251249999999999,
+          "min": 0.20583299999999838,
+          "max": 0.34737499999999955
+        },
+        "rebuildMs": {
+          "label": "series_60:rebuildNodes",
+          "iterations": 180,
+          "avg": 0.1650869388888896,
+          "p50": 0.1599170000000072,
+          "p95": 0.19795899999999733,
+          "min": 0.14020800000000122,
+          "max": 0.3192499999999825
+        },
+        "solveMs": {
+          "label": "series_60:solve",
+          "iterations": 260,
+          "avg": 0.12949471153846118,
+          "p50": 0.12537499999999113,
+          "p95": 0.15066600000000108,
+          "min": 0.11062499999999886,
+          "max": 0.29675000000000296
+        },
+        "stepMs": {
+          "label": "series_60:step",
+          "iterations": 180,
+          "avg": 0.13638448333333394,
+          "p50": 0.1319170000000156,
+          "p95": 0.15745800000001964,
+          "min": 0.11591599999999858,
+          "max": 0.21658300000001418
+        }
+      },
+      "invalidRates": {
+        "solveInvalidRate": 0,
+        "stepInvalidRate": 0
+      }
+    },
+    {
+      "name": "series_120",
+      "resistorCount": 120,
+      "components": 121,
+      "wires": 121,
+      "nodes": 121,
+      "metrics": {
+        "importMs": {
+          "label": "series_120:import",
+          "iterations": 24,
+          "avg": 0.457446166666666,
+          "p50": 0.4372910000000161,
+          "p95": 0.5328329999999823,
+          "min": 0.4141660000000229,
+          "max": 0.5677919999999972
+        },
+        "rebuildMs": {
+          "label": "series_120:rebuildNodes",
+          "iterations": 120,
+          "avg": 0.3173909666666631,
+          "p50": 0.30570799999998144,
+          "p95": 0.38229200000000674,
+          "min": 0.269333999999958,
+          "max": 0.6159169999999676
+        },
+        "solveMs": {
+          "label": "series_120:solve",
+          "iterations": 140,
+          "avg": 0.8531151785714245,
+          "p50": 0.8455419999999663,
+          "p95": 0.9083749999999782,
+          "min": 0.7800000000000296,
+          "max": 0.9875839999999698
+        },
+        "stepMs": {
+          "label": "series_120:step",
+          "iterations": 120,
+          "avg": 0.8624673583333329,
+          "p50": 0.8559589999999844,
+          "p95": 0.914333000000056,
+          "min": 0.8055419999999458,
+          "max": 0.9701249999999959
+        }
+      },
+      "invalidRates": {
+        "solveInvalidRate": 0,
+        "stepInvalidRate": 0
+      }
+    }
+  ],
+  "adversarial": {
+    "scenario": "conflicting_ideal_sources",
+    "iterations": 120,
+    "invalidRate": 1,
+    "solveMs": {
+      "label": "adversarial:conflictingIdealSource",
+      "iterations": 120,
+      "avg": 0.002410466666664964,
+      "p50": 0.002207999999995991,
+      "p95": 0.0027499999999918145,
+      "min": 0.002124999999978172,
+      "max": 0.016833000000019638
+    }
+  },
+  "summary": {
+    "normalScenarioMaxStepAvgMs": 0.8624673583333329,
+    "normalScenarioMaxSolveAvgMs": 0.8531151785714245,
+    "normalScenarioMaxInvalidRate": 0,
+    "adversarialInvalidRate": 1
+  }
+}
