@@ -5,7 +5,7 @@
 
 import { createElement, clearElement } from '../utils/SafeDOM.js';
 import { applyTransform, computeNiceTicks, computeRangeFromBuffer, formatNumberCompact, RingBuffer2D, TransformIds, TransformOptions } from './observation/ObservationMath.js';
-import { evaluateSourceQuantity, getQuantitiesForSource, getSourceOptions, QuantityIds, TIME_SOURCE_ID } from './observation/ObservationSources.js';
+import { evaluateSourceQuantity, getQuantitiesForSource, getSourceOptions, PROBE_SOURCE_PREFIX, QuantityIds, TIME_SOURCE_ID } from './observation/ObservationSources.js';
 import { createDefaultPlotState, DEFAULT_SAMPLE_INTERVAL_MS, normalizeObservationState, normalizeSampleIntervalMs, ObservationDisplayModes, shouldSampleAtTime } from './observation/ObservationState.js';
 
 function setSelectOptions(selectEl, options, selectedId) {
@@ -200,6 +200,46 @@ export class ObservationPanel {
             return comp.id;
         }
         return TIME_SOURCE_ID;
+    }
+
+    resolveSourceIdForPlot(sourceId) {
+        if (typeof sourceId !== 'string' || !sourceId) return TIME_SOURCE_ID;
+        if (sourceId === TIME_SOURCE_ID) return TIME_SOURCE_ID;
+        if (sourceId.startsWith(PROBE_SOURCE_PREFIX)) return sourceId;
+        if (this.circuit?.components?.has?.(sourceId)) return sourceId;
+
+        if (typeof this.circuit?.getObservationProbe === 'function') {
+            const probe = this.circuit.getObservationProbe(sourceId);
+            if (probe) return `${PROBE_SOURCE_PREFIX}${sourceId}`;
+        }
+
+        return TIME_SOURCE_ID;
+    }
+
+    addPlotForSource(sourceId, options = {}) {
+        const resolvedSourceId = this.resolveSourceIdForPlot(sourceId);
+        const fallback = createDefaultPlotState(this.nextPlotIndex, resolvedSourceId);
+        const quantities = getQuantitiesForSource(resolvedSourceId, this.circuit);
+        const quantityIds = quantities.map((item) => item.id);
+        const preferredQuantityId = options.quantityId;
+        const selectedQuantityId = quantityIds.includes(preferredQuantityId)
+            ? preferredQuantityId
+            : (quantityIds[0] || fallback.y.quantityId);
+
+        const config = {
+            ...fallback,
+            name: typeof options.name === 'string' && options.name.trim()
+                ? options.name.trim()
+                : fallback.name,
+            y: {
+                ...fallback.y,
+                sourceId: resolvedSourceId,
+                quantityId: selectedQuantityId
+            }
+        };
+
+        this.addPlot({ config });
+        return this.plots.length > 0 ? this.plots[this.plots.length - 1] : null;
     }
 
     addPlot(options = {}) {
