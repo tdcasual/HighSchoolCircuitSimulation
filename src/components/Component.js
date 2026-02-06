@@ -123,6 +123,38 @@ export const ComponentNames = {
     BlackBox: '黑箱'
 };
 
+const VALUE_DISPLAY_STACK_ORDER = ['power', 'voltage', 'current'];
+const DEFAULT_VALUE_DISPLAY_ANCHOR = Object.freeze({ x: 0, y: -14 });
+const VALUE_DISPLAY_ANCHOR_BY_TYPE = Object.freeze({
+    Rheostat: Object.freeze({ x: 0, y: -22 }),
+    Ammeter: Object.freeze({ x: 0, y: -18 }),
+    Voltmeter: Object.freeze({ x: 0, y: -18 }),
+    Motor: Object.freeze({ x: 0, y: -18 }),
+    ParallelPlateCapacitor: Object.freeze({ x: 0, y: -16 })
+});
+
+export function resolveValueDisplayAnchor(comp = {}) {
+    if (comp?.type === 'BlackBox') {
+        const boxHeight = Math.max(60, comp.boxHeight || 110);
+        return { x: 0, y: -boxHeight / 2 - 6 };
+    }
+    return VALUE_DISPLAY_ANCHOR_BY_TYPE[comp?.type] || DEFAULT_VALUE_DISPLAY_ANCHOR;
+}
+
+export function computeValueDisplayRowOffsets(visibleRows = [], rowGap = 15) {
+    const orderedVisibleRows = VALUE_DISPLAY_STACK_ORDER.filter(row => visibleRows.includes(row));
+    const safeRowGap = Math.max(1, Number.isFinite(rowGap) ? rowGap : 15);
+    const rowOffsets = {};
+    if (orderedVisibleRows.length === 0) {
+        return rowOffsets;
+    }
+    const firstRowY = -(orderedVisibleRows.length - 1) * safeRowGap;
+    orderedVisibleRows.forEach((row, index) => {
+        rowOffsets[row] = firstRowY + index * safeRowGap;
+    });
+    return rowOffsets;
+}
+
 /**
  * 创建元器件对象
  * @param {string} type - 元器件类型
@@ -768,6 +800,17 @@ export const SVGRenderer = {
             g.appendChild(extLine);
         }
 
+        // 透明触控命中区（不改变可视尺寸）
+        const hitCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        hitCircle.setAttribute('cx', x + extX);
+        hitCircle.setAttribute('cy', y + extY);
+        hitCircle.setAttribute('r', 14);
+        hitCircle.setAttribute('class', 'terminal-hit-area');
+        hitCircle.setAttribute('data-terminal', index);
+        hitCircle.style.pointerEvents = 'all';
+        hitCircle.setAttribute('draggable', 'false');
+        g.appendChild(hitCircle);
+
         const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
         circle.setAttribute('cx', x + extX);
         circle.setAttribute('cy', y + extY);
@@ -802,7 +845,8 @@ export const SVGRenderer = {
     addValueDisplay(g, comp) {
         const valueGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
         valueGroup.setAttribute('class', 'value-display-group');
-        valueGroup.setAttribute('transform', 'translate(0, -30)');
+        const anchor = resolveValueDisplayAnchor(comp);
+        valueGroup.setAttribute('transform', `translate(${anchor.x}, ${anchor.y})`);
         
         // 电流显示（最下方）
         const currentText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
@@ -819,7 +863,7 @@ export const SVGRenderer = {
         const voltageText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
         voltageText.setAttribute('class', 'value-display voltage-display');
         voltageText.setAttribute('x', 0);
-        voltageText.setAttribute('y', -16);
+        voltageText.setAttribute('y', 0);
         voltageText.setAttribute('text-anchor', 'middle');
         voltageText.setAttribute('font-size', '13');
         voltageText.setAttribute('font-weight', '600');
@@ -830,7 +874,7 @@ export const SVGRenderer = {
         const powerText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
         powerText.setAttribute('class', 'value-display power-display');
         powerText.setAttribute('x', 0);
-        powerText.setAttribute('y', -32);
+        powerText.setAttribute('y', 0);
         powerText.setAttribute('text-anchor', 'middle');
         powerText.setAttribute('font-size', '13');
         powerText.setAttribute('font-weight', '600');
@@ -838,6 +882,53 @@ export const SVGRenderer = {
         valueGroup.appendChild(powerText);
         
         g.appendChild(valueGroup);
+        this.layoutValueDisplay(g, comp);
+    },
+
+    resolveValueDisplayRowGap(visibleDisplays) {
+        if (!Array.isArray(visibleDisplays) || visibleDisplays.length === 0) {
+            return 15;
+        }
+        const maxFontSize = visibleDisplays.reduce((maxSize, display) => {
+            const fontSizeAttr = parseFloat(display.getAttribute('font-size') || '13');
+            if (!Number.isFinite(fontSizeAttr)) {
+                return maxSize;
+            }
+            return Math.max(maxSize, fontSizeAttr);
+        }, 13);
+        return Math.max(12, Math.round(maxFontSize + 2));
+    },
+
+    layoutValueDisplay(g, comp) {
+        const valueGroup = g.querySelector('.value-display-group');
+        if (!valueGroup) return;
+
+        const displays = {
+            power: g.querySelector('.power-display'),
+            voltage: g.querySelector('.voltage-display'),
+            current: g.querySelector('.current-display')
+        };
+        const visibleRows = [];
+        const visibleDisplays = [];
+        for (const row of VALUE_DISPLAY_STACK_ORDER) {
+            const display = displays[row];
+            if (!display) continue;
+            if ((display.textContent || '').trim().length > 0) {
+                visibleRows.push(row);
+                visibleDisplays.push(display);
+            }
+        }
+
+        const anchor = resolveValueDisplayAnchor(comp);
+        valueGroup.setAttribute('transform', `translate(${anchor.x}, ${anchor.y})`);
+
+        const rowGap = this.resolveValueDisplayRowGap(visibleDisplays);
+        const rowOffsets = computeValueDisplayRowOffsets(visibleRows, rowGap);
+        for (const row of VALUE_DISPLAY_STACK_ORDER) {
+            const display = displays[row];
+            if (!display) continue;
+            display.setAttribute('y', String(rowOffsets[row] ?? 0));
+        }
     },
 
     /**
@@ -865,6 +956,7 @@ export const SVGRenderer = {
             }
             if (voltageDisplay) voltageDisplay.textContent = '';
             if (powerDisplay) powerDisplay.textContent = '';
+            this.layoutValueDisplay(g, comp);
             return;
         }
         
@@ -889,6 +981,7 @@ export const SVGRenderer = {
                 currentDisplay.setAttribute('font-weight', '600');
             }
             if (powerDisplay) powerDisplay.textContent = '';
+            this.layoutValueDisplay(g, comp);
             return;
         }
         
@@ -897,6 +990,7 @@ export const SVGRenderer = {
             if (currentDisplay) currentDisplay.textContent = '';
             if (voltageDisplay) voltageDisplay.textContent = '';
             if (powerDisplay) powerDisplay.textContent = '';
+            this.layoutValueDisplay(g, comp);
             return;
         }
         
@@ -931,6 +1025,7 @@ export const SVGRenderer = {
             powerDisplay.textContent = showPower ? 
                 `P = ${this.formatValue(comp.powerValue, 'W')}` : '';
         }
+        this.layoutValueDisplay(g, comp);
         
         // 更新灯泡亮度
         if (comp.type === 'Bulb') {
@@ -1107,12 +1202,21 @@ export const SVGRenderer = {
             hitArea.setAttribute('d', d);
         }
         
-        // 移除旧的端点
-        g.querySelectorAll('.wire-endpoint').forEach(el => el.remove());
+        // 移除旧的端点与命中圈，避免重绘叠加导致残留交互层。
+        g.querySelectorAll('.wire-endpoint, .wire-endpoint-hit').forEach(el => el.remove());
         
         // 如果导线被选中，显示端点（可拖动）
         if (g.classList.contains('selected')) {
             const makeEndpoint = (pt, which) => {
+                const hitCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                hitCircle.setAttribute('cx', pt.x);
+                hitCircle.setAttribute('cy', pt.y);
+                hitCircle.setAttribute('r', 15);
+                hitCircle.setAttribute('class', 'wire-endpoint-hit');
+                hitCircle.setAttribute('data-end', which);
+                hitCircle.style.cursor = 'move';
+                g.appendChild(hitCircle);
+
                 const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
                 circle.setAttribute('cx', pt.x);
                 circle.setAttribute('cy', pt.y);
