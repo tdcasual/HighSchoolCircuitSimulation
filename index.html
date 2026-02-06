@@ -24,6 +24,15 @@
             <h2>元器件</h2>
             <div class="tool-category">
                 <h3>电源</h3>
+                <div class="tool-item" data-type="Ground" draggable="true">
+                    <svg viewBox="0 0 60 40" width="60" height="40">
+                        <line x1="30" y1="4" x2="30" y2="14" stroke="#333" stroke-width="2"/>
+                        <line x1="18" y1="14" x2="42" y2="14" stroke="#333" stroke-width="2"/>
+                        <line x1="22" y1="19" x2="38" y2="19" stroke="#333" stroke-width="2"/>
+                        <line x1="26" y1="24" x2="34" y2="24" stroke="#333" stroke-width="2"/>
+                    </svg>
+                    <span>接地</span>
+                </div>
                 <div class="tool-item" data-type="PowerSource" draggable="true">
                     <svg viewBox="0 0 60 40" width="60" height="40">
                         <line x1="0" y1="20" x2="20" y2="20" stroke="#333" stroke-width="2"/>
@@ -32,6 +41,15 @@
                         <line x1="28" y1="20" x2="60" y2="20" stroke="#333" stroke-width="2"/>
                     </svg>
                     <span>电源</span>
+                </div>
+                <div class="tool-item" data-type="ACVoltageSource" draggable="true">
+                    <svg viewBox="0 0 60 40" width="60" height="40">
+                        <line x1="0" y1="20" x2="14" y2="20" stroke="#333" stroke-width="2"/>
+                        <circle cx="30" cy="20" r="14" fill="none" stroke="#333" stroke-width="2"/>
+                        <text x="30" y="25" text-anchor="middle" font-size="15" fill="#333">~</text>
+                        <line x1="46" y1="20" x2="60" y2="20" stroke="#333" stroke-width="2"/>
+                    </svg>
+                    <span>交流电源</span>
                 </div>
             </div>
             <div class="tool-category">
@@ -74,6 +92,14 @@
                         <line x1="35" y1="20" x2="60" y2="20" stroke="#333" stroke-width="2"/>
                     </svg>
                     <span>电容</span>
+                </div>
+                <div class="tool-item" data-type="Inductor" draggable="true">
+                    <svg viewBox="0 0 60 40" width="60" height="40">
+                        <line x1="0" y1="20" x2="10" y2="20" stroke="#333" stroke-width="2"/>
+                        <path d="M10 20 a5 5 0 0 1 10 0 a5 5 0 0 1 10 0 a5 5 0 0 1 10 0 a5 5 0 0 1 10 0" fill="none" stroke="#333" stroke-width="2"/>
+                        <line x1="50" y1="20" x2="60" y2="20" stroke="#333" stroke-width="2"/>
+                    </svg>
+                    <span>电感</span>
                 </div>
                 <div class="tool-item" data-type="ParallelPlateCapacitor" draggable="true">
                     <svg viewBox="0 0 60 40" width="60" height="40">
