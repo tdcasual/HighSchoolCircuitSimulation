@@ -3,7 +3,7 @@
  * 处理拖放、连线、选择等用户交互
  */
 
-import { createComponent, ComponentNames, ComponentDefaults, SVGRenderer, updateIdCounterFromExisting } from '../components/Component.js';
+import { createComponent, ComponentNames, ComponentDefaults, SVGRenderer, getComponentTerminalCount, updateIdCounterFromExisting } from '../components/Component.js';
 import { 
     createElement, 
     createPropertyRow, 
@@ -155,7 +155,7 @@ export class InteractionManager {
      */
     bindToolboxEvents() {
         const toolItems = document.querySelectorAll('.tool-item');
-        const validTypes = ['PowerSource', 'Resistor', 'Rheostat', 'Bulb', 'Capacitor', 'ParallelPlateCapacitor', 'Motor', 'Switch', 'Ammeter', 'Voltmeter', 'BlackBox', 'Wire'];
+        const validTypes = ['Ground', 'PowerSource', 'ACVoltageSource', 'Resistor', 'Rheostat', 'Bulb', 'Capacitor', 'Inductor', 'ParallelPlateCapacitor', 'Motor', 'Switch', 'Ammeter', 'Voltmeter', 'BlackBox', 'Wire'];
         
         // 标记是否正在从工具箱拖放
         this.isToolboxDrag = false;
@@ -2391,7 +2391,7 @@ export class InteractionManager {
     findNearbyTerminal(x, y, threshold) {
         for (const [id, comp] of this.circuit.components) {
             // 检查每个端点
-            const terminalCount = comp.type === 'Rheostat' ? 3 : 2;
+            const terminalCount = getComponentTerminalCount(comp.type);
             for (let ti = 0; ti < terminalCount; ti++) {
                 const pos = this.renderer.getTerminalPosition(id, ti);
                 if (pos) {
@@ -2459,6 +2459,7 @@ export class InteractionManager {
             switch (comp.type) {
                 case 'Switch':
                 case 'BlackBox':
+                case 'Ground':
                     return [];
                 case 'Ammeter':
                     return ['current'];
@@ -2513,8 +2514,20 @@ export class InteractionManager {
         
         // 根据类型显示不同的属性
         switch (comp.type) {
+            case 'Ground':
+                content.appendChild(createPropertyRow('类型说明', '参考地（0V基准）'));
+                break;
+
             case 'PowerSource':
                 content.appendChild(createPropertyRow('电动势', `${comp.voltage} V`));
+                content.appendChild(createPropertyRow('内阻', `${comp.internalResistance} Ω`));
+                break;
+
+            case 'ACVoltageSource':
+                content.appendChild(createPropertyRow('有效值', `${comp.rmsVoltage} V`));
+                content.appendChild(createPropertyRow('频率', `${comp.frequency} Hz`));
+                content.appendChild(createPropertyRow('相位', `${comp.phase} °`));
+                content.appendChild(createPropertyRow('偏置', `${comp.offset} V`));
                 content.appendChild(createPropertyRow('内阻', `${comp.internalResistance} Ω`));
                 break;
                 
@@ -2555,6 +2568,11 @@ export class InteractionManager {
                 
             case 'Capacitor':
                 content.appendChild(createPropertyRow('电容值', `${(comp.capacitance * 1000000).toFixed(0)} μF`));
+                break;
+
+            case 'Inductor':
+                content.appendChild(createPropertyRow('电感值', `${comp.inductance} H`));
+                content.appendChild(createPropertyRow('初始电流', `${(comp.initialCurrent || 0).toFixed(3)} A`));
                 break;
 
             case 'ParallelPlateCapacitor': {
@@ -2983,11 +3001,51 @@ export class InteractionManager {
         clearElement(content);
         
         switch (comp.type) {
+            case 'Ground':
+                content.appendChild(createElement('p', { className: 'hint', textContent: '接地元件用于指定 0V 参考节点。' }));
+                break;
+
             case 'PowerSource':
                 content.appendChild(createFormGroup('电动势 (V)', {
                     id: 'edit-voltage',
                     value: comp.voltage,
                     min: 0,
+                    step: 0.1,
+                    unit: 'V'
+                }));
+                content.appendChild(createFormGroup('内阻 (Ω)', {
+                    id: 'edit-internal-resistance',
+                    value: comp.internalResistance,
+                    min: 0,
+                    step: 0.1,
+                    unit: 'Ω'
+                }));
+                break;
+
+            case 'ACVoltageSource':
+                content.appendChild(createFormGroup('有效值 (V)', {
+                    id: 'edit-rms-voltage',
+                    value: comp.rmsVoltage,
+                    min: 0,
+                    step: 0.1,
+                    unit: 'V'
+                }));
+                content.appendChild(createFormGroup('频率 (Hz)', {
+                    id: 'edit-frequency',
+                    value: comp.frequency,
+                    min: 0,
+                    step: 0.1,
+                    unit: 'Hz'
+                }));
+                content.appendChild(createFormGroup('相位 (°)', {
+                    id: 'edit-phase',
+                    value: comp.phase,
+                    step: 1,
+                    unit: '°'
+                }));
+                content.appendChild(createFormGroup('偏置 (V)', {
+                    id: 'edit-offset',
+                    value: comp.offset,
                     step: 0.1,
                     unit: 'V'
                 }));
@@ -3060,6 +3118,22 @@ export class InteractionManager {
                     min: 0.001,
                     step: 100,
                     unit: 'μF'
+                }));
+                break;
+
+            case 'Inductor':
+                content.appendChild(createFormGroup('电感值 (H)', {
+                    id: 'edit-inductance',
+                    value: comp.inductance,
+                    min: 1e-6,
+                    step: 0.01,
+                    unit: 'H'
+                }));
+                content.appendChild(createFormGroup('初始电流 (A)', {
+                    id: 'edit-initial-current',
+                    value: comp.initialCurrent || 0,
+                    step: 0.01,
+                    unit: 'A'
                 }));
                 break;
 
@@ -3277,6 +3351,9 @@ export class InteractionManager {
         try {
             this.runWithHistory('修改属性', () => {
                 switch (comp.type) {
+                case 'Ground':
+                    break;
+
                 case 'PowerSource':
                     comp.voltage = this.safeParseFloat(
                         document.getElementById('edit-voltage').value, 12, 0, 10000
@@ -3287,6 +3364,25 @@ export class InteractionManager {
                     );
                     // 如果用户输入0，使用极小值避免求解器奇异
                     comp.internalResistance = internalR < 1e-9 ? 1e-9 : internalR;
+                    break;
+
+                case 'ACVoltageSource':
+                    comp.rmsVoltage = this.safeParseFloat(
+                        document.getElementById('edit-rms-voltage').value, 12, 0, 10000
+                    );
+                    comp.frequency = this.safeParseFloat(
+                        document.getElementById('edit-frequency').value, 50, 0, 1e6
+                    );
+                    comp.phase = this.safeParseFloat(
+                        document.getElementById('edit-phase').value, 0, -36000, 36000
+                    );
+                    comp.offset = this.safeParseFloat(
+                        document.getElementById('edit-offset').value, 0, -1e6, 1e6
+                    );
+                    let acInternalR = this.safeParseFloat(
+                        document.getElementById('edit-internal-resistance').value, 0.5, 0, 10000
+                    );
+                    comp.internalResistance = acInternalR < 1e-9 ? 1e-9 : acInternalR;
                     break;
                     
                 case 'Resistor':
@@ -3323,6 +3419,16 @@ export class InteractionManager {
                         document.getElementById('edit-capacitance').value, 1000, 0.001, 1e12
                     );
                     comp.capacitance = capValue / 1000000;
+                    break;
+
+                case 'Inductor':
+                    comp.inductance = this.safeParseFloat(
+                        document.getElementById('edit-inductance').value, 0.1, 1e-9, 1e12
+                    );
+                    comp.initialCurrent = this.safeParseFloat(
+                        document.getElementById('edit-initial-current').value, 0, -1e6, 1e6
+                    );
+                    comp.prevCurrent = comp.initialCurrent;
                     break;
 
                 case 'ParallelPlateCapacitor': {
