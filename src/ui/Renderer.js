@@ -291,8 +291,12 @@ export class Renderer {
         for (const g of this.componentElements.values()) {
             g.classList.remove('selected');
         }
-        for (const path of this.wireElements.values()) {
-            path.classList.remove('selected');
+        for (const [wireId, wireGroup] of this.wireElements.entries()) {
+            wireGroup.classList.remove('selected');
+            const wire = this.circuit.getWire(wireId);
+            if (wire) {
+                SVGRenderer.updateWirePath(wireGroup, wire, this.getWireEndpointPosition.bind(this));
+            }
         }
     }
 
@@ -482,10 +486,9 @@ export class Renderer {
      * 清除端点高亮
      */
     clearTerminalHighlight() {
-        const existing = this.uiLayer.querySelector('#terminal-highlight');
-        if (existing) {
-            existing.remove();
-        }
+        this.uiLayer
+            .querySelectorAll('#terminal-highlight, .terminal-highlight, .wire-node-highlight')
+            .forEach((el) => el.remove());
     }
 
     /**
