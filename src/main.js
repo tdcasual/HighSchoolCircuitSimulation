@@ -138,10 +138,10 @@ class CircuitSimulatorApp {
         // Update wire animations; short-circuit warnings can show even when solve is invalid.
         this.renderer.updateWireAnimations(this.circuit.isRunning, results);
 
+        // 更新观察面板（采样、绘制与无效解提示）
+        this.observationPanel?.onCircuitUpdate(results);
+
         if (results.valid) {
-            // 更新观察面板（采样与绘制）
-            this.observationPanel?.onCircuitUpdate(results);
-            
             // 更新选中元器件的属性面板
             if (this.interaction.selectedComponent) {
                 const comp = this.circuit.getComponent(this.interaction.selectedComponent);
@@ -205,6 +205,7 @@ class CircuitSimulatorApp {
         statusEl.classList.remove('running');
         
         this.renderer.updateWireAnimations(false);
+        this.observationPanel?.setRuntimeStatus?.('');
         this.updateStatus('模拟已停止');
     }
 
@@ -278,6 +279,7 @@ class CircuitSimulatorApp {
                 this.interaction.clearSelection();
                 this.observationPanel?.refreshComponentOptions();
                 this.observationPanel?.refreshDialGauges();
+                this.observationPanel?.fromJSON(data.meta?.observation);
                 
                 this.updateStatus(`已导入电路: ${data.meta?.name || '未命名'}`);
             } catch (err) {
@@ -332,6 +334,9 @@ class CircuitSimulatorApp {
         if (this.exerciseBoard?.toJSON) {
             data.meta.exerciseBoard = this.exerciseBoard.toJSON();
         }
+        if (this.observationPanel?.toJSON) {
+            data.meta.observation = this.observationPanel.toJSON();
+        }
         return data;
     }
     
@@ -356,6 +361,7 @@ class CircuitSimulatorApp {
                 this.renderer.render();
                 this.observationPanel?.refreshComponentOptions();
                 this.observationPanel?.refreshDialGauges();
+                this.observationPanel?.fromJSON(circuitJSON.meta?.observation);
                 this.updateStatus(`已从缓存恢复电路 (${circuitJSON.components.length} 个元器件)`);
             }
         } catch (e) {
