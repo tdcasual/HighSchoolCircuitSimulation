@@ -277,7 +277,9 @@ export class ObservationPanel {
                 max: config.y.max
             },
             elements: {},
-            _needsRedraw: true
+            _needsRedraw: true,
+            _latestText: '最新: —',
+            _staticLayer: null
         };
 
         const card = this.createPlotCard(plot);
@@ -294,6 +296,10 @@ export class ObservationPanel {
     clearAllPlots() {
         for (const plot of this.plots) {
             plot.buffer.clear();
+            plot._latestText = '最新: —';
+            if (plot.elements.latestText) {
+                plot.elements.latestText.textContent = plot._latestText;
+            }
             plot._needsRedraw = true;
         }
         this.requestRender({ onlyIfActive: true });
@@ -471,6 +477,10 @@ export class ObservationPanel {
         removeBtn.addEventListener('click', () => this.removePlot(plot.id));
         clearBtn.addEventListener('click', () => {
             plot.buffer.clear();
+            plot._latestText = '最新: —';
+            if (plot.elements.latestText) {
+                plot.elements.latestText.textContent = plot._latestText;
+            }
             plot._needsRedraw = true;
             this.requestRender({ onlyIfActive: true });
         });
@@ -754,8 +764,12 @@ export class ObservationPanel {
         const canRenderNow = this.isObservationActive();
         const shouldSample = shouldSampleAtTime(t, this._lastSampleTime, this.sampleIntervalMs);
         if (shouldSample) {
+            const valueCache = new Map();
             for (const plot of this.plots) {
-                this.samplePlot(plot, { updateLatestText: canRenderNow });
+                this.samplePlot(plot, {
+                    updateLatestText: canRenderNow,
+                    valueCache
+                });
             }
             this._lastSampleTime = t;
         }
@@ -779,8 +793,8 @@ export class ObservationPanel {
     }
 
     samplePlot(plot, options = {}) {
-        const xRaw = evaluateSourceQuantity(this.circuit, plot.x.sourceId, plot.x.quantityId);
-        const yRaw = evaluateSourceQuantity(this.circuit, plot.y.sourceId, plot.y.quantityId);
+        const xRaw = this.getSampleValue(plot.x.sourceId, plot.x.quantityId, options.valueCache);
+        const yRaw = this.getSampleValue(plot.y.sourceId, plot.y.quantityId, options.valueCache);
         const x = applyTransform(xRaw, plot.x.transformId);
         let y = applyTransform(yRaw, plot.y.transformId);
         if (plot.yDisplayMode === ObservationDisplayModes.Magnitude && Number.isFinite(y)) {
@@ -791,8 +805,25 @@ export class ObservationPanel {
         plot._needsRedraw = true;
 
         if (options.updateLatestText && plot.elements.latestText) {
-            plot.elements.latestText.textContent = `最新: x=${formatNumberCompact(x)}, y=${formatNumberCompact(y)}`;
+            const nextText = `最新: x=${formatNumberCompact(x)}, y=${formatNumberCompact(y)}`;
+            if (plot._latestText !== nextText) {
+                plot._latestText = nextText;
+                plot.elements.latestText.textContent = nextText;
+            }
         }
+    }
+
+    getSampleValue(sourceId, quantityId, valueCache = null) {
+        if (!(valueCache instanceof Map)) {
+            return evaluateSourceQuantity(this.circuit, sourceId, quantityId);
+        }
+        const cacheKey = `${sourceId || ''}\u0000${quantityId || ''}`;
+        if (valueCache.has(cacheKey)) {
+            return valueCache.get(cacheKey);
+        }
+        const value = evaluateSourceQuantity(this.circuit, sourceId, quantityId);
+        valueCache.set(cacheKey, value);
+        return value;
     }
 
     requestRender(options = {}) {
@@ -818,6 +849,267 @@ export class ObservationPanel {
         }
     }
 
+    createCacheCanvas(width, height) {
+        const safeWidth = Math.max(1, Math.floor(width || 0));
+        const safeHeight = Math.max(1, Math.floor(height || 0));
+        if (typeof OffscreenCanvas !== 'undefined') {
+            return new OffscreenCanvas(safeWidth, safeHeight);
+        }
+        if (typeof document !== 'undefined' && typeof document.createElement === 'function') {
+            const canvas = document.createElement('canvas');
+            canvas.width = safeWidth;
+            canvas.height = safeHeight;
+            return canvas;
+        }
+        return null;
+    }
+
+    formatFrameNumber(value) {
+        if (!Number.isFinite(value)) return 'NaN';
+        if (Object.is(value, -0)) return '0';
+        return value.toPrecision(10);
+    }
+
+    buildGaugeStaticSignature(model) {
+        return [
+            `${model.w}x${model.h}`,
+            this.formatFrameNumber(model.dpr),
+            this.formatFrameNumber(model.range),
+            model.unit
+        ].join('|');
+    }
+
+    drawGaugeStaticLayer(ctx, model) {
+        const { dpr, w, h, unit, range, cx, cy, radius, startAngle, endAngle } = model;
+        ctx.clearRect(0, 0, w, h);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, w, h);
+
+        ctx.strokeStyle = 'rgba(15, 23, 42, 0.55)';
+        ctx.lineWidth = 2 * dpr;
+        ctx.beginPath();
+        ctx.arc(cx, cy, radius, startAngle, endAngle, false);
+        ctx.stroke();
+
+        const ticks = computeNiceTicks(0, range, 6)
+            .filter((tick) => tick >= -1e-12 && tick <= range + 1e-12);
+        if (ticks.length === 0 || ticks[0] !== 0) ticks.unshift(0);
+        if (ticks[ticks.length - 1] !== range) ticks.push(range);
+
+        const toAngle = (value) => {
+            const k = Math.min(Math.max(value / range, 0), 1);
+            return startAngle + (endAngle - startAngle) * k;
+        };
+
+        ctx.strokeStyle = 'rgba(15, 23, 42, 0.35)';
+        ctx.lineWidth = 1 * dpr;
+        for (let i = 0; i < ticks.length - 1; i++) {
+            const a0 = toAngle(ticks[i]);
+            const a1 = toAngle(ticks[i + 1]);
+            const steps = 5;
+            for (let s = 1; s < steps; s++) {
+                const angle = a0 + (a1 - a0) * (s / steps);
+                const x1 = cx + Math.cos(angle) * (radius - 10 * dpr);
+                const y1 = cy + Math.sin(angle) * (radius - 10 * dpr);
+                const x2 = cx + Math.cos(angle) * (radius - 4 * dpr);
+                const y2 = cy + Math.sin(angle) * (radius - 4 * dpr);
+                ctx.beginPath();
+                ctx.moveTo(x1, y1);
+                ctx.lineTo(x2, y2);
+                ctx.stroke();
+            }
+        }
+
+        ctx.strokeStyle = 'rgba(15, 23, 42, 0.65)';
+        ctx.lineWidth = 2 * dpr;
+        ctx.fillStyle = '#0f172a';
+        ctx.font = `${12 * dpr}px serif`;
+        ticks.forEach((tick) => {
+            const angle = toAngle(tick);
+            const x1 = cx + Math.cos(angle) * (radius - 14 * dpr);
+            const y1 = cy + Math.sin(angle) * (radius - 14 * dpr);
+            const x2 = cx + Math.cos(angle) * (radius + 1 * dpr);
+            const y2 = cy + Math.sin(angle) * (radius + 1 * dpr);
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+            ctx.stroke();
+
+            const labelX = cx + Math.cos(angle) * (radius - 28 * dpr);
+            const labelY = cy + Math.sin(angle) * (radius - 28 * dpr);
+            const label = tick === 0 ? '0' : (Math.abs(tick - range) < 1e-9 ? String(range) : String(tick));
+            ctx.save();
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(label, labelX, labelY);
+            ctx.restore();
+        });
+
+        ctx.fillStyle = '#111827';
+        ctx.font = `${14 * dpr}px serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(unit, cx, cy + 26 * dpr);
+    }
+
+    ensureGaugeStaticLayer(gauge, model) {
+        const signature = this.buildGaugeStaticSignature(model);
+        if (gauge._staticLayer?.signature === signature && gauge._staticLayer.canvas) {
+            return gauge._staticLayer.canvas;
+        }
+
+        const layerCanvas = this.createCacheCanvas(model.w, model.h);
+        const layerCtx = layerCanvas?.getContext?.('2d');
+        if (!layerCanvas || !layerCtx) {
+            gauge._staticLayer = null;
+            return null;
+        }
+
+        this.drawGaugeStaticLayer(layerCtx, model);
+        gauge._staticLayer = { signature, canvas: layerCanvas };
+        return layerCanvas;
+    }
+
+    buildPlotStaticSignature(frame) {
+        const base = [
+            `${frame.w}x${frame.h}`,
+            this.formatFrameNumber(frame.dpr),
+            this.formatFrameNumber(frame.xMin),
+            this.formatFrameNumber(frame.xMax),
+            this.formatFrameNumber(frame.yMin),
+            this.formatFrameNumber(frame.yMax)
+        ];
+        const xTicks = frame.xTicks.map((value) => this.formatFrameNumber(value)).join(',');
+        const yTicks = frame.yTicks.map((value) => this.formatFrameNumber(value)).join(',');
+        return `${base.join('|')}|x:${xTicks}|y:${yTicks}`;
+    }
+
+    computePlotFrame(plot, canvas, dpr) {
+        const w = canvas.width;
+        const h = canvas.height;
+
+        const padL = 46 * dpr;
+        const padR = 10 * dpr;
+        const padT = 10 * dpr;
+        const padB = 28 * dpr;
+        const innerW = Math.max(1, w - padL - padR);
+        const innerH = Math.max(1, h - padT - padB);
+
+        const autoRange = computeRangeFromBuffer(plot.buffer);
+        let xMin = plot.x.autoRange ? autoRange?.minX : plot.x.min;
+        let xMax = plot.x.autoRange ? autoRange?.maxX : plot.x.max;
+        let yMin = plot.y.autoRange ? autoRange?.minY : plot.y.min;
+        let yMax = plot.y.autoRange ? autoRange?.maxY : plot.y.max;
+
+        if (!Number.isFinite(xMin) || !Number.isFinite(xMax) || !Number.isFinite(yMin) || !Number.isFinite(yMax)) {
+            return null;
+        }
+
+        if (xMin === xMax) {
+            const pad = xMin === 0 ? 1 : Math.abs(xMin) * 0.1;
+            xMin -= pad;
+            xMax += pad;
+        }
+        if (yMin === yMax) {
+            const pad = yMin === 0 ? 1 : Math.abs(yMin) * 0.1;
+            yMin -= pad;
+            yMax += pad;
+        }
+        if (xMin > xMax) [xMin, xMax] = [xMax, xMin];
+        if (yMin > yMax) [yMin, yMax] = [yMax, yMin];
+
+        const xPad = (xMax - xMin) * 0.03;
+        const yPad = (yMax - yMin) * 0.05;
+        xMin -= xPad;
+        xMax += xPad;
+        yMin -= yPad;
+        yMax += yPad;
+
+        const xTicks = computeNiceTicks(xMin, xMax, 5);
+        const yTicks = computeNiceTicks(yMin, yMax, 5);
+
+        return {
+            w,
+            h,
+            dpr,
+            padL,
+            padR,
+            padT,
+            padB,
+            innerW,
+            innerH,
+            xMin,
+            xMax,
+            yMin,
+            yMax,
+            xTicks,
+            yTicks
+        };
+    }
+
+    drawPlotStaticLayer(ctx, frame) {
+        const { dpr, w, h, padL, padT, innerW, innerH, xMin, xMax, yMin, yMax, xTicks, yTicks } = frame;
+        const xToPx = (x) => padL + ((x - xMin) / (xMax - xMin)) * innerW;
+        const yToPx = (y) => padT + (1 - (y - yMin) / (yMax - yMin)) * innerH;
+
+        ctx.clearRect(0, 0, w, h);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, w, h);
+
+        ctx.strokeStyle = 'rgba(15, 23, 42, 0.08)';
+        ctx.lineWidth = 1 * dpr;
+        xTicks.forEach((tick) => {
+            const x = xToPx(tick);
+            ctx.beginPath();
+            ctx.moveTo(x, padT);
+            ctx.lineTo(x, padT + innerH);
+            ctx.stroke();
+        });
+        yTicks.forEach((tick) => {
+            const y = yToPx(tick);
+            ctx.beginPath();
+            ctx.moveTo(padL, y);
+            ctx.lineTo(padL + innerW, y);
+            ctx.stroke();
+        });
+
+        ctx.strokeStyle = 'rgba(15, 23, 42, 0.25)';
+        ctx.beginPath();
+        ctx.moveTo(padL, padT);
+        ctx.lineTo(padL, padT + innerH);
+        ctx.lineTo(padL + innerW, padT + innerH);
+        ctx.stroke();
+
+        ctx.fillStyle = '#344054';
+        ctx.font = `${11 * dpr}px sans-serif`;
+        yTicks.forEach((tick) => {
+            const y = yToPx(tick);
+            ctx.fillText(formatNumberCompact(tick, 3), 6 * dpr, y + 4 * dpr);
+        });
+        xTicks.forEach((tick) => {
+            const x = xToPx(tick);
+            ctx.fillText(formatNumberCompact(tick, 3), x - 10 * dpr, padT + innerH + 18 * dpr);
+        });
+    }
+
+    ensurePlotStaticLayer(plot, frame) {
+        const signature = this.buildPlotStaticSignature(frame);
+        if (plot._staticLayer?.signature === signature && plot._staticLayer.canvas) {
+            return plot._staticLayer.canvas;
+        }
+
+        const layerCanvas = this.createCacheCanvas(frame.w, frame.h);
+        const layerCtx = layerCanvas?.getContext?.('2d');
+        if (!layerCanvas || !layerCtx) {
+            plot._staticLayer = null;
+            return null;
+        }
+
+        this.drawPlotStaticLayer(layerCtx, frame);
+        plot._staticLayer = { signature, canvas: layerCanvas };
+        return layerCanvas;
+    }
+
     renderGauge(gauge) {
         const comp = this.circuit.components.get(gauge.compId);
         if (!comp || !gauge.canvas) return;
@@ -836,94 +1128,40 @@ export class ObservationPanel {
             ? Math.abs(comp.currentValue || 0)
             : Math.abs(comp.voltageValue || 0);
 
-        // 更新底部文字
         if (gauge.meta) {
-            gauge.meta.textContent = `读数: ${formatNumberCompact(reading, 4)} ${unit} / 量程: ${range}${unit}`;
-        }
-
-        // 背景
-        ctx.clearRect(0, 0, w, h);
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, w, h);
-
-        // 仿图片风格：圆弧刻度 + 指针
-        const cx = w / 2;
-        const cy = h * 0.78;
-        const radius = Math.min(w * 0.42, h * 0.62);
-
-        const startAngle = Math.PI * 1.12; // 左侧略偏下
-        const endAngle = Math.PI * -0.12;  // 右侧略偏下
-
-        // 外弧
-        ctx.strokeStyle = 'rgba(15, 23, 42, 0.55)';
-        ctx.lineWidth = 2 * dpr;
-        ctx.beginPath();
-        ctx.arc(cx, cy, radius, startAngle, endAngle, false);
-        ctx.stroke();
-
-        // 刻度：使用“漂亮刻度”
-        const ticks = computeNiceTicks(0, range, 6)
-            .filter((t) => t >= 0 - 1e-12 && t <= range + 1e-12);
-        if (ticks.length === 0 || ticks[0] !== 0) ticks.unshift(0);
-        if (ticks[ticks.length - 1] !== range) ticks.push(range);
-
-        const toAngle = (v) => {
-            const k = Math.min(Math.max(v / range, 0), 1);
-            return startAngle + (endAngle - startAngle) * k;
-        };
-
-        // 小刻度（在相邻大刻度间插 4 个）
-        ctx.strokeStyle = 'rgba(15, 23, 42, 0.35)';
-        ctx.lineWidth = 1 * dpr;
-        for (let i = 0; i < ticks.length - 1; i++) {
-            const a0 = toAngle(ticks[i]);
-            const a1 = toAngle(ticks[i + 1]);
-            const steps = 5;
-            for (let s = 1; s < steps; s++) {
-                const a = a0 + (a1 - a0) * (s / steps);
-                const x1 = cx + Math.cos(a) * (radius - 10 * dpr);
-                const y1 = cy + Math.sin(a) * (radius - 10 * dpr);
-                const x2 = cx + Math.cos(a) * (radius - 4 * dpr);
-                const y2 = cy + Math.sin(a) * (radius - 4 * dpr);
-                ctx.beginPath();
-                ctx.moveTo(x1, y1);
-                ctx.lineTo(x2, y2);
-                ctx.stroke();
+            const metaText = `读数: ${formatNumberCompact(reading, 4)} ${unit} / 量程: ${range}${unit}`;
+            if (gauge._metaText !== metaText) {
+                gauge._metaText = metaText;
+                gauge.meta.textContent = metaText;
             }
         }
 
-        // 大刻度 + 数字
-        ctx.strokeStyle = 'rgba(15, 23, 42, 0.65)';
-        ctx.lineWidth = 2 * dpr;
-        ctx.fillStyle = '#0f172a';
-        ctx.font = `${12 * dpr}px serif`;
-        ticks.forEach((t) => {
-            const a = toAngle(t);
-            const x1 = cx + Math.cos(a) * (radius - 14 * dpr);
-            const y1 = cy + Math.sin(a) * (radius - 14 * dpr);
-            const x2 = cx + Math.cos(a) * (radius + 1 * dpr);
-            const y2 = cy + Math.sin(a) * (radius + 1 * dpr);
-            ctx.beginPath();
-            ctx.moveTo(x1, y1);
-            ctx.lineTo(x2, y2);
-            ctx.stroke();
+        const cx = w / 2;
+        const cy = h * 0.78;
+        const radius = Math.min(w * 0.42, h * 0.62);
+        const startAngle = Math.PI * 1.12; // 左侧略偏下
+        const endAngle = Math.PI * -0.12;  // 右侧略偏下
 
-            const labelX = cx + Math.cos(a) * (radius - 28 * dpr);
-            const labelY = cy + Math.sin(a) * (radius - 28 * dpr);
-            const text = t === 0 ? '0' : (Math.abs(t - range) < 1e-9 ? String(range) : String(t));
-            ctx.save();
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(text, labelX, labelY);
-            ctx.restore();
-        });
+        const staticModel = {
+            dpr,
+            w,
+            h,
+            unit,
+            range,
+            cx,
+            cy,
+            radius,
+            startAngle,
+            endAngle
+        };
+        const staticLayer = this.ensureGaugeStaticLayer(gauge, staticModel);
 
-        // 单位
-        ctx.fillStyle = '#111827';
-        ctx.font = `${14 * dpr}px serif`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(unit, cx, cy + 26 * dpr);
+        if (staticLayer) {
+            ctx.clearRect(0, 0, w, h);
+            ctx.drawImage(staticLayer, 0, 0);
+        } else {
+            this.drawGaugeStaticLayer(ctx, staticModel);
+        }
 
         // 指针
         const norm = Math.min(Math.max(reading / range, 0), 1);
@@ -953,111 +1191,32 @@ export class ObservationPanel {
         if (!ctx) return;
 
         const dpr = window.devicePixelRatio || 1;
-        const w = canvas.width;
-        const h = canvas.height;
-        ctx.save();
-        ctx.scale(1, 1);
-
-        // 背景
-        ctx.clearRect(0, 0, w, h);
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, w, h);
-
-        // 留边
-        const padL = 46 * dpr;
-        const padR = 10 * dpr;
-        const padT = 10 * dpr;
-        const padB = 28 * dpr;
-        const innerW = Math.max(1, w - padL - padR);
-        const innerH = Math.max(1, h - padT - padB);
-
-        // 获取范围
-        const autoRange = computeRangeFromBuffer(plot.buffer);
-        let xMin = plot.x.autoRange ? autoRange?.minX : plot.x.min;
-        let xMax = plot.x.autoRange ? autoRange?.maxX : plot.x.max;
-        let yMin = plot.y.autoRange ? autoRange?.minY : plot.y.min;
-        let yMax = plot.y.autoRange ? autoRange?.maxY : plot.y.max;
-
-        if (!Number.isFinite(xMin) || !Number.isFinite(xMax) || !Number.isFinite(yMin) || !Number.isFinite(yMax)) {
-            // 无数据时画占位
+        const frame = this.computePlotFrame(plot, canvas, dpr);
+        if (!frame) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
             ctx.fillStyle = '#667085';
             ctx.font = `${12 * dpr}px sans-serif`;
-            ctx.fillText('暂无数据：运行模拟后开始绘制', padL, padT + 20 * dpr);
-            ctx.restore();
+            ctx.fillText('暂无数据：运行模拟后开始绘制', 46 * dpr, 30 * dpr);
             return;
         }
 
-        if (xMin === xMax) {
-            const pad = xMin === 0 ? 1 : Math.abs(xMin) * 0.1;
-            xMin -= pad;
-            xMax += pad;
+        const staticLayer = this.ensurePlotStaticLayer(plot, frame);
+        if (staticLayer) {
+            ctx.clearRect(0, 0, frame.w, frame.h);
+            ctx.drawImage(staticLayer, 0, 0);
+        } else {
+            this.drawPlotStaticLayer(ctx, frame);
         }
-        if (yMin === yMax) {
-            const pad = yMin === 0 ? 1 : Math.abs(yMin) * 0.1;
-            yMin -= pad;
-            yMax += pad;
-        }
-        if (xMin > xMax) [xMin, xMax] = [xMax, xMin];
-        if (yMin > yMax) [yMin, yMax] = [yMax, yMin];
 
-        // 轻微 padding
-        const xPad = (xMax - xMin) * 0.03;
-        const yPad = (yMax - yMin) * 0.05;
-        xMin -= xPad;
-        xMax += xPad;
-        yMin -= yPad;
-        yMax += yPad;
-
+        const { padL, padT, innerW, innerH, xMin, xMax, yMin, yMax } = frame;
         const xToPx = (x) => padL + ((x - xMin) / (xMax - xMin)) * innerW;
         const yToPx = (y) => padT + (1 - (y - yMin) / (yMax - yMin)) * innerH;
-
-        // 网格/刻度
-        ctx.strokeStyle = 'rgba(15, 23, 42, 0.08)';
-        ctx.lineWidth = 1 * dpr;
-
-        const xTicks = computeNiceTicks(xMin, xMax, 5);
-        const yTicks = computeNiceTicks(yMin, yMax, 5);
-
-        xTicks.forEach((tx) => {
-            const x = xToPx(tx);
-            ctx.beginPath();
-            ctx.moveTo(x, padT);
-            ctx.lineTo(x, padT + innerH);
-            ctx.stroke();
-        });
-
-        yTicks.forEach((ty) => {
-            const y = yToPx(ty);
-            ctx.beginPath();
-            ctx.moveTo(padL, y);
-            ctx.lineTo(padL + innerW, y);
-            ctx.stroke();
-        });
-
-        // 轴线
-        ctx.strokeStyle = 'rgba(15, 23, 42, 0.25)';
-        ctx.beginPath();
-        ctx.moveTo(padL, padT);
-        ctx.lineTo(padL, padT + innerH);
-        ctx.lineTo(padL + innerW, padT + innerH);
-        ctx.stroke();
-
-        // 刻度文字
-        ctx.fillStyle = '#344054';
-        ctx.font = `${11 * dpr}px sans-serif`;
-        yTicks.forEach((ty) => {
-            const y = yToPx(ty);
-            ctx.fillText(formatNumberCompact(ty, 3), 6 * dpr, y + 4 * dpr);
-        });
-        xTicks.forEach((tx) => {
-            const x = xToPx(tx);
-            ctx.fillText(formatNumberCompact(tx, 3), x - 10 * dpr, padT + innerH + 18 * dpr);
-        });
 
         // 曲线（按点序连接，必要时抽样）
         const n = plot.buffer.length;
         if (n <= 0) {
-            ctx.restore();
             return;
         }
 
@@ -1071,21 +1230,17 @@ export class ObservationPanel {
         ctx.beginPath();
 
         let started = false;
-        for (let i = 0; i < n; i += step) {
-            const pt = plot.buffer.getPoint(i);
-            if (!pt) continue;
-            const px = xToPx(pt.x);
-            const py = yToPx(pt.y);
-            if (!Number.isFinite(px) || !Number.isFinite(py)) continue;
+        plot.buffer.forEachSampled(step, (x, y) => {
+            const px = xToPx(x);
+            const py = yToPx(y);
+            if (!Number.isFinite(px) || !Number.isFinite(py)) return;
             if (!started) {
                 ctx.moveTo(px, py);
                 started = true;
             } else {
                 ctx.lineTo(px, py);
             }
-        }
+        });
         if (started) ctx.stroke();
-
-        ctx.restore();
     }
 }
