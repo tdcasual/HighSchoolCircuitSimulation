@@ -47,8 +47,18 @@ export function updateIdCounterFromExisting(existingIds) {
  * 元器件默认属性
  */
 export const ComponentDefaults = {
+    Ground: {
+        isReference: true      // 参考地
+    },
     PowerSource: {
         voltage: 12,           // 电动势 (V)
+        internalResistance: 0.5 // 内阻 (Ω)
+    },
+    ACVoltageSource: {
+        rmsVoltage: 12,        // 有效值 (V)
+        frequency: 50,         // 频率 (Hz)
+        phase: 0,              // 初相 (deg)
+        offset: 0,             // 直流偏置 (V)
         internalResistance: 0.5 // 内阻 (Ω)
     },
     Resistor: {
@@ -68,6 +78,11 @@ export const ComponentDefaults = {
     },
     Capacitor: {
         capacitance: 0.001     // 电容值 (F) = 1000μF
+    },
+    Inductor: {
+        inductance: 0.1,       // 电感值 (H)
+        initialCurrent: 0,     // 初始电流 (A)
+        prevCurrent: 0         // 上一时刻电流 (A)
     },
     ParallelPlateCapacitor: {
         // 平行板电容（用于演示 C 的决定因素）
@@ -110,11 +125,14 @@ export const ComponentDefaults = {
  * 元器件显示名称
  */
 export const ComponentNames = {
+    Ground: '接地',
     PowerSource: '电源',
+    ACVoltageSource: '交流电源',
     Resistor: '定值电阻',
     Rheostat: '滑动变阻器',
     Bulb: '灯泡',
     Capacitor: '电容',
+    Inductor: '电感',
     ParallelPlateCapacitor: '平行板电容',
     Motor: '电动机',
     Switch: '开关',
@@ -122,6 +140,15 @@ export const ComponentNames = {
     Voltmeter: '电压表',
     BlackBox: '黑箱'
 };
+
+const COMPONENT_TERMINAL_COUNT = Object.freeze({
+    Ground: 1,
+    Rheostat: 3
+});
+
+export function getComponentTerminalCount(type) {
+    return COMPONENT_TERMINAL_COUNT[type] || 2;
+}
 
 const VALUE_DISPLAY_STACK_ORDER = ['power', 'voltage', 'current'];
 const DEFAULT_VALUE_DISPLAY_ANCHOR = Object.freeze({ x: 0, y: -14 });
@@ -167,7 +194,7 @@ export function createComponent(type, x, y, existingId = null) {
     const defaults = ComponentDefaults[type] || {};
     
     // 确定端子数量
-    const terminalCount = type === 'Rheostat' ? 3 : 2;
+    const terminalCount = getComponentTerminalCount(type);
     
     // 初始化端子延长数据
     const terminalExtensions = {};
@@ -188,7 +215,7 @@ export function createComponent(type, x, y, existingId = null) {
         defaultDisplay.voltage = true;
     }
     // 开关默认不显示数值（避免干扰）
-    if (type === 'Switch') {
+    if (type === 'Switch' || type === 'Ground') {
         defaultDisplay.current = false;
         defaultDisplay.voltage = false;
         defaultDisplay.power = false;
@@ -253,8 +280,14 @@ export const SVGRenderer = {
         
         // 根据类型渲染不同的元器件
         switch (comp.type) {
+            case 'Ground':
+                this.renderGround(g, comp);
+                break;
             case 'PowerSource':
                 this.renderPowerSource(g, comp);
+                break;
+            case 'ACVoltageSource':
+                this.renderACVoltageSource(g, comp);
                 break;
             case 'Resistor':
                 this.renderResistor(g, comp);
@@ -267,6 +300,9 @@ export const SVGRenderer = {
                 break;
             case 'Capacitor':
                 this.renderCapacitor(g, comp);
+                break;
+            case 'Inductor':
+                this.renderInductor(g, comp);
                 break;
             case 'ParallelPlateCapacitor':
                 this.renderParallelPlateCapacitor(g, comp);
@@ -295,6 +331,23 @@ export const SVGRenderer = {
     },
 
     /**
+     * 渲染接地
+     */
+    renderGround(g, comp) {
+        // 引线与接地符号
+        this.addLine(g, 0, -20, 0, -8, 2);
+        this.addLine(g, -12, -8, 12, -8, 2);
+        this.addLine(g, -8, -3, 8, -3, 2);
+        this.addLine(g, -4, 2, 4, 2, 2);
+
+        // 单端子（支持延长）
+        this.addTerminal(g, 0, -20, 0, comp);
+
+        const labelText = comp.label || 'GND';
+        this.addText(g, 0, 18, labelText, 10, 'label');
+    },
+
+    /**
      * 渲染电源
      */
     renderPowerSource(g, comp) {
@@ -318,6 +371,32 @@ export const SVGRenderer = {
         // 标签 - 优先显示自定义标签
         const labelText = comp.label || `${comp.voltage}V`;
         this.addText(g, 0, 28, labelText, 10, 'label');
+    },
+
+    /**
+     * 渲染交流电源
+     */
+    renderACVoltageSource(g, comp) {
+        this.addLine(g, -35, 0, -16, 0);
+        this.addLine(g, 16, 0, 35, 0);
+
+        const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        circle.setAttribute('cx', 0);
+        circle.setAttribute('cy', 0);
+        circle.setAttribute('r', 16);
+        circle.setAttribute('class', 'body');
+        g.appendChild(circle);
+
+        // ~ 符号
+        this.addText(g, 0, 5, '~', 16, 'label');
+        this.addText(g, -24, 5, '+', 10);
+        this.addText(g, 24, 5, '-', 10);
+
+        this.addTerminal(g, -35, 0, 0, comp);
+        this.addTerminal(g, 35, 0, 1, comp);
+
+        const labelText = comp.label || `${comp.rmsVoltage}V~`;
+        this.addText(g, 0, 30, labelText, 9, 'label');
     },
 
     /**
@@ -488,6 +567,33 @@ export const SVGRenderer = {
                 : `${(comp.capacitance * 1000000).toFixed(0)}μF`;
             this.addText(g, 0, 25, capValue, 10, 'label');
         }
+    },
+
+    /**
+     * 渲染电感
+     */
+    renderInductor(g, comp) {
+        this.addLine(g, -35, 0, -25, 0);
+        this.addLine(g, 25, 0, 35, 0);
+
+        const loops = 4;
+        const radius = 5;
+        const startX = -20;
+        for (let i = 0; i < loops; i++) {
+            const cx = startX + i * (radius * 2) + radius;
+            const arc = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            arc.setAttribute('d', `M ${cx - radius} 0 A ${radius} ${radius} 0 0 1 ${cx + radius} 0`);
+            arc.setAttribute('fill', 'none');
+            arc.setAttribute('stroke', '#333');
+            arc.setAttribute('stroke-width', '2');
+            g.appendChild(arc);
+        }
+
+        this.addTerminal(g, -35, 0, 0, comp);
+        this.addTerminal(g, 35, 0, 1, comp);
+
+        const labelText = comp.label || `${comp.inductance}H`;
+        this.addText(g, 0, 25, labelText, 10, 'label');
     },
 
     /**
@@ -986,7 +1092,7 @@ export const SVGRenderer = {
         }
         
         // 开关不需要显示电压电流
-        if (comp.type === 'Switch') {
+        if (comp.type === 'Switch' || comp.type === 'Ground') {
             if (currentDisplay) currentDisplay.textContent = '';
             if (voltageDisplay) voltageDisplay.textContent = '';
             if (powerDisplay) powerDisplay.textContent = '';
