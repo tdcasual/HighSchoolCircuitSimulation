@@ -1,171 +1,110 @@
-# 电学模拟工具
+# High School Circuit Simulation
 
-一个基于Web的交互式电路仿真工具，支持拖拽式电路设计、实时仿真计算和电路图自动转换。
+面向高中物理教学的电路仿真项目，支持在浏览器中搭建电路、实时计算电压/电流/功率，并结合 AI 辅助进行题目分析与解释。
 
-## 功能特性
+## 1. 功能介绍
 
-### 🎨 可视化电路设计
-- **拖拽式操作**：通过鼠标拖拽放置元器件
-- **智能布线**：支持正交自动布线、导线分段与端点吸附
-- **对齐辅助**：拖动元器件时显示对齐参考线
-- **平滑交互**：10秒自动隐藏导线端点手柄，保持界面整洁
+### 核心能力
+- 可视化搭建电路：拖拽元器件、网格吸附、导线连接、参数编辑
+- 实时仿真求解：基于 MNA（改进节点分析法）计算电路状态
+- 观测与显示：在画布上显示电压/电流/功率，支持观察面板
+- AI 辅助：支持题目理解、结果解释、JSON 电路结构辅助生成
+- 数据读写：支持电路 JSON 导入导出，便于题库化与复用
 
-### ⚡ 实时电路仿真
-- **改进节点分析法(MNA)**：精确求解电路状态
-- **支持元器件类型**：
-  - 电源（含内阻）
-  - 定值电阻
-  - 滑动变阻器（三端可调）
-  - 电容
-  - 灯泡
-  - 开关
-  - 电流表
-  - 电压表
-  - 电动机
+### 当前支持的元器件
+- 电源（PowerSource）
+- 定值电阻（Resistor）
+- 滑动变阻器（Rheostat）
+- 灯泡（Bulb）
+- 电容（Capacitor）
+- 电动机（Motor）
+- 开关（Switch）
+- 电流表（Ammeter）
+- 电压表（Voltmeter）
 
-### 📊 实时数据显示
-- 电压、电流、功率实时更新
-- 断开元器件自动显示为0
-- 电容充放电动态模拟
+## 2. 运行环境
 
-### 💾 电路导入导出
-- **JSON格式**：完整保存电路结构
-- **AI辅助转换**：使用 `电路图转JSON-Prompt.md` 配合LLM将手绘电路图转换为JSON
+- 浏览器：Chrome / Edge / Safari 最新版
+- Node.js：建议 `>= 18`（仅在运行测试脚本时需要）
 
-## 快速开始
+## 3. 快速开始
 
-### 在线使用
-直接打开 `index.html` 文件即可在浏览器中运行，无需安装任何依赖。
+### 方式 A：直接运行（最简单）
+1. 克隆或下载项目
+2. 直接用浏览器打开 `index.html`
 
-### P0 基线回归（20 个标准电路）
-用于后续重构时防止数值漂移：
+> 说明：项目是前端静态应用，直接打开即可使用。
+
+### 方式 B：本地 HTTP 服务（推荐）
+```bash
+python3 -m http.server 8080
+```
+
+浏览器访问：`http://localhost:8080`
+
+### 方式 C：开发与测试
+```bash
+npm install
+npm test
+```
+
+## 4. 部署方式
+
+### Docker 部署
+```bash
+docker build -t high-school-circuit-simulation .
+docker run -d --name circuit-sim -p 8080:80 high-school-circuit-simulation
+```
+
+访问：`http://localhost:8080`
+
+### Vercel 部署
+仓库已提供 `vercel.json`，可直接导入 Vercel 项目进行静态部署。
+
+## 5. 回归测试命令
+
+项目内置了数值回归与基线对比脚本，适合重构后验证精度一致性：
 
 ```bash
-npm run baseline:p0:update   # 首次或有意更新基线
-npm run baseline:p0          # 日常对比校验
+npm run baseline:p0
+npm run baseline:p0:update
+npm run baseline:circuitjs
+npm run baseline:circuitjs:update
+npm run baseline:ai
+npm run baseline:ai:update
 ```
 
-输出文件：
-- 当前快照：`output/baselines/p0-electrical-current.json`
-- 差异报告：`output/baselines/p0-electrical-diff.md`
-- 仓库基线：`scripts/benchmark/baselines/p0-electrical-baseline.json`
+## 6. 项目优势
 
-### 基本操作
+- 教学导向强：围绕高中物理常见电路场景设计
+- 上手成本低：浏览器即可运行，无需复杂环境
+- 可扩展性好：元器件与求解逻辑模块化，便于继续扩展
+- 有回归体系：具备 P0/CircuitJS/AI 基线脚本，便于持续演进
 
-#### 添加元器件
-1. 点击左侧工具栏的元器件按钮
-2. 在画布上点击放置元器件
-3. 双击元器件可编辑参数
+## 7. 当前劣势与限制
 
-#### 连接导线
-1. `Shift + 点击` 空白画布开始布线（也支持工具栏选择导线后点击起点）
-2. 点击目标端子、导线端点或网格点完成连接
-3. 按 `Esc` 键取消布线
+- 目前以直流稳态/简化动态为主，交流与复杂暂态覆盖有限
+- 非线性器件模型较少（如二极管、三极管尚不完整）
+- 大规模电路下性能与交互流畅度仍有优化空间
+- AI 能力依赖提示词与模型质量，稳定性和可解释性需持续加强
 
-#### 编辑导线
-1. 拖动导线可整体平移（按网格移动）
-2. 拖动导线端点默认仅移动该端点（按住 `Shift` 可拖动整个节点）
-3. `Ctrl/Cmd + 点击` 导线可在点击处分割为两段独立导线（或右键菜单分割）
+## 8. 目录结构
 
-#### 调节滑动变阻器
-1. 选中滑动变阻器
-2. 拖动滑块改变阻值
-3. 观察电路参数实时变化
-
-#### 导入电路
-1. 点击"导入电路"按钮
-2. 粘贴JSON格式的电路数据
-3. 点击确认加载电路
-
-## 项目结构
-
-```
-电学模拟工具/
-├── index.html                    # 主页面
-├── README.md                     # 项目说明
-├── 电路图转JSON-Prompt.md        # AI转换提示词
+```text
+.
+├── index.html
 ├── src/
-│   ├── engine/
-│   │   ├── Circuit.js           # 电路引擎（MNA求解器）
-│   │   └── components/          # 元器件模型
-│   │       ├── PowerSource.js
-│   │       ├── Resistor.js
-│   │       ├── Rheostat.js
-│   │       ├── Capacitor.js
-│   │       ├── Bulb.js
-│   │       ├── Switch.js
-│   │       ├── Ammeter.js
-│   │       ├── Voltmeter.js
-│   │       └── Motor.js
-│   └── ui/
-│       ├── Canvas.js            # 画布渲染
-│       ├── Interaction.js       # 交互逻辑
-│       ├── Toolbar.js           # 工具栏
-│       └── PropertyPanel.js     # 属性面板
-└── assets/                      # 静态资源
+│   ├── engine/        # 求解引擎（Circuit/Solver/Matrix）
+│   ├── ui/            # 交互、渲染、观察面板、AI 面板
+│   ├── ai/            # Agent / Skill / Resource 相关实现
+│   └── utils/         # 几何与物理等工具模块
+├── tests/             # 单测与回归测试
+├── scripts/benchmark/ # 基线回归脚本
+├── Dockerfile
+└── vercel.json
 ```
 
-## 电路图转JSON
+## 9. 贡献与许可证
 
-使用 `电路图转JSON-Prompt.md` 文件配合ChatGPT/Claude等LLM，可以将手绘电路图或教材电路图快速转换为JSON格式。
-
-### 使用步骤
-1. 打开 `电路图转JSON-Prompt.md`
-2. 复制全部内容作为系统提示词
-3. 上传电路图图片
-4. LLM将输出标准JSON格式
-5. 在工具中导入JSON
-
-### 转换示例
-原始电路图 → AI识别 → JSON输出 → 工具导入 → 可编辑电路
-
-### 导线 JSON 规范（v2）
-- 导线统一使用端点坐标模型：`{ id, a:{x,y}, b:{x,y}, aRef?, bRef? }`
-- `aRef/bRef` 为可选端子绑定：`{ componentId, terminalIndex }`
-- 运行时与导出仅使用 v2 模型，不再生成 `start/end/controlPoints` 结构
-- 导入仍兼容旧格式（`start/end`、`startComponentId/endComponentId`、`controlPoints`），会自动迁移为 v2 分段导线
-
-## 技术特点
-
-### 数值计算
-- 使用改进节点分析法(Modified Nodal Analysis)
-- Norton等效电路模型
-- 欧拉法求解微分方程（电容充放电）
-
-### 交互优化
-- 5像素拖动阈值区分点击/拖动
-- 智能端子/导线端点吸附（避免连线跳动）
-- 导线端点手柄自动隐藏机制
-- 实时对齐参考线
-
-### 可扩展性
-- 模块化元器件系统
-- 统一的端子接口
-- 易于添加新元器件类型
-
-## 已知限制
-
-- 不支持交流电路分析
-- 不支持非线性元器件（如二极管）
-- 电容仅支持简单充放电模拟
-- 最大节点数建议不超过100
-
-## 开发计划
-
-- [ ] 支持电路原理图自动布局
-- [ ] 添加示波器功能
-- [ ] 支持电路动画回放
-- [ ] 导出为PNG/SVG图片
-- [ ] 更多元器件类型（变压器、继电器等）
-
-## 许可证
-
-MIT License
-
-## 贡献
-
-欢迎提交Issue和Pull Request！
-
----
-
-**提示**：本工具主要用于教学和学习，计算结果仅供参考。
+- 欢迎提交 Issue / PR 改进功能与文档
+- 许可证：MIT
