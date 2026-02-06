@@ -22,6 +22,8 @@ export class Circuit {
         this.simulationInterval = null;
         this.dt = 0.01;               // 10ms 时间步长
         this.simTime = 0;             // 仿真时间（秒）
+        this.minAcSamplesPerCycle = 40; // 交流仿真每周期最小采样点数（用于子步进）
+        this.maxAcSubstepsPerStep = 200; // 单次 step 的最大子步数，防止高频导致卡顿
         this._wireFlowCache = { version: null, map: new Map() };
         this.terminalConnectionMap = new Map();
         this.shortedPowerNodes = new Set(); // node indices that contain a shorted PowerSource
@@ -849,6 +851,41 @@ export class Circuit {
     }
 
     /**
+     * 获取当前电路中已接入的交流电源最高频率
+     * @returns {number}
+     */
+    getMaxConnectedAcFrequencyHz() {
+        let maxFrequency = 0;
+        for (const [id, comp] of this.components) {
+            if (!comp || comp.type !== 'ACVoltageSource') continue;
+            const frequency = Number(comp.frequency);
+            if (!Number.isFinite(frequency) || frequency <= 0) continue;
+            if (!this.isComponentConnected(id)) continue;
+            if (frequency > maxFrequency) maxFrequency = frequency;
+        }
+        return maxFrequency;
+    }
+
+    /**
+     * 根据交流频率决定单步仿真的子步数
+     * 保证每个交流周期至少有一定采样点数，避免 dt 与周期“相位锁定”
+     * @param {number} stepDt
+     * @returns {number}
+     */
+    getSimulationSubstepCount(stepDt = this.dt) {
+        const dt = Number.isFinite(stepDt) && stepDt > 0
+            ? stepDt
+            : (Number.isFinite(this.dt) && this.dt > 0 ? this.dt : 0.01);
+        const maxFrequency = this.getMaxConnectedAcFrequencyHz();
+        if (!Number.isFinite(maxFrequency) || maxFrequency <= 0) return 1;
+
+        const samplesPerCycle = Math.max(4, Math.floor(this.minAcSamplesPerCycle || 40));
+        const maxSubsteps = Math.max(1, Math.floor(this.maxAcSubstepsPerStep || 200));
+        const requiredSubsteps = Math.ceil(dt * maxFrequency * samplesPerCycle);
+        return Math.max(1, Math.min(maxSubsteps, requiredSubsteps));
+    }
+
+    /**
      * 开始模拟
      */
     startSimulation() {
@@ -868,10 +905,14 @@ export class Circuit {
             if (comp.type === 'Capacitor' || comp.type === 'ParallelPlateCapacitor') {
                 comp.prevVoltage = 0;
                 comp.prevCharge = 0;
+                comp.prevCurrent = 0;
+                comp._dynamicHistoryReady = false;
             }
             if (comp.type === 'Inductor') {
                 const initialCurrent = Number.isFinite(comp.initialCurrent) ? comp.initialCurrent : 0;
                 comp.prevCurrent = initialCurrent;
+                comp.prevVoltage = 0;
+                comp._dynamicHistoryReady = false;
             }
             if (comp.type === 'Motor') {
                 comp.speed = 0;
@@ -909,9 +950,21 @@ export class Circuit {
         // 仅在拓扑或关键参数变化后重建 setCircuit，稳定运行时复用已准备结构
         this.ensureSolverPrepared();
         this.solver.debugMode = this.debugMode;
+        
+        // 交流电路子步进：避免 dt 与交流周期相位锁定导致采样失真
+        const substepCount = this.getSimulationSubstepCount(this.dt);
+        const substepDt = this.dt / substepCount;
+        let latestResults = null;
 
-        // 求解
-        this.lastResults = this.solver.solve(this.dt, this.simTime);
+        for (let index = 0; index < substepCount; index++) {
+            const substepResults = this.solver.solve(substepDt, this.simTime);
+            latestResults = substepResults;
+            if (!substepResults.valid) break;
+
+            this.simTime += substepDt;
+            this.solver.updateDynamicComponents(substepResults.voltages, substepResults.currents);
+        }
+        this.lastResults = latestResults || { voltages: [], currents: new Map(), valid: false };
         
         // 调试输出
         if (this.debugMode) {
@@ -923,10 +976,6 @@ export class Circuit {
         }
 
         if (this.lastResults.valid) {
-            this.simTime += this.dt;
-            // 更新动态元器件
-            this.solver.updateDynamicComponents(this.lastResults.voltages);
-
             // 更新各元器件的显示值
             for (const [id, comp] of this.components) {
                 const current = this.lastResults.currents.get(id) || 0;
@@ -1557,11 +1606,15 @@ export class Circuit {
                     ratedPower: comp.ratedPower
                 };
             case 'Capacitor':
-                return { capacitance: comp.capacitance };
+                return {
+                    capacitance: comp.capacitance,
+                    integrationMethod: comp.integrationMethod || 'auto'
+                };
             case 'Inductor':
                 return {
                     inductance: comp.inductance,
-                    initialCurrent: comp.initialCurrent
+                    initialCurrent: comp.initialCurrent,
+                    integrationMethod: comp.integrationMethod || 'auto'
                 };
             case 'ParallelPlateCapacitor':
                 return {
@@ -1570,7 +1623,8 @@ export class Circuit {
                     dielectricConstant: comp.dielectricConstant,
                     plateOffsetYPx: comp.plateOffsetYPx,
                     explorationMode: comp.explorationMode,
-                    capacitance: comp.capacitance
+                    capacitance: comp.capacitance,
+                    integrationMethod: comp.integrationMethod || 'auto'
                 };
             case 'Motor':
                 return {
@@ -1632,6 +1686,12 @@ export class Circuit {
             }
             Object.assign(comp, compData.properties);
 
+            // 兼容旧存档：历史文件未保存 integrationMethod 时保持后向欧拉行为。
+            if ((comp.type === 'Capacitor' || comp.type === 'Inductor' || comp.type === 'ParallelPlateCapacitor')
+                && !compData?.properties?.integrationMethod) {
+                comp.integrationMethod = 'backward-euler';
+            }
+
             // 平行板电容：始终用物理参数刷新电容值，避免保存文件中 C 与参数不一致
             if (comp.type === 'ParallelPlateCapacitor') {
                 const plateLengthPx = 24;
@@ -1646,6 +1706,13 @@ export class Circuit {
 
             if (comp.type === 'Inductor') {
                 comp.prevCurrent = Number.isFinite(comp.initialCurrent) ? comp.initialCurrent : 0;
+                comp.prevVoltage = 0;
+                comp._dynamicHistoryReady = false;
+            }
+            if (comp.type === 'Capacitor' || comp.type === 'ParallelPlateCapacitor') {
+                comp.prevCurrent = 0;
+                comp.prevVoltage = 0;
+                comp._dynamicHistoryReady = false;
             }
 
             // 恢复数值显示开关（单元件配置）
