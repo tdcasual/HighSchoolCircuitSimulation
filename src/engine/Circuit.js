@@ -27,6 +27,9 @@ export class Circuit {
         this._wireFlowCache = { version: null, map: new Map() };
         this.terminalConnectionMap = new Map();
         this.shortedPowerNodes = new Set(); // node indices that contain a shorted PowerSource
+        this.shortedSourceIds = new Set(); // source ids detected as short-circuited
+        this.shortedWireIds = new Set(); // wire ids on short-circuit paths
+        this.shortCircuitCacheVersion = null; // last results object used by short-circuit diagnostics
         this.topologyBatchDepth = 0;
         this.topologyRebuildPending = false;
         this.topologyVersion = 0;
@@ -320,6 +323,7 @@ export class Circuit {
 
         // 先清理零长度导线，避免后续拓扑分析被噪声干扰。
         for (const [wireId, wire] of Array.from(this.wires.entries())) {
+            if (scoped && !scoped.has(wireId)) continue;
             const a = normalizeCanvasPoint(wire?.a);
             const b = normalizeCanvasPoint(wire?.b);
             if (!a || !b) {
@@ -407,6 +411,14 @@ export class Circuit {
                 const keyB = pointKey(pB);
 
                 if (keyA && keyB && keyA === keyB) {
+                    const refsConflict = otherA.ref && otherB.ref
+                        && (
+                            otherA.ref.componentId !== otherB.ref.componentId
+                            || otherA.ref.terminalIndex !== otherB.ref.terminalIndex
+                        );
+                    if (refsConflict) continue;
+                    const mergedRef = otherA.ref || otherB.ref || null;
+                    setEndpoint(wireA, otherA.end, pA, mergedRef);
                     removeWireById(wireB.id);
                     replacementByRemovedId[wireB.id] = wireA.id;
                     mergedInPass = true;
@@ -684,16 +696,22 @@ export class Circuit {
 
         // Track nodes that contain a shorted power source (both terminals on the same electrical node).
         const shorted = new Set();
+        const shortedSources = new Set();
         for (const comp of this.components.values()) {
             if (comp.type !== 'PowerSource' && comp.type !== 'ACVoltageSource') continue;
             const n0 = comp.nodes?.[0];
             const n1 = comp.nodes?.[1];
             if (n0 !== undefined && n0 >= 0 && n0 === n1) {
                 shorted.add(n0);
+                shortedSources.add(comp.id);
             }
         }
         this.shortedPowerNodes = shorted;
+        this.shortedSourceIds = shortedSources;
+        this.shortedWireIds = new Set();
+        this.shortCircuitCacheVersion = null;
         this.topologyVersion += 1;
+        this.refreshComponentConnectivityCache();
         this.markSolverCircuitDirty();
     }
 
@@ -820,8 +838,7 @@ export class Circuit {
      * @param {string} componentId - 元器件ID
      * @returns {boolean} 是否连接
      */
-    isComponentConnected(componentId) {
-        const comp = this.components.get(componentId);
+    computeComponentConnectedState(componentId, comp) {
         if (!comp || !Array.isArray(comp.nodes)) return false;
         const terminalCount = getComponentTerminalCount(comp.type);
 
@@ -848,6 +865,28 @@ export class Circuit {
         if (connectedTerminals.length < 2) return false;
         const uniqueNodes = new Set(connectedTerminals.map(t => t.nodeIdx));
         return uniqueNodes.size >= 2;
+    }
+
+    refreshComponentConnectivityCache() {
+        for (const [id, comp] of this.components) {
+            comp._isConnectedCached = this.computeComponentConnectedState(id, comp);
+            comp._connectionTopologyVersion = this.topologyVersion;
+        }
+    }
+
+    isComponentConnected(componentId) {
+        const comp = this.components.get(componentId);
+        if (!comp || !Array.isArray(comp.nodes)) return false;
+
+        if (comp._connectionTopologyVersion === this.topologyVersion
+            && typeof comp._isConnectedCached === 'boolean') {
+            return comp._isConnectedCached;
+        }
+
+        const connected = this.computeComponentConnectedState(componentId, comp);
+        comp._isConnectedCached = connected;
+        comp._connectionTopologyVersion = this.topologyVersion;
+        return connected;
     }
 
     /**
@@ -975,6 +1014,8 @@ export class Circuit {
             }
         }
 
+        this.refreshShortCircuitDiagnostics(this.lastResults);
+
         if (this.lastResults.valid) {
             // 更新各元器件的显示值
             for (const [id, comp] of this.components) {
@@ -1005,7 +1046,10 @@ export class Circuit {
                 }
                 
                 // 检查元器件是否被短路（两端节点相同）
-                if (comp._isShorted) {
+                const isFiniteResistanceSource = (comp.type === 'PowerSource' || comp.type === 'ACVoltageSource')
+                    && Number.isFinite(Number(comp.internalResistance))
+                    && Number(comp.internalResistance) > 1e-9;
+                if (comp._isShorted && !isFiniteResistanceSource) {
                     comp.currentValue = 0;
                     comp.voltageValue = 0;
                     comp.powerValue = 0;
@@ -1428,17 +1472,140 @@ export class Circuit {
         return r === null || r === undefined || r === Infinity || r >= 1e10;
     }
 
+    refreshShortCircuitDiagnostics(results = null) {
+        const isValidNode = (nodeIdx) => nodeIdx !== undefined && nodeIdx !== null && nodeIdx >= 0;
+        const shortedSources = new Set();
+        const shortedNodes = new Set();
+        const shortedWireIds = new Set();
+        const directShortTerminalKeys = new Set();
+        const nodeShortCurrent = new Map();
+
+        const hasValidResults = !!(results && results.valid);
+        const shortCurrentRatio = 0.95;
+        const lowVoltageRatio = 0.05;
+        const lowVoltageAbs = 0.05;
+
+        const updateNodeShortCurrent = (nodeIdx, currentAbs) => {
+            if (!isValidNode(nodeIdx)) return;
+            if (!(Number.isFinite(currentAbs) && currentAbs > 0)) return;
+            const prev = nodeShortCurrent.get(nodeIdx) || 0;
+            if (currentAbs > prev) {
+                nodeShortCurrent.set(nodeIdx, currentAbs);
+            }
+        };
+
+        for (const comp of this.components.values()) {
+            if (comp.type !== 'PowerSource' && comp.type !== 'ACVoltageSource') continue;
+            const n0 = comp.nodes?.[0];
+            const n1 = comp.nodes?.[1];
+            if (!isValidNode(n0) || !isValidNode(n1)) continue;
+
+            const topologicalShort = n0 === n1;
+            let runtimeShort = false;
+            let sourceCurrentAbs = 0;
+
+            if (hasValidResults) {
+                sourceCurrentAbs = Math.abs(results.currents?.get(comp.id) || 0);
+            }
+
+            if (hasValidResults && !topologicalShort) {
+                const internalResistance = Number(comp.internalResistance);
+                if (Number.isFinite(internalResistance) && internalResistance > 1e-9) {
+                    const sourceVoltage = this.solver.getSourceInstantVoltage(comp);
+                    const sourceVoltageAbs = Math.abs(sourceVoltage);
+                    const shortCurrent = sourceVoltageAbs / internalResistance;
+                    const terminalVoltage = Math.abs((results.voltages[n0] || 0) - (results.voltages[n1] || 0));
+                    const voltageTol = Math.max(lowVoltageAbs, sourceVoltageAbs * lowVoltageRatio);
+                    runtimeShort = shortCurrent > 0
+                        && sourceCurrentAbs >= shortCurrent * shortCurrentRatio
+                        && terminalVoltage <= voltageTol;
+                }
+            }
+
+            if (!(topologicalShort || runtimeShort)) continue;
+
+            shortedSources.add(comp.id);
+            shortedNodes.add(n0);
+            shortedNodes.add(n1);
+            updateNodeShortCurrent(n0, sourceCurrentAbs);
+            updateNodeShortCurrent(n1, sourceCurrentAbs);
+
+            if (topologicalShort) {
+                const p0 = this.getTerminalWorldPositionCached(comp.id, 0, comp);
+                const p1 = this.getTerminalWorldPositionCached(comp.id, 1, comp);
+                const key0 = pointKey(p0);
+                const key1 = pointKey(p1);
+                if (key0) directShortTerminalKeys.add(key0);
+                if (key1) directShortTerminalKeys.add(key1);
+            }
+        }
+
+        if (hasValidResults) {
+            this.ensureWireFlowCache(results);
+            for (const wire of this.wires.values()) {
+                const node = Number.isFinite(wire?.nodeIndex) ? wire.nodeIndex : -1;
+                if (node < 0 || !shortedNodes.has(node)) continue;
+                const expectedShortCurrent = nodeShortCurrent.get(node) || 0;
+                const flow = this._wireFlowCache.map.get(wire.id);
+                const wireCurrent = Math.abs(flow?.currentMagnitude || 0);
+
+                if (expectedShortCurrent > 0) {
+                    if (wireCurrent >= Math.max(1e-6, expectedShortCurrent * 0.2)) {
+                        shortedWireIds.add(wire.id);
+                    }
+                    continue;
+                }
+
+                const aKey = pointKey(wire?.a);
+                const bKey = pointKey(wire?.b);
+                if ((aKey && directShortTerminalKeys.has(aKey))
+                    || (bKey && directShortTerminalKeys.has(bKey))) {
+                    shortedWireIds.add(wire.id);
+                }
+            }
+        } else {
+            // Fallback for invalid/missing solver result: only mark wires touching direct-short source terminals.
+            for (const wire of this.wires.values()) {
+                const aKey = pointKey(wire?.a);
+                const bKey = pointKey(wire?.b);
+                if ((aKey && directShortTerminalKeys.has(aKey))
+                    || (bKey && directShortTerminalKeys.has(bKey))) {
+                    shortedWireIds.add(wire.id);
+                }
+            }
+        }
+
+        this.shortedSourceIds = shortedSources;
+        this.shortedPowerNodes = shortedNodes;
+        this.shortedWireIds = shortedWireIds;
+        this.shortCircuitCacheVersion = results || null;
+    }
+
     /**
      * Whether a wire is on a node that contains a shorted power source.
      * This is a topology-only check; it does not depend on the solver result.
      * @param {Object} wire
      * @returns {boolean}
      */
-    isWireInShortCircuit(wire) {
+    isWireInShortCircuit(wire, results = null) {
         if (!wire) return false;
-        const node = Number.isFinite(wire.nodeIndex) ? wire.nodeIndex : -1;
-        if (node < 0) return false;
-        return !!(this.shortedPowerNodes && this.shortedPowerNodes.has(node));
+        if (results && this.shortCircuitCacheVersion !== results) {
+            this.refreshShortCircuitDiagnostics(results);
+        }
+
+        const wireObj = typeof wire === 'string' ? this.getWire(wire) : wire;
+        const wireId = typeof wire === 'string' ? wire : wire?.id;
+        if (!wireId) return false;
+        if (this.shortedWireIds && this.shortedWireIds.has(wireId)) return true;
+
+        // Topology-only fallback for cases where simulation has not produced runtime diagnostics yet.
+        if (this.shortCircuitCacheVersion === null) {
+            const node = Number.isFinite(wireObj?.nodeIndex) ? wireObj.nodeIndex : -1;
+            if (node >= 0) {
+                return !!(this.shortedPowerNodes && this.shortedPowerNodes.has(node));
+            }
+        }
+        return false;
     }
 
     /**
@@ -1452,18 +1619,7 @@ export class Circuit {
 
         const nodeId = Number.isFinite(wire.nodeIndex) ? wire.nodeIndex : -1;
         const nodeVoltage = nodeId >= 0 ? (results.voltages[nodeId] || 0) : 0;
-        const isShorted = this.isWireInShortCircuit(wire);
-
-        if (isShorted) {
-            return {
-                current: 0,
-                voltage1: nodeVoltage,
-                voltage2: nodeVoltage,
-                isShorted: true,
-                flowDirection: 0,
-                voltageDiff: 0
-            };
-        }
+        const isShorted = this.isWireInShortCircuit(wire, results);
 
         this.ensureWireFlowCache(results);
         const cachedFlow = this._wireFlowCache.map.get(wire.id);
@@ -1474,7 +1630,7 @@ export class Circuit {
             current,
             voltage1: nodeVoltage,
             voltage2: nodeVoltage,
-            isShorted: false,
+            isShorted,
             flowDirection,
             voltageDiff: 0
         };
@@ -1493,6 +1649,9 @@ export class Circuit {
         this.terminalConnectionMap = new Map();
         this._wireFlowCache = { version: null, map: new Map() };
         this.shortedPowerNodes = new Set();
+        this.shortedSourceIds = new Set();
+        this.shortedWireIds = new Set();
+        this.shortCircuitCacheVersion = null;
         this.topologyBatchDepth = 0;
         this.topologyRebuildPending = false;
         this.topologyVersion = 0;
