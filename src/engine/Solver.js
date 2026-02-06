@@ -12,6 +12,7 @@ export class MNASolver {
         this.groundNode = 0;        // 接地节点（参考节点）
         this.voltageSourceCount = 0; // 电压源数量（用于扩展矩阵）
         this.dt = 0.001;            // 时间步长（秒）
+        this.simTime = 0;           // 当前仿真时刻（秒）
         // gmin 稳定化：给每个非接地节点加一个极小的对地电导，避免“悬浮子电路”导致矩阵奇异
         // 取值为 1e-12 S (≈ 1e12Ω) 基本不影响正常高中电路数值，但能显著提升鲁棒性
         this.gmin = 1e-12;
@@ -32,6 +33,10 @@ export class MNASolver {
         // 检测并标记被短路的元器件（两端节点相同）
         for (const comp of components) {
             comp.vsIndex = undefined;
+            if (comp.type === 'Ground') {
+                comp._isShorted = false;
+                continue;
+            }
             if (comp.nodes && comp.nodes.length >= 2) {
                 const n1 = comp.nodes[0];
                 const n2 = comp.nodes[1];
@@ -39,7 +44,7 @@ export class MNASolver {
                 comp._isShorted = (n1 === n2 && n1 >= 0);
                 
                 // 电源被短路是危险的
-                if (comp._isShorted && comp.type === 'PowerSource') {
+                if (comp._isShorted && (comp.type === 'PowerSource' || comp.type === 'ACVoltageSource')) {
                     this.shortCircuitDetected = true;
                     console.warn(`Power source ${comp.id} is short-circuited!`);
                 }
@@ -52,7 +57,7 @@ export class MNASolver {
         // 注意：有内阻的电源使用诺顿等效，不计入电压源
         // 被短路的电源不作为电压源处理
         for (const comp of components) {
-            if (comp.type === 'PowerSource') {
+            if (comp.type === 'PowerSource' || comp.type === 'ACVoltageSource') {
                 const n1 = comp.nodes?.[0];
                 const n2 = comp.nodes?.[1];
                 // 只有零内阻且未被短路的电源才使用电压源模型
@@ -83,6 +88,10 @@ export class MNASolver {
                     }
                 }
             }
+
+            if (comp.type === 'Inductor' && !Number.isFinite(comp.prevCurrent)) {
+                comp.prevCurrent = Number.isFinite(comp.initialCurrent) ? comp.initialCurrent : 0;
+            }
         }
     }
 
@@ -91,8 +100,9 @@ export class MNASolver {
      * @param {number} dt - 时间步长
      * @returns {Object} 解结果，包含节点电压和支路电流
      */
-    solve(dt = 0.001) {
+    solve(dt = 0.001, simTime = 0) {
         this.dt = dt;
+        this.simTime = Number.isFinite(simTime) ? simTime : 0;
         
         const nodeCount = this.nodes.length;
         if (nodeCount < 2) {
@@ -182,6 +192,10 @@ export class MNASolver {
      * @param {number} nodeCount - 节点数量
      */
     stampComponent(comp, A, z, nodeCount) {
+        if (comp.type === 'Ground') {
+            return;
+        }
+
         // 安全检查：确保 nodes 数组存在且有效
         if (!comp.nodes || comp.nodes.length < 2) {
             console.warn(`Component ${comp.id} has no valid nodes array`);
@@ -316,6 +330,7 @@ export class MNASolver {
             }
                 
             case 'PowerSource':
+            case 'ACVoltageSource':
                 // 电源模型：电动势 E 串联内阻 r
                 // 使用戴维南等效：
                 // 理想电压源 E 串联电阻 r 可以等效为：
@@ -327,10 +342,11 @@ export class MNASolver {
                 // 内阻串联需要引入额外节点，这里用简化方法：
                 // 将电源建模为 E 串联 r，使用诺顿等效
                 // 诺顿等效电流源 I_N = E / r，并联电阻 r
+                const sourceVoltage = this.getSourceInstantVoltage(comp);
                 
                 if (comp.internalResistance > 1e-9) {
                     // 使用诺顿等效电路：电流源 I = E/r 并联电阻 r
-                    const I_norton = comp.voltage / comp.internalResistance;
+                    const I_norton = sourceVoltage / comp.internalResistance;
                     const G = 1 / comp.internalResistance;
                     
                     // 添加并联电导
@@ -350,7 +366,7 @@ export class MNASolver {
                     comp._nortonModel = true;
                 } else {
                     // 内阻为0时，使用理想电压源
-                    this.stampVoltageSource(A, z, i1, i2, comp.voltage, comp.vsIndex, nodeCount);
+                    this.stampVoltageSource(A, z, i1, i2, sourceVoltage, comp.vsIndex, nodeCount);
                     comp._nortonModel = false;
                 }
                 break;
@@ -369,6 +385,21 @@ export class MNASolver {
                 const Ieq = Qprev / this.dt;
                 if (i1 >= 0) z[i1] += Ieq;
                 if (i2 >= 0) z[i2] -= Ieq;
+                break;
+            }
+
+            case 'Inductor': {
+                // 电感伴随模型（后向欧拉）：
+                // v = L*(i-i_prev)/dt => i = i_prev + (dt/L)*v
+                // 等效：并联导纳 G=dt/L + 电流源 I_prev（方向 n1->n2）
+                const L = Math.max(1e-12, comp.inductance || 0);
+                const Req = L / this.dt;
+                this.stampResistor(A, i1, i2, Req);
+
+                const prevCurrent = Number.isFinite(comp.prevCurrent)
+                    ? comp.prevCurrent
+                    : (Number.isFinite(comp.initialCurrent) ? comp.initialCurrent : 0);
+                this.stampCurrentSource(z, i1, i2, prevCurrent);
                 break;
             }
                 
@@ -438,6 +469,19 @@ export class MNASolver {
     }
 
     /**
+     * 电流源印记（电流方向：nodeFrom -> nodeTo）
+     * @param {number[]} z - 常数向量
+     * @param {number} iFrom - 起点节点矩阵索引
+     * @param {number} iTo - 终点节点矩阵索引
+     * @param {number} current - 电流值（A）
+     */
+    stampCurrentSource(z, iFrom, iTo, current) {
+        if (!Number.isFinite(current) || Math.abs(current) < 1e-18) return;
+        if (iFrom >= 0) z[iFrom] -= current;
+        if (iTo >= 0) z[iTo] += current;
+    }
+
+    /**
      * 电压源印记
      * @param {number[][]} A - 系数矩阵
      * @param {number[]} z - 常数向量
@@ -471,6 +515,10 @@ export class MNASolver {
      * @returns {number} 电流值
      */
     calculateCurrent(comp, voltages, x, nodeCount) {
+        if (comp.type === 'Ground') {
+            return 0;
+        }
+
         // 被短路的元器件电流为0（两端没有电势差）
         if (comp._isShorted) {
             return 0;
@@ -584,12 +632,14 @@ export class MNASolver {
             }
                 
             case 'PowerSource':
+            case 'ACVoltageSource':
                 // 电源电流计算
                 if (comp._nortonModel) {
                     // 诺顿模型：电流 = (E - V_端子) / r = (E - (v1-v2)) / r
                     // 其中 v1-v2 是端子电压
                     const terminalVoltage = v1 - v2;
-                    const current = (comp.voltage - terminalVoltage) / comp.internalResistance;
+                    const sourceVoltage = this.getSourceInstantVoltage(comp);
+                    const current = (sourceVoltage - terminalVoltage) / comp.internalResistance;
                     return current; // 正值表示从正极流出
                 } else {
                     // 理想电压源模型：从MNA解向量获取
@@ -616,6 +666,14 @@ export class MNASolver {
                     return 0;
                 }
                 return dQ / this.dt;
+            }
+
+            case 'Inductor': {
+                const L = Math.max(1e-12, comp.inductance || 0);
+                const prevCurrent = Number.isFinite(comp.prevCurrent)
+                    ? comp.prevCurrent
+                    : (Number.isFinite(comp.initialCurrent) ? comp.initialCurrent : 0);
+                return prevCurrent + (this.dt / L) * dV;
             }
                 
             case 'Switch':
@@ -686,6 +744,37 @@ export class MNASolver {
                 // 更新反电动势
                 comp.backEmf = comp.emfConstant * comp.speed;
             }
+
+            if (comp.type === 'Inductor') {
+                if (!comp.nodes || !isValidNode(comp.nodes[0]) || !isValidNode(comp.nodes[1])) continue;
+                const v1 = voltages[comp.nodes[0]] || 0;
+                const v2 = voltages[comp.nodes[1]] || 0;
+                const dV = v1 - v2;
+                const L = Math.max(1e-12, comp.inductance || 0);
+                const prevCurrent = Number.isFinite(comp.prevCurrent)
+                    ? comp.prevCurrent
+                    : (Number.isFinite(comp.initialCurrent) ? comp.initialCurrent : 0);
+                comp.prevCurrent = prevCurrent + (this.dt / L) * dV;
+            }
         }
+    }
+
+    getSourceInstantVoltage(comp) {
+        if (!comp) return 0;
+        if (comp.type === 'ACVoltageSource') {
+            const rms = Number.isFinite(comp.rmsVoltage) ? comp.rmsVoltage : 0;
+            const frequency = Number.isFinite(comp.frequency) ? comp.frequency : 0;
+            const phaseDeg = Number.isFinite(comp.phase) ? comp.phase : 0;
+            const offset = Number.isFinite(comp.offset) ? comp.offset : 0;
+            const omega = 2 * Math.PI * frequency;
+            const phaseRad = phaseDeg * Math.PI / 180;
+            const value = offset + (rms * Math.sqrt(2)) * Math.sin(omega * this.simTime + phaseRad);
+            comp.instantaneousVoltage = value;
+            return value;
+        }
+
+        const value = Number.isFinite(comp.voltage) ? comp.voltage : 0;
+        comp.instantaneousVoltage = value;
+        return value;
     }
 }
