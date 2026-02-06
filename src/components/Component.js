@@ -994,7 +994,58 @@ export const SVGRenderer = {
         valueGroup.appendChild(powerText);
         
         g.appendChild(valueGroup);
+        g.__valueDisplayElements = {
+            valueGroup,
+            currentDisplay: currentText,
+            voltageDisplay: voltageText,
+            powerDisplay: powerText
+        };
+        valueGroup.__layoutSignature = '';
         this.layoutValueDisplay(g, comp);
+    },
+
+    getValueDisplayElements(g) {
+        if (!g) return null;
+        const cached = g.__valueDisplayElements;
+        if (cached?.valueGroup && cached.currentDisplay && cached.voltageDisplay && cached.powerDisplay) {
+            return cached;
+        }
+        const valueGroup = g.querySelector('.value-display-group');
+        const elements = {
+            valueGroup,
+            currentDisplay: g.querySelector('.current-display'),
+            voltageDisplay: g.querySelector('.voltage-display'),
+            powerDisplay: g.querySelector('.power-display')
+        };
+        g.__valueDisplayElements = elements;
+        return elements;
+    },
+
+    setElementTextIfChanged(element, nextText) {
+        if (!element) return false;
+        const normalizedText = nextText ?? '';
+        if ((element.textContent || '') === normalizedText) return false;
+        element.textContent = normalizedText;
+        return true;
+    },
+
+    setElementAttributeIfChanged(element, name, value) {
+        if (!element) return false;
+        const normalizedValue = value == null ? '' : String(value);
+        if (element.getAttribute(name) === normalizedValue) return false;
+        element.setAttribute(name, normalizedValue);
+        return true;
+    },
+
+    setDisplayTextAndStyle(element, text, fontSize = null, fontWeight = null) {
+        let changed = this.setElementTextIfChanged(element, text);
+        if (fontSize !== null) {
+            changed = this.setElementAttributeIfChanged(element, 'font-size', fontSize) || changed;
+        }
+        if (fontWeight !== null) {
+            changed = this.setElementAttributeIfChanged(element, 'font-weight', fontWeight) || changed;
+        }
+        return changed;
     },
 
     resolveValueDisplayRowGap(visibleDisplays) {
@@ -1012,13 +1063,14 @@ export const SVGRenderer = {
     },
 
     layoutValueDisplay(g, comp) {
-        const valueGroup = g.querySelector('.value-display-group');
+        const elements = this.getValueDisplayElements(g);
+        const valueGroup = elements?.valueGroup;
         if (!valueGroup) return;
 
         const displays = {
-            power: g.querySelector('.power-display'),
-            voltage: g.querySelector('.voltage-display'),
-            current: g.querySelector('.current-display')
+            power: elements.powerDisplay,
+            voltage: elements.voltageDisplay,
+            current: elements.currentDisplay
         };
         const visibleRows = [];
         const visibleDisplays = [];
@@ -1032,14 +1084,18 @@ export const SVGRenderer = {
         }
 
         const anchor = resolveValueDisplayAnchor(comp);
-        valueGroup.setAttribute('transform', `translate(${anchor.x}, ${anchor.y})`);
-
         const rowGap = this.resolveValueDisplayRowGap(visibleDisplays);
+        const layoutSignature = `${anchor.x},${anchor.y}|${visibleRows.join(',')}|${rowGap}`;
+        if (valueGroup.__layoutSignature === layoutSignature) {
+            return;
+        }
+        valueGroup.__layoutSignature = layoutSignature;
+        this.setElementAttributeIfChanged(valueGroup, 'transform', `translate(${anchor.x}, ${anchor.y})`);
         const rowOffsets = computeValueDisplayRowOffsets(visibleRows, rowGap);
         for (const row of VALUE_DISPLAY_STACK_ORDER) {
             const display = displays[row];
             if (!display) continue;
-            display.setAttribute('y', String(rowOffsets[row] ?? 0));
+            this.setElementAttributeIfChanged(display, 'y', rowOffsets[row] ?? 0);
         }
     },
 
@@ -1047,9 +1103,10 @@ export const SVGRenderer = {
      * 更新元器件的数值显示
      */
     updateValueDisplay(g, comp, showCurrent, showVoltage, showPower) {
-        const currentDisplay = g.querySelector('.current-display');
-        const voltageDisplay = g.querySelector('.voltage-display');
-        const powerDisplay = g.querySelector('.power-display');
+        const elements = this.getValueDisplayElements(g);
+        const currentDisplay = elements?.currentDisplay;
+        const voltageDisplay = elements?.voltageDisplay;
+        const powerDisplay = elements?.powerDisplay;
         
         // 电表显示读数而非 I/U/P 格式
         if (comp.type === 'Ammeter') {
@@ -1057,17 +1114,13 @@ export const SVGRenderer = {
             if (currentDisplay) {
                 if (showCurrent) {
                     const reading = Math.abs(comp.currentValue || 0);
-                    currentDisplay.textContent = `${reading.toFixed(3)} A`;
-                    currentDisplay.setAttribute('font-size', '14');
-                    currentDisplay.setAttribute('font-weight', '700');
+                    this.setDisplayTextAndStyle(currentDisplay, `${reading.toFixed(3)} A`, '14', '700');
                 } else {
-                    currentDisplay.textContent = '';
-                    currentDisplay.setAttribute('font-size', '13');
-                    currentDisplay.setAttribute('font-weight', '600');
+                    this.setDisplayTextAndStyle(currentDisplay, '', '13', '600');
                 }
             }
-            if (voltageDisplay) voltageDisplay.textContent = '';
-            if (powerDisplay) powerDisplay.textContent = '';
+            this.setDisplayTextAndStyle(voltageDisplay, '');
+            this.setDisplayTextAndStyle(powerDisplay, '');
             this.layoutValueDisplay(g, comp);
             return;
         }
@@ -1077,39 +1130,33 @@ export const SVGRenderer = {
             if (voltageDisplay) {
                 if (showVoltage) {
                     const reading = Math.abs(comp.voltageValue || 0);
-                    voltageDisplay.textContent = `${reading.toFixed(3)} V`;
-                    voltageDisplay.setAttribute('font-size', '14');
-                    voltageDisplay.setAttribute('font-weight', '700');
+                    this.setDisplayTextAndStyle(voltageDisplay, `${reading.toFixed(3)} V`, '14', '700');
                 } else {
-                    voltageDisplay.textContent = '';
-                    voltageDisplay.setAttribute('font-size', '13');
-                    voltageDisplay.setAttribute('font-weight', '600');
+                    this.setDisplayTextAndStyle(voltageDisplay, '', '13', '600');
                 }
             }
             // 理想电压表不显示电流，强制清空
-            if (currentDisplay) {
-                currentDisplay.textContent = '';
-                currentDisplay.setAttribute('font-size', '13');
-                currentDisplay.setAttribute('font-weight', '600');
-            }
-            if (powerDisplay) powerDisplay.textContent = '';
+            this.setDisplayTextAndStyle(currentDisplay, '', '13', '600');
+            this.setDisplayTextAndStyle(powerDisplay, '');
             this.layoutValueDisplay(g, comp);
             return;
         }
         
         // 开关不需要显示电压电流
         if (comp.type === 'Switch' || comp.type === 'Ground') {
-            if (currentDisplay) currentDisplay.textContent = '';
-            if (voltageDisplay) voltageDisplay.textContent = '';
-            if (powerDisplay) powerDisplay.textContent = '';
+            this.setDisplayTextAndStyle(currentDisplay, '');
+            this.setDisplayTextAndStyle(voltageDisplay, '');
+            this.setDisplayTextAndStyle(powerDisplay, '');
             this.layoutValueDisplay(g, comp);
             return;
         }
         
         // 其他元器件正常显示
         if (currentDisplay) {
-            currentDisplay.textContent = showCurrent ? 
-                `I = ${this.formatValue(comp.currentValue, 'A')}` : '';
+            this.setDisplayTextAndStyle(
+                currentDisplay,
+                showCurrent ? `I = ${this.formatValue(comp.currentValue, 'A')}` : ''
+            );
         }
         
         if (voltageDisplay) {
@@ -1123,19 +1170,23 @@ export const SVGRenderer = {
                     parts.push(`U₂=${this.formatValue(comp.voltageSegRight, 'V')}`);
                 }
                 if (parts.length > 0) {
-                    voltageDisplay.textContent = parts.join('  ');
+                    this.setDisplayTextAndStyle(voltageDisplay, parts.join('  '));
                 } else {
-                    voltageDisplay.textContent = `U = ${this.formatValue(comp.voltageValue, 'V')}`;
+                    this.setDisplayTextAndStyle(voltageDisplay, `U = ${this.formatValue(comp.voltageValue, 'V')}`);
                 }
             } else {
-                voltageDisplay.textContent = showVoltage ? 
-                    `U = ${this.formatValue(comp.voltageValue, 'V')}` : '';
+                this.setDisplayTextAndStyle(
+                    voltageDisplay,
+                    showVoltage ? `U = ${this.formatValue(comp.voltageValue, 'V')}` : ''
+                );
             }
         }
         
         if (powerDisplay) {
-            powerDisplay.textContent = showPower ? 
-                `P = ${this.formatValue(comp.powerValue, 'W')}` : '';
+            this.setDisplayTextAndStyle(
+                powerDisplay,
+                showPower ? `P = ${this.formatValue(comp.powerValue, 'W')}` : ''
+            );
         }
         this.layoutValueDisplay(g, comp);
         
@@ -1144,12 +1195,8 @@ export const SVGRenderer = {
             const glow = g.querySelector('.glow');
             if (glow) {
                 const brightness = Math.min(1, comp.powerValue / comp.ratedPower);
-                glow.setAttribute('fill', `rgba(255, 235, 59, ${brightness * 0.8})`);
-                if (brightness > 0.1) {
-                    g.classList.add('on');
-                } else {
-                    g.classList.remove('on');
-                }
+                this.setElementAttributeIfChanged(glow, 'fill', `rgba(255, 235, 59, ${brightness * 0.8})`);
+                g.classList.toggle('on', brightness > 0.1);
             }
         }
         
@@ -1159,11 +1206,7 @@ export const SVGRenderer = {
             const isCharged = Math.abs(comp.currentValue || 0) < 1e-6; // 电流极小，认为充电完成
             
             plates.forEach(plate => {
-                if (isCharged) {
-                    plate.classList.add('charged');
-                } else {
-                    plate.classList.remove('charged');
-                }
+                plate.classList.toggle('charged', isCharged);
             });
         }
     },
