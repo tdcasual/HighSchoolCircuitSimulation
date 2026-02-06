@@ -57,11 +57,15 @@ export class RingBuffer2D {
         this.y = new Float64Array(cap);
         this._start = 0;
         this._length = 0;
+        this._cachedRange = null;
+        this._rangeDirty = false;
     }
 
     clear() {
         this._start = 0;
         this._length = 0;
+        this._cachedRange = null;
+        this._rangeDirty = false;
     }
 
     get length() {
@@ -71,7 +75,13 @@ export class RingBuffer2D {
     push(x, y) {
         if (!Number.isFinite(x) || !Number.isFinite(y)) return;
 
+        let overwrittenX = null;
+        let overwrittenY = null;
         const writeIndex = (this._start + this._length) % this.capacity;
+        if (this._length >= this.capacity) {
+            overwrittenX = this.x[writeIndex];
+            overwrittenY = this.y[writeIndex];
+        }
         this.x[writeIndex] = x;
         this.y[writeIndex] = y;
 
@@ -79,7 +89,26 @@ export class RingBuffer2D {
             this._length += 1;
         } else {
             this._start = (this._start + 1) % this.capacity;
+            if (this._cachedRange && (
+                overwrittenX === this._cachedRange.minX
+                || overwrittenX === this._cachedRange.maxX
+                || overwrittenY === this._cachedRange.minY
+                || overwrittenY === this._cachedRange.maxY
+            )) {
+                this._rangeDirty = true;
+            }
         }
+
+        if (!this._cachedRange) {
+            this._cachedRange = { minX: x, maxX: x, minY: y, maxY: y };
+            this._rangeDirty = false;
+            return;
+        }
+
+        this._cachedRange.minX = Math.min(this._cachedRange.minX, x);
+        this._cachedRange.maxX = Math.max(this._cachedRange.maxX, x);
+        this._cachedRange.minY = Math.min(this._cachedRange.minY, y);
+        this._cachedRange.maxY = Math.max(this._cachedRange.maxY, y);
     }
 
     getPoint(index) {
@@ -96,10 +125,49 @@ export class RingBuffer2D {
             callback(this.x[idx], this.y[idx], i);
         }
     }
+
+    forEachSampled(step, callback) {
+        const stride = Math.max(1, Math.floor(Number(step) || 1));
+        for (let i = 0; i < this._length; i += stride) {
+            const idx = (this._start + i) % this.capacity;
+            callback(this.x[idx], this.y[idx], i);
+        }
+    }
+
+    getRange() {
+        if (this._length <= 0) return null;
+        if (this._cachedRange && !this._rangeDirty) {
+            return { ...this._cachedRange };
+        }
+
+        let minX = Infinity;
+        let maxX = -Infinity;
+        let minY = Infinity;
+        let maxY = -Infinity;
+        this.forEach((x, y) => {
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
+            if (y < minY) minY = y;
+            if (y > maxY) maxY = y;
+        });
+
+        if (!Number.isFinite(minX) || !Number.isFinite(maxX) || !Number.isFinite(minY) || !Number.isFinite(maxY)) {
+            this._cachedRange = null;
+            this._rangeDirty = false;
+            return null;
+        }
+
+        this._cachedRange = { minX, maxX, minY, maxY };
+        this._rangeDirty = false;
+        return { ...this._cachedRange };
+    }
 }
 
 export function computeRangeFromBuffer(buffer) {
     if (!buffer || buffer.length <= 0) return null;
+    if (typeof buffer.getRange === 'function') {
+        return buffer.getRange();
+    }
     let minX = Infinity;
     let maxX = -Infinity;
     let minY = Infinity;
@@ -175,4 +243,3 @@ export function formatNumberCompact(value, fractionDigits = 3) {
     }
     return value.toFixed(fractionDigits);
 }
-
