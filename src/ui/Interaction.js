@@ -1508,6 +1508,7 @@ export class InteractionManager {
             this.circuit.removeWire(id);
             this.renderer.removeWire(id);
             this.clearSelection();
+            this.app.observationPanel?.refreshComponentOptions();
             this.updateStatus('已删除导线');
         });
     }
@@ -1846,6 +1847,7 @@ export class InteractionManager {
             } else if (preferredWireId && !this.circuit.getWire(preferredWireId)) {
                 this.selectedWire = null;
             }
+            this.app.observationPanel?.refreshComponentOptions();
         }
 
         return { ...result, resolvedWireId };
@@ -3661,6 +3663,12 @@ export class InteractionManager {
         if (isOrthogonalWire(wire)) {
             menuItems.push({ label: '在此处分割', action: () => this.splitWireAtPoint(wireId, canvas.x, canvas.y) });
         }
+        if (wire) {
+            menuItems.push(
+                { label: '添加节点电压探针', action: () => this.addObservationProbeForWire(wireId, 'NodeVoltageProbe') },
+                { label: '添加支路电流探针', action: () => this.addObservationProbeForWire(wireId, 'WireCurrentProbe') }
+            );
+        }
         menuItems.push(
             { label: '拉直为水平', action: () => straightenWire('horizontal') },
             { label: '拉直为垂直', action: () => straightenWire('vertical') },
@@ -3683,6 +3691,38 @@ export class InteractionManager {
         setTimeout(() => {
             document.addEventListener('click', this.hideContextMenuHandler);
         }, 0);
+    }
+
+    addObservationProbeForWire(wireId, probeType) {
+        const wire = this.circuit.getWire(wireId);
+        if (!wire) return;
+
+        const labelPrefix = probeType === 'NodeVoltageProbe' ? '节点电压' : '支路电流';
+        const typeLabel = probeType === 'NodeVoltageProbe' ? '节点电压探针' : '支路电流探针';
+
+        this.runWithHistory(`添加${typeLabel}`, () => {
+            const sameTypeCount = this.circuit.getAllObservationProbes()
+                .filter((probe) => probe?.type === probeType).length;
+            const probeId = this.circuit.ensureUniqueObservationProbeId(`probe_${Date.now()}`);
+            const probe = this.circuit.addObservationProbe({
+                id: probeId,
+                type: probeType,
+                wireId,
+                label: `${labelPrefix}${sameTypeCount + 1}`
+            });
+
+            if (!probe) {
+                this.updateStatus('添加探针失败');
+                return;
+            }
+
+            this.app.observationPanel?.refreshComponentOptions();
+            if (typeof this.activateSidePanelTab === 'function' && !this.isObservationTabActive()) {
+                this.activateSidePanelTab('observation');
+            }
+            this.app.observationPanel?.requestRender?.({ onlyIfActive: false });
+            this.updateStatus(`已添加${typeLabel}`);
+        });
     }
     
     /**
@@ -3723,9 +3763,11 @@ export class InteractionManager {
         const json = this.circuit.toJSON();
         const components = Array.isArray(json.components) ? [...json.components] : [];
         const wires = Array.isArray(json.wires) ? [...json.wires] : [];
+        const probes = Array.isArray(json.probes) ? [...json.probes] : [];
         components.sort((a, b) => String(a.id).localeCompare(String(b.id)));
         wires.sort((a, b) => String(a.id).localeCompare(String(b.id)));
-        return { components, wires };
+        probes.sort((a, b) => String(a.id).localeCompare(String(b.id)));
+        return { components, wires, probes };
     }
 
     historyKey(state) {
@@ -3824,7 +3866,11 @@ export class InteractionManager {
 
         this.isRestoringHistory = true;
         try {
-            this.circuit.fromJSON({ components: state.components || [], wires: state.wires || [] });
+            this.circuit.fromJSON({
+                components: state.components || [],
+                wires: state.wires || [],
+                probes: state.probes || []
+            });
 
             const allIds = [
                 ...(state.components || []).map((c) => c.id),
