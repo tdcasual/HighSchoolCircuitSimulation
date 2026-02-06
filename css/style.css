@@ -895,6 +895,39 @@ body {
     r: 9 !important;
 }
 
+.wire-probe-marker {
+    cursor: pointer;
+    pointer-events: all;
+}
+
+.wire-probe-marker .wire-probe-body {
+    fill: #ffffff;
+    stroke: #0f172a;
+    stroke-width: 1.5;
+    transition: transform 0.12s ease, stroke 0.12s ease, fill 0.12s ease;
+}
+
+.wire-probe-marker .wire-probe-glyph {
+    font-size: 9px;
+    font-weight: 700;
+    fill: #0f172a;
+    user-select: none;
+    pointer-events: none;
+}
+
+.wire-probe-marker:hover .wire-probe-body {
+    stroke: #1976D2;
+    fill: #E3F2FD;
+}
+
+.wire-probe-marker.probe-NodeVoltageProbe .wire-probe-body {
+    stroke: #1976D2;
+}
+
+.wire-probe-marker.probe-WireCurrentProbe .wire-probe-body {
+    stroke: #C2185B;
+}
+
 /* 对齐辅助线 */
 .alignment-guide {
     stroke: #2196F3;
