@@ -201,6 +201,45 @@ export function createFormGroup(labelText, inputOptions = {}, hint = null) {
 }
 
 /**
+ * 创建下拉选择表单组
+ * @param {string} labelText - 标签文本
+ * @param {Object} selectOptions - 选项
+ * @param {string} selectOptions.id - 下拉框 ID
+ * @param {string} [selectOptions.value] - 当前值
+ * @param {{value:string,label:string}[]} [selectOptions.options] - 下拉选项
+ * @param {string} [hint] - 提示文本
+ * @returns {HTMLElement}
+ */
+export function createSelectFormGroup(labelText, selectOptions = {}, hint = null) {
+    const group = createElement('div', { className: 'form-group' });
+
+    const label = createElement('label', { textContent: labelText });
+    group.appendChild(label);
+
+    const select = createElement('select', { id: selectOptions.id });
+    const items = Array.isArray(selectOptions.options) ? selectOptions.options : [];
+    for (const item of items) {
+        if (!item) continue;
+        const option = createElement('option', {
+            attrs: { value: item.value },
+            textContent: item.label
+        });
+        if (selectOptions.value === item.value) {
+            option.selected = true;
+        }
+        select.appendChild(option);
+    }
+    group.appendChild(select);
+
+    if (hint) {
+        const hintEl = createElement('p', { className: 'hint', textContent: hint });
+        group.appendChild(hintEl);
+    }
+
+    return group;
+}
+
+/**
  * 创建滑块表单组
  * @param {string} labelText - 标签文本
  * @param {Object} options - 选项
