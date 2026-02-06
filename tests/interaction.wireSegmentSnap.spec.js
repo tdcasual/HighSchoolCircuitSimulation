@@ -215,6 +215,87 @@ describe('Interaction wire segment snap/split helpers', () => {
         expect(commitHistoryTransaction).toHaveBeenCalledTimes(1);
     });
 
+    it('renames observation probe and refreshes wire/probe views', () => {
+        const circuit = new Circuit();
+        circuit.addWire({ id: 'W1', a: { x: 0, y: 0 }, b: { x: 40, y: 0 } });
+        circuit.addObservationProbe({ id: 'P1', type: 'NodeVoltageProbe', wireId: 'W1', label: '旧名称' });
+
+        const ctx = {
+            circuit,
+            runWithHistory: (_label, action) => action(),
+            renderer: { renderWires: vi.fn() },
+            app: {
+                observationPanel: {
+                    refreshComponentOptions: vi.fn(),
+                    requestRender: vi.fn()
+                }
+            },
+            updateStatus: vi.fn()
+        };
+
+        const result = InteractionManager.prototype.renameObservationProbe.call(ctx, 'P1', '新名称');
+
+        expect(result).toBe(true);
+        expect(circuit.getObservationProbe('P1')?.label).toBe('新名称');
+        expect(ctx.renderer.renderWires).toHaveBeenCalledTimes(1);
+        expect(ctx.app.observationPanel.refreshComponentOptions).toHaveBeenCalledTimes(1);
+        expect(ctx.updateStatus).toHaveBeenCalledTimes(1);
+    });
+
+    it('deletes observation probe and refreshes observation source list', () => {
+        const circuit = new Circuit();
+        circuit.addWire({ id: 'W1', a: { x: 0, y: 0 }, b: { x: 40, y: 0 } });
+        circuit.addObservationProbe({ id: 'P1', type: 'WireCurrentProbe', wireId: 'W1' });
+
+        const ctx = {
+            circuit,
+            runWithHistory: (_label, action) => action(),
+            renderer: { renderWires: vi.fn() },
+            app: {
+                observationPanel: {
+                    refreshComponentOptions: vi.fn(),
+                    requestRender: vi.fn()
+                }
+            },
+            updateStatus: vi.fn()
+        };
+
+        const result = InteractionManager.prototype.deleteObservationProbe.call(ctx, 'P1');
+
+        expect(result).toBe(true);
+        expect(circuit.getObservationProbe('P1')).toBeUndefined();
+        expect(ctx.renderer.renderWires).toHaveBeenCalledTimes(1);
+        expect(ctx.app.observationPanel.refreshComponentOptions).toHaveBeenCalledTimes(1);
+        expect(ctx.updateStatus).toHaveBeenCalledTimes(1);
+    });
+
+    it('adds probe plot in observation panel and activates observation tab', () => {
+        const circuit = new Circuit();
+        circuit.addWire({ id: 'W1', a: { x: 0, y: 0 }, b: { x: 40, y: 0 } });
+        circuit.addObservationProbe({ id: 'P1', type: 'NodeVoltageProbe', wireId: 'W1' });
+
+        const addPlotForSource = vi.fn();
+        const requestRender = vi.fn();
+        const activateSidePanelTab = vi.fn();
+        const ctx = {
+            circuit,
+            app: {
+                observationPanel: { addPlotForSource, requestRender }
+            },
+            activateSidePanelTab,
+            isObservationTabActive: () => false,
+            updateStatus: vi.fn()
+        };
+
+        const result = InteractionManager.prototype.addProbePlot.call(ctx, 'P1');
+
+        expect(result).toBe(true);
+        expect(activateSidePanelTab).toHaveBeenCalledWith('observation');
+        expect(addPlotForSource).toHaveBeenCalledWith('P1');
+        expect(requestRender).toHaveBeenCalledTimes(1);
+        expect(ctx.updateStatus).toHaveBeenCalledTimes(1);
+    });
+
     it('drags a single wire endpoint by default', () => {
         const beginHistoryTransaction = vi.fn();
         const selectWire = vi.fn();
@@ -266,6 +347,7 @@ describe('Interaction wire segment snap/split helpers', () => {
             pendingToolType: null,
             isWiring: false,
             resolvePointerType: () => 'mouse',
+            resolveProbeMarkerTarget: () => null,
             resolveTerminalTarget: () => null,
             isWireEndpointTarget: () => false,
             startPanning: vi.fn(),
@@ -306,6 +388,7 @@ describe('Interaction wire segment snap/split helpers', () => {
             closest: () => null
         };
         const ctx = {
+            resolveProbeMarkerTarget: () => null,
             splitWireAtPoint,
             showPropertyDialog
         };
