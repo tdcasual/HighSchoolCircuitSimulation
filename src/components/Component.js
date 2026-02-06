@@ -77,12 +77,16 @@ export const ComponentDefaults = {
         ratedPower: 5          // 额定功率 (W)
     },
     Capacitor: {
-        capacitance: 0.001     // 电容值 (F) = 1000μF
+        capacitance: 0.001,    // 电容值 (F) = 1000μF
+        integrationMethod: 'auto', // 积分方法：auto/trapezoidal/backward-euler
+        prevCurrent: 0         // 上一时刻电流 (A)，用于梯形法历史项
     },
     Inductor: {
         inductance: 0.1,       // 电感值 (H)
         initialCurrent: 0,     // 初始电流 (A)
-        prevCurrent: 0         // 上一时刻电流 (A)
+        prevCurrent: 0,        // 上一时刻电流 (A)
+        prevVoltage: 0,        // 上一时刻两端电压 (V)，用于梯形法历史项
+        integrationMethod: 'auto' // 积分方法：auto/trapezoidal/backward-euler
     },
     ParallelPlateCapacitor: {
         // 平行板电容（用于演示 C 的决定因素）
@@ -91,7 +95,9 @@ export const ComponentDefaults = {
         dielectricConstant: 1,     // 相对介电常数 εr
         plateOffsetYPx: 0,         // 单极板纵向偏移（用于演示重叠面积），单位：局部像素
         explorationMode: true,     // 是否开启探索模式（允许拖动极板）
-        capacitance: 8.854e-11     // 由默认 A/d 估算得到的电容（F）
+        capacitance: 8.854e-11,    // 由默认 A/d 估算得到的电容（F）
+        integrationMethod: 'auto', // 积分方法：auto/trapezoidal/backward-euler
+        prevCurrent: 0             // 上一时刻电流 (A)，用于梯形法历史项
     },
     Motor: {
         resistance: 5,         // 电枢电阻 (Ω)
