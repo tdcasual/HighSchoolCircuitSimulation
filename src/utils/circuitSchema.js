@@ -51,38 +51,14 @@ export function validateCircuitJSON(data) {
     }
 
     for (const wire of data.wires) {
-        // v2: explicit endpoints (canvas-space points)
-        if (wire.a && wire.b) {
-            requirePoint(wire.a, 'wire.a');
-            requirePoint(wire.b, 'wire.b');
-            requireTerminalRef(wire.aRef, 'wire.aRef');
-            requireTerminalRef(wire.bRef, 'wire.bRef');
-            continue;
+        // Canonical wire schema: explicit endpoint points.
+        if (!wire.a || !wire.b) {
+            throw new Error(`导线必须使用 a/b 端点坐标: ${JSON.stringify(wire)}`);
         }
-
-        // legacy: terminal references
-        const start = wire.start || (wire.startComponentId != null
-            ? { componentId: wire.startComponentId, terminalIndex: wire.startTerminalIndex }
-            : null);
-        const end = wire.end || (wire.endComponentId != null
-            ? { componentId: wire.endComponentId, terminalIndex: wire.endTerminalIndex }
-            : null);
-
-        if (!start || !end) {
-            throw new Error(`导线缺少端点: ${JSON.stringify(wire)}`);
-        }
-        if (start.componentId === undefined || end.componentId === undefined) {
-            throw new Error(`导线端点缺少 componentId: ${JSON.stringify(wire)}`);
-        }
-        if (start.terminalIndex === undefined || end.terminalIndex === undefined) {
-            throw new Error(`导线端点缺少 terminalIndex: ${JSON.stringify(wire)}`);
-        }
-        const ti = [start.terminalIndex, end.terminalIndex];
-        ti.forEach((idx) => {
-            if (!Number.isInteger(idx) || idx < 0 || idx > 2) {
-                throw new Error(`terminalIndex 非法: ${idx}`);
-            }
-        });
+        requirePoint(wire.a, 'wire.a');
+        requirePoint(wire.b, 'wire.b');
+        requireTerminalRef(wire.aRef, 'wire.aRef');
+        requireTerminalRef(wire.bRef, 'wire.bRef');
     }
 
     return true;
