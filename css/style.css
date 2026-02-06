@@ -80,6 +80,7 @@ body {
     cursor: grab;
     transition: all 0.2s ease;
     background: #fafafa;
+    touch-action: manipulation;
 }
 
 .tool-item:hover {
@@ -96,6 +97,12 @@ body {
     opacity: 0.5;
     border-color: var(--primary-color);
     background: #bbdefb;
+}
+
+.tool-item.tool-item-pending {
+    border-color: var(--primary-color);
+    background: #e3f2fd;
+    box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.2);
 }
 
 .tool-item svg {
@@ -118,6 +125,7 @@ body {
     transition: all 0.2s ease;
     background: var(--primary-color);
     color: white;
+    touch-action: manipulation;
 }
 
 .action-btn:hover {
@@ -137,12 +145,15 @@ body {
     position: relative;
     background: #fff;
     overflow: hidden;
+    overscroll-behavior: contain;
 }
 
 #circuit-canvas {
     width: 100%;
     height: 100%;
     display: block;
+    touch-action: none;
+    -ms-touch-action: none;
 }
 
 #status-bar {
@@ -277,6 +288,13 @@ body {
 
 #observation-root h3 {
     margin: 4px 0 10px;
+}
+
+.observation-runtime-status {
+    display: none;
+    margin: 6px 0 10px;
+    color: #b42318 !important;
+    font-style: normal !important;
 }
 
 .observation-header {
@@ -619,6 +637,13 @@ body {
     margin: 10px 0 6px;
 }
 
+.meter-self-reading-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 8px;
+}
+
 .display-chip {
     border: 1px solid var(--border-color);
     background: #f7f9fc;
@@ -702,6 +727,7 @@ body {
     user-select: none;
     -moz-user-select: none;
     -ms-user-select: none;
+    -webkit-tap-highlight-color: transparent;
 }
 
 .component {
@@ -730,6 +756,13 @@ body {
     cursor: crosshair;
     transition: all 0.15s ease;
     pointer-events: all !important;
+}
+
+.component .terminal-hit-area {
+    fill: transparent;
+    stroke: none;
+    pointer-events: all !important;
+    cursor: crosshair;
 }
 
 .component .terminal:hover {
@@ -840,20 +873,6 @@ body {
     filter: drop-shadow(0 0 3px rgba(255, 87, 34, 0.8));
 }
 
-/* 导线控制点 */
-.wire-control-point {
-    fill: #FF5722;
-    stroke: white;
-    stroke-width: 2;
-    cursor: move;
-    opacity: 0.9;
-}
-
-.wire-control-point:hover {
-    fill: #E64A19;
-    r: 8;
-}
-
 /* 导线端点（蓝色，可拖动） */
 .wire-endpoint {
     fill: #2196F3;
@@ -864,24 +883,16 @@ body {
     transition: r 0.15s ease;
 }
 
+.wire-endpoint-hit {
+    fill: transparent;
+    stroke: none;
+    cursor: move;
+    pointer-events: all;
+}
+
 .wire-endpoint:hover {
     fill: #1565C0;
     r: 9 !important;
-}
-
-/* 添加控制点的按钮（中点） */
-.wire-add-point {
-    fill: #2196F3;
-    stroke: white;
-    stroke-width: 1.5;
-    cursor: pointer;
-    opacity: 0.6;
-}
-
-.wire-add-point:hover {
-    fill: #1976D2;
-    opacity: 1;
-    r: 6;
 }
 
 /* 对齐辅助线 */
@@ -2434,4 +2445,21 @@ body {
 #ai-settings-dialog .dialog-buttons .primary-btn:hover {
     background: var(--primary-dark);
     border-color: var(--primary-dark);
+}
+
+@media (pointer: coarse) {
+    .tool-item {
+        min-height: 48px;
+        padding: 10px;
+    }
+
+    .action-btn,
+    .control-btn,
+    .panel-tab-btn {
+        min-height: 44px;
+    }
+
+    .wire-hit-area {
+        stroke-width: 20;
+    }
 }
