@@ -24,9 +24,113 @@ export class Circuit {
         this._wireFlowCache = { version: null, map: new Map() };
         this.terminalConnectionMap = new Map();
         this.shortedPowerNodes = new Set(); // node indices that contain a shorted PowerSource
+        this.topologyBatchDepth = 0;
+        this.topologyRebuildPending = false;
+        this.topologyVersion = 0;
+        this.solverPreparedTopologyVersion = -1;
+        this.solverCircuitDirty = true;
+        this.componentTerminalTopologyKeys = new Map(); // componentId -> topology key used for terminal geometry cache
+        this.terminalWorldPosCache = new Map(); // componentId -> Map(terminalIndex -> {x,y})
         this.debugMode = false;
         this.loadDebugFlag();
         this.solver.debugMode = this.debugMode;
+    }
+
+    beginTopologyBatch() {
+        this.topologyBatchDepth += 1;
+        return this.topologyBatchDepth;
+    }
+
+    endTopologyBatch(options = {}) {
+        const force = !!options.force;
+        if (this.topologyBatchDepth > 0) {
+            this.topologyBatchDepth -= 1;
+        }
+        if (this.topologyBatchDepth > 0) return false;
+
+        const shouldRebuild = this.topologyRebuildPending || force;
+        this.topologyRebuildPending = false;
+        if (!shouldRebuild) return false;
+
+        this.rebuildNodes();
+        return true;
+    }
+
+    requestTopologyRebuild() {
+        if (this.topologyBatchDepth > 0) {
+            this.topologyRebuildPending = true;
+            return false;
+        }
+        this.rebuildNodes();
+        return true;
+    }
+
+    markSolverCircuitDirty() {
+        this.solverCircuitDirty = true;
+        this.solverPreparedTopologyVersion = -1;
+    }
+
+    invalidateComponentTerminalCache(componentId) {
+        if (!componentId) return;
+        this.componentTerminalTopologyKeys.delete(componentId);
+        this.terminalWorldPosCache.delete(componentId);
+    }
+
+    buildComponentTerminalTopologyKey(comp) {
+        if (!comp || !comp.id) return '';
+        const x = toCanvasInt(comp.x || 0);
+        const y = toCanvasInt(comp.y || 0);
+        const rotation = toCanvasInt(comp.rotation || 0);
+        const rheostatPos = comp.type === 'Rheostat'
+            ? Number((comp.position ?? 0.5).toFixed(6))
+            : '';
+        const boxWidth = comp.type === 'BlackBox'
+            ? toCanvasInt(comp.boxWidth || 0)
+            : '';
+
+        let extKey = '';
+        const ext = comp.terminalExtensions;
+        if (ext && typeof ext === 'object') {
+            const keys = Object.keys(ext).sort((a, b) => Number(a) - Number(b));
+            extKey = keys.map((k) => {
+                const item = ext[k];
+                const ex = toCanvasInt(item?.x || 0);
+                const ey = toCanvasInt(item?.y || 0);
+                return `${k}:${ex},${ey}`;
+            }).join('|');
+        }
+
+        return `${comp.type}|${x},${y}|${rotation}|${rheostatPos}|${boxWidth}|${extKey}`;
+    }
+
+    getTerminalWorldPositionCached(componentId, terminalIndex, comp) {
+        if (!componentId || !comp) return null;
+        let byTerminal = this.terminalWorldPosCache.get(componentId);
+        if (!byTerminal) {
+            byTerminal = new Map();
+            this.terminalWorldPosCache.set(componentId, byTerminal);
+        }
+
+        let pos = byTerminal.get(terminalIndex);
+        if (!pos) {
+            pos = normalizeCanvasPoint(getTerminalWorldPosition(comp, terminalIndex));
+            if (!pos) return null;
+            byTerminal.set(terminalIndex, pos);
+        }
+        return pos;
+    }
+
+    ensureSolverPrepared() {
+        const needsPrepare = this.solverCircuitDirty || this.solverPreparedTopologyVersion !== this.topologyVersion;
+        if (!needsPrepare) return false;
+
+        this.solver.setCircuit(
+            Array.from(this.components.values()),
+            this.nodes
+        );
+        this.solverPreparedTopologyVersion = this.topologyVersion;
+        this.solverCircuitDirty = false;
+        return true;
     }
 
     /**
@@ -50,7 +154,7 @@ export class Circuit {
             }
         }
         this.components.set(component.id, component);
-        this.rebuildNodes();
+        this.requestTopologyRebuild();
     }
 
     /**
@@ -59,7 +163,8 @@ export class Circuit {
      */
     removeComponent(id) {
         this.components.delete(id);
-        this.rebuildNodes();
+        this.invalidateComponentTerminalCache(id);
+        this.requestTopologyRebuild();
     }
 
     /**
@@ -75,7 +180,7 @@ export class Circuit {
         wire.a = a;
         wire.b = b;
         this.wires.set(wire.id, wire);
-        this.rebuildNodes();
+        this.requestTopologyRebuild();
     }
 
     /**
@@ -84,7 +189,7 @@ export class Circuit {
      */
     removeWire(id) {
         this.wires.delete(id);
-        this.rebuildNodes();
+        this.requestTopologyRebuild();
     }
 
     /**
@@ -97,6 +202,162 @@ export class Circuit {
     }
 
     /**
+     * 压缩导线段：
+     * 1) 删除零长度导线
+     * 2) 合并“共端点 + 共线 + 反向”的两段直线导线
+     *
+     * 约束：
+     * - 不跨越元器件端子坐标进行合并
+     * - 不合并包含端子绑定引用(aRef/bRef)的共享端点
+     * - 可按 scopeWireIds 只压缩“当前交互相关”的导线
+     *
+     * @param {{scopeWireIds?: Iterable<string>|null}} options
+     * @returns {{changed:boolean, removedIds:string[], replacementByRemovedId:Object<string,string>}}
+     */
+    compactWires(options = {}) {
+        this.syncWireEndpointsToTerminalRefs();
+        const scoped = options.scopeWireIds
+            ? new Set(Array.from(options.scopeWireIds).filter(Boolean))
+            : null;
+
+        const removedIds = [];
+        const replacementByRemovedId = {};
+        let changed = false;
+
+        const setEndpoint = (wire, end, point, ref) => {
+            if (!wire || (end !== 'a' && end !== 'b') || !point) return;
+            wire[end] = {
+                x: toCanvasInt(point.x),
+                y: toCanvasInt(point.y)
+            };
+            const refKey = end === 'a' ? 'aRef' : 'bRef';
+            if (ref && ref.componentId !== undefined && Number.isInteger(ref.terminalIndex)) {
+                wire[refKey] = {
+                    componentId: ref.componentId,
+                    terminalIndex: ref.terminalIndex
+                };
+            } else {
+                delete wire[refKey];
+            }
+        };
+
+        const removeWireById = (wireId) => {
+            if (!this.wires.has(wireId)) return;
+            this.wires.delete(wireId);
+            removedIds.push(wireId);
+            changed = true;
+        };
+
+        // 先清理零长度导线，避免后续拓扑分析被噪声干扰。
+        for (const [wireId, wire] of Array.from(this.wires.entries())) {
+            const a = normalizeCanvasPoint(wire?.a);
+            const b = normalizeCanvasPoint(wire?.b);
+            if (!a || !b) {
+                removeWireById(wireId);
+                continue;
+            }
+            wire.a = a;
+            wire.b = b;
+            if (a.x === b.x && a.y === b.y) {
+                removeWireById(wireId);
+            }
+        }
+
+        const terminalCoordKeys = new Set();
+        for (const [, comp] of this.components) {
+            const terminalCount = comp.type === 'Rheostat' ? 3 : 2;
+            for (let terminalIndex = 0; terminalIndex < terminalCount; terminalIndex++) {
+                const pos = getTerminalWorldPosition(comp, terminalIndex);
+                const key = pointKey(pos);
+                if (!key) continue;
+                terminalCoordKeys.add(key);
+            }
+        }
+
+        const getOtherEnd = (wire, end) => {
+            if (end === 'a') {
+                return { end: 'b', point: wire?.b, ref: wire?.bRef };
+            }
+            return { end: 'a', point: wire?.a, ref: wire?.aRef };
+        };
+
+        const isCollinearAndOpposite = (shared, p1, p2) => {
+            const v1x = p1.x - shared.x;
+            const v1y = p1.y - shared.y;
+            const v2x = p2.x - shared.x;
+            const v2y = p2.y - shared.y;
+            const cross = v1x * v2y - v1y * v2x;
+            if (Math.abs(cross) > 1e-6) return false;
+            const dot = v1x * v2x + v1y * v2y;
+            return dot < 0;
+        };
+
+        let mergedInPass = true;
+        while (mergedInPass) {
+            mergedInPass = false;
+
+            const endpointBuckets = new Map(); // coordKey -> [{wireId,end,point}]
+            for (const [wireId, wire] of this.wires.entries()) {
+                for (const end of ['a', 'b']) {
+                    const pt = normalizeCanvasPoint(wire?.[end]);
+                    if (!pt) continue;
+                    const key = pointKey(pt);
+                    if (!key) continue;
+                    if (!endpointBuckets.has(key)) endpointBuckets.set(key, []);
+                    endpointBuckets.get(key).push({ wireId, end, point: pt });
+                }
+            }
+
+            for (const [coordKey, endpoints] of endpointBuckets.entries()) {
+                if (!Array.isArray(endpoints) || endpoints.length !== 2) continue;
+                if (terminalCoordKeys.has(coordKey)) continue;
+
+                const first = endpoints[0];
+                const second = endpoints[1];
+                if (!first || !second) continue;
+                if (first.wireId === second.wireId) continue;
+                if (scoped && !scoped.has(first.wireId) && !scoped.has(second.wireId)) continue;
+
+                const wireA = this.wires.get(first.wireId);
+                const wireB = this.wires.get(second.wireId);
+                if (!wireA || !wireB) continue;
+
+                const sharedRefKeyA = first.end === 'a' ? 'aRef' : 'bRef';
+                const sharedRefKeyB = second.end === 'a' ? 'aRef' : 'bRef';
+                if (wireA[sharedRefKeyA] || wireB[sharedRefKeyB]) continue;
+
+                const otherA = getOtherEnd(wireA, first.end);
+                const otherB = getOtherEnd(wireB, second.end);
+                const pA = normalizeCanvasPoint(otherA.point);
+                const pB = normalizeCanvasPoint(otherB.point);
+                if (!pA || !pB) continue;
+
+                const shared = first.point;
+                const keyA = pointKey(pA);
+                const keyB = pointKey(pB);
+
+                if (keyA && keyB && keyA === keyB) {
+                    removeWireById(wireB.id);
+                    replacementByRemovedId[wireB.id] = wireA.id;
+                    mergedInPass = true;
+                    break;
+                }
+
+                if (!isCollinearAndOpposite(shared, pA, pB)) continue;
+
+                setEndpoint(wireA, 'a', pA, otherA.ref);
+                setEndpoint(wireA, 'b', pB, otherB.ref);
+                removeWireById(wireB.id);
+                replacementByRemovedId[wireB.id] = wireA.id;
+                mergedInPass = true;
+                break;
+            }
+        }
+
+        return { changed, removedIds, replacementByRemovedId };
+    }
+
+    /**
      * 重建电气节点
      * 使用并查集算法合并连接的端点
      */
@@ -104,6 +365,24 @@ export class Circuit {
         // Keep any terminal-bound wire endpoints synced to the current terminal geometry
         // before we rebuild the coordinate-based connectivity graph.
         this.syncWireEndpointsToTerminalRefs();
+
+        // Invalidate stale terminal geometry cache entries for removed components.
+        for (const cachedId of Array.from(this.componentTerminalTopologyKeys.keys())) {
+            if (!this.components.has(cachedId)) {
+                this.componentTerminalTopologyKeys.delete(cachedId);
+                this.terminalWorldPosCache.delete(cachedId);
+            }
+        }
+
+        // Refresh per-component terminal geometry cache keys.
+        for (const [id, comp] of this.components) {
+            const nextKey = this.buildComponentTerminalTopologyKey(comp);
+            const prevKey = this.componentTerminalTopologyKeys.get(id);
+            if (prevKey !== nextKey) {
+                this.componentTerminalTopologyKeys.set(id, nextKey);
+                this.terminalWorldPosCache.delete(id);
+            }
+        }
 
         // Union-find over "posts" (component terminals + wire endpoints).
         const parent = new Map(); // postId -> parentPostId
@@ -138,7 +417,8 @@ export class Circuit {
         };
 
         const registerTerminal = (componentId, terminalIndex, comp) => {
-            const pos = getTerminalWorldPosition(comp, terminalIndex);
+            const pos = this.getTerminalWorldPositionCached(componentId, terminalIndex, comp);
+            if (!pos) return;
             const coordKey = pointKey(pos);
             const postId = `T:${componentId}:${terminalIndex}`;
             parent.set(postId, postId);
@@ -311,6 +591,8 @@ export class Circuit {
             }
         }
         this.shortedPowerNodes = shorted;
+        this.topologyVersion += 1;
+        this.markSolverCircuitDirty();
     }
 
     /**
@@ -487,12 +769,9 @@ export class Circuit {
             }
         }
 
-        // 设置求解器
-        this.solver.setCircuit(
-            Array.from(this.components.values()),
-            this.nodes
-        );
+        // 准备求解器（仅在拓扑/关键参数变化后重建）
         this.solver.debugMode = this.debugMode;
+        this.ensureSolverPrepared();
 
         // 开始模拟循环
         this.simulationInterval = setInterval(() => {
@@ -517,11 +796,8 @@ export class Circuit {
     step() {
         if (!this.isRunning) return;
 
-        // 更新求解器的电路数据
-        this.solver.setCircuit(
-            Array.from(this.components.values()),
-            this.nodes
-        );
+        // 仅在拓扑或关键参数变化后重建 setCircuit，稳定运行时复用已准备结构
+        this.ensureSolverPrepared();
         this.solver.debugMode = this.debugMode;
 
         // 求解
@@ -1049,6 +1325,13 @@ export class Circuit {
         this.terminalConnectionMap = new Map();
         this._wireFlowCache = { version: null, map: new Map() };
         this.shortedPowerNodes = new Set();
+        this.topologyBatchDepth = 0;
+        this.topologyRebuildPending = false;
+        this.topologyVersion = 0;
+        this.solverPreparedTopologyVersion = -1;
+        this.solverCircuitDirty = true;
+        this.componentTerminalTopologyKeys = new Map();
+        this.terminalWorldPosCache = new Map();
     }
 
     /**
