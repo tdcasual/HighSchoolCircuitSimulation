@@ -78,4 +78,41 @@ describe('Circuit wire compaction', () => {
         expect(circuit.getWire('B2')).toBeTruthy();
         expect(circuit.getAllWires()).toHaveLength(3);
     });
+
+    it('keeps zero-length wires outside scope unchanged', () => {
+        const circuit = new Circuit();
+        circuit.addWire({ id: 'A1', a: { x: 0, y: 0 }, b: { x: 10, y: 0 } });
+        circuit.addWire({ id: 'A2', a: { x: 10, y: 0 }, b: { x: 20, y: 0 } });
+        circuit.addWire({ id: 'B0', a: { x: 5, y: 5 }, b: { x: 5, y: 5 } });
+
+        const result = circuit.compactWires({ scopeWireIds: ['A1', 'A2'] });
+
+        expect(result.changed).toBe(true);
+        expect(result.removedIds).toContain('A2');
+        expect(result.removedIds).not.toContain('B0');
+        expect(circuit.getWire('A1')).toBeTruthy();
+        expect(circuit.getWire('B0')).toBeTruthy();
+        expect(circuit.getAllWires()).toHaveLength(2);
+    });
+
+    it('preserves non-shared terminal binding when collapsing duplicate overlap', () => {
+        const circuit = new Circuit();
+        const resistor = createComponent('Resistor', 30, 0, 'R0');
+        circuit.addComponent(resistor);
+        circuit.addWire({ id: 'W1', a: { x: 0, y: 0 }, b: { x: 10, y: 0 } });
+        circuit.addWire({
+            id: 'W2',
+            a: { x: 10, y: 0 },
+            b: { x: 0, y: 0 },
+            bRef: { componentId: 'R0', terminalIndex: 0 }
+        });
+
+        const result = circuit.compactWires();
+
+        expect(result.changed).toBe(true);
+        expect(result.removedIds).toContain('W2');
+        const kept = circuit.getWire('W1');
+        expect(kept).toBeTruthy();
+        expect(kept.aRef).toEqual({ componentId: 'R0', terminalIndex: 0 });
+    });
 });
