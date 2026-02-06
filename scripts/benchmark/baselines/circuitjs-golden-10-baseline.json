@@ -1,0 +1,619 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-02-06T14:05:49.768Z",
+  "runtime": {
+    "node": "v25.5.0",
+    "platform": "darwin",
+    "absTolerance": 0.000001,
+    "relTolerance": 0.001
+  },
+  "scenarioCount": 10,
+  "scenarios": [
+    {
+      "id": "cjs_resistors",
+      "sourceFile": "resistors.txt",
+      "sourcePath": "/Users/lvxiaoer/Documents/HighSchoolCircuitSimulation/_reference/circuitjs1/src/com/lushprojects/circuitjs1/public/circuits/resistors.txt",
+      "description": "Resistor network with multiple switches",
+      "valid": true,
+      "dt": 0.01,
+      "steps": 1,
+      "simTime": 0.01,
+      "components": 12,
+      "wires": 11,
+      "nodes": 8,
+      "nodeVoltages": [
+        0,
+        5,
+        1.5e-11,
+        1.538471469649,
+        2e-12,
+        1.53847147088,
+        1.538471470897,
+        4.999999994923
+      ],
+      "componentCurrents": {
+        "cjs_resistors_PowerSource_1": 0.017307642662,
+        "cjs_resistors_Resistor_1": -0.015384714709,
+        "cjs_resistors_Resistor_2": -3e-12,
+        "cjs_resistors_Resistor_3": -0.001923089339,
+        "cjs_resistors_Resistor_4": -8e-12,
+        "cjs_resistors_Resistor_5": -0.017307642646,
+        "cjs_resistors_Switch_1": -0.015384714709,
+        "cjs_resistors_Switch_2": 0,
+        "cjs_resistors_Switch_3": -0.001923089339,
+        "cjs_resistors_Switch_4": -0.01730771082,
+        "cjs_resistors_Switch_5": 0,
+        "cjs_resistors_Switch_6": 0
+      },
+      "componentVoltages": {
+        "cjs_resistors_PowerSource_1": 5,
+        "cjs_resistors_Resistor_1": -1.538471470865,
+        "cjs_resistors_Resistor_2": -1.231e-9,
+        "cjs_resistors_Resistor_3": -1.538471470878,
+        "cjs_resistors_Resistor_4": -5.077e-9,
+        "cjs_resistors_Resistor_5": -3.461528529103,
+        "cjs_resistors_Switch_1": -1.5e-11,
+        "cjs_resistors_Switch_2": -1.538471469649,
+        "cjs_resistors_Switch_3": -2e-12,
+        "cjs_resistors_Switch_4": -1.7e-11,
+        "cjs_resistors_Switch_5": -3.461528524043,
+        "cjs_resistors_Switch_6": -3.46152852912
+      },
+      "wireCurrents": {
+        "cjs_resistors_W1": -0.017307642662,
+        "cjs_resistors_W10": 0.017307642646,
+        "cjs_resistors_W11": 0,
+        "cjs_resistors_W2": -0.001923089339,
+        "cjs_resistors_W3": -0.001923089339,
+        "cjs_resistors_W4": -0.015384714709,
+        "cjs_resistors_W5": 0.001923089339,
+        "cjs_resistors_W6": 0.01730771082,
+        "cjs_resistors_W7": 0,
+        "cjs_resistors_W8": 0,
+        "cjs_resistors_W9": 0.017307642662
+      },
+      "conversion": {
+        "unsupportedElements": [],
+        "skippedMetadata": [
+          "$"
+        ],
+        "elementKindHistogram": {
+          "$": 1,
+          "r": 5,
+          "s": 6,
+          "v": 1,
+          "w": 11
+        }
+      }
+    },
+    {
+      "id": "cjs_voltdivide",
+      "sourceFile": "voltdivide.txt",
+      "sourcePath": "/Users/lvxiaoer/Documents/HighSchoolCircuitSimulation/_reference/circuitjs1/src/com/lushprojects/circuitjs1/public/circuits/voltdivide.txt",
+      "description": "Voltage divider (2 and 4 resistor ladders)",
+      "valid": true,
+      "dt": 0.01,
+      "steps": 1,
+      "simTime": 0.01,
+      "components": 7,
+      "wires": 4,
+      "nodes": 6,
+      "nodeVoltages": [
+        0,
+        10,
+        4.999999975,
+        2.4999999375,
+        4.9999999,
+        7.4999999125
+      ],
+      "componentCurrents": {
+        "cjs_voltdivide_PowerSource_1": 0.000750000021,
+        "cjs_voltdivide_Resistor_1": -0.000499999998,
+        "cjs_voltdivide_Resistor_2": -0.000500000003,
+        "cjs_voltdivide_Resistor_3": -0.000249999994,
+        "cjs_voltdivide_Resistor_4": -0.000249999996,
+        "cjs_voltdivide_Resistor_5": -0.000250000001,
+        "cjs_voltdivide_Resistor_6": -0.000250000009
+      },
+      "componentVoltages": {
+        "cjs_voltdivide_PowerSource_1": 10,
+        "cjs_voltdivide_Resistor_1": -4.999999975,
+        "cjs_voltdivide_Resistor_2": -5.000000025,
+        "cjs_voltdivide_Resistor_3": -2.4999999375,
+        "cjs_voltdivide_Resistor_4": -2.4999999625,
+        "cjs_voltdivide_Resistor_5": -2.5000000125,
+        "cjs_voltdivide_Resistor_6": -2.5000000875
+      },
+      "wireCurrents": {
+        "cjs_voltdivide_W1": -0.000750000021,
+        "cjs_voltdivide_W2": 0.000750000021,
+        "cjs_voltdivide_W3": -0.000249999994,
+        "cjs_voltdivide_W4": 0.000250000009
+      },
+      "conversion": {
+        "unsupportedElements": [],
+        "skippedMetadata": [
+          "$",
+          "O"
+        ],
+        "elementKindHistogram": {
+          "$": 1,
+          "O": 4,
+          "r": 6,
+          "v": 1,
+          "w": 4
+        }
+      }
+    },
+    {
+      "id": "cjs_capac",
+      "sourceFile": "capac.txt",
+      "sourcePath": "/Users/lvxiaoer/Documents/HighSchoolCircuitSimulation/_reference/circuitjs1/src/com/lushprojects/circuitjs1/public/circuits/capac.txt",
+      "description": "RC circuit with capacitor",
+      "valid": true,
+      "dt": 0.01,
+      "steps": 1,
+      "simTime": 0.01,
+      "components": 3,
+      "wires": 1,
+      "nodes": 3,
+      "nodeVoltages": [
+        0,
+        0,
+        0
+      ],
+      "componentCurrents": {
+        "cjs_capac_ACVoltageSource_1": 0,
+        "cjs_capac_Capacitor_1": 0,
+        "cjs_capac_Resistor_1": 0
+      },
+      "componentVoltages": {
+        "cjs_capac_ACVoltageSource_1": 0,
+        "cjs_capac_Capacitor_1": 0,
+        "cjs_capac_Resistor_1": 0
+      },
+      "wireCurrents": {
+        "cjs_capac_W1": 0
+      },
+      "conversion": {
+        "unsupportedElements": [],
+        "skippedMetadata": [
+          "$",
+          "o",
+          "&"
+        ],
+        "elementKindHistogram": {
+          "&": 1,
+          "$": 1,
+          "c": 1,
+          "o": 1,
+          "r": 1,
+          "v": 1,
+          "w": 1
+        }
+      }
+    },
+    {
+      "id": "cjs_inductac",
+      "sourceFile": "inductac.txt",
+      "sourcePath": "/Users/lvxiaoer/Documents/HighSchoolCircuitSimulation/_reference/circuitjs1/src/com/lushprojects/circuitjs1/public/circuits/inductac.txt",
+      "description": "RL AC circuit with inductor",
+      "valid": true,
+      "dt": 0.01,
+      "steps": 1,
+      "simTime": 0.01,
+      "components": 3,
+      "wires": 1,
+      "nodes": 3,
+      "nodeVoltages": [
+        0,
+        0,
+        0
+      ],
+      "componentCurrents": {
+        "cjs_inductac_ACVoltageSource_1": 0,
+        "cjs_inductac_Inductor_1": 0,
+        "cjs_inductac_Resistor_1": 0
+      },
+      "componentVoltages": {
+        "cjs_inductac_ACVoltageSource_1": 0,
+        "cjs_inductac_Inductor_1": 0,
+        "cjs_inductac_Resistor_1": 0
+      },
+      "wireCurrents": {
+        "cjs_inductac_W1": 0
+      },
+      "conversion": {
+        "unsupportedElements": [],
+        "skippedMetadata": [
+          "$",
+          "o",
+          "&"
+        ],
+        "elementKindHistogram": {
+          "&": 1,
+          "$": 1,
+          "l": 1,
+          "o": 1,
+          "r": 1,
+          "v": 1,
+          "w": 1
+        }
+      }
+    },
+    {
+      "id": "cjs_capmultcaps",
+      "sourceFile": "capmultcaps.txt",
+      "sourcePath": "/Users/lvxiaoer/Documents/HighSchoolCircuitSimulation/_reference/circuitjs1/src/com/lushprojects/circuitjs1/public/circuits/capmultcaps.txt",
+      "description": "Capacitors with multiple capacitances",
+      "valid": true,
+      "dt": 0.01,
+      "steps": 1,
+      "simTime": 0.01,
+      "components": 9,
+      "wires": 3,
+      "nodes": 9,
+      "nodeVoltages": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "componentCurrents": {
+        "cjs_capmultcaps_ACVoltageSource_1": 0,
+        "cjs_capmultcaps_ACVoltageSource_2": 0,
+        "cjs_capmultcaps_ACVoltageSource_3": 0,
+        "cjs_capmultcaps_Capacitor_1": 0,
+        "cjs_capmultcaps_Capacitor_2": 0,
+        "cjs_capmultcaps_Capacitor_3": 0,
+        "cjs_capmultcaps_Resistor_1": 0,
+        "cjs_capmultcaps_Resistor_2": 0,
+        "cjs_capmultcaps_Resistor_3": 0
+      },
+      "componentVoltages": {
+        "cjs_capmultcaps_ACVoltageSource_1": 0,
+        "cjs_capmultcaps_ACVoltageSource_2": 0,
+        "cjs_capmultcaps_ACVoltageSource_3": 0,
+        "cjs_capmultcaps_Capacitor_1": 0,
+        "cjs_capmultcaps_Capacitor_2": 0,
+        "cjs_capmultcaps_Capacitor_3": 0,
+        "cjs_capmultcaps_Resistor_1": 0,
+        "cjs_capmultcaps_Resistor_2": 0,
+        "cjs_capmultcaps_Resistor_3": 0
+      },
+      "wireCurrents": {
+        "cjs_capmultcaps_W1": 0,
+        "cjs_capmultcaps_W2": 0,
+        "cjs_capmultcaps_W3": 0
+      },
+      "conversion": {
+        "unsupportedElements": [],
+        "skippedMetadata": [
+          "$",
+          "o"
+        ],
+        "elementKindHistogram": {
+          "$": 1,
+          "c": 3,
+          "o": 3,
+          "r": 3,
+          "v": 3,
+          "w": 3
+        }
+      }
+    },
+    {
+      "id": "cjs_indmultind",
+      "sourceFile": "indmultind.txt",
+      "sourcePath": "/Users/lvxiaoer/Documents/HighSchoolCircuitSimulation/_reference/circuitjs1/src/com/lushprojects/circuitjs1/public/circuits/indmultind.txt",
+      "description": "Inductors with multiple inductances",
+      "valid": true,
+      "dt": 0.01,
+      "steps": 1,
+      "simTime": 0.01,
+      "components": 9,
+      "wires": 3,
+      "nodes": 9,
+      "nodeVoltages": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "componentCurrents": {
+        "cjs_indmultind_ACVoltageSource_1": 0,
+        "cjs_indmultind_ACVoltageSource_2": 0,
+        "cjs_indmultind_ACVoltageSource_3": 0,
+        "cjs_indmultind_Inductor_1": 0,
+        "cjs_indmultind_Inductor_2": 0,
+        "cjs_indmultind_Inductor_3": 0,
+        "cjs_indmultind_Resistor_1": 0,
+        "cjs_indmultind_Resistor_2": 0,
+        "cjs_indmultind_Resistor_3": 0
+      },
+      "componentVoltages": {
+        "cjs_indmultind_ACVoltageSource_1": 0,
+        "cjs_indmultind_ACVoltageSource_2": 0,
+        "cjs_indmultind_ACVoltageSource_3": 0,
+        "cjs_indmultind_Inductor_1": 0,
+        "cjs_indmultind_Inductor_2": 0,
+        "cjs_indmultind_Inductor_3": 0,
+        "cjs_indmultind_Resistor_1": 0,
+        "cjs_indmultind_Resistor_2": 0,
+        "cjs_indmultind_Resistor_3": 0
+      },
+      "wireCurrents": {
+        "cjs_indmultind_W1": 0,
+        "cjs_indmultind_W2": 0,
+        "cjs_indmultind_W3": 0
+      },
+      "conversion": {
+        "unsupportedElements": [],
+        "skippedMetadata": [
+          "$",
+          "o"
+        ],
+        "elementKindHistogram": {
+          "$": 1,
+          "l": 3,
+          "o": 3,
+          "r": 3,
+          "v": 3,
+          "w": 3
+        }
+      }
+    },
+    {
+      "id": "cjs_indmultfreq",
+      "sourceFile": "indmultfreq.txt",
+      "sourcePath": "/Users/lvxiaoer/Documents/HighSchoolCircuitSimulation/_reference/circuitjs1/src/com/lushprojects/circuitjs1/public/circuits/indmultfreq.txt",
+      "description": "Inductor response under multiple frequencies",
+      "valid": true,
+      "dt": 0.01,
+      "steps": 1,
+      "simTime": 0.01,
+      "components": 9,
+      "wires": 3,
+      "nodes": 9,
+      "nodeVoltages": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "componentCurrents": {
+        "cjs_indmultfreq_ACVoltageSource_1": 0,
+        "cjs_indmultfreq_ACVoltageSource_2": 0,
+        "cjs_indmultfreq_ACVoltageSource_3": 0,
+        "cjs_indmultfreq_Inductor_1": 0,
+        "cjs_indmultfreq_Inductor_2": 0,
+        "cjs_indmultfreq_Inductor_3": 0,
+        "cjs_indmultfreq_Resistor_1": 0,
+        "cjs_indmultfreq_Resistor_2": 0,
+        "cjs_indmultfreq_Resistor_3": 0
+      },
+      "componentVoltages": {
+        "cjs_indmultfreq_ACVoltageSource_1": 0,
+        "cjs_indmultfreq_ACVoltageSource_2": 0,
+        "cjs_indmultfreq_ACVoltageSource_3": 0,
+        "cjs_indmultfreq_Inductor_1": 0,
+        "cjs_indmultfreq_Inductor_2": 0,
+        "cjs_indmultfreq_Inductor_3": 0,
+        "cjs_indmultfreq_Resistor_1": 0,
+        "cjs_indmultfreq_Resistor_2": 0,
+        "cjs_indmultfreq_Resistor_3": 0
+      },
+      "wireCurrents": {
+        "cjs_indmultfreq_W1": 0,
+        "cjs_indmultfreq_W2": 0,
+        "cjs_indmultfreq_W3": 0
+      },
+      "conversion": {
+        "unsupportedElements": [],
+        "skippedMetadata": [
+          "$",
+          "o"
+        ],
+        "elementKindHistogram": {
+          "$": 1,
+          "l": 3,
+          "o": 3,
+          "r": 3,
+          "v": 3,
+          "w": 3
+        }
+      }
+    },
+    {
+      "id": "cjs_res_series",
+      "sourceFile": "res-series.txt",
+      "sourcePath": "/Users/lvxiaoer/Documents/HighSchoolCircuitSimulation/_reference/circuitjs1/src/com/lushprojects/circuitjs1/public/circuits/res-series.txt",
+      "description": "Series RLC resonance variants",
+      "valid": true,
+      "dt": 0.01,
+      "steps": 1,
+      "simTime": 0.01,
+      "components": 12,
+      "wires": 0,
+      "nodes": 12,
+      "nodeVoltages": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "componentCurrents": {
+        "cjs_res_series_ACVoltageSource_1": 0,
+        "cjs_res_series_ACVoltageSource_2": 0,
+        "cjs_res_series_ACVoltageSource_3": 0,
+        "cjs_res_series_Capacitor_1": 0,
+        "cjs_res_series_Capacitor_2": 0,
+        "cjs_res_series_Capacitor_3": 0,
+        "cjs_res_series_Inductor_1": 0,
+        "cjs_res_series_Inductor_2": 0,
+        "cjs_res_series_Inductor_3": 0,
+        "cjs_res_series_Resistor_1": 0,
+        "cjs_res_series_Resistor_2": 0,
+        "cjs_res_series_Resistor_3": 0
+      },
+      "componentVoltages": {
+        "cjs_res_series_ACVoltageSource_1": 0,
+        "cjs_res_series_ACVoltageSource_2": 0,
+        "cjs_res_series_ACVoltageSource_3": 0,
+        "cjs_res_series_Capacitor_1": 0,
+        "cjs_res_series_Capacitor_2": 0,
+        "cjs_res_series_Capacitor_3": 0,
+        "cjs_res_series_Inductor_1": 0,
+        "cjs_res_series_Inductor_2": 0,
+        "cjs_res_series_Inductor_3": 0,
+        "cjs_res_series_Resistor_1": 0,
+        "cjs_res_series_Resistor_2": 0,
+        "cjs_res_series_Resistor_3": 0
+      },
+      "wireCurrents": {},
+      "conversion": {
+        "unsupportedElements": [],
+        "skippedMetadata": [
+          "$",
+          "h",
+          "o"
+        ],
+        "elementKindHistogram": {
+          "$": 1,
+          "c": 3,
+          "h": 1,
+          "l": 3,
+          "o": 3,
+          "r": 3,
+          "v": 3
+        }
+      }
+    },
+    {
+      "id": "cjs_powerfactor1",
+      "sourceFile": "powerfactor1.txt",
+      "sourcePath": "/Users/lvxiaoer/Documents/HighSchoolCircuitSimulation/_reference/circuitjs1/src/com/lushprojects/circuitjs1/public/circuits/powerfactor1.txt",
+      "description": "Power factor baseline RL load",
+      "valid": true,
+      "dt": 0.01,
+      "steps": 1,
+      "simTime": 0.01,
+      "components": 4,
+      "wires": 2,
+      "nodes": 4,
+      "nodeVoltages": [
+        0,
+        -169.705627484771,
+        -154.553339302686,
+        -151.522881667814
+      ],
+      "componentCurrents": {
+        "cjs_powerfactor1_ACVoltageSource_1": 0.303045763811,
+        "cjs_powerfactor1_Inductor_1": -0.303045763336,
+        "cjs_powerfactor1_Resistor_1": -0.303045763487,
+        "cjs_powerfactor1_Resistor_2": -0.303045763642
+      },
+      "componentVoltages": {
+        "cjs_powerfactor1_ACVoltageSource_1": 169.705627484771,
+        "cjs_powerfactor1_Inductor_1": -151.522881667814,
+        "cjs_powerfactor1_Resistor_1": -3.030457634872,
+        "cjs_powerfactor1_Resistor_2": -15.152288182085
+      },
+      "wireCurrents": {
+        "cjs_powerfactor1_W1": 0.303045763811,
+        "cjs_powerfactor1_W2": 0.303045763336
+      },
+      "conversion": {
+        "unsupportedElements": [],
+        "skippedMetadata": [
+          "$",
+          "o"
+        ],
+        "elementKindHistogram": {
+          "$": 1,
+          "l": 1,
+          "o": 3,
+          "r": 2,
+          "v": 1,
+          "w": 2
+        }
+      }
+    },
+    {
+      "id": "cjs_powerfactor2",
+      "sourceFile": "powerfactor2.txt",
+      "sourcePath": "/Users/lvxiaoer/Documents/HighSchoolCircuitSimulation/_reference/circuitjs1/src/com/lushprojects/circuitjs1/public/circuits/powerfactor2.txt",
+      "description": "Power factor corrected RLC load",
+      "valid": true,
+      "dt": 0.01,
+      "steps": 1,
+      "simTime": 0.01,
+      "components": 5,
+      "wires": 2,
+      "nodes": 4,
+      "nodeVoltages": [
+        0,
+        -169.705627484771,
+        -153.574303120381,
+        -150.563042273407
+      ],
+      "componentCurrents": {
+        "cjs_powerfactor2_ACVoltageSource_1": 0.322626487458,
+        "cjs_powerfactor2_Capacitor_1": -0.021500402437,
+        "cjs_powerfactor2_Inductor_1": -0.301126084547,
+        "cjs_powerfactor2_Resistor_1": -0.301126084697,
+        "cjs_powerfactor2_Resistor_2": -0.322626487288
+      },
+      "componentVoltages": {
+        "cjs_powerfactor2_ACVoltageSource_1": 169.705627484771,
+        "cjs_powerfactor2_Capacitor_1": -153.574303120381,
+        "cjs_powerfactor2_Inductor_1": -150.563042273407,
+        "cjs_powerfactor2_Resistor_1": -3.011260846974,
+        "cjs_powerfactor2_Resistor_2": -16.13132436439
+      },
+      "wireCurrents": {
+        "cjs_powerfactor2_W1": 0.322626487458,
+        "cjs_powerfactor2_W2": 0.301126084547
+      },
+      "conversion": {
+        "unsupportedElements": [],
+        "skippedMetadata": [
+          "$",
+          "o"
+        ],
+        "elementKindHistogram": {
+          "$": 1,
+          "c": 1,
+          "l": 1,
+          "o": 3,
+          "r": 2,
+          "v": 1,
+          "w": 2
+        }
+      }
+    }
+  ]
+}
