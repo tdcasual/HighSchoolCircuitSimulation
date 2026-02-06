@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createDefaultPlotState, DEFAULT_SAMPLE_INTERVAL_MS, normalizeObservationState, normalizePlotState, normalizeSampleIntervalMs, shouldSampleAtTime } from '../src/ui/observation/ObservationState.js';
+import { createDefaultPlotState, DEFAULT_SAMPLE_INTERVAL_MS, normalizeObservationState, normalizePlotState, normalizeSampleIntervalMs, ObservationDisplayModes, shouldSampleAtTime } from '../src/ui/observation/ObservationState.js';
 import { TransformIds } from '../src/ui/observation/ObservationMath.js';
 import { QuantityIds, TIME_SOURCE_ID } from '../src/ui/observation/ObservationSources.js';
 
@@ -16,6 +16,7 @@ describe('ObservationState', () => {
         const normalized = normalizePlotState({
             name: '  自定义图像 ',
             maxPoints: 50,
+            yDisplayMode: 'invalid-display',
             x: {
                 sourceId: TIME_SOURCE_ID,
                 quantityId: QuantityIds.Time,
@@ -36,6 +37,7 @@ describe('ObservationState', () => {
 
         expect(normalized.name).toBe('自定义图像');
         expect(normalized.maxPoints).toBe(100);
+        expect(normalized.yDisplayMode).toBe(ObservationDisplayModes.Signed);
         expect(normalized.x.transformId).toBe(fallback.x.transformId);
         expect(normalized.x.autoRange).toBe(false);
         expect(normalized.x.min).toBe(-1);
@@ -58,6 +60,7 @@ describe('ObservationState', () => {
         expect(state.plots.length).toBe(1);
         expect(state.plots[0].y.sourceId).toBe('R1');
         expect(state.plots[0].y.quantityId).toBe(QuantityIds.Current);
+        expect(state.plots[0].yDisplayMode).toBe(ObservationDisplayModes.Signed);
     });
 
     it('supports time source defaults for y axis', () => {
@@ -67,6 +70,20 @@ describe('ObservationState', () => {
         });
         expect(state.plots[0].y.sourceId).toBe(TIME_SOURCE_ID);
         expect(state.plots[0].y.quantityId).toBe(QuantityIds.Time);
+        expect(state.plots[0].yDisplayMode).toBe(ObservationDisplayModes.Signed);
+    });
+
+    it('keeps explicit empty plot list when allowEmptyPlots is enabled', () => {
+        const state = normalizeObservationState({
+            sampleIntervalMs: 40,
+            plots: []
+        }, {
+            defaultYSourceId: 'R1',
+            defaultPlotCount: 1,
+            allowEmptyPlots: true
+        });
+        expect(state.sampleIntervalMs).toBe(40);
+        expect(state.plots).toHaveLength(0);
     });
 
     it('decides sampling by simulated time and configured interval', () => {
