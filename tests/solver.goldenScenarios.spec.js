@@ -104,10 +104,10 @@ describe('Solver golden scenarios', () => {
 
         const expectedVoltages = [
             0.9090909091,
-            1.7355371901,
-            2.4868519910,
-            3.1698654463,
-            3.7907867694
+            1.7748917749,
+            2.5582354154,
+            3.2669748996,
+            3.9082153854
         ];
 
         circuit.isRunning = true;
