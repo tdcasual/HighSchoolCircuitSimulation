@@ -116,6 +116,7 @@ export class Renderer {
             const path = SVGRenderer.createWire(wire, this.getWireEndpointPosition.bind(this));
             this.wireLayer.appendChild(path);
             this.wireElements.set(wire.id, path);
+            this.renderWireProbeMarkers(wire, path);
         }
     }
 
@@ -152,6 +153,7 @@ export class Renderer {
         const path = SVGRenderer.createWire(wire, this.getWireEndpointPosition.bind(this));
         this.wireLayer.appendChild(path);
         this.wireElements.set(wire.id, path);
+        this.renderWireProbeMarkers(wire, path);
         return path;
     }
 
@@ -325,7 +327,80 @@ export class Renderer {
         const wire = this.circuit.getWire(wireId);
         if (wireGroup && wire) {
             SVGRenderer.updateWirePath(wireGroup, wire, this.getWireEndpointPosition.bind(this));
+            this.renderWireProbeMarkers(wire, wireGroup);
         }
+    }
+
+    getWireObservationProbes(wireId) {
+        if (!wireId || typeof this.circuit?.getAllObservationProbes !== 'function') return [];
+        return this.circuit.getAllObservationProbes()
+            .filter((probe) => probe?.wireId === wireId);
+    }
+
+    getProbeTypeGlyph(type) {
+        if (type === 'NodeVoltageProbe') return 'U';
+        if (type === 'WireCurrentProbe') return 'I';
+        return '?';
+    }
+
+    getWireProbeOffset(index) {
+        const level = Math.floor(index / 2) + 1;
+        const sign = index % 2 === 0 ? 1 : -1;
+        return sign * level * 14;
+    }
+
+    renderWireProbeMarkers(wire, wireGroup) {
+        if (!wireGroup || !wire) return;
+        wireGroup.querySelectorAll('.wire-probe-marker').forEach((el) => el.remove());
+
+        const probes = this.getWireObservationProbes(wire.id);
+        if (!Array.isArray(probes) || probes.length === 0) return;
+
+        const a = this.getWireEndpointPosition(wire, 'a');
+        const b = this.getWireEndpointPosition(wire, 'b');
+        if (!a || !b) return;
+
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const len = Math.hypot(dx, dy);
+        const nx = len > 1e-9 ? -dy / len : 0;
+        const ny = len > 1e-9 ? dx / len : -1;
+        const midX = (a.x + b.x) / 2;
+        const midY = (a.y + b.y) / 2;
+
+        probes.forEach((probe, index) => {
+            if (!probe?.id || !probe?.type) return;
+            const offset = this.getWireProbeOffset(index);
+            const x = midX + nx * offset;
+            const y = midY + ny * offset;
+
+            const marker = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            marker.setAttribute('class', `wire-probe-marker probe-${probe.type}`);
+            marker.setAttribute('data-probe-id', probe.id);
+            marker.setAttribute('data-wire-id', wire.id);
+            marker.setAttribute('data-probe-type', probe.type);
+            marker.setAttribute('transform', `translate(${x}, ${y})`);
+
+            const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            circle.setAttribute('class', 'wire-probe-body');
+            circle.setAttribute('r', 8);
+            marker.appendChild(circle);
+
+            const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            text.setAttribute('class', 'wire-probe-glyph');
+            text.setAttribute('x', 0);
+            text.setAttribute('y', 3);
+            text.setAttribute('text-anchor', 'middle');
+            text.textContent = this.getProbeTypeGlyph(probe.type);
+            marker.appendChild(text);
+
+            const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+            const displayName = probe.label && String(probe.label).trim() ? String(probe.label).trim() : probe.id;
+            title.textContent = `${displayName} (${probe.type === 'NodeVoltageProbe' ? '节点电压' : '支路电流'})`;
+            marker.appendChild(title);
+
+            wireGroup.appendChild(marker);
+        });
     }
 
     /**
