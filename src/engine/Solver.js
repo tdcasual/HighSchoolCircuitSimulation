@@ -23,6 +23,11 @@ export class MNASolver {
         // 取值为 1e-12 S (≈ 1e12Ω) 基本不影响正常高中电路数值，但能显著提升鲁棒性
         this.gmin = 1e-12;
         this.hasConnectedSwitch = false;
+        this.systemFactorizationCache = {
+            key: null,
+            matrixSize: -1,
+            factorization: null
+        };
     }
 
     /**
@@ -36,11 +41,13 @@ export class MNASolver {
         this.voltageSourceCount = 0;
         this.shortCircuitDetected = false;
         this.hasConnectedSwitch = false;
+        this.resetMatrixFactorizationCache();
         const isValidNode = (nodeIdx) => nodeIdx !== undefined && nodeIdx !== null && nodeIdx >= 0;
         
         // 检测并标记被短路的元器件（两端节点相同）
         for (const comp of components) {
             comp.vsIndex = undefined;
+            const isPowerSource = comp.type === 'PowerSource' || comp.type === 'ACVoltageSource';
             if (comp.type === 'Ground') {
                 comp._isShorted = false;
                 continue;
@@ -52,12 +59,17 @@ export class MNASolver {
                 comp._isShorted = (n1 === n2 && n1 >= 0);
                 
                 // 电源被短路是危险的
-                if (comp._isShorted && (comp.type === 'PowerSource' || comp.type === 'ACVoltageSource')) {
+                if (comp._isShorted && isPowerSource) {
                     this.shortCircuitDetected = true;
                     console.warn(`Power source ${comp.id} is short-circuited!`);
                 }
             } else {
                 comp._isShorted = false;
+            }
+
+            if (isPowerSource) {
+                const internalResistance = Number(comp.internalResistance);
+                comp._nortonModel = Number.isFinite(internalResistance) && internalResistance > 1e-9;
             }
         }
         
@@ -119,6 +131,95 @@ export class MNASolver {
         }
     }
 
+    resetMatrixFactorizationCache() {
+        this.systemFactorizationCache.key = null;
+        this.systemFactorizationCache.matrixSize = -1;
+        this.systemFactorizationCache.factorization = null;
+    }
+
+    formatMatrixKeyNumber(value) {
+        if (!Number.isFinite(value)) {
+            if (value === Infinity) return 'inf';
+            if (value === -Infinity) return '-inf';
+            return 'nan';
+        }
+        return Number(value).toPrecision(12);
+    }
+
+    buildSystemMatrixCacheKey(nodeCount) {
+        const keyParts = [
+            `nodes:${nodeCount}`,
+            `vs:${this.voltageSourceCount}`,
+            `gmin:${this.formatMatrixKeyNumber(this.gmin)}`,
+            `dt:${this.formatMatrixKeyNumber(this.dt)}`,
+            `switch:${this.hasConnectedSwitch ? 1 : 0}`
+        ];
+
+        for (const comp of this.components) {
+            if (!comp) continue;
+
+            const nodesPart = Array.isArray(comp.nodes)
+                ? comp.nodes.map((nodeIdx) => (Number.isInteger(nodeIdx) ? String(nodeIdx) : 'x')).join(',')
+                : '';
+
+            keyParts.push(
+                `id:${comp.id}`,
+                `type:${comp.type}`,
+                `short:${comp._isShorted ? 1 : 0}`,
+                `n:${nodesPart}`,
+                `vsIdx:${comp.vsIndex ?? 'x'}`
+            );
+
+            switch (comp.type) {
+                case 'Resistor':
+                case 'Bulb':
+                    keyParts.push(`R:${this.formatMatrixKeyNumber(comp.resistance ?? 0)}`);
+                    break;
+                case 'Rheostat':
+                    keyParts.push(
+                        `minR:${this.formatMatrixKeyNumber(comp.minResistance ?? 0)}`,
+                        `maxR:${this.formatMatrixKeyNumber(comp.maxResistance ?? 0)}`,
+                        `pos:${this.formatMatrixKeyNumber(comp.position ?? 0.5)}`,
+                        `mode:${comp.connectionMode || 'none'}`
+                    );
+                    break;
+                case 'PowerSource':
+                case 'ACVoltageSource':
+                    keyParts.push(`rInt:${this.formatMatrixKeyNumber(comp.internalResistance ?? 0)}`);
+                    break;
+                case 'Capacitor':
+                case 'ParallelPlateCapacitor':
+                    keyParts.push(
+                        `C:${this.formatMatrixKeyNumber(comp.capacitance ?? 0)}`,
+                        `method:${this.resolveDynamicIntegrationMethod(comp)}`
+                    );
+                    break;
+                case 'Inductor':
+                    keyParts.push(
+                        `L:${this.formatMatrixKeyNumber(comp.inductance ?? 0)}`,
+                        `method:${this.resolveDynamicIntegrationMethod(comp)}`
+                    );
+                    break;
+                case 'Motor':
+                    keyParts.push(`R:${this.formatMatrixKeyNumber(comp.resistance ?? 0)}`);
+                    break;
+                case 'Switch':
+                    keyParts.push(`closed:${comp.closed ? 1 : 0}`);
+                    break;
+                case 'Ammeter':
+                    keyParts.push(`R:${this.formatMatrixKeyNumber(comp.resistance ?? 0)}`);
+                    break;
+                case 'Voltmeter':
+                    keyParts.push(`R:${this.formatMatrixKeyNumber(comp.resistance ?? Infinity)}`);
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        return keyParts.join('|');
+    }
+
     /**
      * 求解电路
      * @param {number} dt - 时间步长
@@ -176,11 +277,35 @@ export class MNASolver {
             console.log('Vector z:', z.map(v => v.toFixed(4)));
         }
 
+        const matrixCacheKey = this.buildSystemMatrixCacheKey(nodeCount);
+        const cached = this.systemFactorizationCache;
+        let factorization = null;
+
+        if (
+            cached &&
+            cached.key === matrixCacheKey &&
+            cached.matrixSize === n &&
+            cached.factorization
+        ) {
+            factorization = cached.factorization;
+        } else {
+            factorization = Matrix.factorize(A);
+            if (!factorization) {
+                console.warn('Matrix factorization failed');
+                this.resetMatrixFactorizationCache();
+                return { voltages: [], currents: new Map(), valid: false };
+            }
+            this.systemFactorizationCache.key = matrixCacheKey;
+            this.systemFactorizationCache.matrixSize = n;
+            this.systemFactorizationCache.factorization = factorization;
+        }
+
         // 求解
-        const x = Matrix.solve(A, z);
+        const x = Matrix.solveWithFactorization(factorization, z);
         
         if (!x) {
             console.warn('Matrix solve failed');
+            this.resetMatrixFactorizationCache();
             return { voltages: [], currents: new Map(), valid: false };
         }
 
@@ -204,8 +329,47 @@ export class MNASolver {
                 console.log(`Current for ${comp.id}: ${current.toFixed(6)}A`);
             }
         }
+        this.shortCircuitDetected = this.detectPowerSourceShortCircuits(voltages, currents);
 
         return { voltages, currents, valid: true };
+    }
+
+    detectPowerSourceShortCircuits(voltages, currents) {
+        const isValidNode = (nodeIdx) => nodeIdx !== undefined && nodeIdx !== null && nodeIdx >= 0;
+        const shortCurrentRatio = 0.95;
+        const lowVoltageRatio = 0.05;
+        const lowVoltageAbs = 0.05;
+
+        for (const comp of this.components) {
+            if (comp.type !== 'PowerSource' && comp.type !== 'ACVoltageSource') continue;
+            const n1 = comp.nodes?.[0];
+            const n2 = comp.nodes?.[1];
+            if (!isValidNode(n1) || !isValidNode(n2)) continue;
+
+            if (comp._isShorted) {
+                return true;
+            }
+
+            const internalResistance = Number(comp.internalResistance);
+            if (!(Number.isFinite(internalResistance) && internalResistance > 1e-9)) {
+                continue;
+            }
+
+            const sourceVoltage = this.getSourceInstantVoltage(comp);
+            const sourceVoltageAbs = Math.abs(sourceVoltage);
+            if (!(sourceVoltageAbs > 0)) continue;
+            const shortCurrent = sourceVoltageAbs / internalResistance;
+            if (!(shortCurrent > 0)) continue;
+
+            const sourceCurrent = Math.abs(currents?.get(comp.id) || 0);
+            const terminalVoltage = Math.abs((voltages[n1] || 0) - (voltages[n2] || 0));
+            const voltageTol = Math.max(lowVoltageAbs, sourceVoltageAbs * lowVoltageRatio);
+            if (sourceCurrent >= shortCurrent * shortCurrentRatio && terminalVoltage <= voltageTol) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -226,8 +390,11 @@ export class MNASolver {
             return;
         }
         
-        // 如果元器件被短路，跳过stamp（除了特殊处理的情况）
-        if (comp._isShorted) {
+        // 如果元器件被短路，跳过 stamp（带内阻电源例外，仍需计算其短路电流）
+        const isFiniteResistanceSource = (comp.type === 'PowerSource' || comp.type === 'ACVoltageSource')
+            && Number.isFinite(Number(comp.internalResistance))
+            && Number(comp.internalResistance) > 1e-9;
+        if (comp._isShorted && !isFiniteResistanceSource) {
             // 被短路的元器件不参与电路计算
             // 但需要记录状态以便显示
             return;
@@ -558,8 +725,11 @@ export class MNASolver {
             return 0;
         }
 
-        // 被短路的元器件电流为0（两端没有电势差）
-        if (comp._isShorted) {
+        // 被短路的元器件电流为0（带内阻电源例外，仍按 E/r 估计短路电流）
+        const isFiniteResistanceSource = (comp.type === 'PowerSource' || comp.type === 'ACVoltageSource')
+            && Number.isFinite(Number(comp.internalResistance))
+            && Number(comp.internalResistance) > 1e-9;
+        if (comp._isShorted && !isFiniteResistanceSource) {
             return 0;
         }
 
@@ -682,6 +852,9 @@ export class MNASolver {
                     return current; // 正值表示从正极流出
                 } else {
                     // 理想电压源模型：从MNA解向量获取
+                    if (!Number.isInteger(comp.vsIndex)) {
+                        return 0;
+                    }
                     const sourceCurrent = x[nodeCount - 1 + comp.vsIndex] || 0;
                     return -sourceCurrent;
                 }
