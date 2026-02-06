@@ -17,11 +17,17 @@ export function getTerminalLocalPosition(comp, terminalIndex) {
     let relY = 0;
 
     switch (comp.type) {
+        case 'Ground':
+            relX = 0;
+            relY = -20;
+            break;
         case 'PowerSource':
+        case 'ACVoltageSource':
         case 'Bulb':
         case 'Motor':
         case 'Resistor':
         case 'Capacitor':
+        case 'Inductor':
         case 'ParallelPlateCapacitor':
         case 'Switch':
         case 'Ammeter':
