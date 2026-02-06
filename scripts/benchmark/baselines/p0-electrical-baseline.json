@@ -1,0 +1,884 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-02-06T11:49:18.344Z",
+  "runtime": {
+    "node": "v25.5.0",
+    "platform": "darwin",
+    "absTolerance": 0.000001,
+    "relTolerance": 0.001
+  },
+  "scenarioCount": 20,
+  "scenarios": [
+    {
+      "id": "series_single_100ohm",
+      "description": "12V source with 100Ω series resistor",
+      "valid": true,
+      "dt": 0.01,
+      "steps": 1,
+      "simTime": 0.01,
+      "components": 2,
+      "wires": 2,
+      "nodes": 2,
+      "nodeVoltages": [
+        0,
+        12
+      ],
+      "componentCurrents": {
+        "R1": 0.12,
+        "V1": 0.120000000012
+      },
+      "componentVoltages": {
+        "R1": 12,
+        "V1": 12
+      },
+      "componentNodeVoltages": {
+        "R1": [
+          12,
+          0
+        ],
+        "V1": [
+          12,
+          0
+        ]
+      },
+      "wireCurrents": {
+        "W1": 0.12,
+        "W2": 0.120000000012
+      }
+    },
+    {
+      "id": "series_source_internal",
+      "description": "12V source with 2Ω internal + 8Ω load",
+      "valid": true,
+      "dt": 0.01,
+      "steps": 1,
+      "simTime": 0.01,
+      "components": 2,
+      "wires": 2,
+      "nodes": 2,
+      "nodeVoltages": [
+        0,
+        9.599999999985
+      ],
+      "componentCurrents": {
+        "R1": 1.199999999998,
+        "V1": 1.200000000008
+      },
+      "componentVoltages": {
+        "R1": 9.599999999985,
+        "V1": 9.599999999985
+      },
+      "componentNodeVoltages": {
+        "R1": [
+          9.599999999985,
+          0
+        ],
+        "V1": [
+          9.599999999985,
+          0
+        ]
+      },
+      "wireCurrents": {
+        "W1": 1.199999999998,
+        "W2": 1.200000000008
+      }
+    },
+    {
+      "id": "series_two_equal",
+      "description": "Two 100Ω resistors in series",
+      "valid": true,
+      "dt": 0.01,
+      "steps": 1,
+      "simTime": 0.01,
+      "components": 3,
+      "wires": 3,
+      "nodes": 3,
+      "nodeVoltages": [
+        0,
+        12,
+        5.9999999997
+      ],
+      "componentCurrents": {
+        "R1": 0.060000000003,
+        "R2": 0.059999999997,
+        "V1": 0.060000000015
+      },
+      "componentVoltages": {
+        "R1": 6.0000000003,
+        "R2": 5.9999999997,
+        "V1": 12
+      },
+      "componentNodeVoltages": {
+        "R1": [
+          12,
+          5.9999999997
+        ],
+        "R2": [
+          5.9999999997,
+          0
+        ],
+        "V1": [
+          12,
+          0
+        ]
+      },
+      "wireCurrents": {
+        "W1": 0.060000000003,
+        "W2": 0.059999999997,
+        "W3": 0.060000000015
+      }
+    },
+    {
+      "id": "series_two_unequal",
+      "description": "50Ω + 150Ω series branch",
+      "valid": true,
+      "dt": 0.01,
+      "steps": 1,
+      "simTime": 0.01,
+      "components": 3,
+      "wires": 3,
+      "nodes": 3,
+      "nodeVoltages": [
+        0,
+        12,
+        8.999999999662
+      ],
+      "componentCurrents": {
+        "R1": 0.060000000007,
+        "R2": 0.059999999998,
+        "V1": 0.060000000019
+      },
+      "componentVoltages": {
+        "R1": 3.000000000338,
+        "R2": 8.999999999662,
+        "V1": 12
+      },
+      "componentNodeVoltages": {
+        "R1": [
+          12,
+          8.999999999662
+        ],
+        "R2": [
+          8.999999999662,
+          0
+        ],
+        "V1": [
+          12,
+          0
+        ]
+      },
+      "wireCurrents": {
+        "W1": 0.060000000007,
+        "W2": 0.059999999998,
+        "W3": 0.060000000019
+      }
+    },
+    {
+      "id": "parallel_two_equal",
+      "description": "Two 100Ω resistors in parallel",
+      "valid": true,
+      "dt": 0.01,
+      "steps": 1,
+      "simTime": 0.01,
+      "components": 3,
+      "wires": 4,
+      "nodes": 2,
+      "nodeVoltages": [
+        0,
+        12
+      ],
+      "componentCurrents": {
+        "R1": 0.12,
+        "R2": 0.12,
+        "V1": 0.240000000012
+      },
+      "componentVoltages": {
+        "R1": 12,
+        "R2": 12,
+        "V1": 12
+      },
+      "componentNodeVoltages": {
+        "R1": [
+          12,
+          0
+        ],
+        "R2": [
+          12,
+          0
+        ],
+        "V1": [
+          12,
+          0
+        ]
+      },
+      "wireCurrents": {
+        "W1": 0.12,
+        "W2": 0.12,
+        "W3": 0.12,
+        "W4": 0.12
+      }
+    },
+    {
+      "id": "parallel_two_unequal",
+      "description": "100Ω and 200Ω resistors in parallel",
+      "valid": true,
+      "dt": 0.01,
+      "steps": 1,
+      "simTime": 0.01,
+      "components": 3,
+      "wires": 4,
+      "nodes": 2,
+      "nodeVoltages": [
+        0,
+        12
+      ],
+      "componentCurrents": {
+        "R1": 0.12,
+        "R2": 0.06,
+        "V1": 0.180000000012
+      },
+      "componentVoltages": {
+        "R1": 12,
+        "R2": 12,
+        "V1": 12
+      },
+      "componentNodeVoltages": {
+        "R1": [
+          12,
+          0
+        ],
+        "R2": [
+          12,
+          0
+        ],
+        "V1": [
+          12,
+          0
+        ]
+      },
+      "wireCurrents": {
+        "W1": 0.12,
+        "W2": 0.06,
+        "W3": 0.12,
+        "W4": 0.06
+      }
+    },
+    {
+      "id": "parallel_three_equal",
+      "description": "Three 120Ω branches in parallel",
+      "valid": true,
+      "dt": 0.01,
+      "steps": 1,
+      "simTime": 0.01,
+      "components": 4,
+      "wires": 6,
+      "nodes": 2,
+      "nodeVoltages": [
+        0,
+        12
+      ],
+      "componentCurrents": {
+        "R1": 0.1,
+        "R2": 0.1,
+        "R3": 0.1,
+        "V1": 0.300000000012
+      },
+      "componentVoltages": {
+        "R1": 12,
+        "R2": 12,
+        "R3": 12,
+        "V1": 12
+      },
+      "componentNodeVoltages": {
+        "R1": [
+          12,
+          0
+        ],
+        "R2": [
+          12,
+          0
+        ],
+        "R3": [
+          12,
+          0
+        ],
+        "V1": [
+          12,
+          0
+        ]
+      },
+      "wireCurrents": {
+        "W1": 0.1,
+        "W2": 0.1,
+        "W3": 0.1,
+        "W4": 0.1,
+        "W5": 0.1,
+        "W6": 0.1
+      }
+    },
+    {
+      "id": "mixed_series_parallel",
+      "description": "60Ω series with two parallel 120Ω branches",
+      "valid": true,
+      "dt": 0.01,
+      "steps": 1,
+      "simTime": 0.01,
+      "components": 4,
+      "wires": 5,
+      "nodes": 3,
+      "nodeVoltages": [
+        0,
+        12,
+        5.99999999982
+      ],
+      "componentCurrents": {
+        "R1": 0.100000000003,
+        "R2": 0.049999999999,
+        "R3": 0.049999999999,
+        "V1": 0.100000000015
+      },
+      "componentVoltages": {
+        "R1": 6.00000000018,
+        "R2": 5.99999999982,
+        "R3": 5.99999999982,
+        "V1": 12
+      },
+      "componentNodeVoltages": {
+        "R1": [
+          12,
+          5.99999999982
+        ],
+        "R2": [
+          5.99999999982,
+          0
+        ],
+        "R3": [
+          5.99999999982,
+          0
+        ],
+        "V1": [
+          12,
+          0
+        ]
+      },
+      "wireCurrents": {
+        "W1": 0.100000000003,
+        "W2": 0.049999999999,
+        "W3": 0.049999999999,
+        "W4": 0.049999999999,
+        "W5": 0.049999999999
+      }
+    },
+    {
+      "id": "switch_open",
+      "description": "Open switch should block current",
+      "valid": true,
+      "dt": 0.01,
+      "steps": 1,
+      "simTime": 0.01,
+      "components": 3,
+      "wires": 3,
+      "nodes": 3,
+      "nodeVoltages": [
+        0,
+        12,
+        1.2e-9
+      ],
+      "componentCurrents": {
+        "R1": 1.2e-11,
+        "S1": 0,
+        "V1": 2.4e-11
+      },
+      "componentVoltages": {
+        "R1": 1.2e-9,
+        "S1": 11.9999999988,
+        "V1": 12
+      },
+      "componentNodeVoltages": {
+        "R1": [
+          1.2e-9,
+          0
+        ],
+        "S1": [
+          12,
+          1.2e-9
+        ],
+        "V1": [
+          12,
+          0
+        ]
+      },
+      "wireCurrents": {
+        "W1": 0,
+        "W2": 0,
+        "W3": 0
+      }
+    },
+    {
+      "id": "switch_closed",
+      "description": "Closed switch should conduct current",
+      "valid": true,
+      "dt": 0.01,
+      "steps": 1,
+      "simTime": 0.01,
+      "components": 3,
+      "wires": 3,
+      "nodes": 3,
+      "nodeVoltages": [
+        0,
+        12,
+        11.99999999988
+      ],
+      "componentCurrents": {
+        "R1": 0.119999999999,
+        "S1": 0.120000009929,
+        "V1": 0.119999885558
+      },
+      "componentVoltages": {
+        "R1": 11.99999999988,
+        "S1": 1.2e-10,
+        "V1": 12
+      },
+      "componentNodeVoltages": {
+        "R1": [
+          11.99999999988,
+          0
+        ],
+        "S1": [
+          12,
+          11.99999999988
+        ],
+        "V1": [
+          12,
+          0
+        ]
+      },
+      "wireCurrents": {
+        "W1": 0.120000009929,
+        "W2": 0.119999999999,
+        "W3": 0.119999885558
+      }
+    },
+    {
+      "id": "rheostat_left_slider",
+      "description": "Rheostat left-slider mode (position 0.25)",
+      "valid": true,
+      "dt": 0.01,
+      "steps": 1,
+      "simTime": 0.01,
+      "components": 2,
+      "wires": 2,
+      "nodes": 2,
+      "nodeVoltages": [
+        0,
+        12
+      ],
+      "componentCurrents": {
+        "RH1": 0.48,
+        "V1": 0.480000000012
+      },
+      "componentVoltages": {
+        "RH1": 12,
+        "V1": 12
+      },
+      "componentNodeVoltages": {
+        "RH1": [
+          12,
+          0,
+          0
+        ],
+        "V1": [
+          12,
+          0
+        ]
+      },
+      "wireCurrents": {
+        "W1": 0.48,
+        "W2": 0.480000000012
+      }
+    },
+    {
+      "id": "rheostat_right_slider",
+      "description": "Rheostat right-slider mode (position 0.25)",
+      "valid": true,
+      "dt": 0.01,
+      "steps": 1,
+      "simTime": 0.01,
+      "components": 2,
+      "wires": 2,
+      "nodes": 2,
+      "nodeVoltages": [
+        0,
+        12
+      ],
+      "componentCurrents": {
+        "RH1": 0.16,
+        "V1": 0.160000000012
+      },
+      "componentVoltages": {
+        "RH1": 0,
+        "V1": 12
+      },
+      "componentNodeVoltages": {
+        "RH1": [
+          0,
+          0,
+          12
+        ],
+        "V1": [
+          12,
+          0
+        ]
+      },
+      "wireCurrents": {
+        "W1": 0.16,
+        "W2": 0.160000000012
+      }
+    },
+    {
+      "id": "rheostat_left_right",
+      "description": "Rheostat left-right mode",
+      "valid": true,
+      "dt": 0.01,
+      "steps": 1,
+      "simTime": 0.01,
+      "components": 2,
+      "wires": 2,
+      "nodes": 2,
+      "nodeVoltages": [
+        0,
+        12
+      ],
+      "componentCurrents": {
+        "RH1": 0.12,
+        "V1": 0.120000000012
+      },
+      "componentVoltages": {
+        "RH1": 12,
+        "V1": 12
+      },
+      "componentNodeVoltages": {
+        "RH1": [
+          12,
+          0,
+          0
+        ],
+        "V1": [
+          12,
+          0
+        ]
+      },
+      "wireCurrents": {
+        "W1": 0.12,
+        "W2": 0.120000000012
+      }
+    },
+    {
+      "id": "bulb_loop",
+      "description": "Bulb as resistive load",
+      "valid": true,
+      "dt": 0.01,
+      "steps": 1,
+      "simTime": 0.01,
+      "components": 2,
+      "wires": 2,
+      "nodes": 2,
+      "nodeVoltages": [
+        0,
+        12
+      ],
+      "componentCurrents": {
+        "B1": 0.24,
+        "V1": 0.240000000012
+      },
+      "componentVoltages": {
+        "B1": 12,
+        "V1": 12
+      },
+      "componentNodeVoltages": {
+        "B1": [
+          12,
+          0
+        ],
+        "V1": [
+          12,
+          0
+        ]
+      },
+      "wireCurrents": {
+        "W1": 0.24,
+        "W2": 0.240000000012
+      }
+    },
+    {
+      "id": "ammeter_ideal_series",
+      "description": "Ideal ammeter in series branch",
+      "valid": true,
+      "dt": 0.01,
+      "steps": 1,
+      "simTime": 0.01,
+      "components": 3,
+      "wires": 3,
+      "nodes": 3,
+      "nodeVoltages": [
+        0,
+        12,
+        12
+      ],
+      "componentCurrents": {
+        "A1": -0.120000000012,
+        "R1": 0.12,
+        "V1": 0.120000000024
+      },
+      "componentVoltages": {
+        "A1": 0,
+        "R1": 12,
+        "V1": 12
+      },
+      "componentNodeVoltages": {
+        "A1": [
+          12,
+          12
+        ],
+        "R1": [
+          12,
+          0
+        ],
+        "V1": [
+          12,
+          0
+        ]
+      },
+      "wireCurrents": {
+        "W1": 0.120000000012,
+        "W2": 0.12,
+        "W3": 0.120000000024
+      }
+    },
+    {
+      "id": "ammeter_real_series",
+      "description": "Ammeter with 1Ω internal resistance",
+      "valid": true,
+      "dt": 0.01,
+      "steps": 1,
+      "simTime": 0.01,
+      "components": 3,
+      "wires": 3,
+      "nodes": 3,
+      "nodeVoltages": [
+        0,
+        12,
+        11.879999999988
+      ],
+      "componentCurrents": {
+        "A1": 0.120000000012,
+        "R1": 0.12,
+        "V1": 0.120000000024
+      },
+      "componentVoltages": {
+        "A1": 0.120000000012,
+        "R1": 11.879999999988,
+        "V1": 12
+      },
+      "componentNodeVoltages": {
+        "A1": [
+          12,
+          11.879999999988
+        ],
+        "R1": [
+          11.879999999988,
+          0
+        ],
+        "V1": [
+          12,
+          0
+        ]
+      },
+      "wireCurrents": {
+        "W1": 0.120000000012,
+        "W2": 0.12,
+        "W3": 0.120000000024
+      }
+    },
+    {
+      "id": "voltmeter_ideal_parallel",
+      "description": "Ideal voltmeter in parallel branch",
+      "valid": true,
+      "dt": 0.01,
+      "steps": 1,
+      "simTime": 0.01,
+      "components": 3,
+      "wires": 4,
+      "nodes": 2,
+      "nodeVoltages": [
+        0,
+        12
+      ],
+      "componentCurrents": {
+        "R1": 0.12,
+        "V1": 0.120000000012,
+        "VM1": 0
+      },
+      "componentVoltages": {
+        "R1": 12,
+        "V1": 12,
+        "VM1": 12
+      },
+      "componentNodeVoltages": {
+        "R1": [
+          12,
+          0
+        ],
+        "V1": [
+          12,
+          0
+        ],
+        "VM1": [
+          12,
+          0
+        ]
+      },
+      "wireCurrents": {
+        "W1": 0.120000000012,
+        "W2": 0.120000000012,
+        "W3": 0,
+        "W4": 0
+      }
+    },
+    {
+      "id": "voltmeter_real_parallel",
+      "description": "Voltmeter with finite 1000Ω resistance",
+      "valid": true,
+      "dt": 0.01,
+      "steps": 1,
+      "simTime": 0.01,
+      "components": 3,
+      "wires": 4,
+      "nodes": 2,
+      "nodeVoltages": [
+        0,
+        12
+      ],
+      "componentCurrents": {
+        "R1": 0.12,
+        "V1": 0.132000000012,
+        "VM1": 0.012
+      },
+      "componentVoltages": {
+        "R1": 12,
+        "V1": 12,
+        "VM1": 12
+      },
+      "componentNodeVoltages": {
+        "R1": [
+          12,
+          0
+        ],
+        "V1": [
+          12,
+          0
+        ],
+        "VM1": [
+          12,
+          0
+        ]
+      },
+      "wireCurrents": {
+        "W1": 0.132000000012,
+        "W2": 0.132000000012,
+        "W3": -0.012,
+        "W4": 0.012
+      }
+    },
+    {
+      "id": "rc_charge",
+      "description": "RC charging transient to near steady state",
+      "valid": true,
+      "dt": 0.01,
+      "steps": 2000,
+      "simTime": 20,
+      "components": 3,
+      "wires": 3,
+      "nodes": 3,
+      "nodeVoltages": [
+        0,
+        12,
+        11.9999999988
+      ],
+      "componentCurrents": {
+        "C1": 0,
+        "R1": 1.2e-11,
+        "V1": 2.4e-11
+      },
+      "componentVoltages": {
+        "C1": 11.9999999988,
+        "R1": 1.2e-9,
+        "V1": 12
+      },
+      "componentNodeVoltages": {
+        "C1": [
+          11.9999999988,
+          0
+        ],
+        "R1": [
+          12,
+          11.9999999988
+        ],
+        "V1": [
+          12,
+          0
+        ]
+      },
+      "wireCurrents": {
+        "W1": 0,
+        "W2": 0,
+        "W3": 0
+      }
+    },
+    {
+      "id": "rl_step",
+      "description": "RL step response near steady current",
+      "valid": true,
+      "dt": 0.01,
+      "steps": 600,
+      "simTime": 6,
+      "components": 3,
+      "wires": 3,
+      "nodes": 3,
+      "nodeVoltages": [
+        0,
+        12,
+        0
+      ],
+      "componentCurrents": {
+        "L1": 2,
+        "R1": 2,
+        "V1": 2.000000000012
+      },
+      "componentVoltages": {
+        "L1": 0,
+        "R1": 12,
+        "V1": 12
+      },
+      "componentNodeVoltages": {
+        "L1": [
+          0,
+          0
+        ],
+        "R1": [
+          12,
+          0
+        ],
+        "V1": [
+          12,
+          0
+        ]
+      },
+      "wireCurrents": {
+        "W1": 2,
+        "W2": 2,
+        "W3": 2.000000000012
+      }
+    }
+  ]
+}
