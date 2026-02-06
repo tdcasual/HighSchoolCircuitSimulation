@@ -1,4 +1,29 @@
 import { GRID_SIZE, snapToGrid, toCanvasInt } from '../../utils/CanvasCoords.js';
+import { getTerminalLocalPosition } from '../../utils/TerminalGeometry.js';
+
+function resolveTerminalDragAxis(comp, terminalIndex) {
+    if (!comp) return { x: 1, y: 0 };
+
+    // Ignore existing extension when deriving the terminal's native direction.
+    const ext = comp.terminalExtensions && typeof comp.terminalExtensions === 'object'
+        ? comp.terminalExtensions
+        : {};
+    const probeComp = {
+        ...comp,
+        terminalExtensions: {
+            ...ext,
+            [terminalIndex]: { x: 0, y: 0 }
+        }
+    };
+    const baseLocal = getTerminalLocalPosition(probeComp, terminalIndex);
+    if (!baseLocal) return { x: 1, y: 0 };
+
+    const absX = Math.abs(baseLocal.x);
+    const absY = Math.abs(baseLocal.y);
+    if (absX >= absY && absX > 0) return { x: Math.sign(baseLocal.x) || 1, y: 0 };
+    if (absY > 0) return { x: 0, y: Math.sign(baseLocal.y) || 1 };
+    return { x: 1, y: 0 };
+}
 
 export function registerDragListeners(startEvent, onMove, onUp) {
     const supportsPointer = typeof window !== 'undefined' && 'PointerEvent' in window;
@@ -67,6 +92,8 @@ export function startTerminalExtend(componentId, terminalIndex, e) {
     const startY = e.clientY;
     const startExtX = comp.terminalExtensions[terminalIndex].x;
     const startExtY = comp.terminalExtensions[terminalIndex].y;
+    const dragAxis = resolveTerminalDragAxis(comp, terminalIndex);
+    const startAxisScalar = startExtX * dragAxis.x + startExtY * dragAxis.y;
     const rotation = (comp.rotation || 0) * Math.PI / 180;
     let cleanupDrag = null;
 
@@ -81,20 +108,17 @@ export function startTerminalExtend(componentId, terminalIndex, e) {
         const localDx = dx * cos - dy * sin;
         const localDy = dx * sin + dy * cos;
 
-        // 计算新的延长偏移（平滑移动，不强制对齐网格）
-        let newExtX = startExtX + localDx;
-        let newExtY = startExtY + localDy;
+        // 仅沿端子原生方向伸缩，保证端子延长始终为直线。
+        let newAxisScalar = startAxisScalar + localDx * dragAxis.x + localDy * dragAxis.y;
 
-        // 与网格轻微吸附，便于对齐
+        // 与网格轻微吸附，便于长度对齐
         const snapThreshold = 8;
-        const gridX = snapToGrid(newExtX, GRID_SIZE);
-        const gridY = snapToGrid(newExtY, GRID_SIZE);
-        if (Math.abs(newExtX - gridX) < snapThreshold) newExtX = gridX;
-        if (Math.abs(newExtY - gridY) < snapThreshold) newExtY = gridY;
+        const gridScalar = snapToGrid(newAxisScalar, GRID_SIZE);
+        if (Math.abs(newAxisScalar - gridScalar) < snapThreshold) newAxisScalar = gridScalar;
+        if (Math.abs(newAxisScalar) < snapThreshold) newAxisScalar = 0;
 
-        // 检测与水平/垂直方向的对齐
-        if (Math.abs(newExtY) < snapThreshold) newExtY = 0;
-        if (Math.abs(newExtX) < snapThreshold) newExtX = 0;
+        const newExtX = newAxisScalar * dragAxis.x;
+        const newExtY = newAxisScalar * dragAxis.y;
 
         // Normalize to integer pixels to keep topology stable.
         comp.terminalExtensions[terminalIndex] = { x: toCanvasInt(newExtX), y: toCanvasInt(newExtY) };
