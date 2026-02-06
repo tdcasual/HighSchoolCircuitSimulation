@@ -38,6 +38,36 @@ describe('ObservationMath', () => {
         expect(r).toEqual({ minX: -1, maxX: 3, minY: -4, maxY: 9 });
     });
 
+    it('computeRangeFromBuffer stays correct after ring overwrite', () => {
+        const buf = new RingBuffer2D(3);
+        buf.push(1, 10);
+        buf.push(2, 20);
+        buf.push(3, 30);
+        expect(computeRangeFromBuffer(buf)).toEqual({ minX: 1, maxX: 3, minY: 10, maxY: 30 });
+
+        // 覆盖掉当前最小值点（1,10），范围应自动更新到剩余窗口
+        buf.push(4, 15);
+        expect(computeRangeFromBuffer(buf)).toEqual({ minX: 2, maxX: 4, minY: 15, maxY: 30 });
+    });
+
+    it('RingBuffer2D forEachSampled iterates by step', () => {
+        const buf = new RingBuffer2D(8);
+        for (let i = 0; i < 6; i++) {
+            buf.push(i, i * 10);
+        }
+
+        const points = [];
+        buf.forEachSampled(2, (x, y, index) => {
+            points.push({ x, y, index });
+        });
+
+        expect(points).toEqual([
+            { x: 0, y: 0, index: 0 },
+            { x: 2, y: 20, index: 2 },
+            { x: 4, y: 40, index: 4 }
+        ]);
+    });
+
     it('computeNiceTicks returns a reasonable sequence', () => {
         const ticks = computeNiceTicks(0.12, 9.87, 5);
         expect(ticks.length).toBeGreaterThanOrEqual(2);
@@ -48,4 +78,3 @@ describe('ObservationMath', () => {
         expect(ticks[ticks.length - 1]).toBeGreaterThanOrEqual(9.87);
     });
 });
-
