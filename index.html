@@ -315,11 +315,12 @@
 
     <!-- AI助手面板 -->
     <div id="ai-assistant-panel" class="collapsed">
+        <button id="ai-fab-btn" title="展开 AI 助手" aria-label="展开 AI 助手" aria-hidden="false">🤖</button>
         <div id="ai-panel-header">
             <h3>AI 助手</h3>
             <div id="ai-panel-actions">
                 <button id="ai-settings-btn" title="设置">设置</button>
-                <button id="ai-toggle-btn" title="展开/折叠">▲</button>
+                <button id="ai-toggle-btn" title="展开面板" aria-expanded="false">展开</button>
             </div>
         </div>
         <div id="ai-panel-content">
@@ -365,6 +366,7 @@
                     <select id="chat-history-select">
                         <option value="">历史记录</option>
                     </select>
+                    <span id="knowledge-version-badge" title="规则库版本">规则库版本: --</span>
                 </div>
                 <div id="quick-questions">
                     <button class="quick-question-btn">为什么R1的电流增大了?</button>
@@ -412,6 +414,39 @@
                 </div>
                 <datalist id="model-list-text"></datalist>
             </div>
+            <div class="form-group">
+                <label>知识源（题库/规则库）</label>
+                <select id="knowledge-source">
+                    <option value="local">本地内置规则库</option>
+                    <option value="mcp">MCP 知识服务</option>
+                </select>
+            </div>
+            <div class="form-group" id="knowledge-mcp-mode-row">
+                <label>MCP 协议模式</label>
+                <select id="knowledge-mcp-mode">
+                    <option value="method">Method 调用（method + params）</option>
+                    <option value="resource">Resource 读取（resource + params）</option>
+                </select>
+            </div>
+            <div class="form-group" id="knowledge-mcp-endpoint-row">
+                <label>MCP 网关地址与服务名</label>
+                <div class="model-input-row">
+                    <input type="text" id="knowledge-mcp-endpoint" placeholder="https://your-host/mcp/knowledge/search" />
+                    <input type="text" id="knowledge-mcp-server" placeholder="circuit-knowledge" />
+                </div>
+            </div>
+            <div class="form-group" id="knowledge-mcp-method-row">
+                <label>MCP Method 名称</label>
+                <input type="text" id="knowledge-mcp-method" placeholder="knowledge.search" />
+            </div>
+            <div class="form-group" id="knowledge-mcp-resource-row">
+                <label>MCP Resource 名称</label>
+                <input type="text" id="knowledge-mcp-resource" placeholder="knowledge://circuit/high-school" />
+            </div>
+            <div class="hint-text">
+                Method模式请求体：{server, method, params}；Resource模式请求体：{server, resource, params}
+            </div>
+            <div id="knowledge-source-version" class="hint-text"></div>
             <div class="dialog-buttons">
                 <button id="settings-fetch-models-btn">获取模型</button>
                 <button id="settings-clear-key-btn">清除密钥</button>
