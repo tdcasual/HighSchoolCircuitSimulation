@@ -37,6 +37,19 @@
 ### 在线使用
 直接打开 `index.html` 文件即可在浏览器中运行，无需安装任何依赖。
 
+### P0 基线回归（20 个标准电路）
+用于后续重构时防止数值漂移：
+
+```bash
+npm run baseline:p0:update   # 首次或有意更新基线
+npm run baseline:p0          # 日常对比校验
+```
+
+输出文件：
+- 当前快照：`output/baselines/p0-electrical-current.json`
+- 差异报告：`output/baselines/p0-electrical-diff.md`
+- 仓库基线：`scripts/benchmark/baselines/p0-electrical-baseline.json`
+
 ### 基本操作
 
 #### 添加元器件
