@@ -47,10 +47,10 @@ export function connectWire(circuit, id, startComponent, startTerminalIndex, end
     return wire;
 }
 
-export function solveCircuit(circuit) {
+export function solveCircuit(circuit, simTime = 0) {
     circuit.solver.setCircuit(
         Array.from(circuit.components.values()),
         circuit.nodes
     );
-    return circuit.solver.solve(circuit.dt);
+    return circuit.solver.solve(circuit.dt, simTime);
 }
