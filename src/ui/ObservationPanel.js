@@ -6,7 +6,7 @@
 import { createElement, clearElement } from '../utils/SafeDOM.js';
 import { applyTransform, computeNiceTicks, computeRangeFromBuffer, formatNumberCompact, RingBuffer2D, TransformIds, TransformOptions } from './observation/ObservationMath.js';
 import { evaluateSourceQuantity, getQuantitiesForSource, getSourceOptions, QuantityIds, TIME_SOURCE_ID } from './observation/ObservationSources.js';
-import { createDefaultPlotState, DEFAULT_SAMPLE_INTERVAL_MS, normalizeObservationState, normalizeSampleIntervalMs, shouldSampleAtTime } from './observation/ObservationState.js';
+import { createDefaultPlotState, DEFAULT_SAMPLE_INTERVAL_MS, normalizeObservationState, normalizeSampleIntervalMs, ObservationDisplayModes, shouldSampleAtTime } from './observation/ObservationState.js';
 
 function setSelectOptions(selectEl, options, selectedId) {
     if (!selectEl) return null;
@@ -101,12 +101,18 @@ export class ObservationPanel {
             attrs: { type: 'button' }
         });
         const clearBtn = createElement('button', {
+            className: 'control-btn',
+            textContent: '清空数据',
+            attrs: { type: 'button' }
+        });
+        const removeAllBtn = createElement('button', {
             className: 'control-btn stop',
-            textContent: '清空全部',
+            textContent: '删除全部图像',
             attrs: { type: 'button' }
         });
         actions.appendChild(addBtn);
         actions.appendChild(clearBtn);
+        actions.appendChild(removeAllBtn);
         header.appendChild(actions);
 
         this.root.appendChild(header);
@@ -165,6 +171,7 @@ export class ObservationPanel {
 
         addBtn.addEventListener('click', () => this.addPlot());
         clearBtn.addEventListener('click', () => this.clearAllPlots());
+        removeAllBtn.addEventListener('click', () => this.deleteAllPlots());
 
         // 默认添加一张图，便于上手
         this.addPlot();
@@ -211,6 +218,7 @@ export class ObservationPanel {
             id: plotId,
             name: config.name,
             maxPoints: config.maxPoints,
+            yDisplayMode: config.yDisplayMode || ObservationDisplayModes.Signed,
             buffer: new RingBuffer2D(config.maxPoints),
             x: {
                 sourceId: config.x.sourceId,
@@ -251,6 +259,12 @@ export class ObservationPanel {
         this.requestRender({ onlyIfActive: true });
     }
 
+    deleteAllPlots() {
+        this.clearPlotCards();
+        this.requestRender({ onlyIfActive: true });
+        this.schedulePersist(0);
+    }
+
     clearPlotCards() {
         for (const plot of this.plots) {
             plot.elements.card?.remove();
@@ -264,6 +278,7 @@ export class ObservationPanel {
             plots: this.plots.map((plot) => ({
                 name: plot.name,
                 maxPoints: plot.maxPoints,
+                yDisplayMode: plot.yDisplayMode || ObservationDisplayModes.Signed,
                 x: {
                     sourceId: plot.x.sourceId,
                     quantityId: plot.x.quantityId,
@@ -288,7 +303,8 @@ export class ObservationPanel {
         if (!this.root) return;
         const normalized = normalizeObservationState(rawState, {
             defaultYSourceId: this.getDefaultComponentId(),
-            defaultPlotCount: 1
+            defaultPlotCount: 1,
+            allowEmptyPlots: true
         });
 
         this.sampleIntervalMs = normalized.sampleIntervalMs;
@@ -363,6 +379,7 @@ export class ObservationPanel {
         const ySourceGroup = createSelectGroup('Y 轴来源', `obs-${plot.id}-y-source`);
         const yQuantityGroup = createSelectGroup('Y 轴量', `obs-${plot.id}-y-quantity`);
         const yTransformGroup = createSelectGroup('Y 轴变换', `obs-${plot.id}-y-transform`);
+        const yDisplayGroup = createSelectGroup('Y 显示', `obs-${plot.id}-y-display`);
 
         controls.appendChild(xSourceGroup);
         controls.appendChild(xQuantityGroup);
@@ -370,6 +387,7 @@ export class ObservationPanel {
         controls.appendChild(ySourceGroup);
         controls.appendChild(yQuantityGroup);
         controls.appendChild(yTransformGroup);
+        controls.appendChild(yDisplayGroup);
 
         // 轴范围
         controls.appendChild(this.createRangeControls(plot, 'x', 'X 轴范围'));
@@ -400,6 +418,7 @@ export class ObservationPanel {
             ySourceSelect: ySourceGroup.querySelector('select'),
             yQuantitySelect: yQuantityGroup.querySelector('select'),
             yTransformSelect: yTransformGroup.querySelector('select'),
+            yDisplaySelect: yDisplayGroup.querySelector('select'),
             xRangeGroup: card.querySelector(`[data-range-for="${plot.id}-x"]`),
             yRangeGroup: card.querySelector(`[data-range-for="${plot.id}-y"]`),
             pointsInput
@@ -418,6 +437,14 @@ export class ObservationPanel {
 
         setSelectOptions(plot.elements.xTransformSelect, TransformOptions, plot.x.transformId);
         setSelectOptions(plot.elements.yTransformSelect, TransformOptions, plot.y.transformId);
+        setSelectOptions(
+            plot.elements.yDisplaySelect,
+            [
+                { id: ObservationDisplayModes.Signed, label: '带符号（方向）' },
+                { id: ObservationDisplayModes.Magnitude, label: '仅幅值（绝对值）' }
+            ],
+            plot.yDisplayMode
+        );
 
         plot.elements.xTransformSelect?.addEventListener('change', () => {
             plot.x.transformId = plot.elements.xTransformSelect.value;
@@ -427,6 +454,12 @@ export class ObservationPanel {
         });
         plot.elements.yTransformSelect?.addEventListener('change', () => {
             plot.y.transformId = plot.elements.yTransformSelect.value;
+            plot._needsRedraw = true;
+            this.requestRender({ onlyIfActive: true });
+            this.schedulePersist(0);
+        });
+        plot.elements.yDisplaySelect?.addEventListener('change', () => {
+            plot.yDisplayMode = plot.elements.yDisplaySelect.value;
             plot._needsRedraw = true;
             this.requestRender({ onlyIfActive: true });
             this.schedulePersist(0);
@@ -709,7 +742,10 @@ export class ObservationPanel {
         const xRaw = evaluateSourceQuantity(this.circuit, plot.x.sourceId, plot.x.quantityId);
         const yRaw = evaluateSourceQuantity(this.circuit, plot.y.sourceId, plot.y.quantityId);
         const x = applyTransform(xRaw, plot.x.transformId);
-        const y = applyTransform(yRaw, plot.y.transformId);
+        let y = applyTransform(yRaw, plot.y.transformId);
+        if (plot.yDisplayMode === ObservationDisplayModes.Magnitude && Number.isFinite(y)) {
+            y = Math.abs(y);
+        }
         if (x == null || y == null) return;
         plot.buffer.push(x, y);
         plot._needsRedraw = true;
