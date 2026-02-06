@@ -5,6 +5,12 @@
 
 import { Matrix } from './Matrix.js';
 
+const DynamicIntegrationMethods = Object.freeze({
+    Auto: 'auto',
+    Trapezoidal: 'trapezoidal',
+    BackwardEuler: 'backward-euler'
+});
+
 export class MNASolver {
     constructor() {
         this.nodes = [];           // 节点列表
@@ -16,6 +22,7 @@ export class MNASolver {
         // gmin 稳定化：给每个非接地节点加一个极小的对地电导，避免“悬浮子电路”导致矩阵奇异
         // 取值为 1e-12 S (≈ 1e12Ω) 基本不影响正常高中电路数值，但能显著提升鲁棒性
         this.gmin = 1e-12;
+        this.hasConnectedSwitch = false;
     }
 
     /**
@@ -28,6 +35,7 @@ export class MNASolver {
         this.nodes = nodes;
         this.voltageSourceCount = 0;
         this.shortCircuitDetected = false;
+        this.hasConnectedSwitch = false;
         const isValidNode = (nodeIdx) => nodeIdx !== undefined && nodeIdx !== null && nodeIdx >= 0;
         
         // 检测并标记被短路的元器件（两端节点相同）
@@ -91,6 +99,22 @@ export class MNASolver {
 
             if (comp.type === 'Inductor' && !Number.isFinite(comp.prevCurrent)) {
                 comp.prevCurrent = Number.isFinite(comp.initialCurrent) ? comp.initialCurrent : 0;
+            }
+            if (comp.type === 'Inductor' && !Number.isFinite(comp.prevVoltage)) {
+                comp.prevVoltage = 0;
+            }
+            if ((comp.type === 'Capacitor' || comp.type === 'ParallelPlateCapacitor') && !Number.isFinite(comp.prevCurrent)) {
+                comp.prevCurrent = 0;
+            }
+            if ((comp.type === 'Capacitor' || comp.type === 'ParallelPlateCapacitor') && !Number.isFinite(comp.prevVoltage)) {
+                comp.prevVoltage = 0;
+            }
+            if (comp.type === 'Switch') {
+                const n1 = comp.nodes?.[0];
+                const n2 = comp.nodes?.[1];
+                if (isValidNode(n1) && isValidNode(n2)) {
+                    this.hasConnectedSwitch = true;
+                }
             }
         }
     }
@@ -373,33 +397,48 @@ export class MNASolver {
                 
             case 'Capacitor':
             case 'ParallelPlateCapacitor': {
-                // 使用后向欧拉法处理电容（支持可变电容：用“上一时刻电荷”而非“上一时刻电压”）
-                // I = dQ/dt,  Q = C * V
-                // 后向欧拉：I = (C_new * V_new - Q_prev) / dt
-                // 等效为：导纳 G = C_new / dt，并联电流源 Ieq = Q_prev / dt（方向：从负极到正极）
+                const method = this.resolveDynamicIntegrationMethod(comp);
                 const C = Math.max(1e-18, comp.capacitance || 0);
-                const Req = this.dt / C;
-                this.stampResistor(A, i1, i2, Req);
-
-                const Qprev = comp.prevCharge || 0;
-                const Ieq = Qprev / this.dt;
-                if (i1 >= 0) z[i1] += Ieq;
-                if (i2 >= 0) z[i2] -= Ieq;
+                if (method === DynamicIntegrationMethods.Trapezoidal) {
+                    // 梯形法伴随模型（Norton）：R = dt/(2C), Ieq = -(v_prev/R + i_prev)
+                    const Req = this.dt / (2 * C);
+                    this.stampResistor(A, i1, i2, Req);
+                    const prevVoltage = Number.isFinite(comp.prevVoltage) ? comp.prevVoltage : 0;
+                    const prevCurrent = Number.isFinite(comp.prevCurrent) ? comp.prevCurrent : 0;
+                    const Ieq = -(prevVoltage / Req + prevCurrent);
+                    this.stampCurrentSource(z, i1, i2, Ieq);
+                } else {
+                    // 后向欧拉：I = (C_new * V_new - Q_prev) / dt
+                    // 等效为：导纳 G = C_new / dt，并联电流源 Ieq = Q_prev / dt（方向：从负极到正极）
+                    const Req = this.dt / C;
+                    this.stampResistor(A, i1, i2, Req);
+                    const Qprev = comp.prevCharge || 0;
+                    const Ieq = Qprev / this.dt;
+                    if (i1 >= 0) z[i1] += Ieq;
+                    if (i2 >= 0) z[i2] -= Ieq;
+                }
                 break;
             }
 
             case 'Inductor': {
-                // 电感伴随模型（后向欧拉）：
-                // v = L*(i-i_prev)/dt => i = i_prev + (dt/L)*v
-                // 等效：并联导纳 G=dt/L + 电流源 I_prev（方向 n1->n2）
+                const method = this.resolveDynamicIntegrationMethod(comp);
                 const L = Math.max(1e-12, comp.inductance || 0);
-                const Req = L / this.dt;
-                this.stampResistor(A, i1, i2, Req);
-
                 const prevCurrent = Number.isFinite(comp.prevCurrent)
                     ? comp.prevCurrent
                     : (Number.isFinite(comp.initialCurrent) ? comp.initialCurrent : 0);
-                this.stampCurrentSource(z, i1, i2, prevCurrent);
+                if (method === DynamicIntegrationMethods.Trapezoidal) {
+                    // 梯形法伴随模型（Norton）：R = 2L/dt, Ieq = i_prev + v_prev/R
+                    const Req = (2 * L) / this.dt;
+                    this.stampResistor(A, i1, i2, Req);
+                    const prevVoltage = Number.isFinite(comp.prevVoltage) ? comp.prevVoltage : 0;
+                    const Ieq = prevCurrent + (prevVoltage / Req);
+                    this.stampCurrentSource(z, i1, i2, Ieq);
+                } else {
+                    // 后向欧拉伴随模型：R = L/dt, Ieq = i_prev
+                    const Req = L / this.dt;
+                    this.stampResistor(A, i1, i2, Req);
+                    this.stampCurrentSource(z, i1, i2, prevCurrent);
+                }
                 break;
             }
                 
@@ -654,25 +693,35 @@ export class MNASolver {
                 
             case 'Capacitor':
             case 'ParallelPlateCapacitor': {
-                // 电容电流 = dQ/dt,  Q = C * V（支持可变电容）
                 const C = comp.capacitance || 0;
+                const method = this.resolveDynamicIntegrationMethod(comp);
+                if (method === DynamicIntegrationMethods.Trapezoidal) {
+                    const Req = this.dt / (2 * Math.max(1e-18, C));
+                    const prevVoltage = Number.isFinite(comp.prevVoltage) ? comp.prevVoltage : 0;
+                    const prevCurrent = Number.isFinite(comp.prevCurrent) ? comp.prevCurrent : 0;
+                    const Ieq = -(prevVoltage / Req + prevCurrent);
+                    return dV / Req + Ieq;
+                }
+
+                // 后向欧拉：I = dQ/dt,  Q = C * V（支持可变电容）
                 const qPrev = comp.prevCharge || 0;
                 const qNew = C * dV;
                 const dQ = qNew - qPrev;
-
-                // 稳态检测：当电荷变化极小时，认为充电完成，电流为0
-                const steadyStateThreshold = 1e-12; // 1pC 阈值（足够小且更适配可变电容）
-                if (Math.abs(dQ) < steadyStateThreshold) {
-                    return 0;
-                }
                 return dQ / this.dt;
             }
 
             case 'Inductor': {
                 const L = Math.max(1e-12, comp.inductance || 0);
+                const method = this.resolveDynamicIntegrationMethod(comp);
                 const prevCurrent = Number.isFinite(comp.prevCurrent)
                     ? comp.prevCurrent
                     : (Number.isFinite(comp.initialCurrent) ? comp.initialCurrent : 0);
+                if (method === DynamicIntegrationMethods.Trapezoidal) {
+                    const Req = (2 * L) / this.dt;
+                    const prevVoltage = Number.isFinite(comp.prevVoltage) ? comp.prevVoltage : 0;
+                    const Ieq = prevCurrent + (prevVoltage / Req);
+                    return dV / Req + Ieq;
+                }
                 return prevCurrent + (this.dt / L) * dV;
             }
                 
@@ -713,8 +762,9 @@ export class MNASolver {
     /**
      * 更新动态元器件状态（用于瞬态分析）
      * @param {number[]} voltages - 当前节点电压
+     * @param {Map<string, number>} [currents] - 当前支路电流
      */
-    updateDynamicComponents(voltages) {
+    updateDynamicComponents(voltages, currents = null) {
         const isValidNode = (nodeIdx) => nodeIdx !== undefined && nodeIdx !== null && nodeIdx >= 0;
         for (const comp of this.components) {
             if (comp.type === 'Capacitor' || comp.type === 'ParallelPlateCapacitor') {
@@ -724,6 +774,13 @@ export class MNASolver {
                 const v = v1 - v2;
                 comp.prevVoltage = v;
                 comp.prevCharge = (comp.capacitance || 0) * v;
+                const measuredCurrent = currents && typeof currents.get === 'function'
+                    ? currents.get(comp.id)
+                    : undefined;
+                if (Number.isFinite(measuredCurrent)) {
+                    comp.prevCurrent = measuredCurrent;
+                }
+                comp._dynamicHistoryReady = true;
             }
             
             if (comp.type === 'Motor') {
@@ -751,12 +808,47 @@ export class MNASolver {
                 const v2 = voltages[comp.nodes[1]] || 0;
                 const dV = v1 - v2;
                 const L = Math.max(1e-12, comp.inductance || 0);
-                const prevCurrent = Number.isFinite(comp.prevCurrent)
-                    ? comp.prevCurrent
-                    : (Number.isFinite(comp.initialCurrent) ? comp.initialCurrent : 0);
-                comp.prevCurrent = prevCurrent + (this.dt / L) * dV;
+                const measuredCurrent = currents && typeof currents.get === 'function'
+                    ? currents.get(comp.id)
+                    : undefined;
+                if (Number.isFinite(measuredCurrent)) {
+                    comp.prevCurrent = measuredCurrent;
+                } else {
+                    const prevCurrent = Number.isFinite(comp.prevCurrent)
+                        ? comp.prevCurrent
+                        : (Number.isFinite(comp.initialCurrent) ? comp.initialCurrent : 0);
+                    comp.prevCurrent = prevCurrent + (this.dt / L) * dV;
+                }
+                comp.prevVoltage = dV;
+                comp._dynamicHistoryReady = true;
             }
         }
+    }
+
+    resolveDynamicIntegrationMethod(comp) {
+        if (!comp) return DynamicIntegrationMethods.BackwardEuler;
+        const methodRaw = typeof comp.integrationMethod === 'string'
+            ? comp.integrationMethod.toLowerCase()
+            : DynamicIntegrationMethods.Auto;
+        const historyReady = !!comp._dynamicHistoryReady;
+
+        if (this.hasConnectedSwitch) {
+            return DynamicIntegrationMethods.BackwardEuler;
+        }
+
+        if (methodRaw === DynamicIntegrationMethods.Trapezoidal) {
+            if (!historyReady) {
+                return DynamicIntegrationMethods.BackwardEuler;
+            }
+            return DynamicIntegrationMethods.Trapezoidal;
+        }
+        if (methodRaw === DynamicIntegrationMethods.BackwardEuler) {
+            return DynamicIntegrationMethods.BackwardEuler;
+        }
+        if (!historyReady) {
+            return DynamicIntegrationMethods.BackwardEuler;
+        }
+        return DynamicIntegrationMethods.Trapezoidal;
     }
 
     getSourceInstantVoltage(comp) {
