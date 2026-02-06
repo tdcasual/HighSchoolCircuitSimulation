@@ -1,0 +1,196 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-02-06T14:36:00.600Z",
+  "mode": "mock",
+  "scenarioCount": 3,
+  "totalQuestions": 6,
+  "passCount": 3,
+  "passRate": 0.5,
+  "avgLatencyMs": 0.5,
+  "avgAbsError": 0,
+  "scenarios": [
+    {
+      "id": "bridge_network",
+      "name": "桥式电阻网络",
+      "description": "五电阻桥式结构，适合验证节点电压与支路电流推理",
+      "valid": true,
+      "questionCount": 2,
+      "passCount": 1,
+      "passRate": 0.5,
+      "avgLatencyMs": 1,
+      "avgAbsError": 0,
+      "questions": [
+        {
+          "id": "q1",
+          "question": "R5 支路电流大约是多少 A？",
+          "latencyMs": 2,
+          "claimCount": 24,
+          "verifiedCount": 24,
+          "mismatchCount": 0,
+          "avgAbsError": 0,
+          "targetEvaluation": {
+            "total": 1,
+            "verified": 1,
+            "mismatch": 0,
+            "missing": 0,
+            "pass": true,
+            "details": [
+              {
+                "component": "R5",
+                "quantity": "current",
+                "status": "verified"
+              }
+            ]
+          },
+          "pass": true
+        },
+        {
+          "id": "q2",
+          "question": "R3 上的电压大约是多少 V？",
+          "latencyMs": 0,
+          "claimCount": 24,
+          "verifiedCount": 24,
+          "mismatchCount": 0,
+          "avgAbsError": 0,
+          "targetEvaluation": {
+            "total": 1,
+            "verified": 0,
+            "mismatch": 0,
+            "missing": 1,
+            "pass": false,
+            "details": [
+              {
+                "component": "R3",
+                "quantity": "voltage",
+                "status": "missing"
+              }
+            ]
+          },
+          "pass": false
+        }
+      ]
+    },
+    {
+      "id": "mixed_series_parallel",
+      "name": "混联分压电路",
+      "description": "并联支路后串联电阻的混联结构",
+      "valid": true,
+      "questionCount": 2,
+      "passCount": 1,
+      "passRate": 0.5,
+      "avgLatencyMs": 0.5,
+      "avgAbsError": 0,
+      "questions": [
+        {
+          "id": "q1",
+          "question": "R3 电流大约是多少 A？",
+          "latencyMs": 1,
+          "claimCount": 24,
+          "verifiedCount": 24,
+          "mismatchCount": 0,
+          "avgAbsError": 0,
+          "targetEvaluation": {
+            "total": 1,
+            "verified": 1,
+            "mismatch": 0,
+            "missing": 0,
+            "pass": true,
+            "details": [
+              {
+                "component": "R3",
+                "quantity": "current",
+                "status": "verified"
+              }
+            ]
+          },
+          "pass": true
+        },
+        {
+          "id": "q2",
+          "question": "R1 两端电压约为多少 V？",
+          "latencyMs": 0,
+          "claimCount": 24,
+          "verifiedCount": 24,
+          "mismatchCount": 0,
+          "avgAbsError": 0,
+          "targetEvaluation": {
+            "total": 1,
+            "verified": 0,
+            "mismatch": 0,
+            "missing": 1,
+            "pass": false,
+            "details": [
+              {
+                "component": "R1",
+                "quantity": "voltage",
+                "status": "missing"
+              }
+            ]
+          },
+          "pass": false
+        }
+      ]
+    },
+    {
+      "id": "rheostat_measurement",
+      "name": "滑变与仪表测量电路",
+      "description": "含滑动变阻器、电流表、电压表的教学典型电路",
+      "valid": true,
+      "questionCount": 2,
+      "passCount": 1,
+      "passRate": 0.5,
+      "avgLatencyMs": 0,
+      "avgAbsError": 0,
+      "questions": [
+        {
+          "id": "q1",
+          "question": "A1 读数大约是多少 A？",
+          "latencyMs": 0,
+          "claimCount": 24,
+          "verifiedCount": 24,
+          "mismatchCount": 0,
+          "avgAbsError": 0,
+          "targetEvaluation": {
+            "total": 1,
+            "verified": 1,
+            "mismatch": 0,
+            "missing": 0,
+            "pass": true,
+            "details": [
+              {
+                "component": "A1",
+                "quantity": "current",
+                "status": "verified"
+              }
+            ]
+          },
+          "pass": true
+        },
+        {
+          "id": "q2",
+          "question": "V1 读数大约是多少 V？",
+          "latencyMs": 0,
+          "claimCount": 24,
+          "verifiedCount": 24,
+          "mismatchCount": 0,
+          "avgAbsError": 0,
+          "targetEvaluation": {
+            "total": 1,
+            "verified": 0,
+            "mismatch": 0,
+            "missing": 1,
+            "pass": false,
+            "details": [
+              {
+                "component": "V1",
+                "quantity": "voltage",
+                "status": "missing"
+              }
+            ]
+          },
+          "pass": false
+        }
+      ]
+    }
+  ]
+}
