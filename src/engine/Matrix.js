@@ -48,61 +48,122 @@ export class Matrix {
      * @returns {number[]|null} 解向量，如果无解返回null
      */
     static solve(A, b) {
+        const factorization = Matrix.factorize(A);
+        if (!factorization) return null;
+        return Matrix.solveWithFactorization(factorization, b);
+    }
+
+    /**
+     * 对方阵进行 LU 分解（带部分主元选取）
+     * @param {number[][]} A - 方阵
+     * @param {{pivotEpsilon?: number, warnOnFailure?: boolean}} [options]
+     * @returns {{lu:number[][], pivot:number[], n:number, pivotEpsilon:number}|null}
+     */
+    static factorize(A, options = {}) {
         const n = A.length;
-        if (n === 0) return [];
+        if (n === 0) {
+            return {
+                lu: [],
+                pivot: [],
+                n: 0,
+                pivotEpsilon: 1e-15
+            };
+        }
 
-        // 创建增广矩阵 [A|b]
-        const augmented = A.map((row, i) => [...row, b[i]]);
+        const pivotEpsilon = Number.isFinite(options.pivotEpsilon) ? options.pivotEpsilon : 1e-15;
+        const warnOnFailure = options.warnOnFailure !== false;
 
-        // 高斯消元（带部分主元选取）
+        const lu = A.map((row) => [...row]);
+        const pivot = Array.from({ length: n }, (_, idx) => idx);
+
         for (let col = 0; col < n; col++) {
-            // 找到当前列中绝对值最大的行（部分主元选取）
             let maxRow = col;
-            let maxVal = Math.abs(augmented[col][col]);
-            
+            let maxVal = Math.abs(lu[col][col]);
+
             for (let row = col + 1; row < n; row++) {
-                const val = Math.abs(augmented[row][col]);
+                const val = Math.abs(lu[row][col]);
                 if (val > maxVal) {
                     maxVal = val;
                     maxRow = row;
                 }
             }
 
-            // 如果主元为零或接近零，矩阵可能奇异
-            // 注意：gmin 稳定化可能会让对角元达到 1e-12 量级；阈值应更小以避免误判。
-            if (maxVal < 1e-15) {
-                console.warn('Matrix is singular or nearly singular');
+            if (maxVal < pivotEpsilon) {
+                if (warnOnFailure) {
+                    console.warn('Matrix is singular or nearly singular');
+                }
                 return null;
             }
 
-            // 交换行
             if (maxRow !== col) {
-                [augmented[col], augmented[maxRow]] = [augmented[maxRow], augmented[col]];
+                [lu[col], lu[maxRow]] = [lu[maxRow], lu[col]];
+                [pivot[col], pivot[maxRow]] = [pivot[maxRow], pivot[col]];
             }
 
-            // 消元
-            const pivot = augmented[col][col];
+            const pivotValue = lu[col][col];
             for (let row = col + 1; row < n; row++) {
-                const factor = augmented[row][col] / pivot;
-                for (let j = col; j <= n; j++) {
-                    augmented[row][j] -= factor * augmented[col][j];
+                lu[row][col] /= pivotValue;
+                const factor = lu[row][col];
+                if (factor === 0) continue;
+                for (let j = col + 1; j < n; j++) {
+                    lu[row][j] -= factor * lu[col][j];
                 }
             }
         }
 
-        // 回代
-        const x = new Array(n);
-        for (let row = n - 1; row >= 0; row--) {
-            let sum = augmented[row][n];
-            for (let col = row + 1; col < n; col++) {
-                sum -= augmented[row][col] * x[col];
-            }
-            x[row] = sum / augmented[row][row];
+        return {
+            lu,
+            pivot,
+            n,
+            pivotEpsilon
+        };
+    }
+
+    /**
+     * 使用 LU 分解结果求解 Ax=b
+     * @param {{lu:number[][], pivot:number[], n:number, pivotEpsilon?:number}} factorization
+     * @param {number[]} b - 常数向量
+     * @returns {number[]|null}
+     */
+    static solveWithFactorization(factorization, b) {
+        if (!factorization || !Array.isArray(factorization.lu) || !Array.isArray(factorization.pivot)) {
+            return null;
         }
 
-        // 处理 NaN 和 Infinity
+        const n = factorization.n;
+        if (n === 0) return [];
+
+        const lu = factorization.lu;
+        const pivot = factorization.pivot;
+        const pivotEpsilon = Number.isFinite(factorization.pivotEpsilon) ? factorization.pivotEpsilon : 1e-15;
+
+        const y = new Array(n).fill(0);
+        const x = new Array(n).fill(0);
+
         for (let i = 0; i < n; i++) {
-            if (!isFinite(x[i])) {
+            const rhs = b[pivot[i]] ?? 0;
+            let sum = rhs;
+            for (let j = 0; j < i; j++) {
+                sum -= lu[i][j] * y[j];
+            }
+            y[i] = sum;
+        }
+
+        for (let i = n - 1; i >= 0; i--) {
+            let sum = y[i];
+            for (let j = i + 1; j < n; j++) {
+                sum -= lu[i][j] * x[j];
+            }
+            const pivotValue = lu[i][i];
+            if (Math.abs(pivotValue) < pivotEpsilon) {
+                console.warn('Matrix is singular or nearly singular');
+                return null;
+            }
+            x[i] = sum / pivotValue;
+        }
+
+        for (let i = 0; i < n; i++) {
+            if (!Number.isFinite(x[i])) {
                 x[i] = 0;
             }
         }
