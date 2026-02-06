@@ -8,6 +8,7 @@ import { Matrix } from './Matrix.js';
 import { createComponent } from '../components/Component.js';
 import { computeOverlapFractionFromOffsetPx, computeParallelPlateCapacitance } from '../utils/Physics.js';
 import { getTerminalWorldPosition } from '../utils/TerminalGeometry.js';
+import { normalizeCanvasPoint, pointKey, toCanvasInt } from '../utils/CanvasCoords.js';
 
 export class Circuit {
     constructor() {
@@ -33,6 +34,21 @@ export class Circuit {
      * @param {Object} component - 元器件对象
      */
     addComponent(component) {
+        if (!component || !component.id) return;
+        if (component) {
+            component.x = toCanvasInt(component.x || 0);
+            component.y = toCanvasInt(component.y || 0);
+            if (component.terminalExtensions && typeof component.terminalExtensions === 'object') {
+                for (const key of Object.keys(component.terminalExtensions)) {
+                    const ext = component.terminalExtensions[key];
+                    if (!ext || typeof ext !== 'object') continue;
+                    component.terminalExtensions[key] = {
+                        x: toCanvasInt(ext.x || 0),
+                        y: toCanvasInt(ext.y || 0)
+                    };
+                }
+            }
+        }
         this.components.set(component.id, component);
         this.rebuildNodes();
     }
@@ -51,6 +67,13 @@ export class Circuit {
      * @param {Object} wire - 导线对象
      */
     addWire(wire) {
+        if (!wire || !wire.id) return;
+        const a = normalizeCanvasPoint(wire.a);
+        const b = normalizeCanvasPoint(wire.b);
+        if (!a || !b) return;
+
+        wire.a = a;
+        wire.b = b;
         this.wires.set(wire.id, wire);
         this.rebuildNodes();
     }
@@ -81,14 +104,6 @@ export class Circuit {
         // Keep any terminal-bound wire endpoints synced to the current terminal geometry
         // before we rebuild the coordinate-based connectivity graph.
         this.syncWireEndpointsToTerminalRefs();
-
-        const pointKey = (pt) => {
-            if (!pt) return null;
-            const x = Number.isFinite(pt.x) ? Math.round(pt.x) : null;
-            const y = Number.isFinite(pt.y) ? Math.round(pt.y) : null;
-            if (x === null || y === null) return null;
-            return `${x},${y}`;
-        };
 
         // Union-find over "posts" (component terminals + wire endpoints).
         const parent = new Map(); // postId -> parentPostId
@@ -316,7 +331,9 @@ export class Circuit {
                 if (!comp) return;
                 const pos = getTerminalWorldPosition(comp, terminalIndex);
                 if (!pos) return;
-                wire[endKey] = { x: pos.x, y: pos.y };
+                const normalizedPos = normalizeCanvasPoint(pos);
+                if (!normalizedPos) return;
+                wire[endKey] = normalizedPos;
             };
             applyRef('a');
             applyRef('b');
@@ -822,14 +839,6 @@ export class Circuit {
         const nodeId = nodeWires[0]?.nodeIndex;
         if (nodeId === undefined || nodeId === null || nodeId < 0) return null;
 
-        const pointKey = (pt) => {
-            if (!pt) return null;
-            const x = Number.isFinite(pt.x) ? Math.round(pt.x) : null;
-            const y = Number.isFinite(pt.y) ? Math.round(pt.y) : null;
-            if (x === null || y === null) return null;
-            return `${x},${y}`;
-        };
-
         // Build vertices from wire endpoint coordinates within this electrical node.
         const keys = [];
         const indexOfKey = new Map(); // coordKey -> idx
@@ -1083,8 +1092,8 @@ export class Circuit {
                 id: comp.id,
                 type: comp.type,
                 label: comp.label || null,  // 包含自定义标签
-                x: comp.x,
-                y: comp.y,
+                x: toCanvasInt(comp.x),
+                y: toCanvasInt(comp.y),
                 rotation: comp.rotation || 0,
                 properties: this.getComponentProperties(comp),
                 display: comp.display || null,
@@ -1092,8 +1101,8 @@ export class Circuit {
             })),
             wires: Array.from(this.wires.values()).map(wire => ({
                 id: wire.id,
-                a: { x: wire?.a?.x ?? 0, y: wire?.a?.y ?? 0 },
-                b: { x: wire?.b?.x ?? 0, y: wire?.b?.y ?? 0 },
+                a: { x: toCanvasInt(wire?.a?.x ?? 0), y: toCanvasInt(wire?.a?.y ?? 0) },
+                b: { x: toCanvasInt(wire?.b?.x ?? 0), y: toCanvasInt(wire?.b?.y ?? 0) },
                 ...(wire?.aRef ? { aRef: wire.aRef } : {}),
                 ...(wire?.bRef ? { bRef: wire.bRef } : {})
             }))
@@ -1181,8 +1190,8 @@ export class Circuit {
             // 使用 createComponent 创建完整的元器件对象
             const comp = createComponent(
                 compData.type,
-                compData.x,
-                compData.y,
+                toCanvasInt(compData.x),
+                toCanvasInt(compData.y),
                 compData.id  // 使用保存的ID
             );
             
@@ -1215,7 +1224,15 @@ export class Circuit {
 
             // 恢复端子延伸
             if (compData.terminalExtensions) {
-                comp.terminalExtensions = compData.terminalExtensions;
+                // Normalize to integer pixels for stable connectivity.
+                const normalized = {};
+                for (const [k, v] of Object.entries(compData.terminalExtensions)) {
+                    if (!v || typeof v !== 'object') continue;
+                    const x = toCanvasInt(v.x || 0);
+                    const y = toCanvasInt(v.y || 0);
+                    normalized[k] = { x, y };
+                }
+                comp.terminalExtensions = normalized;
             }
             
             this.components.set(comp.id, comp);
@@ -1230,11 +1247,7 @@ export class Circuit {
         };
 
         const safePoint = (pt) => {
-            if (!pt) return null;
-            const x = Number(pt.x);
-            const y = Number(pt.y);
-            if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
-            return { x, y };
+            return normalizeCanvasPoint(pt);
         };
 
         const getTerminalPoint = (componentId, terminalIndex) => {

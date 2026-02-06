@@ -39,8 +39,10 @@ export function getTerminalLocalPosition(comp, terminalIndex) {
                 relY = 0;
             } else if (terminalIndex === 2) {
                 // position may be 0; do not use || 0.5
-                const pos = comp.position !== undefined ? comp.position : 0.5;
-                relX = -20 + 40 * pos;
+                const posRaw = comp.position !== undefined ? comp.position : 0.5;
+                const pos = Math.min(Math.max(posRaw, 0), 1);
+                // keep terminal coordinates integer to avoid "hidden rounding" connectivity
+                relX = Math.round(-20 + 40 * pos);
                 relY = -28;
             } else {
                 relX = 0;
@@ -64,7 +66,8 @@ export function getTerminalLocalPosition(comp, terminalIndex) {
         relY += comp.terminalExtensions[terminalIndex].y || 0;
     }
 
-    return { x: relX, y: relY };
+    // Normalize to integer pixels so "same coordinate" means exactly equal.
+    return { x: Math.round(relX), y: Math.round(relY) };
 }
 
 /**
@@ -78,12 +81,41 @@ export function getTerminalWorldPosition(comp, terminalIndex) {
     const local = getTerminalLocalPosition(comp, terminalIndex);
     if (!local) return null;
 
-    const rotation = (comp.rotation || 0) * Math.PI / 180;
-    const cos = Math.cos(rotation);
-    const sin = Math.sin(rotation);
+    const rot = ((comp.rotation || 0) % 360 + 360) % 360;
+    const cx = comp.x || 0;
+    const cy = comp.y || 0;
 
-    return {
-        x: (comp.x || 0) + local.x * cos - local.y * sin,
-        y: (comp.y || 0) + local.x * sin + local.y * cos
-    };
+    let x = cx;
+    let y = cy;
+
+    // Rotation is always in 90° steps in this project; avoid trig precision issues.
+    switch (rot) {
+        case 0:
+            x = cx + local.x;
+            y = cy + local.y;
+            break;
+        case 90:
+            x = cx - local.y;
+            y = cy + local.x;
+            break;
+        case 180:
+            x = cx - local.x;
+            y = cy - local.y;
+            break;
+        case 270:
+            x = cx + local.y;
+            y = cy - local.x;
+            break;
+        default: {
+            const rotation = rot * Math.PI / 180;
+            const cos = Math.cos(rotation);
+            const sin = Math.sin(rotation);
+            x = cx + local.x * cos - local.y * sin;
+            y = cy + local.x * sin + local.y * cos;
+            break;
+        }
+    }
+
+    // Keep all world-space terminals aligned to integer pixels.
+    return { x: Math.round(x), y: Math.round(y) };
 }

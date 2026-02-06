@@ -332,7 +332,11 @@ export const SVGRenderer = {
         g.appendChild(rect);
         
         // 滑块位置 - 限制在电阻体范围内，避免穿模
-        const sliderX = -20 + 40 * comp.position; // 从 -20 到 +20，留出边距
+        // position may be 0; do not use || 0.5
+        const posRaw = comp.position !== undefined ? comp.position : 0.5;
+        const pos = Math.min(Math.max(posRaw, 0), 1);
+        // keep terminal coordinates integer to avoid hidden rounding in connectivity
+        const sliderX = Math.round(-20 + 40 * pos); // 从 -20 到 +20，留出边距
         
         // 滑动杆（横跨电阻体上方）
         this.addLine(g, -25, -12, 25, -12, 1.5);
@@ -366,8 +370,8 @@ export const SVGRenderer = {
         if (comp.label) {
             this.addText(g, 0, 28, comp.label, 10, 'label');
         } else {
-            const displayR = comp.activeResistance !== undefined ? comp.activeResistance : 
-                (comp.minResistance + (comp.maxResistance - comp.minResistance) * comp.position);
+            const displayR = comp.activeResistance !== undefined ? comp.activeResistance :
+                (comp.minResistance + (comp.maxResistance - comp.minResistance) * pos);
             const directionMark = comp.resistanceDirection === 'slider-right-increase' ? '→↑' :
                                   comp.resistanceDirection === 'slider-right-decrease' ? '→↓' : '';
             this.addText(g, 0, 28, `${displayR.toFixed(1)}Ω ${directionMark}`, 10, 'label');

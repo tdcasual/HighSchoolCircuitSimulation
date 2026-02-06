@@ -3,7 +3,7 @@
  * 处理拖放、连线、选择等用户交互
  */
 
-import { createComponent, ComponentNames, ComponentDefaults, SVGRenderer } from '../components/Component.js';
+import { createComponent, ComponentNames, ComponentDefaults, SVGRenderer, updateIdCounterFromExisting } from '../components/Component.js';
 import { 
     createElement, 
     createPropertyRow, 
@@ -14,6 +14,7 @@ import {
     clearElement
 } from '../utils/SafeDOM.js';
 import { computeOverlapFractionFromOffsetPx, computeParallelPlateCapacitance } from '../utils/Physics.js';
+import { GRID_SIZE, normalizeCanvasPoint, snapToGrid, toCanvasInt } from '../utils/CanvasCoords.js';
 
 export class InteractionManager {
     constructor(app) {
@@ -31,6 +32,13 @@ export class InteractionManager {
         this.dragOffset = { x: 0, y: 0 };
         this.selectedComponent = null;
         this.selectedWire = null;
+
+        // Undo/Redo history (circuit state snapshots)
+        this.historyUndo = [];
+        this.historyRedo = [];
+        this.historyMax = 100;
+        this.historyTransaction = null; // { label, beforeState, beforeKey, selectionBefore }
+        this.isRestoringHistory = false;
 
         // 平行板电容探索模式：拖动极板（使用局部 document 监听实现）
         
@@ -193,8 +201,8 @@ export class InteractionManager {
             // 转换为画布坐标
             const canvasX = (screenX - this.viewOffset.x) / this.scale;
             const canvasY = (screenY - this.viewOffset.y) / this.scale;
-            const x = Math.round(canvasX / 20) * 20;
-            const y = Math.round(canvasY / 20) * 20;
+            const x = snapToGrid(canvasX, GRID_SIZE);
+            const y = snapToGrid(canvasY, GRID_SIZE);
             
             if (type === 'Wire') {
                 if (typeof this.addWireAt === 'function') {
@@ -413,6 +421,23 @@ export class InteractionManager {
             if (isEditing) {
                 return; // 让输入框正常处理键盘事件
             }
+
+            // Undo / Redo
+            const modKey = e.metaKey || e.ctrlKey;
+            if (modKey && (e.key === 'z' || e.key === 'Z')) {
+                e.preventDefault();
+                if (e.shiftKey) {
+                    this.redo();
+                } else {
+                    this.undo();
+                }
+                return;
+            }
+            if (modKey && (e.key === 'y' || e.key === 'Y')) {
+                e.preventDefault();
+                this.redo();
+                return;
+            }
             
             // Delete键删除选中的元器件
             if (e.key === 'Delete' || e.key === 'Backspace') {
@@ -448,6 +473,17 @@ export class InteractionManager {
         e.stopPropagation();
 
 	        const target = e.target;
+        const componentGroup = target.closest('.component');
+
+        // Alt + 点击端子：直接进入端子延长（优先于右键平移）
+        if (e.altKey && target.classList.contains('terminal') && componentGroup) {
+            const componentId = componentGroup.dataset.id;
+            const terminalIndex = parseInt(target.dataset.terminal, 10);
+            if (!isNaN(terminalIndex) && terminalIndex >= 0) {
+                this.startTerminalExtend(componentId, terminalIndex, e);
+                return;
+            }
+        }
 
 	        // 右键或中键 - 直接开始拖动画布
 	        if (e.button === 1 || e.button === 2) {
@@ -466,9 +502,8 @@ export class InteractionManager {
 	        // - Alt + 拖动端子：延长/缩短引脚
 	        // - 普通点击端子：仅选中元器件（避免误拖动元器件）
 	        if (target.classList.contains('terminal')) {
-	            const componentG = target.closest('.component');
-	            if (componentG) {
-	                const componentId = componentG.dataset.id;
+	            if (componentGroup) {
+	                const componentId = componentGroup.dataset.id;
 	                const terminalIndex = parseInt(target.dataset.terminal, 10);
 	                if (e.altKey) {
 	                    if (!isNaN(terminalIndex) && terminalIndex >= 0) {
@@ -480,30 +515,35 @@ export class InteractionManager {
 	                return;
 	            }
 	        }
+
+        // Alt + 点击元器件本体：自动选择最近端子进入延长模式（降低操作门槛）
+        if (e.altKey && componentGroup) {
+            const componentId = componentGroup.dataset.id;
+            if (this.startNearestTerminalExtend(componentId, e)) {
+                return;
+            }
+        }
 	        
 	        // 检查是否点击了滑动变阻器的滑块
 	        if (target.classList.contains('rheostat-slider')) {
-	            const componentG = target.closest('.component');
-            if (componentG) {
-                this.startRheostatDrag(componentG.dataset.id, e);
+            if (componentGroup) {
+                this.startRheostatDrag(componentGroup.dataset.id, e);
                 return;
             }
         }
         
         // 检查是否点击了开关（切换开关状态）
         if (target.classList.contains('switch-blade') || target.classList.contains('switch-touch')) {
-            const componentG = target.closest('.component');
-            if (componentG) {
-                this.toggleSwitch(componentG.dataset.id);
+            if (componentGroup) {
+                this.toggleSwitch(componentGroup.dataset.id);
                 return;
             }
         }
 
         // 平行板电容探索模式：拖动可动极板
         if (target.classList.contains('plate-movable') && target.dataset.role === 'plate-movable') {
-            const componentG = target.closest('.component');
-            if (componentG) {
-                const compId = componentG.dataset.id;
+            if (componentGroup) {
+                const compId = componentGroup.dataset.id;
                 const comp = this.circuit.getComponent(compId);
                 if (comp && comp.type === 'ParallelPlateCapacitor' && comp.explorationMode) {
                     this.startParallelPlateCapacitorDrag(compId, e);
@@ -526,9 +566,8 @@ export class InteractionManager {
         }
         
         // 检查是否点击了元器件
-        const componentG = target.closest('.component');
-        if (componentG) {
-            this.startDragging(componentG, e);
+        if (componentGroup) {
+            this.startDragging(componentGroup, e);
             return;
         }
         
@@ -549,6 +588,39 @@ export class InteractionManager {
         
         // 左键点击空白处取消选择
         this.clearSelection();
+    }
+
+    /**
+     * Alt+点击元器件本体时，自动选最近端子进入延长模式。
+     * @param {string} componentId
+     * @param {MouseEvent} e
+     * @returns {boolean}
+     */
+    startNearestTerminalExtend(componentId, e) {
+        const comp = this.circuit.getComponent(componentId);
+        if (!comp) return false;
+
+        const terminalCount = comp.type === 'Rheostat' ? 3 : 2;
+        if (terminalCount <= 0) return false;
+
+        const canvas = this.screenToCanvas(e.clientX, e.clientY);
+        const threshold = 28 / Math.max(this.scale || 1, 0.1);
+        let bestIndex = -1;
+        let bestDist = Infinity;
+
+        for (let i = 0; i < terminalCount; i++) {
+            const pos = this.renderer.getTerminalPosition(componentId, i);
+            if (!pos) continue;
+            const d = Math.hypot(canvas.x - pos.x, canvas.y - pos.y);
+            if (d < bestDist) {
+                bestDist = d;
+                bestIndex = i;
+            }
+        }
+
+        if (bestIndex < 0 || bestDist > threshold) return false;
+        this.startTerminalExtend(componentId, bestIndex, e);
+        return true;
     }
     
     /**
@@ -743,8 +815,8 @@ export class InteractionManager {
 
             const rawDx = canvasX - (drag.startCanvas?.x || 0);
             const rawDy = canvasY - (drag.startCanvas?.y || 0);
-            const snappedDx = Math.round(rawDx / 20) * 20;
-            const snappedDy = Math.round(rawDy / 20) * 20;
+            const snappedDx = snapToGrid(rawDx, GRID_SIZE);
+            const snappedDy = snapToGrid(rawDy, GRID_SIZE);
 
             // Avoid accidental micro-moves: only start applying translation after threshold.
             if (movedScreen < moveThreshold && snappedDx === 0 && snappedDy === 0) {
@@ -789,6 +861,10 @@ export class InteractionManager {
                     newY = alignment.snapY;
                 }
 
+                // Normalize to integer pixels to avoid hidden rounding in node connectivity.
+                newX = toCanvasInt(newX);
+                newY = toCanvasInt(newY);
+
                 // 黑箱：整体移动（包含盒内元件与内部导线控制点）
                 if (comp.type === 'BlackBox' && this.dragGroup && this.dragGroup.boxId === comp.id) {
                     const dx = newX - (comp.x || 0);
@@ -801,8 +877,8 @@ export class InteractionManager {
                     for (const id of this.dragGroup.componentIds) {
                         const inner = this.circuit.getComponent(id);
                         if (!inner) continue;
-                        inner.x = (inner.x || 0) + dx;
-                        inner.y = (inner.y || 0) + dy;
+                        inner.x = toCanvasInt((inner.x || 0) + dx);
+                        inner.y = toCanvasInt((inner.y || 0) + dy);
                         this.renderer.updateComponentTransform(inner);
                     }
 
@@ -812,10 +888,16 @@ export class InteractionManager {
                         const mask = this.dragGroup.wireEndpointMask?.get(wireId);
                         if (!wire || !mask) continue;
                         if (mask.aInside && wire.a) {
-                            wire.a = { x: (wire.a.x || 0) + dx, y: (wire.a.y || 0) + dy };
+                            wire.a = {
+                                x: toCanvasInt((wire.a.x || 0) + dx),
+                                y: toCanvasInt((wire.a.y || 0) + dy)
+                            };
                         }
                         if (mask.bInside && wire.b) {
-                            wire.b = { x: (wire.b.x || 0) + dx, y: (wire.b.y || 0) + dy };
+                            wire.b = {
+                                x: toCanvasInt((wire.b.x || 0) + dx),
+                                y: toCanvasInt((wire.b.y || 0) + dy)
+                            };
                         }
                     }
 
@@ -840,7 +922,13 @@ export class InteractionManager {
         
         // 连线预览
         if (this.isWiring && this.wireStart && this.tempWire) {
-            this.renderer.updateTempWire(this.tempWire, this.wireStart.x, this.wireStart.y, canvasX, canvasY);
+            const preview = this.snapPoint(canvasX, canvasY, { allowWireSegmentSnap: true });
+            this.renderer.updateTempWire(this.tempWire, this.wireStart.x, this.wireStart.y, preview.x, preview.y);
+            if (preview.snap?.type === 'terminal') {
+                this.renderer.highlightTerminal(preview.snap.componentId, preview.snap.terminalIndex);
+            } else {
+                this.renderer.clearTerminalHighlight();
+            }
         }
     }
 
@@ -859,7 +947,9 @@ export class InteractionManager {
         if (this.isDraggingWireEndpoint) {
             this.isDraggingWireEndpoint = false;
             this.wireEndpointDrag = null;
+            this.renderer.clearTerminalHighlight();
             this.circuit.rebuildNodes();
+            this.commitHistoryTransaction();
             return;
         }
 
@@ -868,6 +958,7 @@ export class InteractionManager {
             this.isDraggingWire = false;
             this.wireDrag = null;
             this.circuit.rebuildNodes();
+            this.commitHistoryTransaction();
             return;
         }
         
@@ -879,6 +970,7 @@ export class InteractionManager {
             this.dragGroup = null;
             this.hideAlignmentGuides(); // 隐藏对齐辅助线
             this.circuit.rebuildNodes();
+            this.commitHistoryTransaction();
         }
         
         // 结束连线
@@ -911,7 +1003,7 @@ export class InteractionManager {
                 }
             } else {
                 const canvasCoords = this.screenToCanvas(e.clientX, e.clientY);
-                const snapped = this.snapPoint(canvasCoords.x, canvasCoords.y);
+                const snapped = this.snapPoint(canvasCoords.x, canvasCoords.y, { allowWireSegmentSnap: true });
                 this.finishWiringToPoint(snapped);
                 return;
             }
@@ -929,17 +1021,24 @@ export class InteractionManager {
         if (this.isDraggingWireEndpoint) {
             this.isDraggingWireEndpoint = false;
             this.wireEndpointDrag = null;
+            this.renderer.clearTerminalHighlight();
             this.circuit.rebuildNodes();
+            this.commitHistoryTransaction();
         }
         if (this.isDraggingWire) {
             this.isDraggingWire = false;
             this.wireDrag = null;
             this.circuit.rebuildNodes();
+            this.commitHistoryTransaction();
         }
         if (this.isDragging) {
             this.isDragging = false;
             this.dragTarget = null;
             this.dragGroup = null;
+            this.isDraggingComponent = false;
+            this.hideAlignmentGuides();
+            this.circuit.rebuildNodes();
+            this.commitHistoryTransaction();
         }
     }
 
@@ -992,15 +1091,17 @@ export class InteractionManager {
     addComponent(type, x, y) {
         console.log('Adding component:', type, 'at', x, y);
         try {
-            const comp = createComponent(type, x, y);
-            console.log('Created component:', comp);
-            this.circuit.addComponent(comp);
-            const svgElement = this.renderer.addComponent(comp);
-            console.log('Rendered SVG element:', svgElement);
-            this.selectComponent(comp.id);
-            this.app.observationPanel?.refreshComponentOptions();
-            this.app.observationPanel?.refreshDialGauges();
-            this.updateStatus(`已添加 ${ComponentNames[type]}`);
+            this.runWithHistory(`添加${ComponentNames[type] || type}`, () => {
+                const comp = createComponent(type, toCanvasInt(x), toCanvasInt(y));
+                console.log('Created component:', comp);
+                this.circuit.addComponent(comp);
+                const svgElement = this.renderer.addComponent(comp);
+                console.log('Rendered SVG element:', svgElement);
+                this.selectComponent(comp.id);
+                this.app.observationPanel?.refreshComponentOptions();
+                this.app.observationPanel?.refreshDialGauges();
+                this.updateStatus(`已添加 ${ComponentNames[type]}`);
+            });
         } catch (error) {
             console.error('Error adding component:', error);
             this.updateStatus(`添加失败: ${error.message}`);
@@ -1011,25 +1112,29 @@ export class InteractionManager {
      * 删除元器件
      */
     deleteComponent(id) {
-        this.circuit.removeComponent(id);
-        this.renderer.removeComponent(id);
+        this.runWithHistory('删除元器件', () => {
+            this.circuit.removeComponent(id);
+            this.renderer.removeComponent(id);
 
-        // Model C: wires are independent segments; deleting a component does not delete wires.
-        this.renderer.renderWires();
-        this.clearSelection();
-        this.app.observationPanel?.refreshComponentOptions();
-        this.app.observationPanel?.refreshDialGauges();
-        this.updateStatus('已删除元器件');
+            // Model C: wires are independent segments; deleting a component does not delete wires.
+            this.renderer.renderWires();
+            this.clearSelection();
+            this.app.observationPanel?.refreshComponentOptions();
+            this.app.observationPanel?.refreshDialGauges();
+            this.updateStatus('已删除元器件');
+        });
     }
 
     /**
      * 删除导线
      */
     deleteWire(id) {
-        this.circuit.removeWire(id);
-        this.renderer.removeWire(id);
-        this.clearSelection();
-        this.updateStatus('已删除导线');
+        this.runWithHistory('删除导线', () => {
+            this.circuit.removeWire(id);
+            this.renderer.removeWire(id);
+            this.clearSelection();
+            this.updateStatus('已删除导线');
+        });
     }
 
     /**
@@ -1038,10 +1143,13 @@ export class InteractionManager {
     rotateComponent(id) {
         const comp = this.circuit.getComponent(id);
         if (comp) {
-            comp.rotation = ((comp.rotation || 0) + 90) % 360;
-            this.renderer.refreshComponent(comp);
-            this.renderer.updateConnectedWires(id);
-            this.renderer.setSelected(id, true);
+            this.runWithHistory('旋转元器件', () => {
+                comp.rotation = ((comp.rotation || 0) + 90) % 360;
+                this.renderer.refreshComponent(comp);
+                this.renderer.updateConnectedWires(id);
+                this.renderer.setSelected(id, true);
+                this.circuit.rebuildNodes();
+            });
         }
     }
 
@@ -1051,11 +1159,13 @@ export class InteractionManager {
     toggleSwitch(id) {
         const comp = this.circuit.getComponent(id);
         if (comp && comp.type === 'Switch') {
-            comp.closed = !comp.closed;
-            this.renderer.refreshComponent(comp);
-            this.renderer.setSelected(id, true);
-            this.selectComponent(id);
-            this.updateStatus(`开关已${comp.closed ? '闭合' : '断开'}`);
+            this.runWithHistory('切换开关', () => {
+                comp.closed = !comp.closed;
+                this.renderer.refreshComponent(comp);
+                this.renderer.setSelected(id, true);
+                this.selectComponent(id);
+                this.updateStatus(`开关已${comp.closed ? '闭合' : '断开'}`);
+            });
         }
     }
 
@@ -1071,6 +1181,8 @@ export class InteractionManager {
         this.dragTarget = id;
         this.isDraggingComponent = true; // 标记正在拖动元器件
         this.dragGroup = null;
+
+        this.beginHistoryTransaction('移动元器件');
         
         // 使用统一的坐标转换，计算鼠标相对于元器件中心的偏移
         const canvasCoords = this.screenToCanvas(e.clientX, e.clientY);
@@ -1118,7 +1230,7 @@ export class InteractionManager {
         this.hideAlignmentGuides();
         this.renderer.clearTerminalHighlight();
 
-        const start = this.snapPoint(point.x, point.y);
+        const start = this.snapPoint(point.x, point.y, { allowWireSegmentSnap: true });
 
         this.isWiring = true;
         this.wireStart = { x: start.x, y: start.y, snap: start.snap || null };
@@ -1141,89 +1253,121 @@ export class InteractionManager {
         }
 
         const start = { x: this.wireStart.x, y: this.wireStart.y };
-        const end = this.snapPoint(point.x, point.y);
+        const end = this.snapPoint(point.x, point.y, { allowWireSegmentSnap: true });
         const dist = Math.hypot(end.x - start.x, end.y - start.y);
         if (dist < 1e-6) {
             this.cancelWiring();
             return;
         }
 
-        const ensureUniqueWireId = (baseId) => {
-            if (!this.circuit.getWire(baseId)) return baseId;
-            let i = 1;
-            while (this.circuit.getWire(`${baseId}_${i}`)) i++;
-            return `${baseId}_${i}`;
-        };
-
-        // Auto-route: prefer orthogonal (Manhattan) wiring with a single corner.
-        const points = [{ x: start.x, y: start.y }];
-        if (start.x !== end.x && start.y !== end.y) {
-            const dx = end.x - start.x;
-            const dy = end.y - start.y;
-            const horizontalFirst = Math.abs(dx) >= Math.abs(dy);
-            const corner = horizontalFirst
-                ? { x: end.x, y: start.y }
-                : { x: start.x, y: end.y };
-            points.push(corner);
-        }
-        points.push({ x: end.x, y: end.y });
-
-        const baseId = `wire_${Date.now()}`;
-        const createdIds = [];
-        for (let i = 0; i < points.length - 1; i++) {
-            const a = points[i];
-            const b = points[i + 1];
-            const segDist = Math.hypot(b.x - a.x, b.y - a.y);
-            if (segDist < 1e-6) continue;
-
-            const id = ensureUniqueWireId(i === 0 ? baseId : `${baseId}_${i}`);
-            const wire = {
-                id,
-                a: { x: a.x, y: a.y },
-                b: { x: b.x, y: b.y }
+        this.runWithHistory('添加导线', () => {
+            const ensureUniqueWireId = (baseId = `wire_${Date.now()}`) => {
+                if (!this.circuit.getWire(baseId)) return baseId;
+                let i = 1;
+                while (this.circuit.getWire(`${baseId}_${i}`)) i++;
+                return `${baseId}_${i}`;
             };
 
-            // Bind only the outer endpoints to terminals so wires follow component moves/terminal extension.
-            if (i === 0 && this.wireStart.snap && this.wireStart.snap.type === 'terminal') {
-                wire.aRef = {
-                    componentId: this.wireStart.snap.componentId,
-                    terminalIndex: this.wireStart.snap.terminalIndex
-                };
+            let startPoint = { x: start.x, y: start.y };
+            let endPoint = { x: end.x, y: end.y };
+
+            if (this.wireStart.snap?.type === 'wire-segment') {
+                const split = this.splitWireAtPointInternal(
+                    this.wireStart.snap.wireId,
+                    startPoint.x,
+                    startPoint.y,
+                    { ensureUniqueWireId }
+                );
+                if (split?.point) startPoint = split.point;
             }
-            if (i === points.length - 2 && end.snap && end.snap.type === 'terminal') {
-                wire.bRef = {
-                    componentId: end.snap.componentId,
-                    terminalIndex: end.snap.terminalIndex
-                };
+            if (end.snap?.type === 'wire-segment') {
+                const split = this.splitWireAtPointInternal(
+                    end.snap.wireId,
+                    endPoint.x,
+                    endPoint.y,
+                    { ensureUniqueWireId }
+                );
+                if (split?.point) endPoint = split.point;
             }
 
-            this.circuit.addWire(wire);
-            this.renderer.addWire(wire);
-            createdIds.push(id);
-        }
+            if (Math.hypot(endPoint.x - startPoint.x, endPoint.y - startPoint.y) < 1e-6) {
+                this.cancelWiring();
+                return;
+            }
 
-        this.cancelWiring();
-        if (createdIds.length > 0) {
-            this.selectWire(createdIds[createdIds.length - 1]);
-        }
-        this.updateStatus('已添加导线');
+            // Auto-route: prefer orthogonal (Manhattan) wiring with a single corner.
+            const points = [{ x: startPoint.x, y: startPoint.y }];
+            if (startPoint.x !== endPoint.x && startPoint.y !== endPoint.y) {
+                const dx = endPoint.x - startPoint.x;
+                const dy = endPoint.y - startPoint.y;
+                const horizontalFirst = Math.abs(dx) >= Math.abs(dy);
+                const corner = horizontalFirst
+                    ? { x: endPoint.x, y: startPoint.y }
+                    : { x: startPoint.x, y: endPoint.y };
+                points.push(corner);
+            }
+            points.push({ x: endPoint.x, y: endPoint.y });
+
+            const baseId = `wire_${Date.now()}`;
+            const createdIds = [];
+            for (let i = 0; i < points.length - 1; i++) {
+                const a = points[i];
+                const b = points[i + 1];
+                const segDist = Math.hypot(b.x - a.x, b.y - a.y);
+                if (segDist < 1e-6) continue;
+
+                const id = ensureUniqueWireId(i === 0 ? baseId : `${baseId}_${i}`);
+                const wire = {
+                    id,
+                    a: { x: a.x, y: a.y },
+                    b: { x: b.x, y: b.y }
+                };
+
+                // Bind only the outer endpoints to terminals so wires follow component moves/terminal extension.
+                if (i === 0 && this.wireStart.snap && this.wireStart.snap.type === 'terminal') {
+                    wire.aRef = {
+                        componentId: this.wireStart.snap.componentId,
+                        terminalIndex: this.wireStart.snap.terminalIndex
+                    };
+                }
+                if (i === points.length - 2 && end.snap && end.snap.type === 'terminal') {
+                    wire.bRef = {
+                        componentId: end.snap.componentId,
+                        terminalIndex: end.snap.terminalIndex
+                    };
+                }
+
+                this.circuit.addWire(wire);
+                this.renderer.addWire(wire);
+                createdIds.push(id);
+            }
+
+            this.cancelWiring();
+            if (createdIds.length > 0) {
+                this.selectWire(createdIds[createdIds.length - 1]);
+            }
+            this.updateStatus('已添加导线');
+        });
     }
 
     /**
      * 从工具箱创建一条独立导线（Model C）
      */
     addWireAt(x, y) {
-        const start = { x: x - 30, y };
-        const end = { x: x + 30, y };
-        const wire = {
-            id: `wire_${Date.now()}`,
-            a: start,
-            b: end
-        };
-        this.circuit.addWire(wire);
-        this.renderer.addWire(wire);
-        this.selectWire(wire.id);
-        this.updateStatus('已添加导线');
+        this.runWithHistory('添加导线', () => {
+            const cy = toCanvasInt(y);
+            const start = { x: toCanvasInt(x - 30), y: cy };
+            const end = { x: toCanvasInt(x + 30), y: cy };
+            const wire = {
+                id: `wire_${Date.now()}`,
+                a: start,
+                b: end
+            };
+            this.circuit.addWire(wire);
+            this.renderer.addWire(wire);
+            this.selectWire(wire.id);
+            this.updateStatus('已添加导线');
+        });
     }
 
     /**
@@ -1232,6 +1376,8 @@ export class InteractionManager {
     startWireDrag(wireId, e) {
         const wire = this.circuit.getWire(wireId);
         if (!wire || !wire.a || !wire.b) return;
+
+        this.beginHistoryTransaction('移动导线');
 
         this.isDraggingWire = true;
         this.wireDrag = {
@@ -1257,12 +1403,14 @@ export class InteractionManager {
 	        const wire = this.circuit.getWire(wireId);
 	        if (!wire || (end !== 'a' && end !== 'b')) return;
 
+	        this.beginHistoryTransaction('移动导线端点');
+
 	        const origin = wire[end];
 	        if (!origin) return;
 
 	        // Default: drag the whole junction (all endpoints at the same coordinate).
 	        // Hold Alt while dragging to detach and move only this single endpoint.
-	        const keyOf = (pt) => `${Math.round(pt.x)},${Math.round(pt.y)}`;
+	        const keyOf = (pt) => `${toCanvasInt(pt.x)},${toCanvasInt(pt.y)}`;
 	        const originKey = keyOf(origin);
 	        const affected = [];
 	        if (e && e.altKey) {
@@ -1297,7 +1445,7 @@ export class InteractionManager {
 	    }
 
     /**
-     * 吸附点：优先吸附到端子/导线端点，否则吸附到网格
+     * 吸附点：优先吸附到端子/导线端点，可选吸附到导线中段，否则吸附到网格
      */
 	    snapPoint(x, y, options = {}) {
 	        const threshold = 15;
@@ -1305,10 +1453,11 @@ export class InteractionManager {
         const nearbyTerminal = this.findNearbyTerminal(x, y, threshold);
         if (nearbyTerminal) {
             const pos = this.renderer.getTerminalPosition(nearbyTerminal.componentId, nearbyTerminal.terminalIndex);
-            if (pos) {
+            const normalizedPos = normalizeCanvasPoint(pos);
+            if (normalizedPos) {
                 return {
-                    x: pos.x,
-                    y: pos.y,
+                    x: normalizedPos.x,
+                    y: normalizedPos.y,
                     snap: {
                         type: 'terminal',
                         componentId: nearbyTerminal.componentId,
@@ -1326,18 +1475,37 @@ export class InteractionManager {
 	            options.excludeEnd,
 	            options.excludeWireEndpoints
 	        );
-        if (nearbyEndpoint) {
-            return {
-                x: nearbyEndpoint.x,
-                y: nearbyEndpoint.y,
-                snap: { type: 'wire-endpoint', wireId: nearbyEndpoint.wireId, end: nearbyEndpoint.end }
-            };
+	        if (nearbyEndpoint) {
+            const normalizedEndpoint = normalizeCanvasPoint(nearbyEndpoint);
+            if (!normalizedEndpoint) {
+                return {
+                    x: snapToGrid(x, GRID_SIZE),
+                    y: snapToGrid(y, GRID_SIZE),
+                    snap: { type: 'grid' }
+                };
+            }
+	            return {
+	                x: normalizedEndpoint.x,
+	                y: normalizedEndpoint.y,
+	                snap: { type: 'wire-endpoint', wireId: nearbyEndpoint.wireId, end: nearbyEndpoint.end }
+	            };
+	        }
+
+        if (options.allowWireSegmentSnap) {
+            const nearbySegment = this.findNearbyWireSegment(x, y, threshold, options.excludeWireId);
+            if (nearbySegment) {
+                return {
+                    x: nearbySegment.x,
+                    y: nearbySegment.y,
+                    snap: { type: 'wire-segment', wireId: nearbySegment.wireId }
+                };
+            }
         }
 
-        return {
-            x: Math.round(x / 20) * 20,
-            y: Math.round(y / 20) * 20,
-            snap: { type: 'grid' }
+	        return {
+	            x: snapToGrid(x, GRID_SIZE),
+	            y: snapToGrid(y, GRID_SIZE),
+	            snap: { type: 'grid' }
         };
 	    }
 
@@ -1350,7 +1518,7 @@ export class InteractionManager {
 	            for (const end of ['a', 'b']) {
 	                if (excludeWireEndpoints && excludeWireEndpoints.has(`${wire.id}:${end}`)) continue;
 	                if (excludeWireId && wire.id === excludeWireId && excludeEnd === end) continue;
-	                const pt = wire[end];
+	                const pt = normalizeCanvasPoint(wire[end]);
 	                if (!pt) continue;
 	                const dist = Math.hypot(x - pt.x, y - pt.y);
                 if (dist < threshold && dist < bestDist) {
@@ -1359,6 +1527,45 @@ export class InteractionManager {
                 }
             }
         }
+	        return best;
+	    }
+
+    /**
+     * 查找附近导线线段上的最近点（用于自动分割连线）
+     */
+    findNearbyWireSegment(x, y, threshold, excludeWireId = null) {
+        let best = null;
+        let bestDist = Infinity;
+
+        for (const wire of this.circuit.getAllWires()) {
+            if (!wire || !wire.a || !wire.b) continue;
+            if (excludeWireId && wire.id === excludeWireId) continue;
+
+            const a = normalizeCanvasPoint(wire.a);
+            const b = normalizeCanvasPoint(wire.b);
+            if (!a || !b) continue;
+
+            const dx = b.x - a.x;
+            const dy = b.y - a.y;
+            const len2 = dx * dx + dy * dy;
+            if (len2 < 1e-9) continue;
+
+            const tRaw = ((x - a.x) * dx + (y - a.y) * dy) / len2;
+            const t = Math.max(0, Math.min(1, tRaw));
+            const projX = toCanvasInt(a.x + dx * t);
+            const projY = toCanvasInt(a.y + dy * t);
+            const dist = Math.hypot(x - projX, y - projY);
+            if (dist >= threshold || dist >= bestDist) continue;
+
+            // 贴近端点的情况交给端点吸附处理
+            const distToA = Math.hypot(projX - a.x, projY - a.y);
+            const distToB = Math.hypot(projX - b.x, projY - b.y);
+            if (distToA < 3 || distToB < 3) continue;
+
+            bestDist = dist;
+            best = { wireId: wire.id, x: projX, y: projY };
+        }
+
         return best;
     }
 
@@ -1369,25 +1576,65 @@ export class InteractionManager {
         const wire = this.circuit.getWire(wireId);
         if (!wire || !wire.a || !wire.b) return;
 
-        const split = this.snapPoint(x, y, { excludeWireId: wireId });
+        this.runWithHistory('分割导线', () => {
+            const result = this.splitWireAtPointInternal(wireId, x, y);
+            if (result?.created) {
+                this.updateStatus('导线已分割');
+            }
+        });
+    }
 
-        // Keep split aligned for axis-aligned wires.
-        if (wire.a.x === wire.b.x) split.x = wire.a.x;
-        if (wire.a.y === wire.b.y) split.y = wire.a.y;
+    /**
+     * 分割导线内部实现（不记录历史）。
+     */
+    splitWireAtPointInternal(wireId, x, y, options = {}) {
+        const wire = this.circuit.getWire(wireId);
+        if (!wire || !wire.a || !wire.b) return null;
+
+        const makeId = typeof options.ensureUniqueWireId === 'function'
+            ? options.ensureUniqueWireId
+            : (baseId = `wire_${Date.now()}`) => {
+                if (!this.circuit.getWire(baseId)) return baseId;
+                let i = 1;
+                while (this.circuit.getWire(`${baseId}_${i}`)) i++;
+                return `${baseId}_${i}`;
+            };
+
+        const a = normalizeCanvasPoint(wire.a);
+        const b = normalizeCanvasPoint(wire.b);
+        if (!a || !b) return null;
+
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const len2 = dx * dx + dy * dy;
+        if (len2 < 1e-9) return null;
+
+        // Project click point to the segment for stable split placement.
+        const tRaw = ((x - a.x) * dx + (y - a.y) * dy) / len2;
+        const t = Math.max(0, Math.min(1, tRaw));
+        const split = {
+            x: toCanvasInt(a.x + dx * t),
+            y: toCanvasInt(a.y + dy * t)
+        };
+
+        if (a.x === b.x) split.x = a.x;
+        if (a.y === b.y) split.y = a.y;
 
         const tooClose =
-            Math.hypot(split.x - wire.a.x, split.y - wire.a.y) < 5 ||
-            Math.hypot(split.x - wire.b.x, split.y - wire.b.y) < 5;
-        if (tooClose) return;
+            Math.hypot(split.x - a.x, split.y - a.y) < 5 ||
+            Math.hypot(split.x - b.x, split.y - b.y) < 5;
+        if (tooClose) {
+            return { created: false, point: split };
+        }
 
-        const oldB = { x: wire.b.x, y: wire.b.y };
+        const oldB = { x: b.x, y: b.y };
         const oldBRef = wire.bRef ? { ...wire.bRef } : null;
         wire.b = { x: split.x, y: split.y };
         delete wire.bRef;
         this.renderer.refreshWire(wireId);
 
         const newWire = {
-            id: `wire_${Date.now()}`,
+            id: makeId(`wire_${Date.now()}`),
             a: { x: split.x, y: split.y },
             b: oldB
         };
@@ -1395,7 +1642,7 @@ export class InteractionManager {
 
         this.circuit.addWire(newWire);
         this.renderer.addWire(newWire);
-        this.updateStatus('导线已分割');
+        return { created: true, point: split, newWireId: newWire.id };
     }
 
     /**
@@ -1752,6 +1999,8 @@ export class InteractionManager {
         const comp = this.circuit.getComponent(componentId);
         if (!comp) return;
 
+        this.beginHistoryTransaction('调整端子长度');
+
         // 初始化端子延长数据
         if (!comp.terminalExtensions) {
             comp.terminalExtensions = {};
@@ -1783,8 +2032,8 @@ export class InteractionManager {
 
             // 与网格轻微吸附，便于对齐
             const snapThreshold = 8;
-            const gridX = Math.round(newExtX / 20) * 20;
-            const gridY = Math.round(newExtY / 20) * 20;
+            const gridX = snapToGrid(newExtX, GRID_SIZE);
+            const gridY = snapToGrid(newExtY, GRID_SIZE);
             if (Math.abs(newExtX - gridX) < snapThreshold) newExtX = gridX;
             if (Math.abs(newExtY - gridY) < snapThreshold) newExtY = gridY;
 
@@ -1792,7 +2041,8 @@ export class InteractionManager {
             if (Math.abs(newExtY) < snapThreshold) newExtY = 0;
             if (Math.abs(newExtX) < snapThreshold) newExtX = 0;
 
-            comp.terminalExtensions[terminalIndex] = { x: newExtX, y: newExtY };
+            // Normalize to integer pixels to keep topology stable.
+            comp.terminalExtensions[terminalIndex] = { x: toCanvasInt(newExtX), y: toCanvasInt(newExtY) };
 
             // 重新渲染元器件
             this.renderer.refreshComponent(comp);
@@ -1808,6 +2058,7 @@ export class InteractionManager {
             this.hideAlignmentGuides();
             // 端子位置会影响坐标拓扑，需重建节点
             this.circuit.rebuildNodes();
+            this.commitHistoryTransaction();
             this.updateStatus('端子位置已调整');
         };
 
@@ -2505,8 +2756,8 @@ export class InteractionManager {
         
         // 使用统一的坐标转换
         const canvasCoords = this.screenToCanvas(e.clientX, e.clientY);
-        const x = Math.round(canvasCoords.x / 20) * 20;
-        const y = Math.round(canvasCoords.y / 20) * 20;
+        const x = snapToGrid(canvasCoords.x, GRID_SIZE);
+        const y = snapToGrid(canvasCoords.y, GRID_SIZE);
         
         // 在指定段插入新控制点
         wire.controlPoints.splice(segmentIndex, 0, { x, y });
@@ -2842,14 +3093,14 @@ export class InteractionManager {
                 const heightInput = heightGroup.querySelector('#blackbox-height');
                 if (widthInput) {
                     widthInput.addEventListener('change', () => {
-                        comp.boxWidth = this.safeParseFloat(widthInput.value, w, 80, 5000);
+                        comp.boxWidth = Math.round(this.safeParseFloat(widthInput.value, w, 80, 5000));
                         this.renderer.render();
                         this.selectComponent(comp.id);
                     });
                 }
                 if (heightInput) {
                     heightInput.addEventListener('change', () => {
-                        comp.boxHeight = this.safeParseFloat(heightInput.value, h, 60, 5000);
+                        comp.boxHeight = Math.round(this.safeParseFloat(heightInput.value, h, 60, 5000));
                         this.renderer.render();
                         this.selectComponent(comp.id);
                     });
@@ -3341,9 +3592,10 @@ export class InteractionManager {
         if (!this.editingComponent) return;
         
         const comp = this.editingComponent;
-        
+
         try {
-            switch (comp.type) {
+            this.runWithHistory('修改属性', () => {
+                switch (comp.type) {
                 case 'PowerSource':
                     comp.voltage = this.safeParseFloat(
                         document.getElementById('edit-voltage').value, 12, 0, 10000
@@ -3458,18 +3710,18 @@ export class InteractionManager {
                     break;
 
                 case 'BlackBox': {
-                    comp.boxWidth = this.safeParseFloat(
+                    comp.boxWidth = Math.round(this.safeParseFloat(
                         document.getElementById('edit-box-width').value,
                         comp.boxWidth || 180,
                         80,
                         5000
-                    );
-                    comp.boxHeight = this.safeParseFloat(
+                    ));
+                    comp.boxHeight = Math.round(this.safeParseFloat(
                         document.getElementById('edit-box-height').value,
                         comp.boxHeight || 110,
                         60,
                         5000
-                    );
+                    ));
                     const mode = document.getElementById('edit-box-mode')?.value;
                     comp.viewMode = mode === 'opaque' ? 'opaque' : 'transparent';
                     break;
@@ -3491,6 +3743,7 @@ export class InteractionManager {
             
             this.hideDialog();
             this.updateStatus('属性已更新');
+            });
         } catch (error) {
             console.error('Error applying dialog changes:', error);
             this.updateStatus('更新失败：' + error.message);
@@ -3523,9 +3776,11 @@ export class InteractionManager {
             menuItems.splice(1, 0, {
                 label: enabled ? '关闭自主读数（右侧表盘）' : '开启自主读数（右侧表盘）',
                 action: () => {
-                    comp.selfReading = !enabled;
-                    this.app.observationPanel?.refreshDialGauges();
-                    this.app.updateStatus(comp.selfReading ? '已开启自主读数：请在右侧“观察”查看表盘' : '已关闭自主读数');
+                    this.runWithHistory('切换自主读数', () => {
+                        comp.selfReading = !enabled;
+                        this.app.observationPanel?.refreshDialGauges();
+                        this.app.updateStatus(comp.selfReading ? '已开启自主读数：请在右侧“观察”查看表盘' : '已关闭自主读数');
+                    });
                 }
             });
         }
@@ -3536,10 +3791,12 @@ export class InteractionManager {
             menuItems.splice(1, 0, {
                 label: isOpaque ? '设为透明（显示内部）' : '设为隐藏（黑箱）',
                 action: () => {
-                    comp.viewMode = isOpaque ? 'transparent' : 'opaque';
-                    this.renderer.render();
-                    this.selectComponent(comp.id);
-                    this.app.updateStatus(comp.viewMode === 'opaque' ? '黑箱已设为隐藏模式' : '黑箱已设为透明模式');
+                    this.runWithHistory('切换黑箱显示模式', () => {
+                        comp.viewMode = isOpaque ? 'transparent' : 'opaque';
+                        this.renderer.render();
+                        this.selectComponent(comp.id);
+                        this.app.updateStatus(comp.viewMode === 'opaque' ? '黑箱已设为隐藏模式' : '黑箱已设为透明模式');
+                    });
                 }
             });
         }
@@ -3587,26 +3844,28 @@ export class InteractionManager {
         }
 
         const straightenWire = (mode) => {
-            const w = this.circuit.getWire(wireId);
-            if (!w || !w.a || !w.b) return;
-            const fixed = anchorEnd === 'a' ? w.a : w.b;
-            const moveEnd = anchorEnd === 'a' ? 'b' : 'a';
-            const moving = w[moveEnd];
-            if (!moving) return;
+            this.runWithHistory(mode === 'horizontal' ? '导线水平拉直' : '导线垂直拉直', () => {
+                const w = this.circuit.getWire(wireId);
+                if (!w || !w.a || !w.b) return;
+                const fixed = anchorEnd === 'a' ? w.a : w.b;
+                const moveEnd = anchorEnd === 'a' ? 'b' : 'a';
+                const moving = w[moveEnd];
+                if (!moving) return;
 
-            if (mode === 'horizontal') {
-                w[moveEnd] = { x: moving.x, y: fixed.y };
-            } else if (mode === 'vertical') {
-                w[moveEnd] = { x: fixed.x, y: moving.y };
-            }
+                if (mode === 'horizontal') {
+                    w[moveEnd] = { x: toCanvasInt(moving.x), y: toCanvasInt(fixed.y) };
+                } else if (mode === 'vertical') {
+                    w[moveEnd] = { x: toCanvasInt(fixed.x), y: toCanvasInt(moving.y) };
+                }
 
-            // Moving an endpoint manually detaches it from any terminal binding.
-            const refKey = moveEnd === 'a' ? 'aRef' : 'bRef';
-            delete w[refKey];
+                // Moving an endpoint manually detaches it from any terminal binding.
+                const refKey = moveEnd === 'a' ? 'aRef' : 'bRef';
+                delete w[refKey];
 
-            this.renderer.refreshWire(wireId);
-            this.circuit.rebuildNodes();
-            this.updateStatus(mode === 'horizontal' ? '已水平拉直导线' : '已垂直拉直导线');
+                this.renderer.refreshWire(wireId);
+                this.circuit.rebuildNodes();
+                this.updateStatus(mode === 'horizontal' ? '已水平拉直导线' : '已垂直拉直导线');
+            });
         };
 
         const menuItems = [
@@ -3661,6 +3920,150 @@ export class InteractionManager {
         
         // 在原位置偏移一点创建新元器件
         this.addComponent(comp.type, comp.x + 40, comp.y + 40);
+    }
+
+    /**
+     * =========================
+     * Undo / Redo history
+     * =========================
+     */
+    captureHistoryState() {
+        const json = this.circuit.toJSON();
+        const components = Array.isArray(json.components) ? [...json.components] : [];
+        const wires = Array.isArray(json.wires) ? [...json.wires] : [];
+        components.sort((a, b) => String(a.id).localeCompare(String(b.id)));
+        wires.sort((a, b) => String(a.id).localeCompare(String(b.id)));
+        return { components, wires };
+    }
+
+    historyKey(state) {
+        return JSON.stringify(state);
+    }
+
+    getSelectionSnapshot() {
+        return {
+            componentId: this.selectedComponent || null,
+            wireId: this.selectedWire || null
+        };
+    }
+
+    restoreSelectionSnapshot(snapshot) {
+        const compId = snapshot?.componentId;
+        const wireId = snapshot?.wireId;
+        if (compId && this.circuit.getComponent(compId)) {
+            this.selectComponent(compId);
+            return;
+        }
+        if (wireId && this.circuit.getWire(wireId)) {
+            this.selectWire(wireId);
+            return;
+        }
+        this.clearSelection();
+    }
+
+    pushHistoryEntry(entry) {
+        if (!entry) return;
+        this.historyUndo.push(entry);
+        if (this.historyUndo.length > this.historyMax) {
+            this.historyUndo.shift();
+        }
+        this.historyRedo = [];
+    }
+
+    runWithHistory(label, action) {
+        if (this.isRestoringHistory) {
+            action();
+            return;
+        }
+
+        const before = this.captureHistoryState();
+        const beforeKey = this.historyKey(before);
+        const selectionBefore = this.getSelectionSnapshot();
+
+        action();
+
+        const after = this.captureHistoryState();
+        const afterKey = this.historyKey(after);
+        const selectionAfter = this.getSelectionSnapshot();
+
+        if (beforeKey !== afterKey) {
+            this.pushHistoryEntry({ label, before, after, selectionBefore, selectionAfter });
+        }
+    }
+
+    beginHistoryTransaction(label) {
+        if (this.isRestoringHistory) return;
+        if (this.historyTransaction) return;
+        const before = this.captureHistoryState();
+        this.historyTransaction = {
+            label,
+            beforeState: before,
+            beforeKey: this.historyKey(before),
+            selectionBefore: this.getSelectionSnapshot()
+        };
+    }
+
+    commitHistoryTransaction() {
+        const tx = this.historyTransaction;
+        if (!tx) return;
+        this.historyTransaction = null;
+        if (this.isRestoringHistory) return;
+
+        const after = this.captureHistoryState();
+        const afterKey = this.historyKey(after);
+        if (tx.beforeKey === afterKey) return;
+
+        this.pushHistoryEntry({
+            label: tx.label,
+            before: tx.beforeState,
+            after,
+            selectionBefore: tx.selectionBefore,
+            selectionAfter: this.getSelectionSnapshot()
+        });
+    }
+
+    applyHistoryState(state, selection) {
+        if (!state) return;
+
+        // Editing during simulation is error-prone; keep semantics simple.
+        if (this.app?.circuit?.isRunning) {
+            this.app.stopSimulation();
+        }
+
+        this.isRestoringHistory = true;
+        try {
+            this.circuit.fromJSON({ components: state.components || [], wires: state.wires || [] });
+
+            const allIds = [
+                ...(state.components || []).map((c) => c.id),
+                ...(state.wires || []).map((w) => w.id)
+            ].filter(Boolean);
+            updateIdCounterFromExisting(allIds);
+
+            this.renderer.render();
+            this.app.observationPanel?.refreshComponentOptions?.();
+            this.app.observationPanel?.refreshDialGauges?.();
+
+            this.restoreSelectionSnapshot(selection);
+        } finally {
+            this.isRestoringHistory = false;
+        }
+    }
+
+    undo() {
+        const entry = this.historyUndo.pop();
+        if (!entry) return;
+        this.historyRedo.push(entry);
+        this.applyHistoryState(entry.before, entry.selectionBefore);
+        this.updateStatus(entry.label ? `撤销：${entry.label}` : '已撤销');
+    }
+
+    redo() {
+        const entry = this.historyRedo.pop();
+        if (!entry) return;
+        this.historyUndo.push(entry);
+        this.applyHistoryState(entry.after, entry.selectionAfter);
+        this.updateStatus(entry.label ? `重做：${entry.label}` : '已重做');
     }
 
     /**

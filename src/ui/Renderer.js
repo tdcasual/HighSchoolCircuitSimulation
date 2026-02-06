@@ -5,6 +5,7 @@
 
 import { SVGRenderer, ComponentNames } from '../components/Component.js';
 import { getTerminalWorldPosition } from '../utils/TerminalGeometry.js';
+import { normalizeCanvasPoint } from '../utils/CanvasCoords.js';
 
 export class Renderer {
     constructor(svgCanvas, circuit) {
@@ -201,9 +202,11 @@ export class Renderer {
             if (!Number.isInteger(terminalIndex) || terminalIndex < 0) return false;
             const pos = getTerminalWorldPosition(comp, terminalIndex);
             if (!pos) return false;
+            const normalizedPos = normalizeCanvasPoint(pos);
+            if (!normalizedPos) return false;
             const current = wire[endKey];
-            if (current && current.x === pos.x && current.y === pos.y) return false;
-            wire[endKey] = { x: pos.x, y: pos.y };
+            if (current && current.x === normalizedPos.x && current.y === normalizedPos.y) return false;
+            wire[endKey] = normalizedPos;
             return true;
         };
 
@@ -226,11 +229,7 @@ export class Renderer {
     getWireEndpointPosition(wire, which) {
         if (!wire) return null;
         const pt = which === 'a' ? wire.a : wire.b;
-        if (!pt) return null;
-        const x = Number(pt.x);
-        const y = Number(pt.y);
-        if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
-        return { x, y };
+        return normalizeCanvasPoint(pt);
     }
 
     /**
@@ -239,8 +238,7 @@ export class Renderer {
     getTerminalPosition(componentId, terminalIndex) {
         const comp = this.circuit.getComponent(componentId);
         if (!comp) return null;
-
-        return getTerminalWorldPosition(comp, terminalIndex);
+        return normalizeCanvasPoint(getTerminalWorldPosition(comp, terminalIndex));
     }
 
     /**
