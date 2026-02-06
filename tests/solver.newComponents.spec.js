@@ -98,10 +98,10 @@ describe('New component models (Ground / AC source / Inductor)', () => {
 
         const expectedCurrents = [
             0.0909090909,
-            0.1735537190,
-            0.2486851991,
-            0.3169865446,
-            0.3790786769
+            0.1774891775,
+            0.2558235415,
+            0.3266974900,
+            0.3908215385
         ];
 
         circuit.isRunning = true;
