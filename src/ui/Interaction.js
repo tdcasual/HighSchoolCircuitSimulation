@@ -864,51 +864,14 @@ export class InteractionManager {
      * 右键菜单事件
      */
 	    onContextMenu(e) {
-	        e.preventDefault();
-            const probeMarker = this.resolveProbeMarkerTarget(e.target);
-            if (probeMarker) {
-                const probeId = probeMarker.dataset.probeId;
-                const wireId = probeMarker.dataset.wireId;
-                if (wireId) this.selectWire(wireId);
-                this.showProbeContextMenu(e, probeId, wireId);
-                return;
-            }
-
-	        const componentG = e.target.closest('.component');
-	        if (componentG) {
-	            const id = componentG.dataset.id;
-	            this.selectComponent(id);
-	            this.showContextMenu(e, id);
-	        } else {
-	            const wireGroup = e.target.closest('.wire-group');
-	            if (wireGroup) {
-	                const id = wireGroup.dataset.id;
-	                this.selectWire(id);
-	                this.showWireContextMenu(e, id);
-	            } else {
-	                this.hideContextMenu();
-	            }
-	        }
+	        return InteractionOrchestrator.onContextMenu.call(this, e);
 	    }
 
     /**
      * 双击事件
      */
     onDoubleClick(e) {
-        const probeMarker = this.resolveProbeMarkerTarget(e.target);
-        if (probeMarker) {
-            const probeId = probeMarker.dataset.probeId;
-            if (probeId) {
-                this.renameObservationProbe(probeId);
-            }
-            return;
-        }
-
-        // 双击元器件打开属性编辑
-        const componentG = e.target.closest('.component');
-        if (componentG) {
-            this.showPropertyDialog(componentG.dataset.id);
-        }
+        return InteractionOrchestrator.onDoubleClick.call(this, e);
     }
 
     /**

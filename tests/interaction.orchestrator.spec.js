@@ -180,3 +180,80 @@ describe('InteractionOrchestrator.onMouseLeave', () => {
         expect(context.commitHistoryTransaction).toHaveBeenCalledTimes(1);
     });
 });
+
+describe('InteractionOrchestrator.onContextMenu', () => {
+    it('opens probe context menu and selects wire', () => {
+        const context = {
+            resolveProbeMarkerTarget: vi.fn(() => ({
+                dataset: { probeId: 'P1', wireId: 'W1' }
+            })),
+            selectWire: vi.fn(),
+            showProbeContextMenu: vi.fn()
+        };
+        const event = {
+            preventDefault: vi.fn(),
+            target: makeTarget()
+        };
+
+        InteractionOrchestrator.onContextMenu.call(context, event);
+
+        expect(event.preventDefault).toHaveBeenCalledTimes(1);
+        expect(context.selectWire).toHaveBeenCalledWith('W1');
+        expect(context.showProbeContextMenu).toHaveBeenCalledWith(event, 'P1', 'W1');
+    });
+
+    it('opens component context menu when component is targeted', () => {
+        const component = { dataset: { id: 'R1' } };
+        const context = {
+            resolveProbeMarkerTarget: vi.fn(() => null),
+            selectComponent: vi.fn(),
+            showContextMenu: vi.fn(),
+            hideContextMenu: vi.fn()
+        };
+        const event = {
+            preventDefault: vi.fn(),
+            target: makeTarget({ closestComponent: component })
+        };
+
+        InteractionOrchestrator.onContextMenu.call(context, event);
+
+        expect(context.selectComponent).toHaveBeenCalledWith('R1');
+        expect(context.showContextMenu).toHaveBeenCalledWith(event, 'R1');
+        expect(context.hideContextMenu).not.toHaveBeenCalled();
+    });
+});
+
+describe('InteractionOrchestrator.onDoubleClick', () => {
+    it('renames probe when double-clicking probe marker', () => {
+        const context = {
+            resolveProbeMarkerTarget: vi.fn(() => ({
+                dataset: { probeId: 'P1' }
+            })),
+            renameObservationProbe: vi.fn(),
+            showPropertyDialog: vi.fn()
+        };
+        const event = { target: makeTarget() };
+
+        InteractionOrchestrator.onDoubleClick.call(context, event);
+
+        expect(context.renameObservationProbe).toHaveBeenCalledWith('P1');
+        expect(context.showPropertyDialog).not.toHaveBeenCalled();
+    });
+
+    it('opens property dialog when double-clicking component', () => {
+        const component = { dataset: { id: 'R2' } };
+        const context = {
+            resolveProbeMarkerTarget: vi.fn(() => null),
+            renameObservationProbe: vi.fn(),
+            showPropertyDialog: vi.fn()
+        };
+        const event = {
+            target: makeTarget({ closestComponent: component })
+        };
+
+        InteractionOrchestrator.onDoubleClick.call(context, event);
+
+        expect(context.showPropertyDialog).toHaveBeenCalledWith('R2');
+        expect(context.renameObservationProbe).not.toHaveBeenCalled();
+    });
+});
