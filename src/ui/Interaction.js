@@ -12,25 +12,23 @@ import * as ViewportController from './interaction/ViewportController.js';
 import * as SnapController from './interaction/SnapController.js';
 import * as InteractionOrchestrator from '../app/interaction/InteractionOrchestrator.js';
 import * as ComponentActions from './interaction/ComponentActions.js';
-import * as ContextMenuController from './interaction/ContextMenuController.js';
-import * as ProbeActions from './interaction/ProbeActions.js';
 import * as ToolPlacementController from './interaction/ToolPlacementController.js';
 import * as PanelBindingsController from './interaction/PanelBindingsController.js';
 import * as InputResolver from './interaction/InputResolver.js';
-import * as AlignmentGuideController from './interaction/AlignmentGuideController.js';
 import * as UIStateController from './interaction/UIStateController.js';
-import * as PropertyDialogActions from './interaction/PropertyDialogActions.js';
-import * as PropertyDialogController from './interaction/PropertyDialogController.js';
 import * as MeasurementReadoutController from './interaction/MeasurementReadoutController.js';
 import * as ToolboxBindingsController from './interaction/ToolboxBindingsController.js';
 import * as EventBindingsController from './interaction/EventBindingsController.js';
-import * as HistoryFacadeController from './interaction/HistoryFacadeController.js';
 import * as CoordinateTransforms from './interaction/CoordinateTransforms.js';
 import { initializeInteractionState } from './interaction/InteractionStateInitializer.js';
+import { installInteractionTailDelegates } from './interaction/InteractionTailDelegates.js';
 
 export class InteractionManager {
     constructor(app) {
         initializeInteractionState(this, app);
+        this.hideContextMenuHandler = () => {
+            this.hideContextMenu();
+        };
 
         // 绑定事件
         this.bindEvents();
@@ -496,178 +494,6 @@ export class InteractionManager {
         return MeasurementReadoutController.updateParallelPlateCapacitorPanelValues.call(this, comp);
     }
 
-    /**
-     * 显示属性编辑对话框（使用安全的 DOM 操作防止 XSS）
-     */
-    showPropertyDialog(id) {
-        return PropertyDialogController.showPropertyDialog.call(this, id);
-    }
-
-    /**
-     * 隐藏对话框
-     */
-    hideDialog() {
-        return UIStateController.hideDialog.call(this);
-    }
-
-    /**
-     * 安全解析数值，返回有效值或默认值
-     */
-    safeParseFloat(value, defaultValue, minValue = null, maxValue = null) {
-        return UIStateController.safeParseFloat.call(this, value, defaultValue, minValue, maxValue);
-    }
-
-    /**
-     * 获取黑箱内部包含的元器件（按中心点是否落在盒子范围内判断）
-     * @param {Object} boxComp
-     * @param {Object} options
-     * @param {boolean} [options.includeBoxes=false] - 是否包含其它黑箱
-     * @returns {string[]} component ids
-     */
-    getBlackBoxContainedComponentIds(boxComp, options = {}) {
-        return UIStateController.getBlackBoxContainedComponentIds.call(this, boxComp, options);
-    }
-
-    /**
-     * 应用对话框更改
-     */
-    applyDialogChanges() {
-        return PropertyDialogActions.applyDialogChanges.call(this);
-    }
-
-    /**
-     * 显示元器件上下文菜单
-     */
-    showContextMenu(e, componentId) {
-        return ContextMenuController.showContextMenu.call(this, e, componentId);
-    }
-    
-    /**
-     * 显示导线上下文菜单
-     */
-    showWireContextMenu(e, wireId) {
-        return ContextMenuController.showWireContextMenu.call(this, e, wireId);
-    }
-
-    showProbeContextMenu(e, probeId, wireId) {
-        return ContextMenuController.showProbeContextMenu.call(this, e, probeId, wireId);
-    }
-
-    renameObservationProbe(probeId, nextLabel = null) {
-        return ProbeActions.renameObservationProbe.call(this, probeId, nextLabel);
-    }
-
-    deleteObservationProbe(probeId) {
-        return ProbeActions.deleteObservationProbe.call(this, probeId);
-    }
-
-    addProbePlot(probeId) {
-        return ProbeActions.addProbePlot.call(this, probeId);
-    }
-
-    addObservationProbeForWire(wireId, probeType) {
-        return ProbeActions.addObservationProbeForWire.call(this, wireId, probeType);
-    }
-    
-    /**
-     * 隐藏上下文菜单
-     */
-    hideContextMenu() {
-        return ContextMenuController.hideContextMenu.call(this);
-    }
-    
-    /**
-     * 上下文菜单关闭处理器
-     */
-    hideContextMenuHandler = () => {
-        this.hideContextMenu();
-    }
-    
-    /**
-     * 复制元器件
-     */
-    duplicateComponent(id) {
-        return ComponentActions.duplicateComponent.call(this, id);
-    }
-
-    /**
-     * =========================
-     * Undo / Redo history
-     * =========================
-     */
-    captureHistoryState() {
-        return HistoryFacadeController.captureHistoryState.call(this);
-    }
-
-    historyKey(state) {
-        return HistoryFacadeController.historyKey.call(this, state);
-    }
-
-    getSelectionSnapshot() {
-        return HistoryFacadeController.getSelectionSnapshot.call(this);
-    }
-
-    restoreSelectionSnapshot(snapshot) {
-        HistoryFacadeController.restoreSelectionSnapshot.call(this, snapshot);
-    }
-
-    pushHistoryEntry(entry) {
-        HistoryFacadeController.pushHistoryEntry.call(this, entry);
-    }
-
-    runWithHistory(label, action) {
-        HistoryFacadeController.runWithHistory.call(this, label, action);
-    }
-
-    beginHistoryTransaction(label) {
-        HistoryFacadeController.beginHistoryTransaction.call(this, label);
-    }
-
-    commitHistoryTransaction() {
-        HistoryFacadeController.commitHistoryTransaction.call(this);
-    }
-
-    applyHistoryState(state, selection) {
-        HistoryFacadeController.applyHistoryState.call(this, state, selection);
-    }
-
-    undo() {
-        HistoryFacadeController.undo.call(this);
-    }
-
-    redo() {
-        HistoryFacadeController.redo.call(this);
-    }
-
-    /**
-     * 更新状态栏
-     */
-    updateStatus(text) {
-        return UIStateController.updateStatus.call(this, text);
-    }
-
-    /**
-     * 检测与其他元器件的对齐
-     * @param {string} draggedId - 正在拖动的元器件ID
-     * @param {number} x - 当前x坐标
-     * @param {number} y - 当前y坐标
-     * @returns {Object} 对齐信息
-     */
-    detectAlignment(draggedId, x, y) {
-        return AlignmentGuideController.detectAlignment.call(this, draggedId, x, y);
-    }
-
-    /**
-     * 显示对齐辅助线
-     */
-    showAlignmentGuides(alignment) {
-        return AlignmentGuideController.showAlignmentGuides.call(this, alignment);
-    }
-
-    /**
-     * 隐藏对齐辅助线
-     */
-    hideAlignmentGuides() {
-        return AlignmentGuideController.hideAlignmentGuides.call(this);
-    }
 }
+
+installInteractionTailDelegates(InteractionManager);
