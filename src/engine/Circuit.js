@@ -5,10 +5,14 @@
 
 import { MNASolver } from './Solver.js';
 import { Matrix } from './Matrix.js';
-import { createComponent, getComponentTerminalCount } from '../components/Component.js';
-import { computeOverlapFractionFromOffsetPx, computeParallelPlateCapacitance } from '../utils/Physics.js';
+import { getComponentTerminalCount } from '../components/Component.js';
 import { getTerminalWorldPosition } from '../utils/TerminalGeometry.js';
 import { normalizeCanvasPoint, pointKey, toCanvasInt } from '../utils/CanvasCoords.js';
+import { NodeBuilder } from '../core/topology/NodeBuilder.js';
+import { WireCompactor } from '../core/topology/WireCompactor.js';
+import { ConnectivityCache } from '../core/topology/ConnectivityCache.js';
+import { CircuitSerializer } from '../core/io/CircuitSerializer.js';
+import { CircuitDeserializer } from '../core/io/CircuitDeserializer.js';
 
 export class Circuit {
     constructor() {
@@ -35,6 +39,9 @@ export class Circuit {
         this.topologyVersion = 0;
         this.solverPreparedTopologyVersion = -1;
         this.solverCircuitDirty = true;
+        this.nodeBuilder = new NodeBuilder();
+        this.wireCompactor = new WireCompactor();
+        this.connectivityCache = new ConnectivityCache();
         this.componentTerminalTopologyKeys = new Map(); // componentId -> topology key used for terminal geometry cache
         this.terminalWorldPosCache = new Map(); // componentId -> Map(terminalIndex -> {x,y})
         this.debugMode = false;
@@ -288,153 +295,12 @@ export class Circuit {
      * @returns {{changed:boolean, removedIds:string[], replacementByRemovedId:Object<string,string>}}
      */
     compactWires(options = {}) {
-        this.syncWireEndpointsToTerminalRefs();
-        const scoped = options.scopeWireIds
-            ? new Set(Array.from(options.scopeWireIds).filter(Boolean))
-            : null;
-
-        const removedIds = [];
-        const replacementByRemovedId = {};
-        let changed = false;
-
-        const setEndpoint = (wire, end, point, ref) => {
-            if (!wire || (end !== 'a' && end !== 'b') || !point) return;
-            wire[end] = {
-                x: toCanvasInt(point.x),
-                y: toCanvasInt(point.y)
-            };
-            const refKey = end === 'a' ? 'aRef' : 'bRef';
-            if (ref && ref.componentId !== undefined && Number.isInteger(ref.terminalIndex)) {
-                wire[refKey] = {
-                    componentId: ref.componentId,
-                    terminalIndex: ref.terminalIndex
-                };
-            } else {
-                delete wire[refKey];
-            }
-        };
-
-        const removeWireById = (wireId) => {
-            if (!this.wires.has(wireId)) return;
-            this.wires.delete(wireId);
-            removedIds.push(wireId);
-            changed = true;
-        };
-
-        // 先清理零长度导线，避免后续拓扑分析被噪声干扰。
-        for (const [wireId, wire] of Array.from(this.wires.entries())) {
-            if (scoped && !scoped.has(wireId)) continue;
-            const a = normalizeCanvasPoint(wire?.a);
-            const b = normalizeCanvasPoint(wire?.b);
-            if (!a || !b) {
-                removeWireById(wireId);
-                continue;
-            }
-            wire.a = a;
-            wire.b = b;
-            if (a.x === b.x && a.y === b.y) {
-                removeWireById(wireId);
-            }
-        }
-
-        const terminalCoordKeys = new Set();
-        for (const [, comp] of this.components) {
-            const terminalCount = getComponentTerminalCount(comp.type);
-            for (let terminalIndex = 0; terminalIndex < terminalCount; terminalIndex++) {
-                const pos = getTerminalWorldPosition(comp, terminalIndex);
-                const key = pointKey(pos);
-                if (!key) continue;
-                terminalCoordKeys.add(key);
-            }
-        }
-
-        const getOtherEnd = (wire, end) => {
-            if (end === 'a') {
-                return { end: 'b', point: wire?.b, ref: wire?.bRef };
-            }
-            return { end: 'a', point: wire?.a, ref: wire?.aRef };
-        };
-
-        const isCollinearAndOpposite = (shared, p1, p2) => {
-            const v1x = p1.x - shared.x;
-            const v1y = p1.y - shared.y;
-            const v2x = p2.x - shared.x;
-            const v2y = p2.y - shared.y;
-            const cross = v1x * v2y - v1y * v2x;
-            if (Math.abs(cross) > 1e-6) return false;
-            const dot = v1x * v2x + v1y * v2y;
-            return dot < 0;
-        };
-
-        let mergedInPass = true;
-        while (mergedInPass) {
-            mergedInPass = false;
-
-            const endpointBuckets = new Map(); // coordKey -> [{wireId,end,point}]
-            for (const [wireId, wire] of this.wires.entries()) {
-                for (const end of ['a', 'b']) {
-                    const pt = normalizeCanvasPoint(wire?.[end]);
-                    if (!pt) continue;
-                    const key = pointKey(pt);
-                    if (!key) continue;
-                    if (!endpointBuckets.has(key)) endpointBuckets.set(key, []);
-                    endpointBuckets.get(key).push({ wireId, end, point: pt });
-                }
-            }
-
-            for (const [coordKey, endpoints] of endpointBuckets.entries()) {
-                if (!Array.isArray(endpoints) || endpoints.length !== 2) continue;
-                if (terminalCoordKeys.has(coordKey)) continue;
-
-                const first = endpoints[0];
-                const second = endpoints[1];
-                if (!first || !second) continue;
-                if (first.wireId === second.wireId) continue;
-                if (scoped && !scoped.has(first.wireId) && !scoped.has(second.wireId)) continue;
-
-                const wireA = this.wires.get(first.wireId);
-                const wireB = this.wires.get(second.wireId);
-                if (!wireA || !wireB) continue;
-
-                const sharedRefKeyA = first.end === 'a' ? 'aRef' : 'bRef';
-                const sharedRefKeyB = second.end === 'a' ? 'aRef' : 'bRef';
-                if (wireA[sharedRefKeyA] || wireB[sharedRefKeyB]) continue;
-
-                const otherA = getOtherEnd(wireA, first.end);
-                const otherB = getOtherEnd(wireB, second.end);
-                const pA = normalizeCanvasPoint(otherA.point);
-                const pB = normalizeCanvasPoint(otherB.point);
-                if (!pA || !pB) continue;
-
-                const shared = first.point;
-                const keyA = pointKey(pA);
-                const keyB = pointKey(pB);
-
-                if (keyA && keyB && keyA === keyB) {
-                    const refsConflict = otherA.ref && otherB.ref
-                        && (
-                            otherA.ref.componentId !== otherB.ref.componentId
-                            || otherA.ref.terminalIndex !== otherB.ref.terminalIndex
-                        );
-                    if (refsConflict) continue;
-                    const mergedRef = otherA.ref || otherB.ref || null;
-                    setEndpoint(wireA, otherA.end, pA, mergedRef);
-                    removeWireById(wireB.id);
-                    replacementByRemovedId[wireB.id] = wireA.id;
-                    mergedInPass = true;
-                    break;
-                }
-
-                if (!isCollinearAndOpposite(shared, pA, pB)) continue;
-
-                setEndpoint(wireA, 'a', pA, otherA.ref);
-                setEndpoint(wireA, 'b', pB, otherB.ref);
-                removeWireById(wireB.id);
-                replacementByRemovedId[wireB.id] = wireA.id;
-                mergedInPass = true;
-                break;
-            }
-        }
+        const { changed, removedIds, replacementByRemovedId } = this.wireCompactor.compact({
+            components: this.components,
+            wires: this.wires,
+            scopeWireIds: options.scopeWireIds || null,
+            syncWireEndpointsToTerminalRefs: () => this.syncWireEndpointsToTerminalRefs()
+        });
 
         if (changed) {
             for (const removedId of removedIds) {
@@ -475,206 +341,19 @@ export class Circuit {
             }
         }
 
-        // Union-find over "posts" (component terminals + wire endpoints).
-        const parent = new Map(); // postId -> parentPostId
-
-        const find = (key) => {
-            if (!parent.has(key)) parent.set(key, key);
-            if (parent.get(key) !== key) {
-                parent.set(key, find(parent.get(key)));
-            }
-            return parent.get(key);
-        };
-
-        const union = (key1, key2) => {
-            const root1 = find(key1);
-            const root2 = find(key2);
-            if (root1 !== root2) parent.set(root1, root2);
-        };
-
-        // Coordinate buckets: posts at the same (quantized) coordinate belong to the same electrical node.
-        const coordRepresentative = new Map(); // coordKey -> postId
-        const coordTerminalCount = new Map(); // coordKey -> count of component terminals
-        const coordWireEndpointCount = new Map(); // coordKey -> count of wire endpoints
-        const terminalCoordKey = new Map(); // terminalKey -> coordKey
-
-        const noteCoord = (coordKey, postId) => {
-            if (!coordKey) return;
-            if (!coordRepresentative.has(coordKey)) {
-                coordRepresentative.set(coordKey, postId);
-            } else {
-                union(postId, coordRepresentative.get(coordKey));
-            }
-        };
-
-        const registerTerminal = (componentId, terminalIndex, comp) => {
-            const pos = this.getTerminalWorldPositionCached(componentId, terminalIndex, comp);
-            if (!pos) return;
-            const coordKey = pointKey(pos);
-            const postId = `T:${componentId}:${terminalIndex}`;
-            parent.set(postId, postId);
-            noteCoord(coordKey, postId);
-            const tKey = `${componentId}:${terminalIndex}`;
-            terminalCoordKey.set(tKey, coordKey);
-            coordTerminalCount.set(coordKey, (coordTerminalCount.get(coordKey) || 0) + 1);
-        };
-
-        // Register all component terminals (even if isolated; we will later mark unconnected ones as -1).
-        for (const [id, comp] of this.components) {
-            const terminalCount = getComponentTerminalCount(comp.type);
-            for (let terminalIndex = 0; terminalIndex < terminalCount; terminalIndex++) {
-                registerTerminal(id, terminalIndex, comp);
-            }
-        }
-
-        const registerWireEndpoint = (wireId, which, pt) => {
-            const coordKey = pointKey(pt);
-            const postId = `W:${wireId}:${which}`;
-            parent.set(postId, postId);
-            noteCoord(coordKey, postId);
-            coordWireEndpointCount.set(coordKey, (coordWireEndpointCount.get(coordKey) || 0) + 1);
-            return postId;
-        };
-
-        // Register wire endpoints and union each wire's endpoints (ideal conductor).
-        for (const wire of this.wires.values()) {
-            const aPt = wire?.a;
-            const bPt = wire?.b;
-            if (!aPt || !bPt) continue;
-            const aId = registerWireEndpoint(wire.id, 'a', aPt);
-            const bId = registerWireEndpoint(wire.id, 'b', bPt);
-            union(aId, bId);
-        }
-
-        // Build terminal "degree" map (junction degree at the coordinate point).
-        const connectedTerminals = new Map();
-        for (const [id, comp] of this.components) {
-            const terminalCount = getComponentTerminalCount(comp.type);
-            for (let ti = 0; ti < terminalCount; ti++) {
-                const tKey = `${id}:${ti}`;
-                const coordKey = terminalCoordKey.get(tKey);
-                const wireCount = coordWireEndpointCount.get(coordKey) || 0;
-                const otherTerminalCount = Math.max(0, (coordTerminalCount.get(coordKey) || 0) - 1);
-                const degree = wireCount + otherTerminalCount;
-                if (degree > 0) connectedTerminals.set(tKey, degree);
-            }
-        }
-        this.terminalConnectionMap = connectedTerminals;
-
-        // Assign node indices to union roots that contain at least one connected component terminal.
-        const nodeMap = new Map(); // root -> nodeIndex
-        let nodeIndex = 0;
-
-        const assignNodeIfNeeded = (root) => {
-            if (!nodeMap.has(root)) nodeMap.set(root, nodeIndex++);
-        };
-
-        const getTerminalPostId = (componentId, terminalIndex) => `T:${componentId}:${terminalIndex}`;
-
-        // Prefer explicit Ground terminal as reference node.
-        let groundRoot = null;
-        let fallbackGroundRoot = null;
-        for (const [id, comp] of this.components) {
-            if (comp.type !== 'Ground') continue;
-            const tKey = `${id}:0`;
-            const postId = getTerminalPostId(id, 0);
-            const root = find(postId);
-            if (!fallbackGroundRoot) {
-                fallbackGroundRoot = root;
-            }
-            if (connectedTerminals.has(tKey)) {
-                groundRoot = root;
-                assignNodeIfNeeded(root);
-                break;
-            }
-        }
-
-        // Fallback: connected power source negative terminal.
-        for (const [id, comp] of this.components) {
-            if (groundRoot) break;
-            if (comp.type !== 'PowerSource') continue;
-            const negKey = `${id}:1`;
-            const negPostId = getTerminalPostId(id, 1);
-            const root = find(negPostId);
-            if (connectedTerminals.has(negKey)) {
-                groundRoot = root;
-                assignNodeIfNeeded(root);
-                break;
-            }
-        }
-
-        // If no connected power negative terminal, pick the first connected terminal as ground.
-        if (!groundRoot) {
-            for (const tKey of connectedTerminals.keys()) {
-                const [cid, tidxRaw] = tKey.split(':');
-                const tidx = Number.parseInt(tidxRaw, 10);
-                const root = find(getTerminalPostId(cid, tidx));
-                groundRoot = root;
-                assignNodeIfNeeded(root);
-                break;
-            }
-        }
-
-        // If explicit Ground exists but is currently isolated, still use it as reference.
-        if (!groundRoot && fallbackGroundRoot) {
-            groundRoot = fallbackGroundRoot;
-            assignNodeIfNeeded(groundRoot);
-        }
-
-        // If still none (completely disconnected layout), fall back to first power source negative terminal if any.
-        if (!groundRoot) {
-            for (const [id, comp] of this.components) {
-                if (comp.type !== 'PowerSource') continue;
-                const negPostId = getTerminalPostId(id, 1);
-                groundRoot = find(negPostId);
-                assignNodeIfNeeded(groundRoot);
-                break;
-            }
-        }
-
-        // Assign remaining connected roots.
-        for (const tKey of connectedTerminals.keys()) {
-            const [cid, tidxRaw] = tKey.split(':');
-            const tidx = Number.parseInt(tidxRaw, 10);
-            const root = find(getTerminalPostId(cid, tidx));
-            assignNodeIfNeeded(root);
-        }
-
-        // Update component node references. Unconnected terminals remain -1 to avoid phantom currents.
-        for (const [id, comp] of this.components) {
-            const terminalCount = getComponentTerminalCount(comp.type);
-            comp.nodes = Array.from({ length: terminalCount }, () => -1);
-            for (let ti = 0; ti < terminalCount; ti++) {
-                const tKey = `${id}:${ti}`;
-                const connected = connectedTerminals.has(tKey);
-                const postId = getTerminalPostId(id, ti);
-                const root = find(postId);
-                const mapped = nodeMap.has(root) ? nodeMap.get(root) : undefined;
-                // Always allow the chosen ground root terminal to map (helps maintain a reference node).
-                if ((connected || (groundRoot && root === groundRoot)) && mapped !== undefined) {
-                    comp.nodes[ti] = mapped;
-                }
-            }
-        }
-
-        // Record which electrical node each wire belongs to (for short-circuit warnings / animations).
-        for (const wire of this.wires.values()) {
-            const aId = `W:${wire.id}:a`;
-            if (!parent.has(aId)) {
-                wire.nodeIndex = -1;
-                continue;
-            }
-            const root = find(aId);
-            wire.nodeIndex = nodeMap.has(root) ? nodeMap.get(root) : -1;
-        }
-
-        // Generate node list.
-        this.nodes = Array.from({ length: nodeIndex }, (_, i) => ({ id: i }));
+        const topology = this.nodeBuilder.build({
+            components: this.components,
+            wires: this.wires,
+            getTerminalWorldPosition: (componentId, terminalIndex, comp) =>
+                this.getTerminalWorldPositionCached(componentId, terminalIndex, comp)
+        });
+        this.terminalConnectionMap = topology.terminalConnectionMap;
+        this.nodes = topology.nodes;
 
         // Debug: print node to terminal mapping.
         if (this.debugMode) {
             console.warn('--- Node mapping ---');
-            const nodeTerminals = Array.from({ length: nodeIndex }, () => []);
+            const nodeTerminals = Array.from({ length: this.nodes.length }, () => []);
             for (const [id, comp] of this.components) {
                 const append = (node, terminalIdx) => {
                     if (node !== undefined && node >= 0) {
@@ -839,69 +518,30 @@ export class Circuit {
      * @returns {boolean} 是否连接
      */
     computeComponentConnectedState(componentId, comp) {
-        if (!comp || !Array.isArray(comp.nodes)) return false;
-        const terminalCount = getComponentTerminalCount(comp.type);
-
-        const hasValidNode = (idx) => idx !== undefined && idx !== null && idx >= 0;
-        const hasTerminalWire = (terminalIndex) => {
-            const key = `${componentId}:${terminalIndex}`;
-            return (this.terminalConnectionMap.get(key) || 0) > 0;
-        };
-
-        if (comp.type === 'Ground') {
-            return hasValidNode(comp.nodes[0]) && hasTerminalWire(0);
-        }
-
-        if (comp.type === 'Relay') {
-            const coilConnected = hasValidNode(comp.nodes[0]) && hasValidNode(comp.nodes[1])
-                && hasTerminalWire(0) && hasTerminalWire(1);
-            const contactConnected = hasValidNode(comp.nodes[2]) && hasValidNode(comp.nodes[3])
-                && hasTerminalWire(2) && hasTerminalWire(3);
-            return coilConnected || contactConnected;
-        }
-
-        if (comp.type !== 'Rheostat' && comp.type !== 'SPDTSwitch') {
-            if (terminalCount < 2) return false;
-            return hasValidNode(comp.nodes[0]) && hasValidNode(comp.nodes[1])
-                && hasTerminalWire(0) && hasTerminalWire(1);
-        }
-
-        if (comp.type === 'SPDTSwitch') {
-            const routeToB = comp.position === 'b';
-            const targetTerminal = routeToB ? 2 : 1;
-            return hasValidNode(comp.nodes[0]) && hasValidNode(comp.nodes[targetTerminal])
-                && hasTerminalWire(0) && hasTerminalWire(targetTerminal);
-        }
-
-        // 滑动变阻器需要至少两个不同节点接入，且端子必须真正接线
-        const connectedTerminals = comp.nodes
-            .map((nodeIdx, idx) => ({ nodeIdx, idx }))
-            .filter(({ nodeIdx, idx }) => hasValidNode(nodeIdx) && hasTerminalWire(idx));
-        if (connectedTerminals.length < 2) return false;
-        const uniqueNodes = new Set(connectedTerminals.map(t => t.nodeIdx));
-        return uniqueNodes.size >= 2;
+        return this.connectivityCache.computeComponentConnectedState(
+            componentId,
+            comp,
+            this.terminalConnectionMap
+        );
     }
 
     refreshComponentConnectivityCache() {
-        for (const [id, comp] of this.components) {
-            comp._isConnectedCached = this.computeComponentConnectedState(id, comp);
-            comp._connectionTopologyVersion = this.topologyVersion;
-        }
+        return this.connectivityCache.refreshComponentConnectivityCache(
+            this.components,
+            this.topologyVersion,
+            this.terminalConnectionMap,
+            (id, comp) => this.computeComponentConnectedState(id, comp)
+        );
     }
 
     isComponentConnected(componentId) {
-        const comp = this.components.get(componentId);
-        if (!comp || !Array.isArray(comp.nodes)) return false;
-
-        if (comp._connectionTopologyVersion === this.topologyVersion
-            && typeof comp._isConnectedCached === 'boolean') {
-            return comp._isConnectedCached;
-        }
-
-        const connected = this.computeComponentConnectedState(componentId, comp);
-        comp._isConnectedCached = connected;
-        comp._connectionTopologyVersion = this.topologyVersion;
-        return connected;
+        return this.connectivityCache.isComponentConnected(
+            componentId,
+            this.components,
+            this.topologyVersion,
+            this.terminalConnectionMap,
+            (id, comp) => this.computeComponentConnectedState(id, comp)
+        );
     }
 
     /**
@@ -1851,39 +1491,7 @@ export class Circuit {
      * @returns {Object} 电路JSON对象
      */
     toJSON() {
-        return {
-            meta: {
-                version: '2.0',
-                timestamp: Date.now(),
-                name: '电路设计'
-            },
-            components: Array.from(this.components.values()).map(comp => ({
-                id: comp.id,
-                type: comp.type,
-                label: comp.label || null,  // 包含自定义标签
-                x: toCanvasInt(comp.x),
-                y: toCanvasInt(comp.y),
-                rotation: comp.rotation || 0,
-                properties: this.getComponentProperties(comp),
-                display: comp.display || null,
-                terminalExtensions: comp.terminalExtensions || null
-            })),
-            wires: Array.from(this.wires.values()).map(wire => ({
-                id: wire.id,
-                a: { x: toCanvasInt(wire?.a?.x ?? 0), y: toCanvasInt(wire?.a?.y ?? 0) },
-                b: { x: toCanvasInt(wire?.b?.x ?? 0), y: toCanvasInt(wire?.b?.y ?? 0) },
-                ...(wire?.aRef ? { aRef: wire.aRef } : {}),
-                ...(wire?.bRef ? { bRef: wire.bRef } : {})
-            })),
-            probes: this.getAllObservationProbes()
-                .filter((probe) => probe?.wireId && this.wires.has(probe.wireId))
-                .map((probe) => ({
-                    id: probe.id,
-                    type: probe.type,
-                    wireId: probe.wireId,
-                    ...(probe.label ? { label: probe.label } : {})
-                }))
-        };
+        return CircuitSerializer.serialize(this);
     }
 
     /**
@@ -2033,155 +1641,18 @@ export class Circuit {
      */
     fromJSON(json) {
         this.clear();
-        const componentList = Array.isArray(json?.components) ? json.components : [];
-        const wireList = Array.isArray(json?.wires) ? json.wires : [];
-        const probeList = Array.isArray(json?.probes) ? json.probes : [];
-        
-        // 导入元器件 - 使用 createComponent 确保完整初始化
-        for (const compData of componentList) {
-            // 使用 createComponent 创建完整的元器件对象
-            const comp = createComponent(
-                compData.type,
-                toCanvasInt(compData.x),
-                toCanvasInt(compData.y),
-                compData.id  // 使用保存的ID
-            );
-            
-            // 恢复保存的属性
-            comp.rotation = compData.rotation || 0;
-            if (compData.label) {
-                comp.label = compData.label;  // 恢复自定义标签
-            }
-            Object.assign(comp, compData.properties);
-
-            // 兼容旧存档：历史文件未保存 integrationMethod 时保持后向欧拉行为。
-            if ((comp.type === 'Capacitor' || comp.type === 'Inductor' || comp.type === 'ParallelPlateCapacitor')
-                && !compData?.properties?.integrationMethod) {
-                comp.integrationMethod = 'backward-euler';
-            }
-
-            // 平行板电容：始终用物理参数刷新电容值，避免保存文件中 C 与参数不一致
-            if (comp.type === 'ParallelPlateCapacitor') {
-                const plateLengthPx = 24;
-                const overlapFraction = computeOverlapFractionFromOffsetPx(comp.plateOffsetYPx || 0, plateLengthPx);
-                comp.capacitance = computeParallelPlateCapacitance({
-                    plateArea: comp.plateArea,
-                    plateDistance: comp.plateDistance,
-                    dielectricConstant: comp.dielectricConstant,
-                    overlapFraction
-                });
-            }
-
-            if (comp.type === 'Inductor') {
-                comp.prevCurrent = Number.isFinite(comp.initialCurrent) ? comp.initialCurrent : 0;
-                comp.prevVoltage = 0;
-                comp._dynamicHistoryReady = false;
-            }
-            if (comp.type === 'Capacitor' || comp.type === 'ParallelPlateCapacitor') {
-                comp.prevCurrent = 0;
-                comp.prevVoltage = 0;
-                comp._dynamicHistoryReady = false;
-            }
-
-            // 恢复数值显示开关（单元件配置）
-            if (compData.display && typeof compData.display === 'object') {
-                comp.display = {
-                    ...(comp.display || {}),
-                    ...compData.display
-                };
-            }
-
-            // 恢复端子延伸
-            if (compData.terminalExtensions) {
-                // Normalize to integer pixels for stable connectivity.
-                const normalized = {};
-                for (const [k, v] of Object.entries(compData.terminalExtensions)) {
-                    if (!v || typeof v !== 'object') continue;
-                    const x = toCanvasInt(v.x || 0);
-                    const y = toCanvasInt(v.y || 0);
-                    normalized[k] = { x, y };
-                }
-                comp.terminalExtensions = normalized;
-            }
-            
+        const loaded = CircuitDeserializer.deserialize(json, {
+            normalizeObservationProbe: (probe) => this.normalizeObservationProbe(probe)
+        });
+        for (const comp of loaded.components) {
             this.components.set(comp.id, comp);
         }
-
-        // 导入导线
-        const ensureUniqueWireId = (baseId) => {
-            if (!this.wires.has(baseId)) return baseId;
-            let i = 1;
-            while (this.wires.has(`${baseId}_${i}`)) i++;
-            return `${baseId}_${i}`;
-        };
-
-        const safePoint = (pt) => {
-            return normalizeCanvasPoint(pt);
-        };
-
-        const getTerminalPoint = (componentId, terminalIndex) => {
-            const comp = this.components.get(componentId);
-            if (!comp) return null;
-            return safePoint(getTerminalWorldPosition(comp, terminalIndex));
-        };
-
-        for (const wireData of wireList) {
-            if (!wireData || !wireData.id) continue;
-
-            // v2 format: explicit endpoints (a/b points)
-            if (wireData.a && wireData.b) {
-                const a = safePoint(wireData.a);
-                const b = safePoint(wireData.b);
-                if (!a || !b) continue;
-                const id = ensureUniqueWireId(wireData.id);
-                const wire = { id, a, b };
-                if (wireData.aRef) wire.aRef = wireData.aRef;
-                if (wireData.bRef) wire.bRef = wireData.bRef;
-                this.wires.set(id, wire);
-                continue;
-            }
-
-            // Legacy formats: start/end component terminal references (optionally with controlPoints polyline)
-            const startRef = wireData.start
-                ? { componentId: wireData.start.componentId, terminalIndex: wireData.start.terminalIndex }
-                : (wireData.startComponentId != null
-                    ? { componentId: wireData.startComponentId, terminalIndex: wireData.startTerminalIndex }
-                    : null);
-            const endRef = wireData.end
-                ? { componentId: wireData.end.componentId, terminalIndex: wireData.end.terminalIndex }
-                : (wireData.endComponentId != null
-                    ? { componentId: wireData.endComponentId, terminalIndex: wireData.endTerminalIndex }
-                    : null);
-
-            if (!startRef || !endRef) continue;
-
-            const start = getTerminalPoint(startRef.componentId, startRef.terminalIndex);
-            const end = getTerminalPoint(endRef.componentId, endRef.terminalIndex);
-            if (!start || !end) continue;
-
-            const controlPoints = Array.isArray(wireData.controlPoints) ? wireData.controlPoints : [];
-            const poly = [start, ...controlPoints.map(safePoint).filter(Boolean), end];
-
-            // Convert polyline into multiple 2-terminal wire segments.
-            for (let i = 0; i < poly.length - 1; i++) {
-                const a = poly[i];
-                const b = poly[i + 1];
-                if (!a || !b) continue;
-                const segBase = i === 0 ? wireData.id : `${wireData.id}_${i}`;
-                const id = ensureUniqueWireId(segBase);
-                const seg = { id, a: { x: a.x, y: a.y }, b: { x: b.x, y: b.y } };
-                if (i === 0) seg.aRef = startRef;
-                if (i === poly.length - 2) seg.bRef = endRef;
-                this.wires.set(id, seg);
-            }
+        for (const wire of loaded.wires) {
+            this.wires.set(wire.id, wire);
         }
-
-        for (const probeData of probeList) {
-            const normalized = this.normalizeObservationProbe(probeData);
-            if (!normalized) continue;
-            if (!this.wires.has(normalized.wireId)) continue;
-            const probeId = this.ensureUniqueObservationProbeId(normalized.id);
-            this.observationProbes.set(probeId, { ...normalized, id: probeId });
+        for (const probe of loaded.probes) {
+            const probeId = this.ensureUniqueObservationProbeId(probe.id);
+            this.observationProbes.set(probeId, { ...probe, id: probeId });
         }
 
         this.rebuildNodes();
