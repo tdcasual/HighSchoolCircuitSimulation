@@ -25,6 +25,7 @@ import * as PointerSessionManager from './interaction/PointerSessionManager.js';
 import * as ViewportController from './interaction/ViewportController.js';
 import * as SnapController from './interaction/SnapController.js';
 import * as InteractionOrchestrator from './interaction/InteractionOrchestrator.js';
+import * as ComponentActions from './interaction/ComponentActions.js';
 
 const INTEGRATION_METHOD_OPTIONS = Object.freeze([
     { value: 'auto', label: '自动（默认梯形法）' },
@@ -659,40 +660,14 @@ export class InteractionManager {
      * 旋转元器件
      */
     rotateComponent(id) {
-        const comp = this.circuit.getComponent(id);
-        if (comp) {
-            this.runWithHistory('旋转元器件', () => {
-                comp.rotation = ((comp.rotation || 0) + 90) % 360;
-                this.renderer.refreshComponent(comp);
-                this.renderer.updateConnectedWires(id);
-                this.renderer.setSelected(id, true);
-                this.circuit.rebuildNodes();
-            });
-        }
+        return ComponentActions.rotateComponent.call(this, id);
     }
 
     /**
      * 切换开关状态
      */
     toggleSwitch(id) {
-        const comp = this.circuit.getComponent(id);
-        if (comp && (comp.type === 'Switch' || comp.type === 'SPDTSwitch')) {
-            this.runWithHistory('切换开关', () => {
-                if (comp.type === 'Switch') {
-                    comp.closed = !comp.closed;
-                } else {
-                    comp.position = comp.position === 'b' ? 'a' : 'b';
-                }
-                this.renderer.refreshComponent(comp);
-                this.renderer.setSelected(id, true);
-                this.selectComponent(id);
-                if (comp.type === 'Switch') {
-                    this.updateStatus(`开关已${comp.closed ? '闭合' : '断开'}`);
-                } else {
-                    this.updateStatus(`单刀双掷开关已切换到 ${comp.position === 'b' ? '下掷' : '上掷'}`);
-                }
-            });
-        }
+        return ComponentActions.toggleSwitch.call(this, id);
     }
 
     /**
