@@ -3,7 +3,6 @@
  * 处理拖放、连线、选择等用户交互
  */
 
-import { HistoryManager } from './interaction/HistoryManager.js';
 import * as WireInteractions from './interaction/WireInteractions.js';
 import * as DragBehaviors from './interaction/DragBehaviors.js';
 import * as SelectionPanelController from './interaction/SelectionPanelController.js';
@@ -27,59 +26,12 @@ import * as ToolboxBindingsController from './interaction/ToolboxBindingsControl
 import * as EventBindingsController from './interaction/EventBindingsController.js';
 import * as HistoryFacadeController from './interaction/HistoryFacadeController.js';
 import * as CoordinateTransforms from './interaction/CoordinateTransforms.js';
+import { initializeInteractionState } from './interaction/InteractionStateInitializer.js';
 
 export class InteractionManager {
     constructor(app) {
-        this.app = app;
-        this.circuit = app.circuit;
-        this.renderer = app.renderer;
-        this.svg = app.svg;
-        
-        // 交互状态
-        this.isDragging = false;
-        this.isWiring = false;
-        this.isDraggingComponent = false; // 标记是否正在拖动元器件（而不是从工具箱拖放）
-        this.dragTarget = null;
-        this.dragGroup = null; // 黑箱拖动时的组移动信息
-        this.dragOffset = { x: 0, y: 0 };
-        this.selectedComponent = null;
-        this.selectedWire = null;
+        initializeInteractionState(this, app);
 
-        // Undo/Redo history (circuit state snapshots)
-        this.historyManager = new HistoryManager(this, { maxEntries: 100 });
-
-        // 平行板电容探索模式：拖动极板（使用局部 document 监听实现）
-        
-        // 连线状态
-        this.wireStart = null;
-        this.tempWire = null;
-        this.ignoreNextWireMouseUp = false;
-        this.isDraggingWireEndpoint = false;
-        this.wireEndpointDrag = null; // {wireId,end}
-        this.isDraggingWire = false;
-        this.wireDrag = null; // {wireId,startCanvas,startClient,startA,startB,detached,lastDx,lastDy}
-        
-        // 画布平移状态
-        this.isPanning = false;
-        this.panStart = { x: 0, y: 0 };
-        this.viewOffset = { x: 0, y: 0 };
-        this.scale = 1;
-
-        // Pointer 统一输入（触屏/鼠标/触控笔）
-        this.activePointers = new Map(); // pointerId -> {clientX, clientY, pointerType}
-        this.primaryPointerId = null;
-        this.pinchGesture = null; // {pointerAId,pointerBId,startScale,startDistance,startCanvasPivot}
-        this.blockSinglePointerInteraction = false; // pinch 后需抬起全部手指再恢复单指交互
-        this.lastPrimaryPointerType = 'mouse';
-
-        // 工具箱触屏放置（点击工具 -> 点击画布落子）
-        this.pendingToolType = null;
-        this.pendingToolItem = null;
-        
-        // 对齐辅助线
-        this.alignmentGuides = null;
-        this.snapThreshold = 10; // 吸附阈值（像素）
-        
         // 绑定事件
         this.bindEvents();
     }
