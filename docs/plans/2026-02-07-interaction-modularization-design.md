@@ -12,6 +12,13 @@ Goal: 在不改变对外行为的前提下，同时提升可维护性（A）与�
 - 单元测试难以隔离，需大量端到端场景兜底。
 - UI 层与业务操作耦合，难以并行开发。
 
+当前状态（2026-02-07 更新）：
+
+- 已完成 `ContextMenuController`、`ProbeActions`、`ComponentActions` 拆分。
+- `InteractionOrchestrator` 已迁移到 `src/app/interaction/InteractionOrchestrator.js`。
+- 动作层已引入结果 DTO，并增加 `AppError + ErrorCodes + Logger` 的错误收口链路。
+- `src/ui/Interaction.js` 当前约 2124 行，仍需继续压缩到目标范围。
+
 ## 2. Approaches Considered
 
 1. 结构优先（先拆文件）  
@@ -51,6 +58,10 @@ Goal: 在不改变对外行为的前提下，同时提升可维护性（A）与�
 
 `DOM Event -> InteractionOrchestrator -> Command -> Circuit facade -> core services -> Result DTO -> Renderer`
 
+失败链路补充：
+
+`Result DTO(ok=false) -> AppError(code, traceId) -> Logger(action_failed) -> UI status`
+
 约束：
 
 - UI 不直接调用 `core/*` 细节，只经过 `Circuit` 或 orchestrator。
@@ -63,9 +74,11 @@ Goal: 在不改变对外行为的前提下，同时提升可维护性（A）与�
 
 - `UI_ERR_*`: 会话级错误（如拖拽目标失效），终止当前手势。
 - `APP_ERR_*`: 编排/命令错误，执行局部回滚并保留交互上下文。
-- `CORE_ERR_*`: 求解与拓扑错误，沿用“保留 last valid result”的显示策略。
+- `TOPO_ERR_*`: 拓扑构建/连线合法性错误。
+- `SIM_ERR_*`: 数值求解与仿真稳定性错误。
+- `IO_ERR_*`: 导入/导出与持久化错误。
 
-所有错误经 orchestrator 归一化为可观察事件，供日志与面板提示消费。
+所有错误经 orchestrator 归一化为 `AppError`，并附带 `traceId` 输出可观察日志事件，供面板提示与排障消费。
 
 ## 6. Iteration Plan
 

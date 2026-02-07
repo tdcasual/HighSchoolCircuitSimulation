@@ -138,8 +138,10 @@ npm run baseline:ai:update
 ├── index.html
 ├── css/
 ├── src/
+│   ├── app/             # 交互编排层（orchestrator 等）
 │   ├── components/      # 元器件定义、默认参数、SVG渲染
 │   ├── core/            # 拓扑、仿真、IO 内核服务
+│   │   ├── errors/
 │   │   ├── topology/
 │   │   ├── simulation/
 │   │   └── io/
@@ -164,10 +166,13 @@ npm run baseline:ai:update
 ## 架构分层（重构后）
 
 - facade 层：`AIPanel`、`Circuit`、`Solver`（对外 API 保持稳定）。
+- `src/app/interaction`：交互编排入口（`InteractionOrchestrator`）。
 - `src/core/topology`：节点重建、导线压缩、连通缓存。
 - `src/core/simulation`：印记分发、动态积分、结果后处理。
 - `src/core/io`：JSON 序列化/反序列化与 schema 校验网关。
+- `src/core/errors`：统一错误码与 `AppError`。
 - `src/ui/ai`：聊天、设置、面板布局控制器拆分。
+- `src/ui/interaction/ComponentActions`：动作层返回统一 DTO（`{ ok, type, payload?, message?, error?, code?, traceId? }`），由编排层消费与记录日志。
 
 ## 当前边界（非缺陷，属建模取舍）
 
