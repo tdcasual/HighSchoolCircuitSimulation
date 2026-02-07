@@ -5,12 +5,9 @@
 
 import { Matrix } from './Matrix.js';
 import { computeNtcThermistorResistance, computePhotoresistorResistance } from '../utils/Physics.js';
-
-const DynamicIntegrationMethods = Object.freeze({
-    Auto: 'auto',
-    Trapezoidal: 'trapezoidal',
-    BackwardEuler: 'backward-euler'
-});
+import { StampDispatcher } from '../core/simulation/StampDispatcher.js';
+import { DynamicIntegrator, DynamicIntegrationMethods } from '../core/simulation/DynamicIntegrator.js';
+import { ResultPostprocessor } from '../core/simulation/ResultPostprocessor.js';
 
 export class MNASolver {
     constructor() {
@@ -29,6 +26,13 @@ export class MNASolver {
             matrixSize: -1,
             factorization: null
         };
+        this.stampDispatcher = new StampDispatcher({
+            stampResistor: (comp, context = {}) => {
+                this.stampResistor(context.A, context.i1, context.i2, comp.resistance);
+            }
+        });
+        this.dynamicIntegrator = new DynamicIntegrator();
+        this.resultPostprocessor = new ResultPostprocessor();
     }
 
     /**
@@ -414,15 +418,16 @@ export class MNASolver {
             }
 
             // 计算各元器件的电流
-            const currents = new Map();
-            for (const comp of this.components) {
-                const current = this.calculateCurrent(comp, voltages, x, nodeCount);
-                currents.set(comp.id, current);
-
-                if (this.debugMode) {
-                    console.log(`Current for ${comp.id}: ${current.toFixed(6)}A`);
-                }
-            }
+            const { currents } = this.resultPostprocessor.apply({
+                components: this.components,
+                voltages,
+                x,
+                nodeCount,
+                dt: this.dt,
+                debugMode: this.debugMode,
+                resolveDynamicIntegrationMethod: (component) => this.resolveDynamicIntegrationMethod(component),
+                getSourceInstantVoltage: (component) => this.getSourceInstantVoltage(component)
+            });
 
             solvedVoltages = voltages;
             solvedCurrents = currents;
@@ -578,6 +583,20 @@ export class MNASolver {
         
         if (this.debugMode) {
             console.log(`Stamp ${comp.type} ${comp.id}: nodes=[${n1},${n2}], matrix idx=[${i1},${i2}]`);
+        }
+
+        const handledByDispatcher = this.stampDispatcher.stamp(comp, {
+            A,
+            z,
+            nodeCount,
+            n1,
+            n2,
+            i1,
+            i2,
+            isValidNode
+        });
+        if (handledByDispatcher) {
+            return;
         }
 
         switch (comp.type) {
@@ -960,269 +979,14 @@ export class MNASolver {
      * @returns {number} 电流值
      */
     calculateCurrent(comp, voltages, x, nodeCount) {
-        if (comp.type === 'Ground') {
-            return 0;
-        }
-
-        // 被短路的元器件电流为0（带内阻电源例外，仍按 E/r 估计短路电流）
-        const isFiniteResistanceSource = (comp.type === 'PowerSource' || comp.type === 'ACVoltageSource')
-            && Number.isFinite(Number(comp.internalResistance))
-            && Number(comp.internalResistance) > 1e-9;
-        if (comp._isShorted && !isFiniteResistanceSource) {
-            return 0;
-        }
-
-        // IMPORTANT: Components that are not fully wired into the circuit have invalid node indices (-1).
-        // They are skipped during stamping, so their current must be forced to 0 here as well.
-        // Otherwise we can leak "phantom" currents into wire animation logic via results.currents.
-        const isValidNode = (nodeIdx) => nodeIdx !== undefined && nodeIdx !== null && nodeIdx >= 0;
-        if (comp.type !== 'Rheostat' && comp.type !== 'SPDTSwitch' && comp.type !== 'Relay') {
-            if (!comp.nodes || !isValidNode(comp.nodes[0]) || !isValidNode(comp.nodes[1])) {
-                return 0;
-            }
-        } else if (comp.type === 'Relay') {
-            if (!comp.nodes || !isValidNode(comp.nodes[0]) || !isValidNode(comp.nodes[1])) {
-                return 0;
-            }
-        } else if (comp.type === 'SPDTSwitch') {
-            const routeToB = comp.position === 'b';
-            const targetIdx = routeToB ? 2 : 1;
-            if (!comp.nodes || !isValidNode(comp.nodes[0]) || !isValidNode(comp.nodes[targetIdx])) {
-                return 0;
-            }
-        } else {
-            const mode = comp.connectionMode || 'none';
-            const nLeft = comp.nodes?.[0];
-            const nRight = comp.nodes?.[1];
-            const nSlider = comp.nodes?.[2];
-            const leftValid = isValidNode(nLeft);
-            const rightValid = isValidNode(nRight);
-            const sliderValid = isValidNode(nSlider);
-            switch (mode) {
-                case 'left-slider':
-                    if (!leftValid || !sliderValid) return 0;
-                    break;
-                case 'right-slider':
-                    if (!rightValid || !sliderValid) return 0;
-                    break;
-                case 'left-right':
-                    if (!leftValid || !rightValid) return 0;
-                    break;
-                case 'all':
-                    if (!leftValid || !rightValid || !sliderValid) return 0;
-                    break;
-                default:
-                    return 0;
-            }
-        }
-        
-        const v1 = voltages[comp.nodes[0]] || 0;
-        const v2 = voltages[comp.nodes[1]] || 0;
-        const dV = v1 - v2;
-
-        switch (comp.type) {
-            case 'Resistor':
-            case 'Bulb':
-                return comp.resistance > 0 ? dV / comp.resistance : 0;
-
-            case 'Thermistor': {
-                const resistance = computeNtcThermistorResistance(comp);
-                return resistance > 0 ? dV / resistance : 0;
-            }
-            case 'Photoresistor': {
-                const resistance = computePhotoresistorResistance(comp);
-                return resistance > 0 ? dV / resistance : 0;
-            }
-            case 'Relay': {
-                const coilR = Math.max(1e-9, Number(comp.coilResistance) || 200);
-                return dV / coilR; // 元件“主电流”定义为线圈电流
-            }
-
-            case 'Diode':
-            case 'LED': {
-                const vfDefault = comp.type === 'LED' ? 2.0 : 0.7;
-                const ronDefault = comp.type === 'LED' ? 2 : 1;
-                const vf = Math.max(0, Number(comp.forwardVoltage) || vfDefault);
-                const ron = Math.max(1e-9, Number(comp.onResistance) || ronDefault);
-                const roff = Math.max(1, Number(comp.offResistance) || 1e9);
-                if (comp.conducting) {
-                    return (dV - vf) / ron;
-                }
-                return dV / roff;
-            }
-                
-            case 'Rheostat': {
-                // 滑动变阻器电流计算 - 根据连接模式
-                // 安全获取电压值，未连接的端子电压视为0
-                const getVoltage = (nodeIdx) => {
-                    if (nodeIdx === undefined || nodeIdx < 0) return 0;
-                    return voltages[nodeIdx] || 0;
-                };
-                
-                const v_left = getVoltage(comp.nodes[0]);
-                const v_right = getVoltage(comp.nodes[1]);
-                const v_slider = getVoltage(comp.nodes[2]);
-                
-                const minR = comp.minResistance ?? 0;
-                const maxR = comp.maxResistance ?? 100;
-                const position = comp.position == null ? 0.5 : Math.min(Math.max(comp.position, 0), 1);
-                const range = Math.max(0, maxR - minR);
-                const R1 = Math.max(1e-9, minR + range * position);
-                const R2 = Math.max(1e-9, maxR - range * position);
-                
-                switch (comp.connectionMode) {
-                    case 'left-slider':
-                        // 左端到滑块的电流
-                        return (v_left - v_slider) / R1;
-                    case 'right-slider':
-                        // 滑块到右端的电流
-                        return (v_slider - v_right) / R2;
-                    case 'left-right':
-                        // 全阻值
-                        return (v_left - v_right) / Math.max(1e-9, maxR);
-                    case 'all': {
-                        // 三端都连接，根据节点连接情况计算电流
-                        const n_left = comp.nodes[0];
-                        const n_right = comp.nodes[1];
-                        const n_slider = comp.nodes[2];
-                        
-                        const leftEqSlider = (n_left === n_slider);
-                        const rightEqSlider = (n_right === n_slider);
-                        const leftEqRight = (n_left === n_right);
-                        
-                        if (leftEqSlider && rightEqSlider) {
-                            // 完全短路
-                            return 0;
-                        } else if (leftEqSlider) {
-                            // R1短路，只有R2
-                            return (v_slider - v_right) / R2;
-                        } else if (rightEqSlider) {
-                            // R2短路，只有R1
-                            return (v_left - v_slider) / R1;
-                        } else if (leftEqRight) {
-                            // R1||R2 并联
-                            const R_parallel = (R1 * R2) / (R1 + R2);
-                            return (v_left - v_slider) / R_parallel;
-                        } else {
-                            // 正常三端连接，返回流经滑块的总电流
-                            const I1 = (v_left - v_slider) / R1;
-                            const I2 = (v_slider - v_right) / R2;
-                            return Math.abs(I1) > Math.abs(I2) ? I1 : I2;
-                        }
-                    }
-                    default:
-                        return 0;
-                }
-            }
-                
-            case 'PowerSource':
-            case 'ACVoltageSource':
-                // 电源电流计算
-                if (comp._nortonModel) {
-                    // 诺顿模型：电流 = (E - V_端子) / r = (E - (v1-v2)) / r
-                    // 其中 v1-v2 是端子电压
-                    const terminalVoltage = v1 - v2;
-                    const sourceVoltage = this.getSourceInstantVoltage(comp);
-                    const current = (sourceVoltage - terminalVoltage) / comp.internalResistance;
-                    return current; // 正值表示从正极流出
-                } else {
-                    // 理想电压源模型：从MNA解向量获取
-                    if (!Number.isInteger(comp.vsIndex)) {
-                        return 0;
-                    }
-                    const sourceCurrent = x[nodeCount - 1 + comp.vsIndex] || 0;
-                    return -sourceCurrent;
-                }
-                
-            case 'Motor':
-                // 电动机电流从MNA解向量中获取
-                const motorCurrent = x[nodeCount - 1 + comp.vsIndex] || 0;
-                return -motorCurrent;
-                
-            case 'Capacitor':
-            case 'ParallelPlateCapacitor': {
-                const C = comp.capacitance || 0;
-                const method = this.resolveDynamicIntegrationMethod(comp);
-                if (method === DynamicIntegrationMethods.Trapezoidal) {
-                    const Req = this.dt / (2 * Math.max(1e-18, C));
-                    const prevVoltage = Number.isFinite(comp.prevVoltage) ? comp.prevVoltage : 0;
-                    const prevCurrent = Number.isFinite(comp.prevCurrent) ? comp.prevCurrent : 0;
-                    const Ieq = -(prevVoltage / Req + prevCurrent);
-                    return dV / Req + Ieq;
-                }
-
-                // 后向欧拉：I = dQ/dt,  Q = C * V（支持可变电容）
-                const qPrev = comp.prevCharge || 0;
-                const qNew = C * dV;
-                const dQ = qNew - qPrev;
-                return dQ / this.dt;
-            }
-
-            case 'Inductor': {
-                const L = Math.max(1e-12, comp.inductance || 0);
-                const method = this.resolveDynamicIntegrationMethod(comp);
-                const prevCurrent = Number.isFinite(comp.prevCurrent)
-                    ? comp.prevCurrent
-                    : (Number.isFinite(comp.initialCurrent) ? comp.initialCurrent : 0);
-                if (method === DynamicIntegrationMethods.Trapezoidal) {
-                    const Req = (2 * L) / this.dt;
-                    const prevVoltage = Number.isFinite(comp.prevVoltage) ? comp.prevVoltage : 0;
-                    const Ieq = prevCurrent + (prevVoltage / Req);
-                    return dV / Req + Ieq;
-                }
-                return prevCurrent + (this.dt / L) * dV;
-            }
-                
-            case 'Switch':
-                // 开关电流
-                if (comp.closed) {
-                    // 闭合时电流很大（短路），但实际电流受外部电路限制
-                    // 用极小电阻计算
-                    return dV / 1e-9;
-                }
-                return 0; // 断开时无电流
-
-            case 'SPDTSwitch': {
-                const routeToB = comp.position === 'b';
-                const targetIdx = routeToB ? 2 : 1;
-                const commonNode = comp.nodes?.[0];
-                const targetNode = comp.nodes?.[targetIdx];
-                const vCommon = commonNode !== undefined && commonNode >= 0 ? (voltages[commonNode] || 0) : 0;
-                const vTarget = targetNode !== undefined && targetNode >= 0 ? (voltages[targetNode] || 0) : 0;
-                const onR = Math.max(1e-9, Number(comp.onResistance) || 1e-9);
-                return (vCommon - vTarget) / onR;
-            }
-
-            case 'Fuse': {
-                const resistance = comp.blown
-                    ? Math.max(1, Number(comp.blownResistance) || 1e12)
-                    : Math.max(1e-9, Number(comp.coldResistance) || 0.05);
-                return dV / resistance;
-            }
-                
-            case 'Ammeter':
-                // 电流表电流
-                if (comp.resistance > 0) {
-                    // 有内阻时通过电阻计算
-                    return dV / comp.resistance;
-                } else {
-                    // 理想电流表：从MNA解向量获取
-                    const ammeterCurrent = x[nodeCount - 1 + comp.vsIndex] || 0;
-                    return -ammeterCurrent;
-                }
-                
-            case 'Voltmeter':
-                // 电压表电流
-                const vmResistance = comp.resistance;
-                if (vmResistance !== null && vmResistance !== undefined && 
-                    vmResistance !== Infinity && vmResistance > 0) {
-                    return dV / vmResistance;
-                }
-                return 0; // 理想电压表无电流
-                
-            default:
-                return 0;
-        }
+        return this.resultPostprocessor.calculateCurrent(comp, {
+            voltages,
+            x,
+            nodeCount,
+            dt: this.dt,
+            resolveDynamicIntegrationMethod: (targetComp) => this.resolveDynamicIntegrationMethod(targetComp),
+            getSourceInstantVoltage: (targetComp) => this.getSourceInstantVoltage(targetComp)
+        });
     }
 
     /**
@@ -1231,90 +995,17 @@ export class MNASolver {
      * @param {Map<string, number>} [currents] - 当前支路电流
      */
     updateDynamicComponents(voltages, currents = null) {
-        const isValidNode = (nodeIdx) => nodeIdx !== undefined && nodeIdx !== null && nodeIdx >= 0;
-        for (const comp of this.components) {
-            if (comp.type === 'Capacitor' || comp.type === 'ParallelPlateCapacitor') {
-                if (!comp.nodes || !isValidNode(comp.nodes[0]) || !isValidNode(comp.nodes[1])) continue;
-                const v1 = voltages[comp.nodes[0]] || 0;
-                const v2 = voltages[comp.nodes[1]] || 0;
-                const v = v1 - v2;
-                comp.prevVoltage = v;
-                comp.prevCharge = (comp.capacitance || 0) * v;
-                const measuredCurrent = currents && typeof currents.get === 'function'
-                    ? currents.get(comp.id)
-                    : undefined;
-                if (Number.isFinite(measuredCurrent)) {
-                    comp.prevCurrent = measuredCurrent;
-                }
-                comp._dynamicHistoryReady = true;
-            }
-            
-            if (comp.type === 'Motor') {
-                if (!comp.nodes || !isValidNode(comp.nodes[0]) || !isValidNode(comp.nodes[1])) continue;
-                // 更新电机转速和反电动势
-                // 简化模型：反电动势与转速成正比
-                const v1 = voltages[comp.nodes[0]] || 0;
-                const v2 = voltages[comp.nodes[1]] || 0;
-                const voltage = v1 - v2;
-                const current = (voltage - (comp.backEmf || 0)) / comp.resistance;
-                
-                // 电磁转矩产生加速度，更新转速
-                const torque = comp.torqueConstant * current;
-                const acceleration = (torque - comp.loadTorque) / comp.inertia;
-                comp.speed = (comp.speed || 0) + acceleration * this.dt;
-                comp.speed = Math.max(0, comp.speed); // 转速不能为负
-                
-                // 更新反电动势
-                comp.backEmf = comp.emfConstant * comp.speed;
-            }
-
-            if (comp.type === 'Inductor') {
-                if (!comp.nodes || !isValidNode(comp.nodes[0]) || !isValidNode(comp.nodes[1])) continue;
-                const v1 = voltages[comp.nodes[0]] || 0;
-                const v2 = voltages[comp.nodes[1]] || 0;
-                const dV = v1 - v2;
-                const L = Math.max(1e-12, comp.inductance || 0);
-                const measuredCurrent = currents && typeof currents.get === 'function'
-                    ? currents.get(comp.id)
-                    : undefined;
-                if (Number.isFinite(measuredCurrent)) {
-                    comp.prevCurrent = measuredCurrent;
-                } else {
-                    const prevCurrent = Number.isFinite(comp.prevCurrent)
-                        ? comp.prevCurrent
-                        : (Number.isFinite(comp.initialCurrent) ? comp.initialCurrent : 0);
-                    comp.prevCurrent = prevCurrent + (this.dt / L) * dV;
-                }
-                comp.prevVoltage = dV;
-                comp._dynamicHistoryReady = true;
-            }
-        }
+        return this.dynamicIntegrator.updateDynamicComponents(
+            this.components,
+            voltages,
+            currents,
+            this.dt,
+            this.hasConnectedSwitch
+        );
     }
 
     resolveDynamicIntegrationMethod(comp) {
-        if (!comp) return DynamicIntegrationMethods.BackwardEuler;
-        const methodRaw = typeof comp.integrationMethod === 'string'
-            ? comp.integrationMethod.toLowerCase()
-            : DynamicIntegrationMethods.Auto;
-        const historyReady = !!comp._dynamicHistoryReady;
-
-        if (this.hasConnectedSwitch) {
-            return DynamicIntegrationMethods.BackwardEuler;
-        }
-
-        if (methodRaw === DynamicIntegrationMethods.Trapezoidal) {
-            if (!historyReady) {
-                return DynamicIntegrationMethods.BackwardEuler;
-            }
-            return DynamicIntegrationMethods.Trapezoidal;
-        }
-        if (methodRaw === DynamicIntegrationMethods.BackwardEuler) {
-            return DynamicIntegrationMethods.BackwardEuler;
-        }
-        if (!historyReady) {
-            return DynamicIntegrationMethods.BackwardEuler;
-        }
-        return DynamicIntegrationMethods.Trapezoidal;
+        return this.dynamicIntegrator.resolveDynamicIntegrationMethod(comp, this.hasConnectedSwitch);
     }
 
     getSourceInstantVoltage(comp) {
