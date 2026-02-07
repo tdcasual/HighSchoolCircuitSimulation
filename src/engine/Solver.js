@@ -123,6 +123,12 @@ export class MNASolver {
             if ((comp.type === 'Capacitor' || comp.type === 'ParallelPlateCapacitor') && !Number.isFinite(comp.prevVoltage)) {
                 comp.prevVoltage = 0;
             }
+            if (comp.type === 'Diode') {
+                comp.forwardVoltage = Number.isFinite(comp.forwardVoltage) ? comp.forwardVoltage : 0.7;
+                comp.onResistance = Number.isFinite(comp.onResistance) ? comp.onResistance : 1;
+                comp.offResistance = Number.isFinite(comp.offResistance) ? comp.offResistance : 1e9;
+                comp.conducting = !!comp.conducting;
+            }
             if (comp.type === 'Switch' || comp.type === 'SPDTSwitch') {
                 const n1 = comp.nodes?.[0];
                 const n2 = comp.type === 'SPDTSwitch'
@@ -178,6 +184,14 @@ export class MNASolver {
                 case 'Resistor':
                 case 'Bulb':
                     keyParts.push(`R:${this.formatMatrixKeyNumber(comp.resistance ?? 0)}`);
+                    break;
+                case 'Diode':
+                    keyParts.push(
+                        `vf:${this.formatMatrixKeyNumber(comp.forwardVoltage ?? 0.7)}`,
+                        `ron:${this.formatMatrixKeyNumber(comp.onResistance ?? 1)}`,
+                        `roff:${this.formatMatrixKeyNumber(comp.offResistance ?? 1e9)}`,
+                        `on:${comp.conducting ? 1 : 0}`
+                    );
                     break;
                 case 'Rheostat':
                     keyParts.push(
@@ -269,87 +283,135 @@ export class MNASolver {
             return { voltages, currents, valid: true };
         }
 
-        // 创建MNA矩阵和向量
-        const A = Matrix.zeros(n, n);
-        const z = Matrix.zeroVector(n);
+        const hasDiode = this.components.some((comp) => comp?.type === 'Diode');
+        const maxIterations = hasDiode ? 6 : 1;
 
-        // 为每个元器件添加印记（stamp）
-        for (const comp of this.components) {
-            this.stampComponent(comp, A, z, nodeCount);
-        }
+        let solvedVoltages = [];
+        let solvedCurrents = new Map();
+        let solvedValid = false;
 
-        // gmin 稳定化：给每个非接地节点加一个极小对地电导
-        // 目的：当画布上存在与参考地完全断开的“悬浮子电路”时，仍可得到可解的方程组
-        if (this.gmin > 0) {
-            for (let i = 0; i < nodeCount - 1; i++) {
-                A[i][i] += this.gmin;
+        for (let iter = 0; iter < maxIterations; iter++) {
+            // 创建MNA矩阵和向量
+            const A = Matrix.zeros(n, n);
+            const z = Matrix.zeroVector(n);
+
+            // 为每个元器件添加印记（stamp）
+            for (const comp of this.components) {
+                this.stampComponent(comp, A, z, nodeCount);
             }
-        }
 
-        // 调试输出矩阵
-        if (this.debugMode) {
-            console.log('MNA Matrix A:');
-            for (let i = 0; i < n; i++) {
-                console.log(`  [${A[i].map(v => v.toFixed(4)).join(', ')}]`);
+            // gmin 稳定化：给每个非接地节点加一个极小对地电导
+            // 目的：当画布上存在与参考地完全断开的“悬浮子电路”时，仍可得到可解的方程组
+            if (this.gmin > 0) {
+                for (let i = 0; i < nodeCount - 1; i++) {
+                    A[i][i] += this.gmin;
+                }
             }
-            console.log('Vector z:', z.map(v => v.toFixed(4)));
-        }
 
-        const matrixCacheKey = this.buildSystemMatrixCacheKey(nodeCount);
-        const cached = this.systemFactorizationCache;
-        let factorization = null;
+            // 调试输出矩阵
+            if (this.debugMode) {
+                console.log('MNA Matrix A:');
+                for (let i = 0; i < n; i++) {
+                    console.log(`  [${A[i].map(v => v.toFixed(4)).join(', ')}]`);
+                }
+                console.log('Vector z:', z.map(v => v.toFixed(4)));
+            }
 
-        if (
-            cached &&
-            cached.key === matrixCacheKey &&
-            cached.matrixSize === n &&
-            cached.factorization
-        ) {
-            factorization = cached.factorization;
-        } else {
-            factorization = Matrix.factorize(A);
-            if (!factorization) {
-                console.warn('Matrix factorization failed');
+            const matrixCacheKey = this.buildSystemMatrixCacheKey(nodeCount);
+            const cached = this.systemFactorizationCache;
+            let factorization = null;
+
+            if (
+                cached &&
+                cached.key === matrixCacheKey &&
+                cached.matrixSize === n &&
+                cached.factorization
+            ) {
+                factorization = cached.factorization;
+            } else {
+                factorization = Matrix.factorize(A);
+                if (!factorization) {
+                    console.warn('Matrix factorization failed');
+                    this.resetMatrixFactorizationCache();
+                    return { voltages: [], currents: new Map(), valid: false };
+                }
+                this.systemFactorizationCache.key = matrixCacheKey;
+                this.systemFactorizationCache.matrixSize = n;
+                this.systemFactorizationCache.factorization = factorization;
+            }
+
+            // 求解
+            const x = Matrix.solveWithFactorization(factorization, z);
+
+            if (!x) {
+                console.warn('Matrix solve failed');
                 this.resetMatrixFactorizationCache();
                 return { voltages: [], currents: new Map(), valid: false };
             }
-            this.systemFactorizationCache.key = matrixCacheKey;
-            this.systemFactorizationCache.matrixSize = n;
-            this.systemFactorizationCache.factorization = factorization;
-        }
 
-        // 求解
-        const x = Matrix.solveWithFactorization(factorization, z);
-        
-        if (!x) {
-            console.warn('Matrix solve failed');
-            this.resetMatrixFactorizationCache();
-            return { voltages: [], currents: new Map(), valid: false };
-        }
-
-        if (this.debugMode) {
-            console.log('Solution x:', x.map(v => v.toFixed(4)));
-        }
-
-        // 提取节点电压（添加地节点的0电压）
-        const voltages = [0]; // 节点0是地
-        for (let i = 0; i < nodeCount - 1; i++) {
-            voltages.push(x[i] || 0);
-        }
-
-        // 计算各元器件的电流
-        const currents = new Map();
-        for (const comp of this.components) {
-            const current = this.calculateCurrent(comp, voltages, x, nodeCount);
-            currents.set(comp.id, current);
-            
             if (this.debugMode) {
-                console.log(`Current for ${comp.id}: ${current.toFixed(6)}A`);
+                console.log('Solution x:', x.map(v => v.toFixed(4)));
+            }
+
+            // 提取节点电压（添加地节点的0电压）
+            const voltages = [0]; // 节点0是地
+            for (let i = 0; i < nodeCount - 1; i++) {
+                voltages.push(x[i] || 0);
+            }
+
+            // 计算各元器件的电流
+            const currents = new Map();
+            for (const comp of this.components) {
+                const current = this.calculateCurrent(comp, voltages, x, nodeCount);
+                currents.set(comp.id, current);
+
+                if (this.debugMode) {
+                    console.log(`Current for ${comp.id}: ${current.toFixed(6)}A`);
+                }
+            }
+
+            solvedVoltages = voltages;
+            solvedCurrents = currents;
+            solvedValid = true;
+
+            if (!hasDiode) {
+                break;
+            }
+
+            const diodeStateChanged = this.updateDiodeConductionStates(voltages, currents);
+            if (!diodeStateChanged) {
+                break;
             }
         }
-        this.shortCircuitDetected = this.detectPowerSourceShortCircuits(voltages, currents);
 
-        return { voltages, currents, valid: true };
+        this.shortCircuitDetected = this.detectPowerSourceShortCircuits(solvedVoltages, solvedCurrents);
+        return { voltages: solvedVoltages, currents: solvedCurrents, valid: solvedValid };
+    }
+
+    updateDiodeConductionStates(voltages, currents) {
+        let changed = false;
+        const holdMargin = 0.05; // 避免在阈值附近抖动
+
+        for (const comp of this.components) {
+            if (!comp || comp.type !== 'Diode') continue;
+            const nAnode = comp.nodes?.[0];
+            const nCathode = comp.nodes?.[1];
+            if (nAnode == null || nCathode == null || nAnode < 0 || nCathode < 0) continue;
+
+            const vf = Math.max(0, Number(comp.forwardVoltage) || 0.7);
+            const vAk = (voltages[nAnode] || 0) - (voltages[nCathode] || 0);
+            const i = Number(currents?.get(comp.id)) || 0;
+            const currentOn = i > 1e-9;
+            const keepOn = !!comp.conducting && vAk >= (vf - holdMargin);
+            const nextConducting = vAk >= vf || currentOn || keepOn;
+
+            if (nextConducting !== !!comp.conducting) {
+                comp.conducting = nextConducting;
+                changed = true;
+            }
+        }
+
+        return changed;
     }
 
     detectPowerSourceShortCircuits(voltages, currents) {
@@ -441,6 +503,21 @@ export class MNASolver {
             case 'Bulb':
                 this.stampResistor(A, i1, i2, comp.resistance);
                 break;
+
+            case 'Diode': {
+                const vf = Math.max(0, Number(comp.forwardVoltage) || 0.7);
+                const ron = Math.max(1e-9, Number(comp.onResistance) || 1);
+                const roff = Math.max(1, Number(comp.offResistance) || 1e9);
+                if (comp.conducting) {
+                    // 线性化导通模型：I = (V - Vf) / Ron
+                    // 等效为 Ron + 从阴极到阳极的恒流源 Vf/Ron
+                    this.stampResistor(A, i1, i2, ron);
+                    this.stampCurrentSource(z, i2, i1, vf / ron);
+                } else {
+                    this.stampResistor(A, i1, i2, roff);
+                }
+                break;
+            }
                 
             case 'Rheostat': {
                 // 滑动变阻器模型：根据连接模式决定如何stamp
@@ -828,6 +905,16 @@ export class MNASolver {
             case 'Resistor':
             case 'Bulb':
                 return comp.resistance > 0 ? dV / comp.resistance : 0;
+
+            case 'Diode': {
+                const vf = Math.max(0, Number(comp.forwardVoltage) || 0.7);
+                const ron = Math.max(1e-9, Number(comp.onResistance) || 1);
+                const roff = Math.max(1, Number(comp.offResistance) || 1e9);
+                if (comp.conducting) {
+                    return (dV - vf) / ron;
+                }
+                return dV / roff;
+            }
                 
             case 'Rheostat': {
                 // 滑动变阻器电流计算 - 根据连接模式

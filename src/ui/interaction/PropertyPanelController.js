@@ -125,6 +125,13 @@ export function updatePropertyPanel(comp) {
             content.appendChild(createPropertyRow('电阻值', `${comp.resistance} Ω`));
             break;
 
+        case 'Diode':
+            content.appendChild(createPropertyRow('导通压降', `${Number.isFinite(comp.forwardVoltage) ? comp.forwardVoltage : 0.7} V`));
+            content.appendChild(createPropertyRow('导通电阻', `${Number.isFinite(comp.onResistance) ? comp.onResistance : 1} Ω`));
+            content.appendChild(createPropertyRow('截止电阻', `${Number.isFinite(comp.offResistance) ? comp.offResistance : 1e9} Ω`));
+            content.appendChild(createPropertyRow('状态', comp.conducting ? '导通' : '截止'));
+            break;
+
         case 'Rheostat': {
             const connectionModeText = {
                 'left-slider': '左端-滑块',

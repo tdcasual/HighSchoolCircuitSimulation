@@ -130,6 +130,9 @@ export function getQuantitiesForSource(sourceId, circuit) {
         case 'Fuse':
             list.push({ id: QuantityIds.Resistance, label: '等效电阻 R', unit: 'Ω' });
             break;
+        case 'Diode':
+            list.push({ id: QuantityIds.Resistance, label: '等效电阻 R', unit: 'Ω' });
+            break;
         case 'Rheostat':
             list.push({ id: QuantityIds.Resistance, label: '接入电阻 R', unit: 'Ω' });
             break;
@@ -229,6 +232,10 @@ export function evaluateSourceQuantity(circuit, sourceId, quantityId) {
                 const cold = Number.isFinite(comp.coldResistance) ? comp.coldResistance : 0.05;
                 const blown = Number.isFinite(comp.blownResistance) ? comp.blownResistance : 1e12;
                 return comp.blown ? blown : cold;
+            }
+            if (comp.type === 'Diode') {
+                if (comp.conducting) return Number.isFinite(comp.onResistance) ? comp.onResistance : 1;
+                return Number.isFinite(comp.offResistance) ? comp.offResistance : 1e9;
             }
             if (Number.isFinite(comp.resistance)) return comp.resistance;
             return null;

@@ -1042,6 +1042,9 @@ export class Circuit {
                     comp.voltageValue = 0;
                     comp.powerValue = 0;
                     comp._isShorted = false;
+                    if (comp.type === 'Diode') {
+                        comp.conducting = false;
+                    }
                     if (comp.type === 'Bulb') {
                         comp.brightness = 0;
                     }
@@ -1824,6 +1827,12 @@ export class Circuit {
                 };
             case 'Resistor':
                 return { resistance: comp.resistance };
+            case 'Diode':
+                return {
+                    forwardVoltage: comp.forwardVoltage,
+                    onResistance: comp.onResistance,
+                    offResistance: comp.offResistance
+                };
             case 'Rheostat':
                 return {
                     minResistance: comp.minResistance,

@@ -64,6 +64,12 @@ export const ComponentDefaults = {
     Resistor: {
         resistance: 100        // 电阻值 (Ω)
     },
+    Diode: {
+        forwardVoltage: 0.7,   // 导通压降 (V)
+        onResistance: 1,       // 导通等效电阻 (Ω)
+        offResistance: 1e9,    // 截止等效电阻 (Ω)
+        conducting: false      // 当前导通状态（求解过程会更新）
+    },
     Rheostat: {
         minResistance: 0,      // 最小电阻 (Ω)
         maxResistance: 100,    // 最大电阻 (Ω)
@@ -148,6 +154,7 @@ export const ComponentNames = {
     PowerSource: '电源',
     ACVoltageSource: '交流电源',
     Resistor: '定值电阻',
+    Diode: '二极管',
     Rheostat: '滑动变阻器',
     Bulb: '灯泡',
     Capacitor: '电容',
@@ -314,6 +321,9 @@ export const SVGRenderer = {
             case 'Resistor':
                 this.renderResistor(g, comp);
                 break;
+            case 'Diode':
+                this.renderDiode(g, comp);
+                break;
             case 'Rheostat':
                 this.renderRheostat(g, comp);
                 break;
@@ -451,6 +461,40 @@ export const SVGRenderer = {
         // 标签 - 优先显示自定义标签
         const labelText = comp.label || `${comp.resistance}Ω`;
         this.addText(g, 0, 25, labelText, 10, 'label');
+    },
+
+    /**
+     * 渲染二极管
+     */
+    renderDiode(g, comp) {
+        // 连接线
+        this.addLine(g, -30, 0, -14, 0);
+        this.addLine(g, 14, 0, 30, 0);
+
+        // 三角形（阳极侧）与竖线（阴极侧）
+        const triangle = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+        triangle.setAttribute('points', '-14,-10 -14,10 6,0');
+        triangle.setAttribute('fill', '#fff');
+        triangle.setAttribute('stroke', '#333');
+        triangle.setAttribute('stroke-width', 2);
+        g.appendChild(triangle);
+
+        const cathodeBar = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        cathodeBar.setAttribute('x1', '9');
+        cathodeBar.setAttribute('y1', '-12');
+        cathodeBar.setAttribute('x2', '9');
+        cathodeBar.setAttribute('y2', '12');
+        cathodeBar.setAttribute('stroke', '#333');
+        cathodeBar.setAttribute('stroke-width', 2.2);
+        g.appendChild(cathodeBar);
+
+        // 端子 0=阳极(左), 1=阴极(右)
+        this.addTerminal(g, -30, 0, 0, comp);
+        this.addTerminal(g, 30, 0, 1, comp);
+
+        const isOn = !!comp.conducting;
+        const labelText = comp.label || `${comp.forwardVoltage}V ${isOn ? '导通' : '截止'}`;
+        this.addText(g, 0, 25, labelText, 9, 'label');
     },
 
     /**

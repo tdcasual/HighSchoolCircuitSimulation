@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { addComponent, connectWire, createTestCircuit, solveCircuit } from './helpers/circuitTestUtils.js';
 
-describe('New component models (Ground / AC source / Inductor)', () => {
+describe('New component models (Ground / AC source / Inductor / SPDT / Fuse / Diode)', () => {
     it('uses explicit Ground as reference node (node 0)', () => {
         const circuit = createTestCircuit();
         const ground = addComponent(circuit, 'Ground', 'GND');
@@ -211,5 +211,58 @@ describe('New component models (Ground / AC source / Inductor)', () => {
         const fuseCurrent = Math.abs(circuit.lastResults?.currents?.get('F1') || 0);
         expect(fuseCurrent).toBeLessThan(1e-6);
         circuit.isRunning = false;
+    });
+
+    it('iterates diode state to forward conduction', () => {
+        const circuit = createTestCircuit();
+        const source = addComponent(circuit, 'PowerSource', 'V1', {
+            voltage: 5,
+            internalResistance: 0
+        });
+        const diode = addComponent(circuit, 'Diode', 'D1', {
+            forwardVoltage: 0.7,
+            onResistance: 1,
+            offResistance: 1e9,
+            conducting: false
+        });
+        const resistor = addComponent(circuit, 'Resistor', 'R1', { resistance: 100 });
+
+        connectWire(circuit, 'W1', source, 0, diode, 0); // + to anode
+        connectWire(circuit, 'W2', diode, 1, resistor, 0); // cathode to load
+        connectWire(circuit, 'W3', resistor, 1, source, 1); // load return to -
+
+        const results = solveCircuit(circuit, 0);
+        const expectedCurrent = (5 - 0.7) / (100 + 1);
+
+        expect(results.valid).toBe(true);
+        expect(diode.conducting).toBe(true);
+        expect(results.currents.get('D1')).toBeCloseTo(expectedCurrent, 6);
+        expect(results.currents.get('R1')).toBeCloseTo(expectedCurrent, 6);
+    });
+
+    it('keeps diode in cutoff under reverse bias', () => {
+        const circuit = createTestCircuit();
+        const source = addComponent(circuit, 'PowerSource', 'V1', {
+            voltage: 5,
+            internalResistance: 0
+        });
+        const diode = addComponent(circuit, 'Diode', 'D1', {
+            forwardVoltage: 0.7,
+            onResistance: 1,
+            offResistance: 1e9,
+            conducting: false
+        });
+        const resistor = addComponent(circuit, 'Resistor', 'R1', { resistance: 100 });
+
+        connectWire(circuit, 'W1', source, 0, diode, 1); // + to cathode (reverse)
+        connectWire(circuit, 'W2', diode, 0, resistor, 0); // anode to load
+        connectWire(circuit, 'W3', resistor, 1, source, 1); // load return to -
+
+        const results = solveCircuit(circuit, 0);
+        const diodeCurrent = results.currents.get('D1') || 0;
+
+        expect(results.valid).toBe(true);
+        expect(diode.conducting).toBe(false);
+        expect(Math.abs(diodeCurrent)).toBeLessThan(1e-6);
     });
 });

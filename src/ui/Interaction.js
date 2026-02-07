@@ -163,7 +163,7 @@ export class InteractionManager {
      */
     bindToolboxEvents() {
         const toolItems = document.querySelectorAll('.tool-item');
-        const validTypes = ['Ground', 'PowerSource', 'ACVoltageSource', 'Resistor', 'Rheostat', 'Bulb', 'Capacitor', 'Inductor', 'ParallelPlateCapacitor', 'Motor', 'Switch', 'SPDTSwitch', 'Fuse', 'Ammeter', 'Voltmeter', 'BlackBox', 'Wire'];
+        const validTypes = ['Ground', 'PowerSource', 'ACVoltageSource', 'Resistor', 'Diode', 'Rheostat', 'Bulb', 'Capacitor', 'Inductor', 'ParallelPlateCapacitor', 'Motor', 'Switch', 'SPDTSwitch', 'Fuse', 'Ammeter', 'Voltmeter', 'BlackBox', 'Wire'];
         
         // 标记是否正在从工具箱拖放
         this.isToolboxDrag = false;
@@ -2168,6 +2168,30 @@ export class InteractionManager {
                     unit: 'Ω'
                 }));
                 break;
+
+            case 'Diode':
+                content.appendChild(createFormGroup('导通压降 Vf (V)', {
+                    id: 'edit-forward-voltage',
+                    value: Number.isFinite(comp.forwardVoltage) ? comp.forwardVoltage : 0.7,
+                    min: 0,
+                    step: 0.01,
+                    unit: 'V'
+                }));
+                content.appendChild(createFormGroup('导通电阻 Ron (Ω)', {
+                    id: 'edit-on-resistance',
+                    value: Number.isFinite(comp.onResistance) ? comp.onResistance : 1,
+                    min: 1e-9,
+                    step: 0.01,
+                    unit: 'Ω'
+                }));
+                content.appendChild(createFormGroup('截止电阻 Roff (Ω)', {
+                    id: 'edit-off-resistance',
+                    value: Number.isFinite(comp.offResistance) ? comp.offResistance : 1e9,
+                    min: 1,
+                    step: 1000,
+                    unit: 'Ω'
+                }));
+                break;
                 
             case 'Rheostat':
                 content.appendChild(createFormGroup('最小电阻 (Ω)', {
@@ -2568,6 +2592,18 @@ export class InteractionManager {
                     // 电阻最小值为极小正数，避免除零
                     comp.resistance = this.safeParseFloat(
                         document.getElementById('edit-resistance').value, 100, 1e-9, 1e12
+                    );
+                    break;
+
+                case 'Diode':
+                    comp.forwardVoltage = this.safeParseFloat(
+                        document.getElementById('edit-forward-voltage').value, 0.7, 0, 1000
+                    );
+                    comp.onResistance = this.safeParseFloat(
+                        document.getElementById('edit-on-resistance').value, 1, 1e-9, 1e9
+                    );
+                    comp.offResistance = this.safeParseFloat(
+                        document.getElementById('edit-off-resistance').value, 1e9, 1, 1e15
                     );
                     break;
                     
