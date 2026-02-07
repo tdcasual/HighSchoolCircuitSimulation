@@ -257,3 +257,55 @@ describe('InteractionOrchestrator.onDoubleClick', () => {
         expect(context.renameObservationProbe).not.toHaveBeenCalled();
     });
 });
+
+describe('InteractionOrchestrator.onMouseMove', () => {
+    it('updates view offset during panning', () => {
+        const context = {
+            isPanning: true,
+            panStart: { x: 10, y: 20 },
+            viewOffset: { x: 0, y: 0 },
+            updateViewTransform: vi.fn()
+        };
+        const event = { clientX: 35, clientY: 65 };
+
+        InteractionOrchestrator.onMouseMove.call(context, event);
+
+        expect(context.viewOffset).toEqual({ x: 25, y: 45 });
+        expect(context.updateViewTransform).toHaveBeenCalledTimes(1);
+    });
+
+    it('updates temp wire preview and terminal highlight while wiring', () => {
+        const context = {
+            isPanning: false,
+            screenToCanvas: vi.fn(() => ({ x: 100, y: 120 })),
+            isDraggingWireEndpoint: false,
+            isDraggingWire: false,
+            isDragging: false,
+            isWiring: true,
+            wireStart: { x: 10, y: 20 },
+            tempWire: 'TEMP',
+            resolvePointerType: vi.fn(() => 'mouse'),
+            snapPoint: vi.fn(() => ({
+                x: 130,
+                y: 140,
+                snap: { type: 'terminal', componentId: 'R1', terminalIndex: 0 }
+            })),
+            renderer: {
+                updateTempWire: vi.fn(),
+                highlightTerminal: vi.fn(),
+                clearTerminalHighlight: vi.fn()
+            }
+        };
+        const event = { clientX: 300, clientY: 320 };
+
+        InteractionOrchestrator.onMouseMove.call(context, event);
+
+        expect(context.snapPoint).toHaveBeenCalledWith(100, 120, {
+            allowWireSegmentSnap: false,
+            pointerType: 'mouse'
+        });
+        expect(context.renderer.updateTempWire).toHaveBeenCalledWith('TEMP', 10, 20, 130, 140);
+        expect(context.renderer.highlightTerminal).toHaveBeenCalledWith('R1', 0);
+        expect(context.renderer.clearTerminalHighlight).not.toHaveBeenCalled();
+    });
+});
