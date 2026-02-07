@@ -6,17 +6,21 @@ import { OpenAIClient } from '../ai/OpenAIClient.js';
 import { CircuitExplainer } from '../ai/CircuitExplainer.js';
 import { CircuitAIAgent } from '../ai/agent/CircuitAIAgent.js';
 import { createKnowledgeProvider } from '../ai/resources/createKnowledgeProvider.js';
+import { AILogService } from '../ai/AILogService.js';
 
 export class AIPanel {
     constructor(app) {
         this.app = app;
         this.circuit = app.circuit;
+        this.aiLogger = new AILogService();
         this.aiClient = new OpenAIClient();
+        this.aiClient.setLogger(this.aiLogger);
         this.explainer = new CircuitExplainer(this.circuit);
         this.aiAgent = new CircuitAIAgent({
             aiClient: this.aiClient,
             explainer: this.explainer,
-            circuit: this.circuit
+            circuit: this.circuit,
+            logger: this.aiLogger
         });
         this.layoutStorageKey = 'ai_panel_layout';
         this.panelGesture = null;
@@ -38,6 +42,13 @@ export class AIPanel {
         this.messageHistory = [];
         this.isProcessing = false;
         this.lastQuestion = '';
+        this.chatAdvancedExpanded = false;
+        this.markedConfigured = false;
+        this.mathTypesetQueue = new Set();
+        this.mathTypesetTimer = null;
+        this.mathTypesetRetryCount = 0;
+        this.mathTypesetRetryDelayMs = 200;
+        this.mathTypesetMaxRetries = 30;
         
         this.initializeUI();
         this.loadSettings();
@@ -109,6 +120,7 @@ export class AIPanel {
 
         // 布局控制
         this.initializePanelLayoutControls();
+        this.bindMathJaxLoadListener();
     }
 
     /**
@@ -232,6 +244,10 @@ export class AIPanel {
 
         const convertBtn = document.getElementById('convert-circuit-btn');
         const originalText = convertBtn.textContent;
+        const traceId = this.aiLogger?.createTrace?.('image_convert', {
+            imageDataChars: String(this.currentImage || '').length
+        }) || '';
+        this.logPanelEvent?.('info', 'convert_image_requested', null, traceId);
         
         try {
             this.isProcessing = true;
@@ -239,7 +255,7 @@ export class AIPanel {
             convertBtn.innerHTML = '<span class="loading-indicator"><span></span><span></span><span></span></span> 正在转换...';
 
             // 通过 Agent 调用：包含模型输出归一化 + 结构校验
-            const circuitJSON = await this.aiAgent.convertImageToCircuit(this.currentImage);
+            const circuitJSON = await this.aiAgent.convertImageToCircuit(this.currentImage, { traceId });
 
             // 加载到电路
             this.app.stopSimulation();
@@ -257,6 +273,13 @@ export class AIPanel {
             this.saveCircuitToLocalStorage(circuitJSON);
 
             this.app.updateStatus(`✅ 成功从图片加载电路: ${circuitJSON.components.length} 个元器件`);
+            this.logPanelEvent?.('info', 'convert_image_success', {
+                components: circuitJSON.components.length,
+                wires: Array.isArray(circuitJSON.wires) ? circuitJSON.wires.length : 0
+            }, traceId);
+            this.aiLogger?.finishTrace?.(traceId, 'success', {
+                components: circuitJSON.components.length
+            });
             
             // 清除图片
             this.clearImage();
@@ -271,10 +294,17 @@ export class AIPanel {
             console.error('Conversion error:', error);
             alert(`转换失败: ${error.message}`);
             this.app.updateStatus(`❌ 转换失败: ${error.message}`);
+            this.logPanelEvent?.('error', 'convert_image_failed', {
+                error: error.message
+            }, traceId);
+            this.aiLogger?.finishTrace?.(traceId, 'error', {
+                error: error.message
+            });
         } finally {
             this.isProcessing = false;
             convertBtn.disabled = false;
             convertBtn.textContent = originalText;
+            this.updateLogSummaryDisplay?.();
         }
     }
 
@@ -285,32 +315,94 @@ export class AIPanel {
         const input = document.getElementById('chat-input');
         const sendBtn = document.getElementById('chat-send-btn');
         const followups = document.querySelectorAll('.followup-btn');
+        const advancedToggleBtn = document.getElementById('chat-advanced-toggle-btn');
+        const insertButtons = document.querySelectorAll('.chat-insert-btn');
+        const followupActions = document.getElementById('followup-actions');
+        const quickQuestions = document.getElementById('quick-questions');
+        const chatControls = document.getElementById('chat-controls');
         const undoBtn = document.getElementById('chat-undo-btn');
         const newChatBtn = document.getElementById('chat-new-btn');
         const historySelect = document.getElementById('chat-history-select');
+        if (!input || !sendBtn) return;
+        this.chatAdvancedExpanded = false;
+        this.syncChatInputHeight(input);
 
-        // 发送消息
-        const sendMessage = () => {
-            const question = input.value.trim();
-            if (question && !this.isProcessing) {
-                this.askQuestion(question);
-                input.value = '';
+        const runAskQuestionSafely = async (question) => {
+            try {
+                await this.askQuestion(question);
+            } catch (error) {
+                console.error('Ask question failed:', error);
+                this.addChatMessage('system', `抱歉，出现错误: ${error.message}`);
+                this.logPanelEvent?.('error', 'question_outer_failed', {
+                    error: error?.message || String(error)
+                });
+                this.isProcessing = false;
+                if (sendBtn) {
+                    sendBtn.disabled = false;
+                    if (sendBtn.textContent === '⏳') {
+                        sendBtn.textContent = '发送';
+                    }
+                }
+                this.updateLogSummaryDisplay?.();
             }
         };
 
-        sendBtn.addEventListener('click', sendMessage);
-        input.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') sendMessage();
+        // 发送消息
+        const sendMessage = async () => {
+            const question = input.value.trim();
+            if (question && !this.isProcessing) {
+                await runAskQuestionSafely(question);
+                input.value = '';
+                this.syncChatInputHeight(input);
+            }
+        };
+
+        sendBtn.addEventListener('click', () => {
+            void sendMessage();
+        });
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+                e.preventDefault();
+                void sendMessage();
+            }
+        });
+        input.addEventListener('input', () => {
+            this.syncChatInputHeight(input);
         });
 
         // 快速问题
         const quickBtns = document.querySelectorAll('.quick-question-btn');
         quickBtns.forEach(btn => {
             btn.addEventListener('click', () => {
-                const question = btn.textContent;
-                this.askQuestion(question);
+                const question = btn.textContent?.trim();
+                if (!question || this.isProcessing) return;
+                void runAskQuestionSafely(question);
             });
         });
+
+        insertButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                this.insertChatTemplateByMode(input, btn?.dataset?.insert);
+            });
+        });
+
+        // 默认隐藏快捷问题，减少视觉干扰
+        if (quickQuestions) {
+            quickQuestions.classList.remove('visible');
+        }
+        if (followupActions) {
+            followupActions.classList.remove('visible');
+        }
+        if (chatControls) {
+            chatControls.classList.remove('visible');
+        }
+        if (advancedToggleBtn) {
+            advancedToggleBtn.addEventListener('click', () => {
+                this.chatAdvancedExpanded = !this.chatAdvancedExpanded;
+                this.updateChatActionVisibility();
+            });
+        }
+        this.updateChatActionVisibility();
 
         followups.forEach(btn => {
             btn.addEventListener('click', () => {
@@ -336,53 +428,141 @@ export class AIPanel {
         }
     }
 
+    syncChatInputHeight(input) {
+        if (!input || !input.style) return;
+        const minHeight = 40;
+        const maxHeight = 148;
+        input.style.height = 'auto';
+        const scrollHeight = Number(input.scrollHeight) || minHeight;
+        const targetHeight = Math.min(maxHeight, Math.max(minHeight, scrollHeight));
+        input.style.height = `${targetHeight}px`;
+        input.style.overflowY = scrollHeight > maxHeight ? 'auto' : 'hidden';
+    }
+
+    insertChatTemplateByMode(input, mode) {
+        if (!input) return;
+        const currentValue = String(input.value || '');
+        const start = Number.isFinite(Number(input.selectionStart)) ? Number(input.selectionStart) : currentValue.length;
+        const end = Number.isFinite(Number(input.selectionEnd)) ? Number(input.selectionEnd) : start;
+        const selected = currentValue.slice(start, end);
+
+        const templates = {
+            'inline-math': {
+                prefix: '$',
+                placeholder: selected || '公式',
+                suffix: '$',
+                block: false
+            },
+            'block-math': {
+                prefix: '$$\n',
+                placeholder: selected || '公式',
+                suffix: '\n$$',
+                block: true
+            }
+        };
+
+        const template = templates[mode] || templates['inline-math'];
+        const needsLeadingNewline = template.block && start > 0 && currentValue[start - 1] !== '\n';
+        const insertPrefix = `${needsLeadingNewline ? '\n' : ''}${template.prefix}`;
+        const insertedText = `${insertPrefix}${template.placeholder}${template.suffix}`;
+        input.value = `${currentValue.slice(0, start)}${insertedText}${currentValue.slice(end)}`;
+
+        const selectionStart = start + insertPrefix.length;
+        const selectionEnd = selectionStart + template.placeholder.length;
+        input.focus();
+        if (typeof input.setSelectionRange === 'function') {
+            input.setSelectionRange(selectionStart, selectionEnd);
+        }
+        this.syncChatInputHeight(input);
+    }
+
     /**
      * 提问
      */
     async askQuestion(question) {
         if (this.isProcessing) return;
+        const normalizedQuestion = String(question || '').trim();
+        if (!normalizedQuestion) return;
+        const traceId = this.aiLogger?.createTrace?.('chat_question', {
+            questionPreview: normalizedQuestion.slice(0, 180),
+            componentCount: this.circuit.components.size,
+            wireCount: this.circuit.wires.size
+        }) || '';
+        this.logPanelEvent?.('info', 'question_received', {
+            chars: normalizedQuestion.length
+        }, traceId);
+
+        // 添加用户消息（无论后续是否可求解，都保留对话上下文）
+        this.addChatMessage('user', normalizedQuestion);
+        this.lastQuestion = normalizedQuestion;
 
         // 检查电路是否为空
         if (this.circuit.components.size === 0) {
             this.addChatMessage('system', '当前电路为空，请先添加元器件或上传电路图。');
+            this.logPanelEvent?.('warn', 'question_blocked_empty_circuit', null, traceId);
+            this.aiLogger?.finishTrace?.(traceId, 'warning', {
+                reason: 'empty_circuit'
+            });
+            this.updateLogSummaryDisplay?.();
             return;
         }
 
         const historyContext = this.getAgentConversationContext();
-
-        // 添加用户消息
-        this.addChatMessage('user', question);
-        this.lastQuestion = question;
-
         const sendBtn = document.getElementById('chat-send-btn');
-        const originalText = sendBtn.textContent;
+        const originalText = sendBtn?.textContent || '发送';
+        let loadingId = null;
 
         try {
             this.isProcessing = true;
-            sendBtn.disabled = true;
-            sendBtn.textContent = '⏳';
+            if (sendBtn) {
+                sendBtn.disabled = true;
+                sendBtn.textContent = '⏳';
+            }
 
             // 添加加载提示
-            const loadingId = this.addChatMessage('assistant', '<div class="loading-indicator"><span></span><span></span><span></span></div>', { rawHtml: true });
+            loadingId = this.addChatMessage('assistant', '<div class="loading-indicator"><span></span><span></span><span></span></div>', { rawHtml: true });
 
             // 调用 Agent（自动注入电路快照 + 对话上下文）
             const answer = await this.aiAgent.answerQuestion({
-                question,
-                history: historyContext
+                question: normalizedQuestion,
+                history: historyContext,
+                traceId
             });
 
             // 移除加载提示，添加回答
             this.removeChatMessage(loadingId);
+            loadingId = null;
             this.addChatMessage('assistant', answer, { markdown: true });
+            const fallbackUsed = String(answer || '').includes('离线保底回答路径');
+            this.logPanelEvent?.(fallbackUsed ? 'warn' : 'info', 'question_answer_rendered', {
+                answerChars: String(answer || '').length,
+                fallbackUsed
+            }, traceId);
+            this.aiLogger?.finishTrace?.(traceId, fallbackUsed ? 'warning' : 'success', {
+                fallbackUsed
+            });
 
         } catch (error) {
             console.error('Question error:', error);
+            if (loadingId) {
+                this.removeChatMessage(loadingId);
+                loadingId = null;
+            }
             this.addChatMessage('system', `抱歉，出现错误: ${error.message}`);
+            this.logPanelEvent?.('error', 'question_failed', {
+                error: error?.message || String(error)
+            }, traceId);
+            this.aiLogger?.finishTrace?.(traceId, 'error', {
+                error: error?.message || String(error)
+            });
         } finally {
             this.isProcessing = false;
-            sendBtn.disabled = false;
-            sendBtn.textContent = originalText;
+            if (sendBtn) {
+                sendBtn.disabled = false;
+                sendBtn.textContent = originalText;
+            }
             this.updateKnowledgeVersionDisplay();
+            this.updateLogSummaryDisplay?.();
         }
     }
 
@@ -410,7 +590,23 @@ export class AIPanel {
                 prompt = '请继续讲解。';
         }
         const composite = `基于我们上一轮对话，${prompt}`;
-        this.askQuestion(composite);
+        this.askQuestion(composite).catch((error) => {
+            console.error('Followup question failed:', error);
+            this.addChatMessage('system', `抱歉，出现错误: ${error.message}`);
+            this.logPanelEvent?.('error', 'followup_failed', {
+                mode,
+                error: error?.message || String(error)
+            });
+            this.isProcessing = false;
+            const sendBtn = document.getElementById('chat-send-btn');
+            if (sendBtn) {
+                sendBtn.disabled = false;
+                if (sendBtn.textContent === '⏳') {
+                    sendBtn.textContent = '发送';
+                }
+            }
+            this.updateLogSummaryDisplay?.();
+        });
     }
 
     getAgentConversationContext(maxTurns = 4) {
@@ -426,6 +622,151 @@ export class AIPanel {
                 && !message.content.includes('loading-indicator'))
             .slice(-maxMessages)
             .map(message => ({ role: message.role, content: message.content.trim() }));
+    }
+
+    ensureMarkedConfigured() {
+        if (this.markedConfigured) return;
+        if (typeof window === 'undefined') return;
+        if (!window.marked || typeof window.marked.setOptions !== 'function') return;
+        window.marked.setOptions({
+            gfm: true,
+            breaks: true,
+            mangle: false,
+            headerIds: false
+        });
+        this.markedConfigured = true;
+    }
+
+    isSafeLinkHref(href) {
+        const text = String(href || '').trim();
+        if (!text) return false;
+        if (text.startsWith('#') || text.startsWith('/')) return true;
+        try {
+            const parsed = new URL(text, 'https://example.com');
+            const protocol = String(parsed.protocol || '').toLowerCase();
+            return protocol === 'http:' || protocol === 'https:' || protocol === 'mailto:' || protocol === 'tel:';
+        } catch (_) {
+            return false;
+        }
+    }
+
+    sanitizeRenderedMarkdown(html) {
+        if (!html) return '';
+        if (typeof document === 'undefined') {
+            return this.escapeHtml(String(html));
+        }
+        const allowedTags = new Set([
+            'p', 'br', 'strong', 'em', 'code', 'pre', 'blockquote', 'a',
+            'ul', 'ol', 'li', 'hr', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+            'table', 'thead', 'tbody', 'tr', 'th', 'td', 'del', 'sup', 'sub'
+        ]);
+        const template = document.createElement('template');
+        template.innerHTML = String(html);
+
+        const sanitizeElement = (element) => {
+            const tag = String(element.tagName || '').toLowerCase();
+            if (!allowedTags.has(tag)) {
+                const textNode = document.createTextNode(element.textContent || '');
+                element.replaceWith(textNode);
+                return false;
+            }
+            const attrs = Array.from(element.attributes || []);
+            attrs.forEach((attr) => {
+                const attrName = String(attr.name || '').toLowerCase();
+                if (attrName.startsWith('on') || attrName === 'style') {
+                    element.removeAttribute(attr.name);
+                    return;
+                }
+                if (tag === 'a' && (attrName === 'href' || attrName === 'title')) return;
+                if (tag === 'code' && attrName === 'class') {
+                    const classValue = String(attr.value || '').trim();
+                    if (/^language-[a-z0-9_-]+$/i.test(classValue)) return;
+                }
+                element.removeAttribute(attr.name);
+            });
+            if (tag === 'a') {
+                const href = element.getAttribute('href');
+                if (!this.isSafeLinkHref(href)) {
+                    element.removeAttribute('href');
+                }
+                element.setAttribute('target', '_blank');
+                element.setAttribute('rel', 'noopener noreferrer');
+            }
+            return true;
+        };
+
+        const walk = (node) => {
+            let child = node.firstChild;
+            while (child) {
+                const next = child.nextSibling;
+                if (child.nodeType === 1) {
+                    const shouldTraverse = sanitizeElement(child);
+                    if (shouldTraverse) {
+                        walk(child);
+                    }
+                } else if (child.nodeType === 8) {
+                    child.remove();
+                }
+                child = next;
+            }
+        };
+
+        walk(template.content);
+        return template.innerHTML;
+    }
+
+    bindMathJaxLoadListener() {
+        if (typeof document === 'undefined') return;
+        const script = document.getElementById('MathJax-script');
+        if (!script || this.mathJaxLoadListenerBound) return;
+        this.mathJaxLoadListenerBound = true;
+        script.addEventListener('load', () => {
+            this.flushMathTypesetQueue();
+        });
+    }
+
+    scheduleMathTypesetFlush(delayMs = this.mathTypesetRetryDelayMs) {
+        if (this.mathTypesetTimer) return;
+        this.mathTypesetTimer = setTimeout(() => {
+            this.mathTypesetTimer = null;
+            this.flushMathTypesetQueue();
+        }, Math.max(16, Number(delayMs) || this.mathTypesetRetryDelayMs));
+    }
+
+    queueMathTypeset(element) {
+        if (!element) return;
+        this.mathTypesetQueue.add(element);
+        this.flushMathTypesetQueue();
+    }
+
+    flushMathTypesetQueue() {
+        if (!this.mathTypesetQueue || this.mathTypesetQueue.size === 0) return;
+        const mathJax = typeof window !== 'undefined' ? window.MathJax : null;
+        if (!mathJax || typeof mathJax.typesetPromise !== 'function') {
+            this.mathTypesetRetryCount += 1;
+            if (this.mathTypesetRetryCount > this.mathTypesetMaxRetries) {
+                this.logPanelEvent?.('warn', 'math_typeset_unavailable', {
+                    pendingCount: this.mathTypesetQueue.size
+                });
+                this.mathTypesetQueue.clear();
+                this.mathTypesetRetryCount = 0;
+                return;
+            }
+            this.scheduleMathTypesetFlush();
+            return;
+        }
+
+        const nodes = Array.from(this.mathTypesetQueue)
+            .filter(node => node && node.isConnected !== false);
+        this.mathTypesetQueue.clear();
+        this.mathTypesetRetryCount = 0;
+        if (!nodes.length) return;
+
+        mathJax.typesetPromise(nodes).catch((error) => {
+            this.logPanelEvent?.('warn', 'math_typeset_failed', {
+                error: error?.message || String(error)
+            });
+        });
     }
 
     /**
@@ -448,13 +789,11 @@ export class AIPanel {
         messagesDiv.scrollTop = messagesDiv.scrollHeight;
 
         if (markdown) {
-            // 异步渲染公式
-            if (window.MathJax?.typesetPromise) {
-                window.MathJax.typesetPromise([messageEl]).catch(() => {});
-            }
+            this.queueMathTypeset(messageEl);
         }
         
         this.messageHistory.push({ role, content, id: messageId });
+        this.updateChatActionVisibility();
         
         return messageId;
     }
@@ -471,8 +810,14 @@ export class AIPanel {
 
     renderMarkdown(markdownText) {
         const text = markdownText || '';
-        if (window.marked?.parse) {
-            return window.marked.parse(text, { breaks: true });
+        this.ensureMarkedConfigured();
+        if (typeof window !== 'undefined' && window.marked?.parse) {
+            try {
+                const parsed = window.marked.parse(text, { breaks: true, gfm: true });
+                return this.sanitizeRenderedMarkdown(parsed);
+            } catch (_) {
+                // fallback below
+            }
         }
 
         // 轻量 fallback：仅处理粗体/斜体/代码/换行
@@ -491,6 +836,56 @@ export class AIPanel {
         if (messageEl) messageEl.remove();
         
         this.messageHistory = this.messageHistory.filter(m => m.id !== messageId);
+        this.updateChatActionVisibility();
+    }
+
+    updateChatActionVisibility() {
+        const followupActions = document.getElementById('followup-actions');
+        const quickQuestions = document.getElementById('quick-questions');
+        const chatControls = document.getElementById('chat-controls');
+        const advancedToggleBtn = document.getElementById('chat-advanced-toggle-btn');
+        const hasAssistantReply = Array.isArray(this.messageHistory)
+            && this.messageHistory.some(message => message
+                && message.role === 'assistant'
+                && typeof message.content === 'string'
+                && message.content.trim()
+                && !message.content.includes('loading-indicator'));
+        const hasConversation = Array.isArray(this.messageHistory)
+            && this.messageHistory.some(message => message
+                && (message.role === 'user' || message.role === 'assistant')
+                && typeof message.content === 'string'
+                && message.content.trim()
+                && !message.content.includes('loading-indicator'));
+        const hasArchivedHistory = (() => {
+            if (typeof this.loadHistory !== 'function') return false;
+            try {
+                const history = this.loadHistory();
+                return Array.isArray(history) && history.length > 0;
+            } catch (_) {
+                return false;
+            }
+        })();
+        const hasAdvancedActions = hasAssistantReply || hasConversation || hasArchivedHistory;
+        if (!hasAdvancedActions && this.chatAdvancedExpanded) {
+            this.chatAdvancedExpanded = false;
+        }
+        const advancedOpen = !!this.chatAdvancedExpanded && hasAdvancedActions;
+        if (followupActions) {
+            followupActions.classList.toggle('visible', advancedOpen && hasAssistantReply);
+        }
+        if (quickQuestions) {
+            quickQuestions.classList.toggle('visible', advancedOpen && !hasConversation);
+        }
+        if (chatControls) {
+            chatControls.classList.toggle('visible', advancedOpen && (hasConversation || hasArchivedHistory));
+        }
+        if (advancedToggleBtn) {
+            const showToggle = hasAdvancedActions;
+            advancedToggleBtn.style.display = showToggle ? '' : 'none';
+            advancedToggleBtn.setAttribute('aria-hidden', showToggle ? 'false' : 'true');
+            advancedToggleBtn.setAttribute('aria-expanded', advancedOpen ? 'true' : 'false');
+            advancedToggleBtn.textContent = advancedOpen ? '收起操作' : '更多操作';
+        }
     }
 
     /**
@@ -522,6 +917,7 @@ export class AIPanel {
         messagesDiv.innerHTML = '';
         this.messageHistory = [];
         this.lastQuestion = '';
+        this.updateChatActionVisibility();
         this.refreshHistorySelect();
     }
 
@@ -594,6 +990,7 @@ export class AIPanel {
                 this.lastQuestion = msg.content;
             }
         }
+        this.updateChatActionVisibility();
     }
 
     /**
@@ -607,6 +1004,8 @@ export class AIPanel {
         const clearKeyBtn = document.getElementById('settings-clear-key-btn');
         const fetchModelsBtn = document.getElementById('settings-fetch-models-btn');
         const fetchStatus = document.getElementById('model-fetch-status');
+        const exportLogsBtn = document.getElementById('settings-export-logs-btn');
+        const clearLogsBtn = document.getElementById('settings-clear-logs-btn');
         const visionSelect = document.getElementById('vision-model-select');
         const textSelect = document.getElementById('text-model-select');
         const visionInput = document.getElementById('vision-model');
@@ -664,6 +1063,7 @@ export class AIPanel {
             this.aiClient.clearApiKey();
             document.getElementById('api-key').value = '';
             this.app.updateStatus('API 密钥已清除（仅会话存储）');
+            this.logPanelEvent?.('warn', 'api_key_cleared');
         });
 
         fetchModelsBtn.addEventListener('click', async () => {
@@ -677,14 +1077,29 @@ export class AIPanel {
                 const models = await this.aiClient.listModels();
                 this.populateModelLists(models);
                 fetchStatus.textContent = `已加载 ${models.length} 个模型`;
+                this.logPanelEvent?.('info', 'fetch_models_success', { count: models.length });
             } catch (e) {
                 console.error(e);
                 fetchStatus.textContent = `获取失败: ${e.message}`;
+                this.logPanelEvent?.('error', 'fetch_models_failed', { error: e.message });
             } finally {
                 this.isProcessing = false;
                 fetchModelsBtn.disabled = false;
+                this.updateLogSummaryDisplay?.();
             }
         });
+
+        if (exportLogsBtn) {
+            exportLogsBtn.addEventListener('click', () => {
+                this.exportAILogs();
+            });
+        }
+        if (clearLogsBtn) {
+            clearLogsBtn.addEventListener('click', () => {
+                this.clearAILogs();
+            });
+        }
+        this.updateLogSummaryDisplay?.();
     }
 
     /**
@@ -728,6 +1143,7 @@ export class AIPanel {
         this.syncSelectToValue(document.getElementById('vision-model-select'), config.visionModel);
         this.syncSelectToValue(document.getElementById('text-model-select'), config.textModel);
         this.updateKnowledgeVersionDisplay();
+        this.updateLogSummaryDisplay?.();
         
         document.getElementById('ai-settings-dialog').classList.remove('hidden');
     }
@@ -761,6 +1177,14 @@ export class AIPanel {
         const sourceText = config.knowledgeSource === 'mcp'
             ? `MCP(${config.knowledgeMcpMode === 'resource' ? 'resource' : 'method'})`
             : '本地';
+        this.logPanelEvent?.('info', 'settings_saved', {
+            endpoint: config.apiEndpoint,
+            textModel: config.textModel,
+            visionModel: config.visionModel,
+            knowledgeSource: config.knowledgeSource,
+            knowledgeMode: config.knowledgeMcpMode
+        });
+        this.updateLogSummaryDisplay?.();
         this.app.updateStatus(`AI 设置已保存${keyMsg}，规则库来源：${sourceText}`);
     }
 
@@ -770,11 +1194,19 @@ export class AIPanel {
     loadSettings() {
         this.refreshKnowledgeProvider();
         this.updateKnowledgeVersionDisplay();
+        this.logPanelEvent?.('info', 'settings_loaded', {
+            endpoint: this.aiClient.config?.apiEndpoint || '',
+            knowledgeSource: this.aiClient.config?.knowledgeSource || 'local'
+        });
     }
 
     refreshKnowledgeProvider() {
         const provider = createKnowledgeProvider(this.aiClient.config || {});
         this.aiAgent.setKnowledgeProvider(provider);
+        this.logPanelEvent?.('info', 'knowledge_provider_refreshed', {
+            source: this.aiClient.config?.knowledgeSource || 'local',
+            mode: this.aiClient.config?.knowledgeMcpMode || 'method'
+        });
         this.updateKnowledgeVersionDisplay();
     }
 
@@ -822,6 +1254,72 @@ export class AIPanel {
         if (hintEl) {
             hintEl.textContent = `${label}${detail}${stats}`;
         }
+    }
+
+    logPanelEvent(level, stage, data = null, traceId = '') {
+        if (!this.aiLogger || typeof this.aiLogger.log !== 'function') return;
+        this.aiLogger.log({
+            level,
+            source: 'ai_panel',
+            stage,
+            traceId,
+            message: stage,
+            data
+        });
+    }
+
+    updateLogSummaryDisplay() {
+        const summaryEl = document.getElementById('settings-log-summary');
+        if (!summaryEl || !this.aiLogger) return;
+        const summary = this.aiLogger.getSummary();
+        const lastTime = summary.lastTimestamp
+            ? new Date(summary.lastTimestamp).toLocaleString()
+            : '--';
+        const lastErrorText = summary.lastError
+            ? `最近错误: ${summary.lastError.source}/${summary.lastError.stage} - ${summary.lastError.message || 'unknown'}`
+            : '最近错误: 无';
+        summaryEl.textContent = `日志: ${summary.total} 条 | 错误 ${summary.errorCount} | 警告 ${summary.warnCount} | 最近更新 ${lastTime} | ${lastErrorText}`;
+    }
+
+    exportAILogs() {
+        if (!this.aiLogger) return;
+        const payload = this.aiLogger.exportPayload(3000);
+        const fileName = `ai-runtime-logs-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+        try {
+            const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const anchor = document.createElement('a');
+            anchor.href = url;
+            anchor.download = fileName;
+            document.body.appendChild(anchor);
+            anchor.click();
+            anchor.remove();
+            URL.revokeObjectURL(url);
+            this.logPanelEvent?.('info', 'export_logs', {
+                entries: Array.isArray(payload.entries) ? payload.entries.length : 0,
+                fileName
+            });
+            this.app.updateStatus('AI 运行日志已导出');
+        } catch (error) {
+            this.logPanelEvent?.('error', 'export_logs_failed', {
+                error: error?.message || String(error)
+            });
+            this.app.updateStatus(`AI 日志导出失败: ${error.message}`);
+        } finally {
+            this.updateLogSummaryDisplay?.();
+        }
+    }
+
+    clearAILogs() {
+        if (!this.aiLogger) return;
+        const allowed = typeof window?.confirm === 'function'
+            ? window.confirm('确定清空 AI 运行日志吗？此操作不可恢复。')
+            : true;
+        if (!allowed) return;
+        this.aiLogger.clear();
+        this.logPanelEvent?.('warn', 'logs_cleared');
+        this.updateLogSummaryDisplay?.();
+        this.app.updateStatus('AI 运行日志已清空');
     }
 
     bindModelSelector(selectEl, inputEl) {

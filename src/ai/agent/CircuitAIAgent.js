@@ -26,6 +26,7 @@ export class CircuitAIAgent {
         circuit = null,
         knowledgeProvider = null,
         skillRegistry = null,
+        logger = null,
         knowledgeCacheTtlMs = DEFAULT_KNOWLEDGE_CACHE_TTL_MS,
         knowledgeCacheLimit = DEFAULT_KNOWLEDGE_CACHE_LIMIT,
         knowledgeAccessLogLimit = DEFAULT_KNOWLEDGE_ACCESS_LOG_LIMIT
@@ -34,6 +35,7 @@ export class CircuitAIAgent {
             throw new Error('CircuitAIAgent requires aiClient');
         }
         this.aiClient = aiClient;
+        this.logger = logger || aiClient?.logger || null;
         this.explainer = explainer || null;
         this.circuit = circuit || explainer?.circuit || null;
         this.knowledgeProvider = knowledgeProvider || new LocalKnowledgeResourceProvider();
@@ -56,6 +58,13 @@ export class CircuitAIAgent {
             fallbackQueries: 0
         };
         this.knowledgeCacheProviderToken = this.getKnowledgeProviderToken();
+    }
+
+    setLogger(logger) {
+        this.logger = logger || null;
+        if (this.aiClient && typeof this.aiClient.setLogger === 'function') {
+            this.aiClient.setLogger(this.logger);
+        }
     }
 
     createDefaultSkillRegistry() {
@@ -329,6 +338,18 @@ export class CircuitAIAgent {
         return `\n\n回答流程提示：${steps.join(' -> ')}`;
     }
 
+    logEvent(level, stage, data = null, traceId = '') {
+        if (!this.logger || typeof this.logger.log !== 'function') return;
+        this.logger.log({
+            level,
+            source: 'ai_agent',
+            stage,
+            traceId,
+            message: stage,
+            data
+        });
+    }
+
     buildTutorSystemPrompt(circuitState, knowledgeItems = [], plan = {}, evidenceSection = '') {
         return `你是一名高中物理电路老师，请基于给定电路状态进行可靠讲解。
 要求：
@@ -391,35 +412,63 @@ ${evidence}
 - 原问题：${question}${knowledgeBlock}`;
     }
 
-    async answerQuestion({ question, history = [] } = {}) {
+    async answerQuestion({ question, history = [], traceId = '' } = {}) {
         const normalizedQuestion = String(question || '').trim();
         if (!normalizedQuestion) {
             throw new Error('问题不能为空');
         }
+        const startedAt = Date.now();
+        this.logEvent('info', 'answer_question_start', {
+            questionPreview: normalizedQuestion.slice(0, 160),
+            historyCount: Array.isArray(history) ? history.length : 0
+        }, traceId);
 
+        const planStart = Date.now();
         const plan = await this.skills.run('question_plan', {
             question: normalizedQuestion
         }, {
             circuit: this.circuit
         });
+        this.logEvent('info', 'question_plan_ready', {
+            mode: plan?.mode || 'unknown',
+            requiresNumericVerification: !!plan?.requiresNumericVerification,
+            durationMs: Date.now() - planStart
+        }, traceId);
+
+        const refreshStart = Date.now();
         const refreshResult = await this.skills.run('simulation_refresh', {
             circuit: this.circuit
         }, {
             circuit: this.circuit
         });
+        this.logEvent(refreshResult?.valid ? 'info' : 'warn', 'simulation_refresh_done', {
+            valid: !!refreshResult?.valid,
+            reason: refreshResult?.reason || 'unknown',
+            durationMs: Date.now() - refreshStart
+        }, traceId);
 
+        const snapshotStart = Date.now();
         const circuitState = await this.skills.run('circuit_snapshot', {
             explainer: this.explainer,
             concise: false,
             includeTopology: plan?.includeTopology !== false,
             includeNodes: true
         }, { explainer: this.explainer });
+        this.logEvent('info', 'circuit_snapshot_ready', {
+            chars: String(circuitState || '').length,
+            durationMs: Date.now() - snapshotStart
+        }, traceId);
         const evidenceSection = this.buildEvidenceSection(normalizedQuestion, plan?.evidenceLimit || 6);
 
+        const knowledgeStart = Date.now();
         const knowledgeItems = await this.getKnowledgeItems(normalizedQuestion, {
             limit: plan?.knowledgeLimit || 3,
             circuit: this.circuit
         });
+        this.logEvent('info', 'knowledge_items_ready', {
+            count: Array.isArray(knowledgeItems) ? knowledgeItems.length : 0,
+            durationMs: Date.now() - knowledgeStart
+        }, traceId);
 
         const messages = [
             { role: 'system', content: this.buildTutorSystemPrompt(circuitState, knowledgeItems, plan, evidenceSection) },
@@ -429,9 +478,23 @@ ${evidence}
 
         let answer;
         try {
-            answer = await this.aiClient.callAPI(messages, this.aiClient.config.textModel, 1500);
+            this.logEvent('info', 'model_call_start', {
+                model: this.aiClient.config.textModel,
+                messageCount: messages.length
+            }, traceId);
+            answer = await this.aiClient.callAPI(messages, this.aiClient.config.textModel, 1500, {
+                traceId,
+                source: 'ai_agent.answer_question'
+            });
+            this.logEvent('info', 'model_call_success', {
+                model: this.aiClient.config.textModel,
+                answerChars: String(answer || '').length
+            }, traceId);
         } catch (error) {
-            return this.buildFallbackAnswer({
+            this.logEvent('error', 'model_call_failed', {
+                error: error?.message || String(error)
+            }, traceId);
+            const fallbackAnswer = this.buildFallbackAnswer({
                 question: normalizedQuestion,
                 plan,
                 refreshResult,
@@ -439,6 +502,11 @@ ${evidence}
                 knowledgeItems,
                 error
             });
+            this.logEvent('warn', 'fallback_answer_returned', {
+                reason: error?.message || 'model_call_failed',
+                durationMs: Date.now() - startedAt
+            }, traceId);
+            return fallbackAnswer;
         }
         try {
             const claims = await this.skills.run('claim_extract', {
@@ -454,13 +522,25 @@ ${evidence}
                 }, {
                     circuit: this.circuit
                 });
-                return this.skills.run('answer_verify', {
+                const verified = await this.skills.run('answer_verify', {
                     answer,
                     checks
                 });
+                this.logEvent('info', 'answer_verify_done', {
+                    checkCount: Array.isArray(checks) ? checks.length : 0,
+                    durationMs: Date.now() - startedAt
+                }, traceId);
+                return verified;
             }
+            this.logEvent('info', 'answer_question_done', {
+                durationMs: Date.now() - startedAt
+            }, traceId);
             return answer;
-        } catch (_error) {
+        } catch (error) {
+            this.logEvent('warn', 'answer_post_process_failed', {
+                error: error?.message || String(error),
+                durationMs: Date.now() - startedAt
+            }, traceId);
             return answer;
         }
     }
@@ -486,11 +566,14 @@ ${evidence}
 4. 只输出 JSON 代码块，不要解释文字。`;
     }
 
-    async convertImageToCircuit(imageData) {
+    async convertImageToCircuit(imageData, { traceId = '' } = {}) {
         if (!this.aiClient.config.apiKey) {
             throw new Error('请先在设置中配置 API 密钥');
         }
 
+        this.logEvent('info', 'convert_image_start', {
+            payloadChars: String(imageData || '').length
+        }, traceId);
         const normalizedImagePayload = this.normalizeImagePayload(imageData);
         const conversionPrompt = await this.aiClient.getCircuitConversionPrompt();
         const messages = [
@@ -515,9 +598,16 @@ ${evidence}
             }
         ];
 
-        const rawResponse = await this.aiClient.callAPI(messages, this.aiClient.config.visionModel, 2200);
+        const rawResponse = await this.aiClient.callAPI(messages, this.aiClient.config.visionModel, 2200, {
+            traceId,
+            source: 'ai_agent.convert_image'
+        });
         const normalizedCircuit = await this.skills.run('circuit_json_normalize', { rawText: rawResponse });
         await this.skills.run('circuit_json_validate', normalizedCircuit);
+        this.logEvent('info', 'convert_image_done', {
+            components: Array.isArray(normalizedCircuit?.components) ? normalizedCircuit.components.length : 0,
+            wires: Array.isArray(normalizedCircuit?.wires) ? normalizedCircuit.wires.length : 0
+        }, traceId);
         return normalizedCircuit;
     }
 }

@@ -432,6 +432,9 @@
             <!-- 物理解释 Tab -->
             <div id="tab-explain" class="ai-tab-content">
                 <div id="chat-messages"></div>
+                <div id="chat-advanced-bar">
+                    <button id="chat-advanced-toggle-btn" type="button" aria-expanded="false" aria-hidden="true">更多操作</button>
+                </div>
                 <div id="followup-actions">
                     <button class="followup-btn" data-mode="continue">继续讲解</button>
                     <button class="followup-btn" data-mode="simplify">换个说法</button>
@@ -451,7 +454,11 @@
                     <button class="quick-question-btn">为什么电压表读数变化?</button>
                 </div>
                 <div id="chat-input-area">
-                    <input type="text" id="chat-input" placeholder="问一个关于电路的问题..." />
+                    <div id="chat-input-tools">
+                        <button type="button" class="chat-insert-btn" data-insert="inline-math" title="插入行内公式">$x$</button>
+                        <button type="button" class="chat-insert-btn" data-insert="block-math" title="插入公式块">$$x$$</button>
+                    </div>
+                    <textarea id="chat-input" rows="1" placeholder="问一个关于电路的问题..."></textarea>
                     <button id="chat-send-btn">发送</button>
                 </div>
             </div>

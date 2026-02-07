@@ -7,6 +7,11 @@ export class OpenAIClient {
     constructor() {
         this.config = this.loadConfig();
         this.cachedPrompt = null;
+        this.logger = null;
+    }
+
+    setLogger(logger) {
+        this.logger = logger || null;
     }
 
     get PUBLIC_CONFIG_KEY() {
@@ -21,6 +26,7 @@ export class OpenAIClient {
      * 从 localStorage 加载配置
      */
     loadConfig() {
+        const DEFAULT_REQUEST_TIMEOUT_MS = 180000;
         const defaultConfig = {
             apiEndpoint: 'https://api.openai.com/v1/chat/completions',
             apiKey: '',
@@ -33,7 +39,7 @@ export class OpenAIClient {
             knowledgeMcpMethod: 'knowledge.search',
             knowledgeMcpResource: 'knowledge://circuit/high-school',
             maxTokens: 2000,
-            requestTimeout: 20000,
+            requestTimeout: DEFAULT_REQUEST_TIMEOUT_MS,
             retryAttempts: 2,
             retryDelayMs: 600
         };
@@ -50,6 +56,11 @@ export class OpenAIClient {
         const sessionKey = safeGet(() => sessionStorage.getItem(this.SESSION_KEY_KEY)) || '';
         try {
             const merged = savedPublic ? { ...defaultConfig, ...JSON.parse(savedPublic) } : defaultConfig;
+            const parsedTimeout = Number(merged.requestTimeout);
+            // 兼容旧默认值 20000ms，统一升级到 3 分钟
+            if (!Number.isFinite(parsedTimeout) || parsedTimeout <= 0 || parsedTimeout === 20000) {
+                merged.requestTimeout = DEFAULT_REQUEST_TIMEOUT_MS;
+            }
             return { ...merged, apiKey: sessionKey };
         } catch (e) {
             console.warn('Failed to load AI config, using defaults.', e);
@@ -116,7 +127,9 @@ export class OpenAIClient {
         try {
             const response = await this.callAPI([
                 { role: 'user', content: 'Hello' }
-            ], this.config.textModel, 10);
+            ], this.config.textModel, 10, {
+                source: 'openai_client.test_connection'
+            });
             
             return { success: true, message: '连接成功!' };
         } catch (error) {
@@ -158,7 +171,9 @@ export class OpenAIClient {
         ];
 
         try {
-            const response = await this.callAPI(messages, this.config.visionModel, 2000);
+            const response = await this.callAPI(messages, this.config.visionModel, 2000, {
+                source: 'openai_client.convert_image'
+            });
             
             // 提取 JSON
             const jsonMatch = response.match(/```json\s*([\s\S]*?)\s*```/) || 
@@ -208,7 +223,9 @@ ${circuitState}`;
         ];
 
         try {
-            return await this.callAPI(messages, this.config.textModel, 1500);
+            return await this.callAPI(messages, this.config.textModel, 1500, {
+                source: 'openai_client.explain_circuit'
+            });
         } catch (error) {
             console.error('Explanation error:', error);
             throw new Error(`解释失败: ${error.message}`);
@@ -235,8 +252,16 @@ ${circuitState}`;
             base = apiEndpoint.endsWith('/') ? `${apiEndpoint}v1/models` : `${apiEndpoint}/v1/models`;
         }
 
+        const timeoutMs = this.getTimeoutMs();
+        const requestStartTime = Date.now();
+        this.logEvent('info', 'list_models_start', {
+            endpoint: base,
+            timeoutMs
+        }, {
+            source: 'openai_client.list_models'
+        });
         const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), this.config.requestTimeout || 20000);
+        const timer = setTimeout(() => controller.abort(), timeoutMs);
 
         try {
             const response = await fetch(base, {
@@ -247,20 +272,38 @@ ${circuitState}`;
                 signal: controller.signal
             });
             clearTimeout(timer);
+            const { json, text } = await this.readResponsePayload(response, timeoutMs);
 
             if (!response.ok) {
                 if (response.status === 401 || response.status === 403) {
                     throw new Error('API 密钥无效或无访问权限');
                 }
-                throw new Error(`获取模型失败: HTTP ${response.status}`);
+                throw new Error(this.resolveHttpErrorMessage(response.status, response.statusText, json, text));
             }
-            const data = await response.json();
+            const data = json;
+            if (!data || typeof data !== 'object') {
+                throw new Error('模型列表响应解析失败');
+            }
             const ids = (data.data || []).map(m => m.id).filter(Boolean);
+            this.logEvent('info', 'list_models_success', {
+                endpoint: base,
+                count: ids.length,
+                durationMs: Date.now() - requestStartTime
+            }, {
+                source: 'openai_client.list_models'
+            });
             return ids;
         } catch (err) {
             clearTimeout(timer);
+            this.logEvent('error', 'list_models_failed', {
+                endpoint: base,
+                durationMs: Date.now() - requestStartTime,
+                error: err?.message || String(err)
+            }, {
+                source: 'openai_client.list_models'
+            });
             if (err?.name === 'AbortError') {
-                throw new Error('请求超时');
+                throw new Error(`请求超时（>${timeoutMs}ms）`);
             }
             throw err;
         }
@@ -269,7 +312,7 @@ ${circuitState}`;
     /**
      * 调用 OpenAI API
      */
-    async callAPI(messages, model, maxTokens = null) {
+    async callAPI(messages, model, maxTokens = null, context = {}) {
         const apiKey = this.config.apiKey;
         if (!apiKey) {
             throw new Error('请先在设置中配置 API 密钥');
@@ -278,16 +321,40 @@ ${circuitState}`;
         const primaryUseResponsesApi = this.shouldUseResponsesApi(model);
         let useResponsesApi = primaryUseResponsesApi;
         let fallbackTried = false;
+        const traceId = context?.traceId || '';
+        const source = context?.source || 'openai_client.call_api';
 
         const attempts = Math.max(1, this.config.retryAttempts || 1);
         let delay = Math.max(200, this.config.retryDelayMs || 200);
         let lastError;
+        const timeoutMs = this.getTimeoutMs();
+        const startedAt = Date.now();
+        this.logEvent('info', 'call_api_start', {
+            model,
+            messageCount: Array.isArray(messages) ? messages.length : 0,
+            messageChars: this.estimateMessageChars(messages),
+            useResponsesApi: primaryUseResponsesApi,
+            timeoutMs,
+            attempts
+        }, {
+            traceId,
+            source
+        });
 
         for (let attempt = 0; attempt < attempts; attempt++) {
             const requestBody = this.buildRequestBody(messages, model, maxTokens, useResponsesApi);
             const apiUrl = this.resolveApiEndpoint(useResponsesApi);
+            this.logEvent('info', 'call_api_attempt_start', {
+                attempt: attempt + 1,
+                model,
+                endpoint: apiUrl,
+                useResponsesApi
+            }, {
+                traceId,
+                source
+            });
             const controller = new AbortController();
-            const timer = setTimeout(() => controller.abort(), this.config.requestTimeout || 20000);
+            const timer = setTimeout(() => controller.abort(), timeoutMs);
             try {
                 const response = await fetch(apiUrl, {
                     method: 'POST',
@@ -299,6 +366,7 @@ ${circuitState}`;
                     signal: controller.signal
                 });
                 clearTimeout(timer);
+                const { json, text } = await this.readResponsePayload(response, timeoutMs);
 
                 if (!response.ok) {
                     if (response.status === 401 || response.status === 403) {
@@ -306,8 +374,7 @@ ${circuitState}`;
                     }
                     if (response.status === 429 || response.status >= 500) {
                         // 适合重试的错误
-                        const errObj = await response.json().catch(() => ({}));
-                        lastError = new Error(errObj.error?.message || `HTTP ${response.status}`);
+                        lastError = new Error(this.resolveHttpErrorMessage(response.status, response.statusText, json, text));
                         if (attempt < attempts - 1) {
                             await new Promise(res => setTimeout(res, delay));
                             delay *= 2;
@@ -315,36 +382,119 @@ ${circuitState}`;
                         }
                         throw lastError;
                     }
-                    const error = await response.json().catch(() => ({ error: { message: response.statusText } }));
-                    const msg = error.error?.message || `HTTP ${response.status}: ${response.statusText}`;
+                    const msg = this.resolveHttpErrorMessage(response.status, response.statusText, json, text);
 
                     // 若 /responses 路径无效，回退到 chat/completions
                     if (this.shouldFallbackToCompletions(response.status, msg, useResponsesApi, fallbackTried)) {
+                        this.logEvent('warn', 'call_api_fallback_to_completions', {
+                            attempt: attempt + 1,
+                            status: response.status,
+                            message: msg
+                        }, {
+                            traceId,
+                            source
+                        });
                         useResponsesApi = false;
                         fallbackTried = true;
                         attempt--;
                         continue;
                     }
 
+                    this.logEvent('error', 'call_api_http_error', {
+                        attempt: attempt + 1,
+                        status: response.status,
+                        message: msg
+                    }, {
+                        traceId,
+                        source
+                    });
                     throw new Error(msg);
                 }
 
-                const data = await response.json();
-                return this.extractResponseText(data, useResponsesApi);
+                if (json && typeof json === 'object') {
+                    const answerText = this.extractResponseText(json, useResponsesApi);
+                    this.logEvent('info', 'call_api_success', {
+                        attempt: attempt + 1,
+                        durationMs: Date.now() - startedAt,
+                        endpoint: apiUrl,
+                        useResponsesApi,
+                        responseKind: 'json',
+                        answerChars: String(answerText || '').length
+                    }, {
+                        traceId,
+                        source
+                    });
+                    return answerText;
+                }
+
+                const plainText = String(text || '').trim();
+                if (plainText) {
+                    this.logEvent('info', 'call_api_success', {
+                        attempt: attempt + 1,
+                        durationMs: Date.now() - startedAt,
+                        endpoint: apiUrl,
+                        useResponsesApi,
+                        responseKind: 'text',
+                        answerChars: plainText.length
+                    }, {
+                        traceId,
+                        source
+                    });
+                    return plainText;
+                }
+                this.logEvent('error', 'call_api_empty_response', {
+                    attempt: attempt + 1,
+                    endpoint: apiUrl,
+                    useResponsesApi
+                }, {
+                    traceId,
+                    source
+                });
+                throw new Error('响应中未找到文本内容');
             } catch (error) {
                 clearTimeout(timer);
                 const isAbort = error?.name === 'AbortError';
                 const isNetwork = error?.message?.includes('fetch failed');
-                if ((isAbort || isNetwork) && attempt < attempts - 1) {
-                    lastError = error;
+                const isBodyTimeout = error?.message?.includes('响应读取超时');
+                const abortReasonRaw = controller?.signal?.aborted ? controller.signal.reason : '';
+                const abortReason = abortReasonRaw ? String(abortReasonRaw) : '';
+                const normalizedReason = isAbort
+                    ? `请求超时或被中止（timeout=${timeoutMs}ms${abortReason ? `, reason=${abortReason}` : ''}）`
+                    : (error?.message || String(error));
+                const normalizedError = isAbort ? new Error(normalizedReason) : error;
+                if ((isAbort || isNetwork || isBodyTimeout) && attempt < attempts - 1) {
+                    this.logEvent('warn', 'call_api_retry', {
+                        attempt: attempt + 1,
+                        durationMs: Date.now() - startedAt,
+                        reason: normalizedReason
+                    }, {
+                        traceId,
+                        source
+                    });
+                    lastError = normalizedError;
                     await new Promise(res => setTimeout(res, delay));
                     delay *= 2;
                     continue;
                 }
-                throw lastError || error;
+                this.logEvent('error', 'call_api_failed', {
+                    attempt: attempt + 1,
+                    durationMs: Date.now() - startedAt,
+                    reason: normalizedReason
+                }, {
+                    traceId,
+                    source
+                });
+                throw lastError || normalizedError;
             }
         }
 
+        this.logEvent('error', 'call_api_failed', {
+            durationMs: Date.now() - startedAt,
+            reason: (lastError && lastError.message) || '未知错误'
+        }, {
+            traceId,
+            source
+        });
         throw lastError || new Error('未知错误');
     }
 
@@ -412,7 +562,7 @@ ${circuitState}`;
     buildRequestBody(messages, model, maxTokens, useResponsesApi) {
         const tokenLimit = maxTokens || this.config.maxTokens;
         const temperature = this.getTemperatureForModel(model);
-        const requestBody = { model };
+        const requestBody = { model, stream: false };
         if (temperature !== null && temperature !== undefined) {
             requestBody.temperature = temperature;
         }
@@ -562,6 +712,127 @@ ${circuitState}`;
             })
             .filter(Boolean);
         return parts.join('\n').trim();
+    }
+
+    getTimeoutMs() {
+        const parsed = Number(this.config.requestTimeout);
+        if (Number.isFinite(parsed) && parsed > 0) {
+            return parsed;
+        }
+        return 180000;
+    }
+
+    runWithTimeout(taskFactory, timeoutMs, timeoutMessage = '请求超时') {
+        return new Promise((resolve, reject) => {
+            let settled = false;
+            const timer = setTimeout(() => {
+                settled = true;
+                reject(new Error(timeoutMessage));
+            }, timeoutMs);
+            Promise.resolve()
+                .then(() => taskFactory())
+                .then((value) => {
+                    if (settled) return;
+                    settled = true;
+                    clearTimeout(timer);
+                    resolve(value);
+                })
+                .catch((error) => {
+                    if (settled) return;
+                    settled = true;
+                    clearTimeout(timer);
+                    reject(error);
+                });
+        });
+    }
+
+    tryParseJson(text) {
+        if (typeof text !== 'string') return null;
+        const trimmed = text.trim();
+        if (!trimmed) return null;
+        try {
+            return JSON.parse(trimmed);
+        } catch (_) {
+            return null;
+        }
+    }
+
+    async readResponsePayload(response, timeoutMs) {
+        if (response && typeof response.text === 'function') {
+            const text = await this.runWithTimeout(
+                () => response.text(),
+                timeoutMs,
+                '响应读取超时'
+            );
+            return {
+                text: typeof text === 'string' ? text : String(text || ''),
+                json: this.tryParseJson(text)
+            };
+        }
+
+        if (response && typeof response.json === 'function') {
+            const json = await this.runWithTimeout(
+                () => response.json(),
+                timeoutMs,
+                '响应读取超时'
+            );
+            return {
+                text: '',
+                json: json && typeof json === 'object' ? json : null
+            };
+        }
+
+        return { text: '', json: null };
+    }
+
+    resolveHttpErrorMessage(status, statusText, jsonPayload, textPayload) {
+        const payloadMessage = jsonPayload?.error?.message || jsonPayload?.message;
+        if (payloadMessage) return String(payloadMessage);
+        const text = String(textPayload || '').trim();
+        if (text) return text.slice(0, 500);
+        return `HTTP ${status}: ${statusText || '请求失败'}`;
+    }
+
+    estimateMessageChars(messages) {
+        if (!Array.isArray(messages)) return 0;
+        let total = 0;
+        for (const message of messages) {
+            if (!message) continue;
+            const role = String(message.role || '');
+            total += role.length;
+            const content = message.content;
+            if (typeof content === 'string') {
+                total += content.length;
+                continue;
+            }
+            if (!Array.isArray(content)) continue;
+            for (const item of content) {
+                if (!item) continue;
+                if (typeof item === 'string') {
+                    total += item.length;
+                    continue;
+                }
+                if (typeof item.text === 'string') {
+                    total += item.text.length;
+                }
+                if (item.image_url?.url) {
+                    total += String(item.image_url.url).length;
+                }
+            }
+        }
+        return total;
+    }
+
+    logEvent(level, stage, data = null, context = {}) {
+        if (!this.logger || typeof this.logger.log !== 'function') return;
+        this.logger.log({
+            level,
+            source: context?.source || 'openai_client',
+            stage,
+            traceId: context?.traceId || '',
+            message: stage,
+            data
+        });
     }
 
     /**
