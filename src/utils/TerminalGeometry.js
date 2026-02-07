@@ -30,6 +30,7 @@ export function getTerminalLocalPosition(comp, terminalIndex) {
         case 'Inductor':
         case 'ParallelPlateCapacitor':
         case 'Switch':
+        case 'Fuse':
         case 'Ammeter':
         case 'Voltmeter':
             relX = terminalIndex === 0 ? -30 : 30;

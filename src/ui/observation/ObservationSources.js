@@ -127,6 +127,9 @@ export function getQuantitiesForSource(sourceId, circuit) {
                 list.push({ id: QuantityIds.BulbBrightness, label: '亮度', unit: '' });
             }
             break;
+        case 'Fuse':
+            list.push({ id: QuantityIds.Resistance, label: '等效电阻 R', unit: 'Ω' });
+            break;
         case 'Rheostat':
             list.push({ id: QuantityIds.Resistance, label: '接入电阻 R', unit: 'Ω' });
             break;
@@ -221,6 +224,11 @@ export function evaluateSourceQuantity(circuit, sourceId, quantityId) {
                     default:
                         return 0;
                 }
+            }
+            if (comp.type === 'Fuse') {
+                const cold = Number.isFinite(comp.coldResistance) ? comp.coldResistance : 0.05;
+                const blown = Number.isFinite(comp.blownResistance) ? comp.blownResistance : 1e12;
+                return comp.blown ? blown : cold;
             }
             if (Number.isFinite(comp.resistance)) return comp.resistance;
             return null;

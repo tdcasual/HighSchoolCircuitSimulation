@@ -163,7 +163,7 @@ export class InteractionManager {
      */
     bindToolboxEvents() {
         const toolItems = document.querySelectorAll('.tool-item');
-        const validTypes = ['Ground', 'PowerSource', 'ACVoltageSource', 'Resistor', 'Rheostat', 'Bulb', 'Capacitor', 'Inductor', 'ParallelPlateCapacitor', 'Motor', 'Switch', 'SPDTSwitch', 'Ammeter', 'Voltmeter', 'BlackBox', 'Wire'];
+        const validTypes = ['Ground', 'PowerSource', 'ACVoltageSource', 'Resistor', 'Rheostat', 'Bulb', 'Capacitor', 'Inductor', 'ParallelPlateCapacitor', 'Motor', 'Switch', 'SPDTSwitch', 'Fuse', 'Ammeter', 'Voltmeter', 'BlackBox', 'Wire'];
         
         // 标记是否正在从工具箱拖放
         this.isToolboxDrag = false;
@@ -2328,6 +2328,49 @@ export class InteractionManager {
                     unit: 'Ω'
                 }, '数值越大越接近理想断开'));
                 break;
+
+            case 'Fuse': {
+                content.appendChild(createFormGroup('额定电流 (A)', {
+                    id: 'edit-rated-current',
+                    value: comp.ratedCurrent ?? 3,
+                    min: 0.001,
+                    step: 0.1,
+                    unit: 'A'
+                }));
+                content.appendChild(createFormGroup('熔断阈值 I²t (A²·s)', {
+                    id: 'edit-i2t-threshold',
+                    value: comp.i2tThreshold ?? 1,
+                    min: 1e-6,
+                    step: 0.1,
+                    unit: 'A²·s'
+                }));
+                content.appendChild(createFormGroup('正常电阻 (Ω)', {
+                    id: 'edit-cold-resistance',
+                    value: comp.coldResistance ?? 0.05,
+                    min: 1e-9,
+                    step: 0.001,
+                    unit: 'Ω'
+                }));
+                content.appendChild(createFormGroup('熔断后电阻 (Ω)', {
+                    id: 'edit-blown-resistance',
+                    value: comp.blownResistance ?? 1e12,
+                    min: 1,
+                    step: 1000,
+                    unit: 'Ω'
+                }));
+
+                const blownGroup = createElement('div', { className: 'form-group' });
+                blownGroup.appendChild(createElement('label', { textContent: '状态' }));
+                const blownInput = createElement('input', {
+                    id: 'edit-fuse-blown',
+                    attrs: { type: 'checkbox' }
+                });
+                blownInput.checked = !!comp.blown;
+                blownGroup.appendChild(blownInput);
+                blownGroup.appendChild(createElement('p', { className: 'hint', textContent: '取消勾选会复位保险丝并清空 I²t 累计值。' }));
+                content.appendChild(blownGroup);
+                break;
+            }
                 
             case 'Ammeter':
                 content.appendChild(createFormGroup('内阻 (Ω)', {
@@ -2624,6 +2667,27 @@ export class InteractionManager {
                         document.getElementById('edit-off-resistance').value, 1e12, 1, 1e15
                     );
                     break;
+
+                case 'Fuse': {
+                    comp.ratedCurrent = this.safeParseFloat(
+                        document.getElementById('edit-rated-current').value, 3, 0.001, 1e9
+                    );
+                    comp.i2tThreshold = this.safeParseFloat(
+                        document.getElementById('edit-i2t-threshold').value, 1, 1e-9, 1e12
+                    );
+                    comp.coldResistance = this.safeParseFloat(
+                        document.getElementById('edit-cold-resistance').value, 0.05, 1e-9, 1e9
+                    );
+                    comp.blownResistance = this.safeParseFloat(
+                        document.getElementById('edit-blown-resistance').value, 1e12, 1, 1e15
+                    );
+                    const blownChecked = !!document.getElementById('edit-fuse-blown')?.checked;
+                    if (!blownChecked) {
+                        comp.i2tAccum = 0;
+                    }
+                    comp.blown = blownChecked;
+                    break;
+                }
                     
                 case 'Ammeter':
                     comp.resistance = this.safeParseFloat(

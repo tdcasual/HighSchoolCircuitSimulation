@@ -114,6 +114,14 @@ export const ComponentDefaults = {
         onResistance: 1e-9,    // 导通电阻
         offResistance: 1e12    // 断开支路电阻
     },
+    Fuse: {
+        ratedCurrent: 3,       // 额定电流 (A)
+        i2tThreshold: 1,       // 熔断阈值 I²t (A²·s)
+        i2tAccum: 0,           // 当前累计 I²t
+        coldResistance: 0.05,  // 正常导通电阻 (Ω)
+        blownResistance: 1e12, // 熔断后等效电阻 (Ω)
+        blown: false           // 是否已熔断
+    },
     Ammeter: {
         resistance: 0,         // 内阻 (Ω)，0表示理想电流表
         range: 3,              // 量程 (A)
@@ -148,6 +156,7 @@ export const ComponentNames = {
     Motor: '电动机',
     Switch: '开关',
     SPDTSwitch: '单刀双掷开关',
+    Fuse: '保险丝',
     Ammeter: '电流表',
     Voltmeter: '电压表',
     BlackBox: '黑箱'
@@ -328,6 +337,9 @@ export const SVGRenderer = {
                 break;
             case 'SPDTSwitch':
                 this.renderSPDTSwitch(g, comp);
+                break;
+            case 'Fuse':
+                this.renderFuse(g, comp);
                 break;
             case 'Ammeter':
                 this.renderAmmeter(g, comp);
@@ -847,6 +859,57 @@ export const SVGRenderer = {
 
         const labelText = comp.label || (route === 'a' ? '上掷' : '下掷');
         this.addText(g, 0, 26, labelText, 9, 'label');
+    },
+
+    /**
+     * 渲染保险丝
+     */
+    renderFuse(g, comp) {
+        const blown = !!comp.blown;
+
+        // 引线
+        this.addLine(g, -30, 0, -12, 0);
+        this.addLine(g, 12, 0, 30, 0);
+
+        const body = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        body.setAttribute('x', -12);
+        body.setAttribute('y', -7);
+        body.setAttribute('width', 24);
+        body.setAttribute('height', 14);
+        body.setAttribute('rx', 6);
+        body.setAttribute('ry', 6);
+        body.setAttribute('fill', blown ? '#ffebee' : '#fffde7');
+        body.setAttribute('stroke', blown ? '#d32f2f' : '#8d6e63');
+        body.setAttribute('stroke-width', 2);
+        g.appendChild(body);
+
+        const filament = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        filament.setAttribute('x1', -7);
+        filament.setAttribute('y1', 0);
+        filament.setAttribute('x2', 7);
+        filament.setAttribute('y2', 0);
+        filament.setAttribute('stroke', blown ? '#d32f2f' : '#6d4c41');
+        filament.setAttribute('stroke-width', 2);
+        filament.setAttribute('stroke-linecap', 'round');
+        g.appendChild(filament);
+
+        if (blown) {
+            const crack = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            crack.setAttribute('x1', -1);
+            crack.setAttribute('y1', -4);
+            crack.setAttribute('x2', 1);
+            crack.setAttribute('y2', 4);
+            crack.setAttribute('stroke', '#d32f2f');
+            crack.setAttribute('stroke-width', 2.2);
+            crack.setAttribute('stroke-linecap', 'round');
+            g.appendChild(crack);
+        }
+
+        this.addTerminal(g, -30, 0, 0, comp);
+        this.addTerminal(g, 30, 0, 1, comp);
+
+        const labelText = comp.label || (blown ? '已熔断' : `${comp.ratedCurrent}A`);
+        this.addText(g, 0, 24, labelText, 9, 'label');
     },
 
     /**

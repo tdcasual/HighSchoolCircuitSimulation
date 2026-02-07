@@ -179,4 +179,37 @@ describe('New component models (Ground / AC source / Inductor)', () => {
         expect(results.currents.get('Rbottom')).toBeCloseTo(0.5, 6);
         expect(results.currents.get('SW1')).toBeCloseTo(0.5, 6);
     });
+
+    it('blows fuse when accumulated I²t exceeds threshold', () => {
+        const circuit = createTestCircuit();
+        circuit.dt = 0.01;
+
+        const source = addComponent(circuit, 'PowerSource', 'V1', {
+            voltage: 10,
+            internalResistance: 0
+        });
+        const fuse = addComponent(circuit, 'Fuse', 'F1', {
+            ratedCurrent: 1,
+            i2tThreshold: 0.2,
+            coldResistance: 0.05,
+            blownResistance: 1e12,
+            blown: false,
+            i2tAccum: 0
+        });
+        const load = addComponent(circuit, 'Resistor', 'R1', { resistance: 1 });
+
+        connectWire(circuit, 'W1', source, 0, fuse, 0);
+        connectWire(circuit, 'W2', fuse, 1, load, 0);
+        connectWire(circuit, 'W3', load, 1, source, 1);
+
+        circuit.isRunning = true;
+        circuit.step();
+        expect(fuse.blown).toBe(true);
+        expect((fuse.i2tAccum || 0)).toBeGreaterThanOrEqual(0.2);
+
+        circuit.step();
+        const fuseCurrent = Math.abs(circuit.lastResults?.currents?.get('F1') || 0);
+        expect(fuseCurrent).toBeLessThan(1e-6);
+        circuit.isRunning = false;
+    });
 });

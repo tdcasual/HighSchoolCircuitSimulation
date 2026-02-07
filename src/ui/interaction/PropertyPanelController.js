@@ -268,6 +268,15 @@ export function updatePropertyPanel(comp) {
             content.appendChild(createPropertyRow('断开支路电阻', `${Number.isFinite(comp.offResistance) ? comp.offResistance : 1e12} Ω`));
             break;
 
+        case 'Fuse':
+            content.appendChild(createPropertyRow('状态', comp.blown ? '已熔断' : '正常'));
+            content.appendChild(createPropertyRow('额定电流', `${Number.isFinite(comp.ratedCurrent) ? comp.ratedCurrent : 3} A`));
+            content.appendChild(createPropertyRow('I²t 阈值', `${Number.isFinite(comp.i2tThreshold) ? comp.i2tThreshold : 1} A²·s`));
+            content.appendChild(createPropertyRow('I²t 累计', `${Number.isFinite(comp.i2tAccum) ? comp.i2tAccum.toFixed(3) : '0.000'} A²·s`));
+            content.appendChild(createPropertyRow('正常电阻', `${Number.isFinite(comp.coldResistance) ? comp.coldResistance : 0.05} Ω`));
+            content.appendChild(createPropertyRow('熔断电阻', `${Number.isFinite(comp.blownResistance) ? comp.blownResistance : 1e12} Ω`));
+            break;
+
         case 'Ammeter':
             content.appendChild(createPropertyRow('内阻', comp.resistance > 0 ? `${comp.resistance} Ω` : '理想（0Ω）'));
             content.appendChild(createPropertyRow('量程', `${comp.range} A`));

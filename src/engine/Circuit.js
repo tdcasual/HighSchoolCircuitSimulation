@@ -964,6 +964,9 @@ export class Circuit {
                 comp.speed = 0;
                 comp.backEmf = 0;
             }
+            if (comp.type === 'Fuse' && !comp.blown) {
+                comp.i2tAccum = 0;
+            }
         }
 
         // 准备求解器（仅在拓扑/关键参数变化后重建）
@@ -1142,6 +1145,29 @@ export class Circuit {
                 if (comp.type === 'Bulb') {
                     comp.brightness = Math.min(1, comp.powerValue / comp.ratedPower);
                 }
+            }
+
+            // 更新保险丝 I²t 累计并判定是否熔断
+            let fuseStateChanged = false;
+            for (const [id, comp] of this.components) {
+                if (comp.type !== 'Fuse') continue;
+                if (comp.blown) continue;
+                if (!this.isComponentConnected(id)) continue;
+
+                const currentAbs = Math.abs(this.lastResults.currents.get(id) || 0);
+                if (!Number.isFinite(currentAbs)) continue;
+
+                const ratedCurrent = Math.max(1e-6, Number(comp.ratedCurrent) || 3);
+                const defaultThreshold = ratedCurrent * ratedCurrent * 0.2;
+                const threshold = Math.max(1e-9, Number(comp.i2tThreshold) || defaultThreshold);
+                comp.i2tAccum = Math.max(0, Number(comp.i2tAccum) || 0) + currentAbs * currentAbs * this.dt;
+                if (comp.i2tAccum >= threshold) {
+                    comp.blown = true;
+                    fuseStateChanged = true;
+                }
+            }
+            if (fuseStateChanged) {
+                this.markSolverCircuitDirty();
             }
         }
 
@@ -1845,6 +1871,15 @@ export class Circuit {
                     position: comp.position === 'b' ? 'b' : 'a',
                     onResistance: comp.onResistance,
                     offResistance: comp.offResistance
+                };
+            case 'Fuse':
+                return {
+                    ratedCurrent: comp.ratedCurrent,
+                    i2tThreshold: comp.i2tThreshold,
+                    i2tAccum: comp.i2tAccum,
+                    coldResistance: comp.coldResistance,
+                    blownResistance: comp.blownResistance,
+                    blown: !!comp.blown
                 };
             case 'Ammeter':
                 return {

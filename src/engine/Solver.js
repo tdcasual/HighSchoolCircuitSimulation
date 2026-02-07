@@ -217,6 +217,13 @@ export class MNASolver {
                         `roff:${this.formatMatrixKeyNumber(comp.offResistance ?? 1e12)}`
                     );
                     break;
+                case 'Fuse':
+                    keyParts.push(
+                        `blown:${comp.blown ? 1 : 0}`,
+                        `Rcold:${this.formatMatrixKeyNumber(comp.coldResistance ?? 0.05)}`,
+                        `Rblown:${this.formatMatrixKeyNumber(comp.blownResistance ?? 1e12)}`
+                    );
+                    break;
                 case 'Ammeter':
                     keyParts.push(`R:${this.formatMatrixKeyNumber(comp.resistance ?? 0)}`);
                     break;
@@ -659,6 +666,15 @@ export class MNASolver {
                 }
                 break;
             }
+
+            case 'Fuse': {
+                const blown = !!comp.blown;
+                const resistance = blown
+                    ? Math.max(1, Number(comp.blownResistance) || 1e12)
+                    : Math.max(1e-9, Number(comp.coldResistance) || 0.05);
+                this.stampResistor(A, i1, i2, resistance);
+                break;
+            }
                 
             case 'Ammeter':
                 // 电流表模型
@@ -953,6 +969,13 @@ export class MNASolver {
                 const vTarget = targetNode !== undefined && targetNode >= 0 ? (voltages[targetNode] || 0) : 0;
                 const onR = Math.max(1e-9, Number(comp.onResistance) || 1e-9);
                 return (vCommon - vTarget) / onR;
+            }
+
+            case 'Fuse': {
+                const resistance = comp.blown
+                    ? Math.max(1, Number(comp.blownResistance) || 1e12)
+                    : Math.max(1e-9, Number(comp.coldResistance) || 0.05);
+                return dV / resistance;
             }
                 
             case 'Ammeter':
