@@ -7,6 +7,9 @@ import { CircuitExplainer } from '../ai/CircuitExplainer.js';
 import { CircuitAIAgent } from '../ai/agent/CircuitAIAgent.js';
 import { createKnowledgeProvider } from '../ai/resources/createKnowledgeProvider.js';
 import { AILogService } from '../ai/AILogService.js';
+import { ChatController } from './ai/ChatController.js';
+import { SettingsController } from './ai/SettingsController.js';
+import { PanelLayoutController } from './ai/PanelLayoutController.js';
 
 export class AIPanel {
     constructor(app) {
@@ -22,6 +25,14 @@ export class AIPanel {
             circuit: this.circuit,
             logger: this.aiLogger
         });
+        const controllerDeps = {
+            panel: this,
+            app: this.app,
+            circuit: this.circuit
+        };
+        this.chatController = new ChatController(controllerDeps);
+        this.settingsController = new SettingsController(controllerDeps);
+        this.layoutController = new PanelLayoutController(controllerDeps);
         this.layoutStorageKey = 'ai_panel_layout';
         this.panelGesture = null;
         this.minPanelWidth = 320;
@@ -114,120 +125,7 @@ export class AIPanel {
      * 初始化聊天功能
      */
     initializeChat() {
-        const input = document.getElementById('chat-input');
-        const sendBtn = document.getElementById('chat-send-btn');
-        const followups = document.querySelectorAll('.followup-btn');
-        const advancedToggleBtn = document.getElementById('chat-advanced-toggle-btn');
-        const insertButtons = document.querySelectorAll('.chat-insert-btn');
-        const followupActions = document.getElementById('followup-actions');
-        const quickQuestions = document.getElementById('quick-questions');
-        const chatControls = document.getElementById('chat-controls');
-        const undoBtn = document.getElementById('chat-undo-btn');
-        const newChatBtn = document.getElementById('chat-new-btn');
-        const historySelect = document.getElementById('chat-history-select');
-        if (!input || !sendBtn) return;
-        this.chatAdvancedExpanded = false;
-        this.syncChatInputHeight(input);
-
-        const runAskQuestionSafely = async (question) => {
-            try {
-                await this.askQuestion(question);
-            } catch (error) {
-                console.error('Ask question failed:', error);
-                this.addChatMessage('system', `抱歉，出现错误: ${error.message}`);
-                this.logPanelEvent?.('error', 'question_outer_failed', {
-                    error: error?.message || String(error)
-                });
-                this.isProcessing = false;
-                if (sendBtn) {
-                    sendBtn.disabled = false;
-                    if (sendBtn.textContent === '⏳') {
-                        sendBtn.textContent = '发送';
-                    }
-                }
-                this.updateLogSummaryDisplay?.();
-            }
-        };
-
-        // 发送消息
-        const sendMessage = async () => {
-            const question = input.value.trim();
-            if (question && !this.isProcessing) {
-                await runAskQuestionSafely(question);
-                input.value = '';
-                this.syncChatInputHeight(input);
-            }
-        };
-
-        sendBtn.addEventListener('click', () => {
-            void sendMessage();
-        });
-        input.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
-                e.preventDefault();
-                void sendMessage();
-            }
-        });
-        input.addEventListener('input', () => {
-            this.syncChatInputHeight(input);
-        });
-
-        // 快速问题
-        const quickBtns = document.querySelectorAll('.quick-question-btn');
-        quickBtns.forEach(btn => {
-            btn.addEventListener('click', () => {
-                const question = btn.textContent?.trim();
-                if (!question || this.isProcessing) return;
-                void runAskQuestionSafely(question);
-            });
-        });
-
-        insertButtons.forEach(btn => {
-            btn.addEventListener('click', () => {
-                this.insertChatTemplateByMode(input, btn?.dataset?.insert);
-            });
-        });
-
-        // 默认隐藏快捷问题，减少视觉干扰
-        if (quickQuestions) {
-            quickQuestions.classList.remove('visible');
-        }
-        if (followupActions) {
-            followupActions.classList.remove('visible');
-        }
-        if (chatControls) {
-            chatControls.classList.remove('visible');
-        }
-        if (advancedToggleBtn) {
-            advancedToggleBtn.addEventListener('click', () => {
-                this.chatAdvancedExpanded = !this.chatAdvancedExpanded;
-                this.updateChatActionVisibility();
-            });
-        }
-        this.updateChatActionVisibility();
-
-        followups.forEach(btn => {
-            btn.addEventListener('click', () => {
-                const mode = btn.dataset.mode;
-                this.triggerFollowup(mode);
-            });
-        });
-
-        if (undoBtn) {
-            undoBtn.addEventListener('click', () => this.undoLastExchange());
-        }
-
-        if (newChatBtn) {
-            newChatBtn.addEventListener('click', () => this.startNewConversation());
-        }
-
-        if (historySelect) {
-            historySelect.addEventListener('change', (e) => {
-                const id = e.target.value;
-                if (id) this.loadConversationFromHistory(id);
-            });
-            this.refreshHistorySelect();
-        }
+        getOrCreateChatController(this).initializeChat();
     }
 
     syncChatInputHeight(input) {
@@ -278,152 +176,26 @@ export class AIPanel {
         this.syncChatInputHeight(input);
     }
 
+    ensureChatController() {
+        return getOrCreateChatController(this);
+    }
+
     /**
      * 提问
      */
-    async askQuestion(question) {
-        if (this.isProcessing) return;
-        const normalizedQuestion = String(question || '').trim();
-        if (!normalizedQuestion) return;
-        const traceId = this.aiLogger?.createTrace?.('chat_question', {
-            questionPreview: normalizedQuestion.slice(0, 180),
-            componentCount: this.circuit.components.size,
-            wireCount: this.circuit.wires.size
-        }) || '';
-        this.logPanelEvent?.('info', 'question_received', {
-            chars: normalizedQuestion.length
-        }, traceId);
-
-        // 添加用户消息（无论后续是否可求解，都保留对话上下文）
-        this.addChatMessage('user', normalizedQuestion);
-        this.lastQuestion = normalizedQuestion;
-
-        // 检查电路是否为空
-        if (this.circuit.components.size === 0) {
-            this.addChatMessage('system', '当前电路为空，请先添加元器件或上传电路图。');
-            this.logPanelEvent?.('warn', 'question_blocked_empty_circuit', null, traceId);
-            this.aiLogger?.finishTrace?.(traceId, 'warning', {
-                reason: 'empty_circuit'
-            });
-            this.updateLogSummaryDisplay?.();
-            return;
-        }
-
-        const historyContext = this.getAgentConversationContext();
-        const sendBtn = document.getElementById('chat-send-btn');
-        const originalText = sendBtn?.textContent || '发送';
-        let loadingId = null;
-
-        try {
-            this.isProcessing = true;
-            if (sendBtn) {
-                sendBtn.disabled = true;
-                sendBtn.textContent = '⏳';
-            }
-
-            // 添加加载提示
-            loadingId = this.addChatMessage('assistant', '<div class="loading-indicator"><span></span><span></span><span></span></div>', { rawHtml: true });
-
-            // 调用 Agent（自动注入电路快照 + 对话上下文）
-            const answer = await this.aiAgent.answerQuestion({
-                question: normalizedQuestion,
-                history: historyContext,
-                traceId
-            });
-
-            // 移除加载提示，添加回答
-            this.removeChatMessage(loadingId);
-            loadingId = null;
-            this.addChatMessage('assistant', answer, { markdown: true });
-            const fallbackUsed = String(answer || '').includes('离线保底回答路径');
-            this.logPanelEvent?.(fallbackUsed ? 'warn' : 'info', 'question_answer_rendered', {
-                answerChars: String(answer || '').length,
-                fallbackUsed
-            }, traceId);
-            this.aiLogger?.finishTrace?.(traceId, fallbackUsed ? 'warning' : 'success', {
-                fallbackUsed
-            });
-
-        } catch (error) {
-            console.error('Question error:', error);
-            if (loadingId) {
-                this.removeChatMessage(loadingId);
-                loadingId = null;
-            }
-            this.addChatMessage('system', `抱歉，出现错误: ${error.message}`);
-            this.logPanelEvent?.('error', 'question_failed', {
-                error: error?.message || String(error)
-            }, traceId);
-            this.aiLogger?.finishTrace?.(traceId, 'error', {
-                error: error?.message || String(error)
-            });
-        } finally {
-            this.isProcessing = false;
-            if (sendBtn) {
-                sendBtn.disabled = false;
-                sendBtn.textContent = originalText;
-            }
-            this.updateKnowledgeVersionDisplay();
-            this.updateLogSummaryDisplay?.();
-        }
+    askQuestion(question) {
+        return getOrCreateChatController(this).askQuestion(question);
     }
 
     /**
      * 触发跟进提问（继续/简化/小测验）
      */
     triggerFollowup(mode) {
-        if (this.isProcessing) return;
-        if (!this.lastQuestion) {
-            this.addChatMessage('system', '请先提一个问题，再使用跟进按钮。');
-            return;
-        }
-        let prompt;
-        switch (mode) {
-            case 'continue':
-                prompt = '请基于上一轮回答继续深入讲解，并补充1-2点关键物理要点。';
-                break;
-            case 'simplify':
-                prompt = '请把上一轮回答改写成更简洁、更通俗的版本，控制在3-4句话。';
-                break;
-            case 'quiz':
-                prompt = '请基于刚才讲解生成2道简短小测验（选择或填空），最后单独给出答案。';
-                break;
-            default:
-                prompt = '请继续讲解。';
-        }
-        const composite = `基于我们上一轮对话，${prompt}`;
-        this.askQuestion(composite).catch((error) => {
-            console.error('Followup question failed:', error);
-            this.addChatMessage('system', `抱歉，出现错误: ${error.message}`);
-            this.logPanelEvent?.('error', 'followup_failed', {
-                mode,
-                error: error?.message || String(error)
-            });
-            this.isProcessing = false;
-            const sendBtn = document.getElementById('chat-send-btn');
-            if (sendBtn) {
-                sendBtn.disabled = false;
-                if (sendBtn.textContent === '⏳') {
-                    sendBtn.textContent = '发送';
-                }
-            }
-            this.updateLogSummaryDisplay?.();
-        });
+        return getOrCreateChatController(this).triggerFollowup(mode);
     }
 
     getAgentConversationContext(maxTurns = 4) {
-        if (!Array.isArray(this.messageHistory) || this.messageHistory.length === 0) {
-            return [];
-        }
-        const maxMessages = Math.max(1, maxTurns) * 2;
-        return this.messageHistory
-            .filter(message => message
-                && (message.role === 'user' || message.role === 'assistant')
-                && typeof message.content === 'string'
-                && message.content.trim()
-                && !message.content.includes('loading-indicator'))
-            .slice(-maxMessages)
-            .map(message => ({ role: message.role, content: message.content.trim() }));
+        return getOrCreateChatController(this).getAgentConversationContext(maxTurns);
     }
 
     ensureMarkedConfigured() {
@@ -575,29 +347,7 @@ export class AIPanel {
      * 添加聊天消息
      */
     addChatMessage(role, content, options = {}) {
-        const { rawHtml = false, markdown = false } = options;
-        const messagesDiv = document.getElementById('chat-messages');
-        const messageId = `msg-${Date.now()}-${Math.random()}`;
-        
-        const messageEl = document.createElement('div');
-        messageEl.className = `chat-message ${role}`;
-        messageEl.id = messageId;
-        const rendered = rawHtml ? content
-            : markdown ? this.renderMarkdown(content)
-            : this.escapeHtml(content);
-        messageEl.innerHTML = `<div class="chat-message-content">${rendered}</div>`;
-        
-        messagesDiv.appendChild(messageEl);
-        messagesDiv.scrollTop = messagesDiv.scrollHeight;
-
-        if (markdown) {
-            this.queueMathTypeset(messageEl);
-        }
-        
-        this.messageHistory.push({ role, content, id: messageId });
-        this.updateChatActionVisibility();
-        
-        return messageId;
+        return getOrCreateChatController(this).addChatMessage(role, content, options);
     }
 
     escapeHtml(text) {
@@ -634,11 +384,7 @@ export class AIPanel {
      * 移除聊天消息
      */
     removeChatMessage(messageId) {
-        const messageEl = document.getElementById(messageId);
-        if (messageEl) messageEl.remove();
-        
-        this.messageHistory = this.messageHistory.filter(m => m.id !== messageId);
-        this.updateChatActionVisibility();
+        return getOrCreateChatController(this).removeChatMessage(messageId);
     }
 
     updateChatActionVisibility() {
@@ -694,105 +440,33 @@ export class AIPanel {
      * 回撤上一轮问答（移除最后的 assistant + preceding user）
      */
     undoLastExchange() {
-        if (this.isProcessing || this.messageHistory.length === 0) return;
-        // 找到最后一个 assistant 消息
-        let removed = false;
-        while (this.messageHistory.length > 0) {
-            const last = this.messageHistory[this.messageHistory.length - 1];
-            this.removeChatMessage(last.id);
-            if (last.role === 'assistant') {
-                removed = true;
-            } else if (removed && last.role === 'user') {
-                break;
-            }
-        }
+        return getOrCreateChatController(this).undoLastExchange();
     }
 
     /**
      * 开启新对话：归档当前对话，清空消息
      */
     startNewConversation() {
-        if (this.messageHistory.length > 0) {
-            this.archiveCurrentConversation();
-        }
-        const messagesDiv = document.getElementById('chat-messages');
-        messagesDiv.innerHTML = '';
-        this.messageHistory = [];
-        this.lastQuestion = '';
-        this.updateChatActionVisibility();
-        this.refreshHistorySelect();
+        return getOrCreateChatController(this).startNewConversation();
     }
 
     /**
      * 将当前对话保存到 localStorage
      */
     archiveCurrentConversation() {
-        const history = this.loadHistory();
-        const title = this.messageHistory.find(m => m.role === 'user')?.content?.slice(0, 40) || '未命名会话';
-        const record = {
-            id: `history-${Date.now()}`,
-            title,
-            timestamp: Date.now(),
-            messages: [...this.messageHistory]
-        };
-        history.unshift(record);
-        // 保留最新的 20 条
-        const trimmed = history.slice(0, 20);
-        try {
-            localStorage.setItem('ai_chat_history', JSON.stringify(trimmed));
-        } catch (e) {
-            console.warn('保存历史失败', e);
-        }
+        return getOrCreateChatController(this).archiveCurrentConversation();
     }
 
     loadHistory() {
-        try {
-            const raw = localStorage.getItem('ai_chat_history');
-            if (!raw) return [];
-            const parsed = JSON.parse(raw);
-            return Array.isArray(parsed) ? parsed : [];
-        } catch (_) {
-            return [];
-        }
+        return getOrCreateChatController(this).loadHistory();
     }
 
     refreshHistorySelect() {
-        const historySelect = document.getElementById('chat-history-select');
-        if (!historySelect) return;
-        const history = this.loadHistory();
-        const currentValue = historySelect.value;
-        historySelect.innerHTML = '<option value=\"\">历史记录</option>';
-        history.forEach(item => {
-            const opt = document.createElement('option');
-            const date = new Date(item.timestamp).toLocaleString();
-            opt.value = item.id;
-            opt.textContent = `${item.title} (${date})`;
-            historySelect.appendChild(opt);
-        });
-        // 保持选择
-        historySelect.value = currentValue || '';
+        return getOrCreateChatController(this).refreshHistorySelect();
     }
 
     loadConversationFromHistory(id) {
-        const history = this.loadHistory();
-        const record = history.find(h => h.id === id);
-        if (!record) return;
-
-        // 清空现有
-        const messagesDiv = document.getElementById('chat-messages');
-        messagesDiv.innerHTML = '';
-        this.messageHistory = [];
-        this.lastQuestion = '';
-
-        // 重新渲染
-        for (const msg of record.messages) {
-            const opts = { markdown: msg.role === 'assistant' };
-            this.addChatMessage(msg.role, msg.content, opts);
-            if (msg.role === 'user') {
-                this.lastQuestion = msg.content;
-            }
-        }
-        this.updateChatActionVisibility();
+        return getOrCreateChatController(this).loadConversationFromHistory(id);
     }
 
     /**
@@ -1696,4 +1370,15 @@ export class AIPanel {
         this.savePanelLayout();
     }
 
+}
+
+function getOrCreateChatController(panel) {
+    if (!panel.chatController) {
+        panel.chatController = new ChatController({
+            panel,
+            app: panel.app,
+            circuit: panel.circuit
+        });
+    }
+    return panel.chatController;
 }

@@ -32,6 +32,12 @@ describe('AIPanel chat behavior', () => {
         vi.unstubAllGlobals();
     });
 
+    it('delegates askQuestion to ChatController', async () => {
+        const panel = { chatController: { askQuestion: vi.fn().mockResolvedValue(undefined) } };
+        await AIPanel.prototype.askQuestion.call(panel, 'q1');
+        expect(panel.chatController.askQuestion).toHaveBeenCalledWith('q1');
+    });
+
     it('keeps user question visible when circuit is empty', async () => {
         const sendBtn = { textContent: '发送', disabled: false };
         vi.stubGlobal('document', {
