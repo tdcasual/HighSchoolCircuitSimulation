@@ -2208,11 +2208,7 @@ export class InteractionManager {
      * 复制元器件
      */
     duplicateComponent(id) {
-        const comp = this.circuit.getComponent(id);
-        if (!comp) return;
-        
-        // 在原位置偏移一点创建新元器件
-        this.addComponent(comp.type, comp.x + 40, comp.y + 40);
+        return ComponentActions.duplicateComponent.call(this, id);
     }
 
     /**

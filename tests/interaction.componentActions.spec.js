@@ -197,3 +197,34 @@ describe('ComponentActions.deleteWire', () => {
         expect(context.updateStatus).toHaveBeenCalledWith('已删除导线');
     });
 });
+
+describe('ComponentActions.duplicateComponent', () => {
+    it('creates a duplicated component with fixed offset', () => {
+        const context = {
+            circuit: {
+                getComponent: vi.fn(() => ({
+                    id: 'R1',
+                    type: 'Resistor',
+                    x: 120,
+                    y: 80
+                }))
+            },
+            addComponent: vi.fn()
+        };
+
+        ComponentActions.duplicateComponent.call(context, 'R1');
+
+        expect(context.addComponent).toHaveBeenCalledWith('Resistor', 160, 120);
+    });
+
+    it('does nothing for missing component', () => {
+        const context = {
+            circuit: { getComponent: vi.fn(() => null) },
+            addComponent: vi.fn()
+        };
+
+        ComponentActions.duplicateComponent.call(context, 'R404');
+
+        expect(context.addComponent).not.toHaveBeenCalled();
+    });
+});
