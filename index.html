@@ -401,36 +401,8 @@
             </div>
         </div>
         <div id="ai-panel-content">
-            <div id="ai-tabs">
-                <button class="ai-tab active" data-tab="image">图片转电路</button>
-                <button class="ai-tab" data-tab="explain">物理解释</button>
-            </div>
-            
-            <!-- 图片转电路 Tab -->
-            <div id="tab-image" class="ai-tab-content active">
-                <div id="image-upload-zone">
-                    <input type="file" id="circuit-image-input" accept="image/*" hidden>
-                    <div id="image-drop-area">
-                        <div id="image-preview-area" class="hidden">
-                            <img id="image-preview" alt="电路预览">
-                            <button id="image-remove-btn">×</button>
-                        </div>
-                        <div id="image-upload-prompt">
-                            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-                                <circle cx="8.5" cy="8.5" r="1.5"/>
-                                <polyline points="21 15 16 10 5 21"/>
-                            </svg>
-                            <p>拖放电路图片到这里，或点击上传</p>
-                            <button id="image-upload-btn" class="primary-btn">选择图片</button>
-                        </div>
-                    </div>
-                </div>
-                <button id="convert-circuit-btn" class="primary-btn" disabled>转换为 JSON 并加载</button>
-            </div>
-            
             <!-- 物理解释 Tab -->
-            <div id="tab-explain" class="ai-tab-content">
+            <div id="tab-explain" class="ai-tab-content active">
                 <div id="chat-messages"></div>
                 <div id="chat-advanced-bar">
                     <button id="chat-advanced-toggle-btn" type="button" aria-expanded="false" aria-hidden="true">更多操作</button>
@@ -477,16 +449,6 @@
             <div class="form-group">
                 <label>API 密钥</label>
                 <input type="password" id="api-key" placeholder="sk-..." />
-            </div>
-            <div class="form-group">
-                <label>视觉模型 (图片转换)</label>
-                <div class="model-input-row">
-                    <select id="vision-model-select">
-                        <option value="">从列表选择</option>
-                    </select>
-                    <input type="text" id="vision-model" list="model-list-vision" placeholder="gpt-4o-mini-vision" />
-                </div>
-                <datalist id="model-list-vision"></datalist>
             </div>
             <div class="form-group">
                 <label>文本模型 (物理解释)</label>

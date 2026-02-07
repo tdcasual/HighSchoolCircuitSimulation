@@ -5,8 +5,6 @@
 import { SkillRegistry } from '../skills/SkillRegistry.js';
 import { CircuitSnapshotSkill } from '../skills/CircuitSnapshotSkill.js';
 import { KnowledgeRetrievalSkill } from '../skills/KnowledgeRetrievalSkill.js';
-import { CircuitJsonNormalizationSkill } from '../skills/CircuitJsonNormalizationSkill.js';
-import { CircuitJsonValidationSkill } from '../skills/CircuitJsonValidationSkill.js';
 import { ClaimExtractSkill } from '../skills/ClaimExtractSkill.js';
 import { NumericCheckSkill } from '../skills/NumericCheckSkill.js';
 import { AnswerVerifySkill } from '../skills/AnswerVerifySkill.js';
@@ -71,8 +69,6 @@ export class CircuitAIAgent {
         return new SkillRegistry([
             CircuitSnapshotSkill,
             KnowledgeRetrievalSkill,
-            CircuitJsonNormalizationSkill,
-            CircuitJsonValidationSkill,
             ClaimExtractSkill,
             NumericCheckSkill,
             AnswerVerifySkill,
@@ -543,71 +539,5 @@ ${evidence}
             }, traceId);
             return answer;
         }
-    }
-
-    normalizeImagePayload(imageData) {
-        const text = String(imageData || '').trim();
-        if (!text) {
-            throw new Error('缺少图片数据');
-        }
-        if (text.startsWith('data:image/')) {
-            return text;
-        }
-        return `data:image/jpeg;base64,${text}`;
-    }
-
-    buildConversionPrompt(basePrompt = '') {
-        return `${basePrompt}
-
-补充要求（必须遵守）：
-1. wires 统一使用 v2 结构：{ "id", "a": {"x","y"}, "b": {"x","y"}, "aRef"?, "bRef"? }
-2. 不要输出 start/end/controlPoints 作为最终结果字段。
-3. 若原始推理需要折线，请拆成多条 v2 导线段。
-4. 只输出 JSON 代码块，不要解释文字。`;
-    }
-
-    async convertImageToCircuit(imageData, { traceId = '' } = {}) {
-        if (!this.aiClient.config.apiKey) {
-            throw new Error('请先在设置中配置 API 密钥');
-        }
-
-        this.logEvent('info', 'convert_image_start', {
-            payloadChars: String(imageData || '').length
-        }, traceId);
-        const normalizedImagePayload = this.normalizeImagePayload(imageData);
-        const conversionPrompt = await this.aiClient.getCircuitConversionPrompt();
-        const messages = [
-            {
-                role: 'system',
-                content: '你是电路图识别助手。请严格按给定格式输出可直接导入的电路 JSON。'
-            },
-            {
-                role: 'user',
-                content: [
-                    {
-                        type: 'text',
-                        text: this.buildConversionPrompt(conversionPrompt)
-                    },
-                    {
-                        type: 'image_url',
-                        image_url: {
-                            url: normalizedImagePayload
-                        }
-                    }
-                ]
-            }
-        ];
-
-        const rawResponse = await this.aiClient.callAPI(messages, this.aiClient.config.visionModel, 2200, {
-            traceId,
-            source: 'ai_agent.convert_image'
-        });
-        const normalizedCircuit = await this.skills.run('circuit_json_normalize', { rawText: rawResponse });
-        await this.skills.run('circuit_json_validate', normalizedCircuit);
-        this.logEvent('info', 'convert_image_done', {
-            components: Array.isArray(normalizedCircuit?.components) ? normalizedCircuit.components.length : 0,
-            wires: Array.isArray(normalizedCircuit?.wires) ? normalizedCircuit.wires.length : 0
-        }, traceId);
-        return normalizedCircuit;
     }
 }

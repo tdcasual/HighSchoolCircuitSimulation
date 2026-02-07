@@ -6,7 +6,6 @@
 export class OpenAIClient {
     constructor() {
         this.config = this.loadConfig();
-        this.cachedPrompt = null;
         this.logger = null;
     }
 
@@ -30,7 +29,6 @@ export class OpenAIClient {
         const defaultConfig = {
             apiEndpoint: 'https://api.openai.com/v1/chat/completions',
             apiKey: '',
-            visionModel: 'gpt-4o-mini-vision',
             textModel: 'gpt-4o-mini',
             knowledgeSource: 'local',
             knowledgeMcpEndpoint: '',
@@ -82,7 +80,6 @@ export class OpenAIClient {
 
         safeSet(() => localStorage.setItem(this.PUBLIC_CONFIG_KEY, JSON.stringify({
             apiEndpoint: this.config.apiEndpoint,
-            visionModel: this.config.visionModel,
             textModel: this.config.textModel,
             knowledgeSource: this.config.knowledgeSource,
             knowledgeMcpEndpoint: this.config.knowledgeMcpEndpoint,
@@ -134,60 +131,6 @@ export class OpenAIClient {
             return { success: true, message: '连接成功!' };
         } catch (error) {
             return { success: false, message: error.message };
-        }
-    }
-
-    /**
-     * 图片转电路 JSON
-     */
-    async convertImageToCircuit(imageBase64) {
-        if (!this.config.apiKey) {
-            throw new Error('请先在设置中配置 API 密钥');
-        }
-
-        // 读取转换 Prompt
-        const conversionPrompt = await this.getCircuitConversionPrompt();
-
-        const messages = [
-            {
-                role: 'system',
-                content: '你是一个专业的电路图识别助手。请根据用户上传的电路图图片，严格按照提供的格式规范输出 JSON，禁止输出解释性文字。仅返回一个 JSON 代码块，不要额外前后缀。'
-            },
-            {
-                role: 'user',
-                content: [
-                    {
-                        type: 'text',
-                        text: conversionPrompt
-                    },
-                    {
-                        type: 'image_url',
-                        image_url: {
-                            url: `data:image/jpeg;base64,${imageBase64}`
-                        }
-                    }
-                ]
-            }
-        ];
-
-        try {
-            const response = await this.callAPI(messages, this.config.visionModel, 2000, {
-                source: 'openai_client.convert_image'
-            });
-            
-            // 提取 JSON
-            const jsonMatch = response.match(/```json\s*([\s\S]*?)\s*```/) || 
-                            response.match(/\{[\s\S]*"components"[\s\S]*\}/);
-            
-            if (jsonMatch) {
-                const jsonStr = jsonMatch[1] || jsonMatch[0];
-                return JSON.parse(jsonStr);
-            } else {
-                throw new Error('AI 响应中未找到有效的 JSON 格式');
-            }
-        } catch (error) {
-            console.error('Circuit conversion error:', error);
-            throw new Error(`转换失败: ${error.message}`);
         }
     }
 
@@ -318,7 +261,8 @@ ${circuitState}`;
             throw new Error('请先在设置中配置 API 密钥');
         }
 
-        const primaryUseResponsesApi = this.shouldUseResponsesApi(model);
+        const primaryUseResponsesApi = this.shouldUseResponsesApi(model)
+            || this.shouldPreferResponsesForVision(model, messages);
         let useResponsesApi = primaryUseResponsesApi;
         let fallbackTried = false;
         const traceId = context?.traceId || '';
@@ -342,7 +286,7 @@ ${circuitState}`;
         });
 
         for (let attempt = 0; attempt < attempts; attempt++) {
-            const requestBody = this.buildRequestBody(messages, model, maxTokens, useResponsesApi);
+            const requestBody = this.buildRequestBody(messages, model, maxTokens, useResponsesApi, context);
             const apiUrl = this.resolveApiEndpoint(useResponsesApi);
             this.logEvent('info', 'call_api_attempt_start', {
                 attempt: attempt + 1,
@@ -499,41 +443,6 @@ ${circuitState}`;
     }
 
     /**
-     * 获取电路转换 Prompt (从文件或内嵌)
-     */
-    async getCircuitConversionPrompt() {
-        if (this.cachedPrompt) return this.cachedPrompt;
-
-        // 优先读取本地的提示文件，便于更新
-        try {
-            const resp = await fetch('电路图转JSON-Prompt.md');
-            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-            const text = await resp.text();
-            this.cachedPrompt = text;
-            return text;
-        } catch (err) {
-            console.warn('加载电路图转JSON提示失败，使用内置后备。', err);
-        }
-
-        // 后备内置提示（精简版）
-        const fallback = `请将电路图转换为规范 JSON：
-
-## 重要规则：
-1. 识别类型：Ground(1端), PowerSource, ACVoltageSource, Resistor, Rheostat(3端), Capacitor, Inductor, Bulb, Switch, Ammeter, Voltmeter, Motor
-2. 生成矩形/正交布局：x 递增表示从左到右，y 递增表示从上到下；rotation 0=水平，90=竖直，电源推荐 270（正极在上）
-3. 每个元件必须有 label（E1/R1/R2/A1/V1 等），并填写合理属性（voltage/resistance/position 等）
-4. wires 必须使用 v2 端点坐标格式：{a:{x,y},b:{x,y}}，可选端子绑定 {aRef:{componentId,terminalIndex},bRef:{...}}
-5. 端子约定：接地 0=接线端；电源/交流电源 0=左或上端 1=右或下端；电阻/电容/电感 0=左或上端 1=右或下端；滑变 0=a 1=b 2=滑片
-
-6. rotation 只能是 0/90/180/270；坐标可取整数
-
-输出仅 JSON 代码块（\`\`\`json ...\`\`\`）。`;
-
-        this.cachedPrompt = fallback;
-        return fallback;
-    }
-
-    /**
      * 是否使用 /responses API（例如 gpt-5 系列）
      */
     shouldUseResponsesApi(model) {
@@ -545,6 +454,16 @@ ${circuitState}`;
         const host = this.safeParseHost(endpoint);
         if (host && /oaipro\.com$/i.test(host)) return false;
         return /^gpt-5/i.test(model);
+    }
+
+    shouldPreferResponsesForVision(model, messages) {
+        if (!this.containsVisionPayload(messages)) return false;
+        const endpoint = this.config.apiEndpoint || '';
+        if (endpoint.includes('/chat/completions')) return false;
+        const host = this.safeParseHost(endpoint);
+        if (host && /oaipro\.com$/i.test(host)) return false;
+        const id = String(model || '').toLowerCase();
+        return /^gpt-(4o|4\.1|5)/.test(id);
     }
 
     safeParseHost(endpoint) {
@@ -559,9 +478,9 @@ ${circuitState}`;
     /**
      * 构建请求体，兼容 chat/completions 和 responses
      */
-    buildRequestBody(messages, model, maxTokens, useResponsesApi) {
+    buildRequestBody(messages, model, maxTokens, useResponsesApi, context = {}) {
         const tokenLimit = maxTokens || this.config.maxTokens;
-        const temperature = this.getTemperatureForModel(model);
+        const temperature = this.getTemperatureForModel(model, context);
         const requestBody = { model, stream: false };
         if (temperature !== null && temperature !== undefined) {
             requestBody.temperature = temperature;
@@ -663,11 +582,17 @@ ${circuitState}`;
     /**
      * 获取温度参数，部分模型必须使用默认温度，不支持自定义
      */
-    getTemperatureForModel(model) {
+    getTemperatureForModel(model, context = {}) {
         const id = model?.toLowerCase?.() || '';
+        const explicitTemperature = Number(context?.temperature);
+        if (Number.isFinite(explicitTemperature)) {
+            return Math.max(0, Math.min(2, explicitTemperature));
+        }
+
         // gpt-5 系列（含 nano/5.1）在部分兼容端点仅接受默认温度，直接省略
         if (/^gpt-5/.test(id)) return null;
         if (/qwen/i.test(id) || /dashscope/i.test(this.config.apiEndpoint || '')) return null;
+
         return 0.7;
     }
 

@@ -3,6 +3,11 @@
  * Throws informative errors when structure is invalid.
  * Used by AI image→JSON pipeline to guard against malformed output.
  */
+import { ComponentDefaults, getComponentTerminalCount } from '../components/Component.js';
+
+const SUPPORTED_COMPONENT_TYPES = new Set(Object.keys(ComponentDefaults));
+const POWER_COMPONENT_TYPES = new Set(['PowerSource', 'ACVoltageSource']);
+
 export function validateCircuitJSON(data) {
     if (!data || typeof data !== 'object') {
         throw new Error('返回结果不是对象');
@@ -26,6 +31,9 @@ export function validateCircuitJSON(data) {
         return true;
     };
 
+    const componentsById = new Map();
+    let hasPowerSource = false;
+
     const requireTerminalRef = (ref, label) => {
         if (!ref) return true;
         if (ref.componentId === undefined || ref.componentId === null) {
@@ -34,9 +42,18 @@ export function validateCircuitJSON(data) {
         if (ref.terminalIndex === undefined || ref.terminalIndex === null) {
             throw new Error(`${label} 缺少 terminalIndex: ${JSON.stringify(ref)}`);
         }
+        const componentId = String(ref.componentId);
+        const boundComponent = componentsById.get(componentId);
+        if (!boundComponent) {
+            throw new Error(`${label}.componentId 不存在: ${componentId}`);
+        }
         const idx = Number(ref.terminalIndex);
-        if (!Number.isInteger(idx) || idx < 0 || idx > 2) {
+        if (!Number.isInteger(idx) || idx < 0) {
             throw new Error(`${label}.terminalIndex 非法: ${ref.terminalIndex}`);
+        }
+        const terminalCount = getComponentTerminalCount(boundComponent.type);
+        if (idx >= terminalCount) {
+            throw new Error(`${label}.terminalIndex 超出范围: ${ref.terminalIndex}`);
         }
         return true;
     };
@@ -45,9 +62,25 @@ export function validateCircuitJSON(data) {
         if (!comp.id || !comp.type) {
             throw new Error(`组件缺少 id/type: ${JSON.stringify(comp)}`);
         }
+        const type = String(comp.type);
+        if (!SUPPORTED_COMPONENT_TYPES.has(type)) {
+            throw new Error(`不支持的元器件类型: ${type}`);
+        }
+        const id = String(comp.id);
+        if (componentsById.has(id)) {
+            throw new Error(`组件 id 重复: ${id}`);
+        }
+        componentsById.set(id, { ...comp, type });
+        if (POWER_COMPONENT_TYPES.has(type)) {
+            hasPowerSource = true;
+        }
         if (!comp.label) {
             // 不强制报错，但推荐有 label；可后续自动填充
         }
+    }
+
+    if (!hasPowerSource) {
+        throw new Error('至少需要一个电源元件（PowerSource 或 ACVoltageSource）');
     }
 
     for (const wire of data.wires) {
@@ -57,6 +90,9 @@ export function validateCircuitJSON(data) {
         }
         requirePoint(wire.a, 'wire.a');
         requirePoint(wire.b, 'wire.b');
+        if (Number(wire.a.x) === Number(wire.b.x) && Number(wire.a.y) === Number(wire.b.y)) {
+            throw new Error(`导线起点与终点重合: ${JSON.stringify(wire)}`);
+        }
         requireTerminalRef(wire.aRef, 'wire.aRef');
         requireTerminalRef(wire.bRef, 'wire.bRef');
     }

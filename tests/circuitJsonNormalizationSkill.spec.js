@@ -61,4 +61,45 @@ describe('CircuitJsonNormalizationSkill', () => {
         expect(normalized.wires[0].a).toEqual({ x: 0, y: 0 });
         expect(normalized.wires[0].b).toEqual({ x: 20, y: 0 });
     });
+
+    it('maps common alias types and auto-binds nearby wire endpoints to terminal refs', () => {
+        const payload = {
+            components: [
+                {
+                    id: 'VoltageSource_1',
+                    type: 'VoltageSource',
+                    x: 100,
+                    y: 100,
+                    rotation: 270,
+                    properties: { voltage: 3 }
+                },
+                {
+                    id: 'Lamp_1',
+                    type: 'Lamp',
+                    x: 220,
+                    y: 100,
+                    properties: { resistance: 12 }
+                }
+            ],
+            wires: [
+                {
+                    id: 'w1',
+                    a: { x: 99, y: 71 },
+                    b: { x: 190, y: 100 }
+                }
+            ]
+        };
+
+        const normalized = CircuitJsonNormalizationSkill.run({ rawText: payload });
+        expect(normalized.components[0].type).toBe('PowerSource');
+        expect(normalized.components[1].type).toBe('Bulb');
+        expect(normalized.wires[0].aRef).toEqual({
+            componentId: 'VoltageSource_1',
+            terminalIndex: 1
+        });
+        expect(normalized.wires[0].bRef).toEqual({
+            componentId: 'Lamp_1',
+            terminalIndex: 0
+        });
+    });
 });

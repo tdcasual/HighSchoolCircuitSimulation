@@ -5,6 +5,7 @@
 
 import { normalizeCanvasPoint, toCanvasInt } from '../../utils/CanvasCoords.js';
 import { getTerminalWorldPosition } from '../../utils/TerminalGeometry.js';
+import { getComponentTerminalCount } from '../../components/Component.js';
 
 const RESERVED_COMPONENT_KEYS = new Set([
     'id', 'type', 'label', 'x', 'y', 'rotation', 'properties', 'terminalExtensions', 'display'
@@ -33,6 +34,19 @@ const LABEL_PREFIX_BY_TYPE = Object.freeze({
     Voltmeter: 'V',
     BlackBox: 'B'
 });
+
+const COMPONENT_TYPE_ALIASES = Object.freeze({
+    voltagesource: 'PowerSource',
+    dcsource: 'PowerSource',
+    battery: 'PowerSource',
+    powersupply: 'PowerSource',
+    lamp: 'Bulb',
+    lightbulb: 'Bulb',
+    groundsymbol: 'Ground'
+});
+
+const TERMINAL_BIND_DISTANCE_PX = 24;
+const TERMINAL_SNAP_DISTANCE_PX = 12;
 
 function makeUniqueString(base, usedSet) {
     const normalized = String(base || '').trim() || 'unnamed';
@@ -104,7 +118,9 @@ function normalizeComponent(rawComponent, index, usedIds, typeCounters) {
         throw new Error(`组件 ${index + 1} 不是对象`);
     }
 
-    const type = String(rawComponent.type || '').trim();
+    const rawType = String(rawComponent.type || '').trim();
+    const lowerType = rawType.toLowerCase();
+    const type = COMPONENT_TYPE_ALIASES[lowerType] || rawType;
     if (!type) {
         throw new Error(`组件 ${index + 1} 缺少 type`);
     }
@@ -143,23 +159,29 @@ function normalizeComponent(rawComponent, index, usedIds, typeCounters) {
     return normalized;
 }
 
-function normalizeTerminalRef(rawRef) {
+function normalizeTerminalRef(rawRef, componentGeometryMap = null) {
     if (!rawRef || typeof rawRef !== 'object') return null;
     const componentId = rawRef.componentId;
     const terminalIndex = Number(rawRef.terminalIndex);
     if (componentId === undefined || componentId === null) return null;
-    if (!Number.isInteger(terminalIndex) || terminalIndex < 0 || terminalIndex > 2) return null;
+    if (!Number.isInteger(terminalIndex) || terminalIndex < 0) return null;
+    if (componentGeometryMap instanceof Map) {
+        const component = componentGeometryMap.get(String(componentId));
+        if (!component) return null;
+        const maxTerminalCount = getComponentTerminalCount(component.type);
+        if (terminalIndex >= maxTerminalCount) return null;
+    }
     return {
         componentId: String(componentId),
         terminalIndex
     };
 }
 
-function getLegacyRef(rawWire, prefix) {
+function getLegacyRef(rawWire, prefix, componentGeometryMap) {
     const componentId = rawWire?.[`${prefix}ComponentId`];
     const terminalIndex = rawWire?.[`${prefix}TerminalIndex`];
     if (componentId === undefined || componentId === null) return null;
-    return normalizeTerminalRef({ componentId, terminalIndex });
+    return normalizeTerminalRef({ componentId, terminalIndex }, componentGeometryMap);
 }
 
 function buildComponentGeometryMap(components = []) {
@@ -179,6 +201,76 @@ function resolveTerminalPoint(ref, componentGeometryMap) {
     if (!component) return null;
     const point = getTerminalWorldPosition(component, ref.terminalIndex);
     return normalizeCanvasPoint(point);
+}
+
+function distanceSquared(a, b) {
+    if (!a || !b) return Number.POSITIVE_INFINITY;
+    const dx = Number(a.x) - Number(b.x);
+    const dy = Number(a.y) - Number(b.y);
+    return dx * dx + dy * dy;
+}
+
+function buildTerminalCandidates(componentGeometryMap) {
+    const candidates = [];
+    if (!(componentGeometryMap instanceof Map)) return candidates;
+    componentGeometryMap.forEach((component, componentId) => {
+        const count = getComponentTerminalCount(component.type);
+        for (let terminalIndex = 0; terminalIndex < count; terminalIndex += 1) {
+            const point = resolveTerminalPoint({ componentId, terminalIndex }, componentGeometryMap);
+            if (!point) continue;
+            candidates.push({
+                componentId,
+                terminalIndex,
+                point
+            });
+        }
+    });
+    return candidates;
+}
+
+function findNearestTerminal(point, terminalCandidates, maxDistancePx = TERMINAL_BIND_DISTANCE_PX) {
+    if (!point || !Array.isArray(terminalCandidates) || terminalCandidates.length === 0) return null;
+    const maxDistanceSq = maxDistancePx * maxDistancePx;
+    let best = null;
+    let bestDistance = Number.POSITIVE_INFINITY;
+    for (const candidate of terminalCandidates) {
+        const dist = distanceSquared(point, candidate.point);
+        if (dist <= maxDistanceSq && dist < bestDistance) {
+            best = candidate;
+            bestDistance = dist;
+        }
+    }
+    return best;
+}
+
+function repairEndpoint(rawPoint, rawRef, componentGeometryMap, terminalCandidates) {
+    let point = normalizeCanvasPoint(rawPoint);
+    let ref = normalizeTerminalRef(rawRef, componentGeometryMap);
+
+    if (!point && ref) {
+        point = resolveTerminalPoint(ref, componentGeometryMap);
+    }
+    if (!ref && point) {
+        const nearest = findNearestTerminal(point, terminalCandidates);
+        if (nearest) {
+            ref = {
+                componentId: nearest.componentId,
+                terminalIndex: nearest.terminalIndex
+            };
+        }
+    }
+    if (ref) {
+        const terminalPoint = resolveTerminalPoint(ref, componentGeometryMap);
+        if (terminalPoint) {
+            if (!point) {
+                point = terminalPoint;
+            } else if (distanceSquared(point, terminalPoint) <= TERMINAL_SNAP_DISTANCE_PX * TERMINAL_SNAP_DISTANCE_PX) {
+                point = terminalPoint;
+            }
+        }
+    }
+
+    return { point, ref };
 }
 
 function normalizeJsonText(rawText) {
@@ -244,8 +336,8 @@ function parseJsonWithRepairs(rawText) {
 }
 
 function normalizeWireSegmentsFromLegacy(rawWire, componentGeometryMap, usedWireIds, fallbackWireBase) {
-    const startRef = normalizeTerminalRef(rawWire.start) || getLegacyRef(rawWire, 'start');
-    const endRef = normalizeTerminalRef(rawWire.end) || getLegacyRef(rawWire, 'end');
+    const startRef = normalizeTerminalRef(rawWire.start, componentGeometryMap) || getLegacyRef(rawWire, 'start', componentGeometryMap);
+    const endRef = normalizeTerminalRef(rawWire.end, componentGeometryMap) || getLegacyRef(rawWire, 'end', componentGeometryMap);
     if (!startRef || !endRef) return [];
 
     const startPoint = resolveTerminalPoint(startRef, componentGeometryMap);
@@ -274,20 +366,15 @@ function normalizeWireSegmentsFromLegacy(rawWire, componentGeometryMap, usedWire
     return segments;
 }
 
-function normalizeWire(rawWire, index, componentGeometryMap, usedWireIds) {
+function normalizeWire(rawWire, index, componentGeometryMap, terminalCandidates, usedWireIds) {
     if (!rawWire || typeof rawWire !== 'object') return [];
 
-    const aRef = normalizeTerminalRef(rawWire.aRef);
-    const bRef = normalizeTerminalRef(rawWire.bRef);
-
-    let pointA = normalizeCanvasPoint(rawWire.a);
-    let pointB = normalizeCanvasPoint(rawWire.b);
-    if (!pointA && aRef) {
-        pointA = resolveTerminalPoint(aRef, componentGeometryMap);
-    }
-    if (!pointB && bRef) {
-        pointB = resolveTerminalPoint(bRef, componentGeometryMap);
-    }
+    const repairedA = repairEndpoint(rawWire.a, rawWire.aRef, componentGeometryMap, terminalCandidates);
+    const repairedB = repairEndpoint(rawWire.b, rawWire.bRef, componentGeometryMap, terminalCandidates);
+    const aRef = repairedA.ref;
+    const bRef = repairedB.ref;
+    const pointA = repairedA.point;
+    const pointB = repairedB.point;
 
     if (pointA && pointB) {
         const id = makeUniqueString(rawWire.id || `wire_${index + 1}`, usedWireIds);
@@ -328,10 +415,11 @@ function normalizeCircuitJson(rawJson) {
     ));
 
     const componentGeometryMap = buildComponentGeometryMap(components);
+    const terminalCandidates = buildTerminalCandidates(componentGeometryMap);
     const usedWireIds = new Set();
     const wires = [];
     wiresRaw.forEach((rawWire, index) => {
-        const normalizedSegments = normalizeWire(rawWire, index, componentGeometryMap, usedWireIds);
+        const normalizedSegments = normalizeWire(rawWire, index, componentGeometryMap, terminalCandidates, usedWireIds);
         wires.push(...normalizedSegments);
     });
 

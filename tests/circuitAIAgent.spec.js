@@ -7,11 +7,9 @@ describe('CircuitAIAgent', () => {
         const aiClient = {
             config: {
                 apiKey: 'test-key',
-                textModel: 'gpt-test',
-                visionModel: 'gpt-vision'
+                textModel: 'gpt-test'
             },
-            callAPI,
-            getCircuitConversionPrompt: vi.fn()
+            callAPI
         };
         const explainer = {
             extractCircuitState: vi.fn().mockReturnValue('节点1: R1:0, E1:1')
@@ -66,62 +64,14 @@ describe('CircuitAIAgent', () => {
         expect(messages[messages.length - 1]).toEqual({ role: 'user', content: '现在电流是多少？' });
     });
 
-    it('normalizes image conversion output into canonical v2 wires', async () => {
-        const conversionResult = {
-            components: [
-                { type: 'PowerSource', x: 100, y: 100, rotation: 270, properties: { voltage: 3, internalResistance: 1 } },
-                { type: 'Resistor', x: 220, y: 100, properties: { resistance: 10 } }
-            ],
-            wires: [
-                {
-                    id: 'wire_1',
-                    start: { componentId: 'PowerSource_1', terminalIndex: 1 },
-                    end: { componentId: 'Resistor_1', terminalIndex: 0 },
-                    controlPoints: []
-                }
-            ]
-        };
-
-        const callAPI = vi.fn().mockResolvedValue(`\`\`\`json\n${JSON.stringify(conversionResult)}\n\`\`\``);
-        const aiClient = {
-            config: {
-                apiKey: 'test-key',
-                textModel: 'gpt-test',
-                visionModel: 'gpt-vision'
-            },
-            callAPI,
-            getCircuitConversionPrompt: vi.fn().mockResolvedValue('请识别电路图')
-        };
-        const explainer = {
-            extractCircuitState: vi.fn().mockReturnValue('mock-state')
-        };
-
-        const agent = new CircuitAIAgent({ aiClient, explainer });
-        const json = await agent.convertImageToCircuit('data:image/png;base64,abc123');
-
-        expect(callAPI).toHaveBeenCalledTimes(1);
-        const [messages, model, tokenLimit] = callAPI.mock.calls[0];
-        expect(model).toBe('gpt-vision');
-        expect(tokenLimit).toBe(2200);
-        expect(messages[1].content[1].image_url.url).toBe('data:image/png;base64,abc123');
-        expect(json.components.length).toBe(2);
-        expect(json.wires.length).toBe(1);
-        expect(json.wires[0]).toHaveProperty('a');
-        expect(json.wires[0]).toHaveProperty('b');
-        expect(json.wires[0].aRef).toEqual({ componentId: 'PowerSource_1', terminalIndex: 1 });
-        expect(json.wires[0].bRef).toEqual({ componentId: 'Resistor_1', terminalIndex: 0 });
-    });
-
     it('caches knowledge retrieval for repeated same question', async () => {
         const callAPI = vi.fn().mockResolvedValue('AI答复');
         const aiClient = {
             config: {
                 apiKey: 'test-key',
-                textModel: 'gpt-test',
-                visionModel: 'gpt-vision'
+                textModel: 'gpt-test'
             },
-            callAPI,
-            getCircuitConversionPrompt: vi.fn()
+            callAPI
         };
         const explainer = {
             extractCircuitState: vi.fn().mockReturnValue('mock-circuit')
@@ -148,11 +98,9 @@ describe('CircuitAIAgent', () => {
         const aiClient = {
             config: {
                 apiKey: 'test-key',
-                textModel: 'gpt-test',
-                visionModel: 'gpt-vision'
+                textModel: 'gpt-test'
             },
-            callAPI,
-            getCircuitConversionPrompt: vi.fn()
+            callAPI
         };
         const explainer = {
             extractCircuitState: vi.fn().mockReturnValue('mock-circuit')
@@ -180,11 +128,9 @@ describe('CircuitAIAgent', () => {
         const aiClient = {
             config: {
                 apiKey: 'test-key',
-                textModel: 'gpt-test',
-                visionModel: 'gpt-vision'
+                textModel: 'gpt-test'
             },
             callAPI: vi.fn().mockRejectedValue(new Error('network down')),
-            getCircuitConversionPrompt: vi.fn()
         };
         const explainer = {
             extractCircuitState: vi.fn().mockReturnValue('mock-circuit-state')
@@ -225,11 +171,9 @@ describe('CircuitAIAgent', () => {
         const aiClient = {
             config: {
                 apiKey: 'test-key',
-                textModel: 'gpt-test',
-                visionModel: 'gpt-vision'
+                textModel: 'gpt-test'
             },
-            callAPI,
-            getCircuitConversionPrompt: vi.fn()
+            callAPI
         };
         const explainer = {
             extractCircuitState: vi.fn().mockReturnValue('mock-circuit')

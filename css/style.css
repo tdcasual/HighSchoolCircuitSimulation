@@ -1962,37 +1962,6 @@ body {
     min-height: 210px;
 }
 
-#ai-tabs {
-    display: flex;
-    padding: 0 16px;
-    border-bottom: 1px solid #f0f0f0;
-    background: #f9fbff;
-}
-
-.ai-tab {
-    padding: 12px 16px;
-    border: none;
-    background: transparent;
-    cursor: pointer;
-    font-size: 13px;
-    font-weight: 600;
-    transition: all 0.2s;
-    border-bottom: 2px solid transparent;
-    color: var(--text-light);
-    position: relative;
-}
-
-.ai-tab:hover {
-    color: var(--primary-dark);
-    background: rgba(33, 150, 243, 0.06);
-}
-
-.ai-tab.active {
-    color: var(--primary-dark);
-    border-bottom-color: var(--primary-color);
-    background: var(--panel-bg);
-}
-
 .ai-tab-content {
     display: none;
     flex: 1;
@@ -2008,97 +1977,6 @@ body {
 #tab-explain {
     min-height: 0;
     overflow: hidden;
-}
-
-/* 图片上传区域 - 简约风 */
-#image-upload-zone {
-    flex: 1;
-    margin-bottom: 12px;
-    display: flex;
-    flex-direction: column;
-}
-
-#image-drop-area {
-    border: 1px dashed var(--border-color);
-    border-radius: 10px;
-    padding: 20px;
-    text-align: center;
-    transition: all 0.2s;
-    height: 190px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    position: relative;
-    background: #f9fbff;
-}
-
-#image-drop-area.dragover {
-    border-color: var(--primary-color);
-    background: rgba(33, 150, 243, 0.06);
-    border-style: solid;
-}
-
-#image-upload-prompt {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 12px;
-    color: #666;
-}
-
-#image-upload-prompt svg {
-    color: #999;
-    opacity: 0.6;
-}
-
-#image-upload-prompt p {
-    font-size: 14px;
-    margin: 0;
-    color: var(--text-light);
-    font-weight: 500;
-}
-
-#image-preview-area {
-    position: relative;
-    width: 100%;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-#image-preview-area.hidden {
-    display: none;
-}
-
-#image-preview {
-    max-width: 100%;
-    max-height: 100%;
-    border-radius: 8px;
-    object-fit: contain;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-}
-
-#image-remove-btn {
-    position: absolute;
-    top: 8px;
-    right: 8px;
-    background: rgba(33,150,243,0.9);
-    color: white;
-    border: none;
-    border-radius: 50%;
-    width: 26px;
-    height: 26px;
-    cursor: pointer;
-    font-size: 16px;
-    line-height: 1;
-    backdrop-filter: blur(4px);
-    transition: all 0.2s;
-}
-
-#image-remove-btn:hover {
-    background: rgba(25,118,210,0.95);
-    transform: scale(1.1);
 }
 
 #ai-resize-handle {

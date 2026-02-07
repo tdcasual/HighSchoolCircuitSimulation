@@ -99,3 +99,36 @@ describe('OpenAIClient callAPI robustness', () => {
         expect(requestBody.stream).toBe(false);
     });
 });
+
+describe('OpenAIClient source-specific request strategy', () => {
+    let client;
+
+    beforeEach(() => {
+        client = new OpenAIClient();
+        client.config.apiEndpoint = 'https://api.openai.com/v1/chat/completions';
+    });
+
+    it('keeps default temperature for regular text source', () => {
+        const requestBody = client.buildRequestBody(
+            [{ role: 'user', content: 'chat' }],
+            'gpt-4o-mini',
+            800,
+            false,
+            { source: 'openai_client.explain_circuit' }
+        );
+
+        expect(requestBody.temperature).toBe(0.7);
+    });
+
+    it('omits temperature for gpt-5 regardless of source', () => {
+        const requestBody = client.buildRequestBody(
+            [{ role: 'user', content: 'chat' }],
+            'gpt-5-mini',
+            800,
+            true,
+            { source: 'openai_client.explain_circuit' }
+        );
+
+        expect(Object.prototype.hasOwnProperty.call(requestBody, 'temperature')).toBe(false);
+    });
+});

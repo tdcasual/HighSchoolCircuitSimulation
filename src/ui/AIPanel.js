@@ -37,8 +37,7 @@ export class AIPanel {
         this.suppressFabClickOnce = false;
         this.idleTimeoutMs = 9000;
         this.idleTimer = null;
-        
-        this.currentImage = null;
+
         this.messageHistory = [];
         this.isProcessing = false;
         this.lastQuestion = '';
@@ -95,22 +94,10 @@ export class AIPanel {
         }
         this.syncPanelCollapsedUI();
 
-        // Tab 切换
-        const tabs = document.querySelectorAll('.ai-tab');
-        tabs.forEach(tab => {
-            tab.addEventListener('click', () => {
-                const tabName = tab.dataset.tab;
-                this.switchTab(tabName);
-            });
-        });
-
         // 设置按钮
         document.getElementById('ai-settings-btn').addEventListener('click', () => {
             this.openSettings();
         });
-
-        // 图片上传
-        this.initializeImageUpload();
 
         // 聊天功能
         this.initializeChat();
@@ -121,191 +108,6 @@ export class AIPanel {
         // 布局控制
         this.initializePanelLayoutControls();
         this.bindMathJaxLoadListener();
-    }
-
-    /**
-     * 切换 Tab
-     */
-    switchTab(tabName) {
-        // 更新 Tab 按钮
-        document.querySelectorAll('.ai-tab').forEach(btn => {
-            btn.classList.toggle('active', btn.dataset.tab === tabName);
-        });
-
-        // 更新内容区域
-        document.querySelectorAll('.ai-tab-content').forEach(content => {
-            content.classList.toggle('active', content.id === `tab-${tabName}`);
-        });
-    }
-
-    /**
-     * 初始化图片上传
-     */
-    initializeImageUpload() {
-        const input = document.getElementById('circuit-image-input');
-        const uploadBtn = document.getElementById('image-upload-btn');
-        const dropArea = document.getElementById('image-drop-area');
-        const convertBtn = document.getElementById('convert-circuit-btn');
-        const removeBtn = document.getElementById('image-remove-btn');
-
-        // 点击上传
-        uploadBtn.addEventListener('click', () => input.click());
-
-        // 文件选择
-        input.addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (file) this.handleImageFile(file);
-        });
-
-        // 拖放上传
-        dropArea.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            dropArea.classList.add('dragover');
-        });
-
-        dropArea.addEventListener('dragleave', () => {
-            dropArea.classList.remove('dragover');
-        });
-
-        dropArea.addEventListener('drop', (e) => {
-            e.preventDefault();
-            dropArea.classList.remove('dragover');
-            const file = e.dataTransfer.files[0];
-            if (file && file.type.startsWith('image/')) {
-                this.handleImageFile(file);
-            }
-        });
-
-        // 移除图片
-        removeBtn.addEventListener('click', () => {
-            this.clearImage();
-        });
-
-        // 转换按钮
-        convertBtn.addEventListener('click', () => {
-            this.convertImageToCircuit();
-        });
-    }
-
-    /**
-     * 处理图片文件
-     */
-    handleImageFile(file) {
-        // 检查文件大小 (最大 5MB)
-        if (file.size > 5 * 1024 * 1024) {
-            alert('图片文件过大，请选择小于 5MB 的图片');
-            return;
-        }
-
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            this.currentImage = e.target.result;
-            this.displayImagePreview(e.target.result);
-            document.getElementById('convert-circuit-btn').disabled = false;
-        };
-        reader.readAsDataURL(file);
-    }
-
-    /**
-     * 显示图片预览
-     */
-    displayImagePreview(dataUrl) {
-        const preview = document.getElementById('image-preview');
-        const previewArea = document.getElementById('image-preview-area');
-        const uploadPrompt = document.getElementById('image-upload-prompt');
-
-        preview.src = dataUrl;
-        previewArea.classList.remove('hidden');
-        uploadPrompt.style.display = 'none';
-    }
-
-    /**
-     * 清除图片
-     */
-    clearImage() {
-        this.currentImage = null;
-        const preview = document.getElementById('image-preview');
-        const previewArea = document.getElementById('image-preview-area');
-        const uploadPrompt = document.getElementById('image-upload-prompt');
-        const input = document.getElementById('circuit-image-input');
-
-        preview.src = '';
-        previewArea.classList.add('hidden');
-        uploadPrompt.style.display = 'flex';
-        input.value = '';
-        document.getElementById('convert-circuit-btn').disabled = true;
-    }
-
-    /**
-     * 转换图片为电路
-     */
-    async convertImageToCircuit() {
-        if (!this.currentImage || this.isProcessing) return;
-
-        const convertBtn = document.getElementById('convert-circuit-btn');
-        const originalText = convertBtn.textContent;
-        const traceId = this.aiLogger?.createTrace?.('image_convert', {
-            imageDataChars: String(this.currentImage || '').length
-        }) || '';
-        this.logPanelEvent?.('info', 'convert_image_requested', null, traceId);
-        
-        try {
-            this.isProcessing = true;
-            convertBtn.disabled = true;
-            convertBtn.innerHTML = '<span class="loading-indicator"><span></span><span></span><span></span></span> 正在转换...';
-
-            // 通过 Agent 调用：包含模型输出归一化 + 结构校验
-            const circuitJSON = await this.aiAgent.convertImageToCircuit(this.currentImage, { traceId });
-
-            // 加载到电路
-            this.app.stopSimulation();
-            this.circuit.fromJSON(circuitJSON);
-            this.app.renderer.render();
-            this.app.interaction.clearSelection();
-            this.app.exerciseBoard?.fromJSON?.(circuitJSON.meta?.exerciseBoard);
-
-            // 自动求解一次，提前暴露潜在问题
-            this.circuit.startSimulation();
-            this.circuit.step();
-            this.circuit.stopSimulation();
-
-            // 保存到 localStorage
-            this.saveCircuitToLocalStorage(circuitJSON);
-
-            this.app.updateStatus(`✅ 成功从图片加载电路: ${circuitJSON.components.length} 个元器件`);
-            this.logPanelEvent?.('info', 'convert_image_success', {
-                components: circuitJSON.components.length,
-                wires: Array.isArray(circuitJSON.wires) ? circuitJSON.wires.length : 0
-            }, traceId);
-            this.aiLogger?.finishTrace?.(traceId, 'success', {
-                components: circuitJSON.components.length
-            });
-            
-            // 清除图片
-            this.clearImage();
-            
-            // 切换到解释 Tab
-            setTimeout(() => {
-                this.switchTab('explain');
-                this.addChatMessage('system', '电路已成功加载！你可以问我关于这个电路的问题。');
-            }, 500);
-
-        } catch (error) {
-            console.error('Conversion error:', error);
-            alert(`转换失败: ${error.message}`);
-            this.app.updateStatus(`❌ 转换失败: ${error.message}`);
-            this.logPanelEvent?.('error', 'convert_image_failed', {
-                error: error.message
-            }, traceId);
-            this.aiLogger?.finishTrace?.(traceId, 'error', {
-                error: error.message
-            });
-        } finally {
-            this.isProcessing = false;
-            convertBtn.disabled = false;
-            convertBtn.textContent = originalText;
-            this.updateLogSummaryDisplay?.();
-        }
     }
 
     /**
@@ -1006,14 +808,11 @@ export class AIPanel {
         const fetchStatus = document.getElementById('model-fetch-status');
         const exportLogsBtn = document.getElementById('settings-export-logs-btn');
         const clearLogsBtn = document.getElementById('settings-clear-logs-btn');
-        const visionSelect = document.getElementById('vision-model-select');
         const textSelect = document.getElementById('text-model-select');
-        const visionInput = document.getElementById('vision-model');
         const textInput = document.getElementById('text-model');
         const knowledgeSourceSelect = document.getElementById('knowledge-source');
         const knowledgeMcpModeSelect = document.getElementById('knowledge-mcp-mode');
 
-        this.bindModelSelector(visionSelect, visionInput);
         this.bindModelSelector(textSelect, textInput);
         if (knowledgeSourceSelect) {
             knowledgeSourceSelect.addEventListener('change', () => {
@@ -1110,7 +909,6 @@ export class AIPanel {
         
         document.getElementById('api-endpoint').value = config.apiEndpoint;
         document.getElementById('api-key').value = config.apiKey;
-        document.getElementById('vision-model').value = config.visionModel;
         document.getElementById('text-model').value = config.textModel;
         const knowledgeSource = document.getElementById('knowledge-source');
         const knowledgeMcpEndpoint = document.getElementById('knowledge-mcp-endpoint');
@@ -1140,7 +938,6 @@ export class AIPanel {
             knowledgeSource?.value || config.knowledgeSource || 'local',
             knowledgeMcpMode?.value || config.knowledgeMcpMode || 'method'
         );
-        this.syncSelectToValue(document.getElementById('vision-model-select'), config.visionModel);
         this.syncSelectToValue(document.getElementById('text-model-select'), config.textModel);
         this.updateKnowledgeVersionDisplay();
         this.updateLogSummaryDisplay?.();
@@ -1161,7 +958,6 @@ export class AIPanel {
         const config = {
             apiEndpoint: document.getElementById('api-endpoint').value.trim(),
             apiKey: document.getElementById('api-key').value.trim(),
-            visionModel: document.getElementById('vision-model').value.trim(),
             textModel: document.getElementById('text-model').value.trim(),
             knowledgeSource: knowledgeSource?.value || 'local',
             knowledgeMcpEndpoint: knowledgeMcpEndpoint?.value?.trim?.() || '',
@@ -1180,7 +976,6 @@ export class AIPanel {
         this.logPanelEvent?.('info', 'settings_saved', {
             endpoint: config.apiEndpoint,
             textModel: config.textModel,
-            visionModel: config.visionModel,
             knowledgeSource: config.knowledgeSource,
             knowledgeMode: config.knowledgeMcpMode
         });
@@ -1363,28 +1158,11 @@ export class AIPanel {
         selectEl.value = val;
     }
 
-    isVisionModelId(modelId) {
-        if (!modelId) return false;
-        const lower = modelId.toLowerCase();
-        if (/(vision|image|omni)/.test(lower)) return true;
-
-        // 常见多模态模型前缀（推断）
-        const visionPrefixes = [
-            'gpt-4o',
-            'gpt-4.1',
-            'gpt-5'
-        ];
-        return visionPrefixes.some(prefix => lower.startsWith(prefix));
-    }
-
     populateModelLists(models = []) {
-        const visionList = document.getElementById('model-list-vision');
         const textList = document.getElementById('model-list-text');
-        const visionSelect = document.getElementById('vision-model-select');
         const textSelect = document.getElementById('text-model-select');
-        const visionInput = document.getElementById('vision-model');
         const textInput = document.getElementById('text-model');
-        if (!visionList || !textList) return;
+        if (!textList) return;
 
         const toOption = (id) => {
             const opt = document.createElement('option');
@@ -1392,26 +1170,15 @@ export class AIPanel {
             return opt;
         };
 
-        // 视觉列表不做过滤，直接展示全部；文本列表同样全部展示
-        const visionModels = [...new Set(models)];
-        const textModels = [...new Set(models)];
+        const textModels = [...new Set(models.map(id => String(id || '').trim()).filter(Boolean))];
 
-        visionList.innerHTML = '';
         textList.innerHTML = '';
-
-        visionModels.forEach(id => visionList.appendChild(toOption(id)));
         textModels.forEach(id => textList.appendChild(toOption(id)));
 
-        if (visionSelect) {
-            this.fillSelectOptions(visionSelect, visionModels, visionInput?.value);
-        }
         if (textSelect) {
             this.fillSelectOptions(textSelect, textModels, textInput?.value);
         }
 
-        if (visionSelect && visionInput) {
-            this.syncSelectToValue(visionSelect, visionInput.value.trim());
-        }
         if (textSelect && textInput) {
             this.syncSelectToValue(textSelect, textInput.value.trim());
         }
