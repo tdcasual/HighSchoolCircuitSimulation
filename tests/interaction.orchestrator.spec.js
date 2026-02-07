@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as InteractionOrchestrator from '../src/ui/interaction/InteractionOrchestrator.js';
 
 function makeTarget({
@@ -18,6 +18,11 @@ function makeTarget({
         }
     };
 }
+
+afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+});
 
 describe('InteractionOrchestrator.onMouseDown', () => {
     it('starts panning on middle button', () => {
@@ -307,5 +312,116 @@ describe('InteractionOrchestrator.onMouseMove', () => {
         expect(context.renderer.updateTempWire).toHaveBeenCalledWith('TEMP', 10, 20, 130, 140);
         expect(context.renderer.highlightTerminal).toHaveBeenCalledWith('R1', 0);
         expect(context.renderer.clearTerminalHighlight).not.toHaveBeenCalled();
+    });
+});
+
+describe('InteractionOrchestrator.onKeyDown', () => {
+    it('closes dialog on Escape and skips other shortcuts while dialog is open', () => {
+        vi.stubGlobal('document', {
+            getElementById: vi.fn(() => ({
+                classList: { contains: vi.fn(() => false) }
+            })),
+            activeElement: null
+        });
+
+        const context = {
+            hideDialog: vi.fn(),
+            clearSelection: vi.fn()
+        };
+        const event = {
+            key: 'Escape',
+            preventDefault: vi.fn(),
+            metaKey: false,
+            ctrlKey: false,
+            shiftKey: false
+        };
+
+        InteractionOrchestrator.onKeyDown.call(context, event);
+
+        expect(context.hideDialog).toHaveBeenCalledTimes(1);
+        expect(context.clearSelection).not.toHaveBeenCalled();
+    });
+
+    it('handles Ctrl/Cmd+Z undo shortcut', () => {
+        vi.stubGlobal('document', {
+            getElementById: vi.fn(() => ({
+                classList: { contains: vi.fn(() => true) }
+            })),
+            activeElement: null
+        });
+
+        const context = {
+            undo: vi.fn(),
+            redo: vi.fn()
+        };
+        const event = {
+            key: 'z',
+            preventDefault: vi.fn(),
+            metaKey: false,
+            ctrlKey: true,
+            shiftKey: false
+        };
+
+        InteractionOrchestrator.onKeyDown.call(context, event);
+
+        expect(event.preventDefault).toHaveBeenCalledTimes(1);
+        expect(context.undo).toHaveBeenCalledTimes(1);
+        expect(context.redo).not.toHaveBeenCalled();
+    });
+
+    it('deletes selected wire on Delete key', () => {
+        vi.stubGlobal('document', {
+            getElementById: vi.fn(() => ({
+                classList: { contains: vi.fn(() => true) }
+            })),
+            activeElement: null
+        });
+
+        const context = {
+            selectedComponent: null,
+            selectedWire: 'W1',
+            deleteWire: vi.fn(),
+            deleteComponent: vi.fn()
+        };
+        const event = {
+            key: 'Delete',
+            preventDefault: vi.fn(),
+            metaKey: false,
+            ctrlKey: false,
+            shiftKey: false
+        };
+
+        InteractionOrchestrator.onKeyDown.call(context, event);
+
+        expect(event.preventDefault).toHaveBeenCalledTimes(1);
+        expect(context.deleteWire).toHaveBeenCalledWith('W1');
+        expect(context.deleteComponent).not.toHaveBeenCalled();
+    });
+
+    it('ignores shortcuts when focus is in editable input', () => {
+        vi.stubGlobal('document', {
+            getElementById: vi.fn(() => ({
+                classList: { contains: vi.fn(() => true) }
+            })),
+            activeElement: { tagName: 'INPUT', isContentEditable: false }
+        });
+
+        const context = {
+            selectedComponent: null,
+            selectedWire: 'W1',
+            deleteWire: vi.fn()
+        };
+        const event = {
+            key: 'Delete',
+            preventDefault: vi.fn(),
+            metaKey: false,
+            ctrlKey: false,
+            shiftKey: false
+        };
+
+        InteractionOrchestrator.onKeyDown.call(context, event);
+
+        expect(event.preventDefault).not.toHaveBeenCalled();
+        expect(context.deleteWire).not.toHaveBeenCalled();
     });
 });

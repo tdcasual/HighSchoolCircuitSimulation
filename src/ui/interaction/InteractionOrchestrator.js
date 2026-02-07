@@ -533,3 +533,73 @@ export function onDoubleClick(e) {
         this.showPropertyDialog(componentG.dataset.id);
     }
 }
+
+export function onKeyDown(e) {
+    // 检查对话框是否打开
+    const dialogOverlay = typeof document !== 'undefined'
+        ? document.getElementById('dialog-overlay')
+        : null;
+    const isDialogOpen = dialogOverlay && !dialogOverlay.classList.contains('hidden');
+
+    // 如果对话框打开，只处理 Escape 键关闭对话框
+    if (isDialogOpen) {
+        if (e.key === 'Escape') {
+            this.hideDialog();
+        }
+        return;
+    }
+
+    // 如果焦点在输入框、文本框等可编辑元素中，不处理快捷键
+    const activeElement = typeof document !== 'undefined' ? document.activeElement : null;
+    const isEditing = activeElement && (
+        activeElement.tagName === 'INPUT' ||
+        activeElement.tagName === 'TEXTAREA' ||
+        activeElement.tagName === 'SELECT' ||
+        activeElement.isContentEditable
+    );
+
+    if (isEditing) {
+        return;
+    }
+
+    // Undo / Redo
+    const modKey = e.metaKey || e.ctrlKey;
+    if (modKey && (e.key === 'z' || e.key === 'Z')) {
+        e.preventDefault();
+        if (e.shiftKey) {
+            this.redo();
+        } else {
+            this.undo();
+        }
+        return;
+    }
+    if (modKey && (e.key === 'y' || e.key === 'Y')) {
+        e.preventDefault();
+        this.redo();
+        return;
+    }
+
+    // Delete键删除选中的元器件
+    if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault();
+        if (this.selectedComponent) {
+            this.deleteComponent(this.selectedComponent);
+        } else if (this.selectedWire) {
+            this.deleteWire(this.selectedWire);
+        }
+    }
+
+    // R键旋转
+    if (e.key === 'r' || e.key === 'R') {
+        if (this.selectedComponent) {
+            this.rotateComponent(this.selectedComponent);
+        }
+    }
+
+    // Escape取消连线
+    if (e.key === 'Escape') {
+        this.cancelWiring();
+        this.clearPendingToolType({ silent: true });
+        this.clearSelection();
+    }
+}
