@@ -163,7 +163,7 @@ export class InteractionManager {
      */
     bindToolboxEvents() {
         const toolItems = document.querySelectorAll('.tool-item');
-        const validTypes = ['Ground', 'PowerSource', 'ACVoltageSource', 'Resistor', 'Diode', 'LED', 'Rheostat', 'Bulb', 'Capacitor', 'Inductor', 'ParallelPlateCapacitor', 'Motor', 'Switch', 'SPDTSwitch', 'Fuse', 'Ammeter', 'Voltmeter', 'BlackBox', 'Wire'];
+        const validTypes = ['Ground', 'PowerSource', 'ACVoltageSource', 'Resistor', 'Diode', 'LED', 'Thermistor', 'Rheostat', 'Bulb', 'Capacitor', 'Inductor', 'ParallelPlateCapacitor', 'Motor', 'Switch', 'SPDTSwitch', 'Fuse', 'Ammeter', 'Voltmeter', 'BlackBox', 'Wire'];
         
         // 标记是否正在从工具箱拖放
         this.isToolboxDrag = false;
@@ -2223,6 +2223,31 @@ export class InteractionManager {
                     unit: 'mA'
                 }));
                 break;
+
+            case 'Thermistor':
+                content.appendChild(createFormGroup('R25 (Ω)', {
+                    id: 'edit-r25',
+                    value: Number.isFinite(comp.resistanceAt25) ? comp.resistanceAt25 : 1000,
+                    min: 0.001,
+                    step: 1,
+                    unit: 'Ω'
+                }));
+                content.appendChild(createFormGroup('Beta 常数 (K)', {
+                    id: 'edit-beta',
+                    value: Number.isFinite(comp.beta) ? comp.beta : 3950,
+                    min: 1,
+                    step: 10,
+                    unit: 'K'
+                }));
+                content.appendChild(createFormGroup('温度 (°C)', {
+                    id: 'edit-temperature-c',
+                    value: Number.isFinite(comp.temperatureC) ? comp.temperatureC : 25,
+                    min: -100,
+                    max: 300,
+                    step: 1,
+                    unit: '°C'
+                }));
+                break;
                 
             case 'Rheostat':
                 content.appendChild(createFormGroup('最小电阻 (Ω)', {
@@ -2651,6 +2676,18 @@ export class InteractionManager {
                     comp.ratedCurrent = this.safeParseFloat(
                         document.getElementById('edit-rated-current').value, 20, 0.1, 100000
                     ) / 1000;
+                    break;
+
+                case 'Thermistor':
+                    comp.resistanceAt25 = this.safeParseFloat(
+                        document.getElementById('edit-r25').value, 1000, 1e-9, 1e15
+                    );
+                    comp.beta = this.safeParseFloat(
+                        document.getElementById('edit-beta').value, 3950, 1, 1e6
+                    );
+                    comp.temperatureC = this.safeParseFloat(
+                        document.getElementById('edit-temperature-c').value, 25, -100, 300
+                    );
                     break;
                     
                 case 'Rheostat':

@@ -6,6 +6,7 @@ import {
     createFormGroup,
     clearElement
 } from '../../utils/SafeDOM.js';
+import { computeNtcThermistorResistance } from '../../utils/Physics.js';
 
 function resolveIntegrationMethodLabel(method) {
     const normalized = typeof method === 'string' ? method.toLowerCase() : 'auto';
@@ -140,6 +141,15 @@ export function updatePropertyPanel(comp) {
             content.appendChild(createPropertyRow('亮度', `${((Number.isFinite(comp.brightness) ? comp.brightness : 0) * 100).toFixed(0)}%`));
             content.appendChild(createPropertyRow('状态', comp.conducting ? '导通' : '截止'));
             break;
+
+        case 'Thermistor': {
+            const resistance = computeNtcThermistorResistance(comp);
+            content.appendChild(createPropertyRow('R25', `${Number.isFinite(comp.resistanceAt25) ? comp.resistanceAt25 : 1000} Ω`));
+            content.appendChild(createPropertyRow('Beta', `${Number.isFinite(comp.beta) ? comp.beta : 3950} K`));
+            content.appendChild(createPropertyRow('温度', `${Number.isFinite(comp.temperatureC) ? comp.temperatureC : 25} °C`));
+            content.appendChild(createPropertyRow('当前电阻', `${resistance.toFixed(2)} Ω`));
+            break;
+        }
 
         case 'Rheostat': {
             const connectionModeText = {

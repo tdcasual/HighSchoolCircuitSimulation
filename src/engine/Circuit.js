@@ -1838,6 +1838,12 @@ export class Circuit {
                 };
             case 'Resistor':
                 return { resistance: comp.resistance };
+            case 'Thermistor':
+                return {
+                    resistanceAt25: comp.resistanceAt25,
+                    beta: comp.beta,
+                    temperatureC: comp.temperatureC
+                };
             case 'Diode':
                 return {
                     forwardVoltage: comp.forwardVoltage,

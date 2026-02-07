@@ -37,3 +37,25 @@ export function computeParallelPlateCapacitance(params) {
     return EPSILON_0 * er * (area * overlapFraction) / distance;
 }
 
+/**
+ * NTC 热敏电阻阻值模型（Beta 模型）
+ * R(T) = R25 * exp(B * (1/T - 1/T0))
+ * 其中 T0 = 298.15K (25°C)
+ */
+export function computeNtcThermistorResistance(params) {
+    const r25Raw = Number(params?.resistanceAt25);
+    const betaRaw = Number(params?.beta);
+    const tempCRaw = Number(params?.temperatureC);
+
+    const r25 = Number.isFinite(r25Raw) ? Math.max(1e-6, r25Raw) : 1000;
+    const beta = Number.isFinite(betaRaw) ? Math.max(1, betaRaw) : 3950;
+    const tempC = Number.isFinite(tempCRaw) ? tempCRaw : 25;
+
+    const tKelvin = Math.max(1, tempC + 273.15);
+    const t0Kelvin = 298.15;
+    const exponent = beta * ((1 / tKelvin) - (1 / t0Kelvin));
+
+    const resistance = r25 * Math.exp(exponent);
+    if (!Number.isFinite(resistance)) return 1e12;
+    return clamp(resistance, 1e-6, 1e15);
+}

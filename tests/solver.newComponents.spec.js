@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { addComponent, connectWire, createTestCircuit, solveCircuit } from './helpers/circuitTestUtils.js';
+import { computeNtcThermistorResistance } from '../src/utils/Physics.js';
 
-describe('New component models (Ground / AC source / Inductor / SPDT / Fuse / Diode / LED)', () => {
+describe('New component models (Ground / AC source / Inductor / SPDT / Fuse / Diode / LED / Thermistor)', () => {
     it('uses explicit Ground as reference node (node 0)', () => {
         const circuit = createTestCircuit();
         const ground = addComponent(circuit, 'Ground', 'GND');
@@ -322,5 +323,59 @@ describe('New component models (Ground / AC source / Inductor / SPDT / Fuse / Di
         expect(results.valid).toBe(true);
         expect(led.conducting).toBe(false);
         expect(Math.abs(results.currents.get('LED1') || 0)).toBeLessThan(1e-6);
+    });
+
+    it('solves thermistor branch using Beta model resistance', () => {
+        const circuit = createTestCircuit();
+        const source = addComponent(circuit, 'PowerSource', 'V1', {
+            voltage: 5,
+            internalResistance: 0
+        });
+        const thermistor = addComponent(circuit, 'Thermistor', 'RT1', {
+            resistanceAt25: 1000,
+            beta: 3950,
+            temperatureC: 25
+        });
+
+        connectWire(circuit, 'W1', source, 0, thermistor, 0);
+        connectWire(circuit, 'W2', thermistor, 1, source, 1);
+
+        const results = solveCircuit(circuit, 0);
+        const resistance = computeNtcThermistorResistance(thermistor);
+        const expectedCurrent = 5 / resistance;
+
+        expect(results.valid).toBe(true);
+        expect(results.currents.get('RT1')).toBeCloseTo(expectedCurrent, 8);
+    });
+
+    it('decreases thermistor resistance and increases current at higher temperature', () => {
+        const circuit = createTestCircuit();
+        const source = addComponent(circuit, 'PowerSource', 'V1', {
+            voltage: 5,
+            internalResistance: 0
+        });
+        const thermistor = addComponent(circuit, 'Thermistor', 'RT1', {
+            resistanceAt25: 1000,
+            beta: 3950,
+            temperatureC: 25
+        });
+
+        connectWire(circuit, 'W1', source, 0, thermistor, 0);
+        connectWire(circuit, 'W2', thermistor, 1, source, 1);
+
+        const coolResults = solveCircuit(circuit, 0);
+        const coolCurrent = coolResults.currents.get('RT1') || 0;
+
+        thermistor.temperatureC = 75;
+        const hotResults = solveCircuit(circuit, 0);
+        const hotCurrent = hotResults.currents.get('RT1') || 0;
+
+        const coolR = computeNtcThermistorResistance({ ...thermistor, temperatureC: 25 });
+        const hotR = computeNtcThermistorResistance({ ...thermistor, temperatureC: 75 });
+
+        expect(coolResults.valid).toBe(true);
+        expect(hotResults.valid).toBe(true);
+        expect(hotR).toBeLessThan(coolR);
+        expect(Math.abs(hotCurrent)).toBeGreaterThan(Math.abs(coolCurrent));
     });
 });

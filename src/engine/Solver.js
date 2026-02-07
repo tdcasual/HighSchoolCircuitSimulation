@@ -4,6 +4,7 @@
  */
 
 import { Matrix } from './Matrix.js';
+import { computeNtcThermistorResistance } from '../utils/Physics.js';
 
 const DynamicIntegrationMethods = Object.freeze({
     Auto: 'auto',
@@ -131,6 +132,11 @@ export class MNASolver {
                 comp.offResistance = Number.isFinite(comp.offResistance) ? comp.offResistance : 1e9;
                 comp.conducting = !!comp.conducting;
             }
+            if (comp.type === 'Thermistor') {
+                comp.resistanceAt25 = Number.isFinite(comp.resistanceAt25) ? comp.resistanceAt25 : 1000;
+                comp.beta = Number.isFinite(comp.beta) ? comp.beta : 3950;
+                comp.temperatureC = Number.isFinite(comp.temperatureC) ? comp.temperatureC : 25;
+            }
             if (comp.type === 'Switch' || comp.type === 'SPDTSwitch') {
                 const n1 = comp.nodes?.[0];
                 const n2 = comp.type === 'SPDTSwitch'
@@ -186,6 +192,14 @@ export class MNASolver {
                 case 'Resistor':
                 case 'Bulb':
                     keyParts.push(`R:${this.formatMatrixKeyNumber(comp.resistance ?? 0)}`);
+                    break;
+                case 'Thermistor':
+                    keyParts.push(
+                        `R25:${this.formatMatrixKeyNumber(comp.resistanceAt25 ?? 1000)}`,
+                        `beta:${this.formatMatrixKeyNumber(comp.beta ?? 3950)}`,
+                        `tempC:${this.formatMatrixKeyNumber(comp.temperatureC ?? 25)}`,
+                        `R:${this.formatMatrixKeyNumber(computeNtcThermistorResistance(comp))}`
+                    );
                     break;
                 case 'Diode':
                 case 'LED':
@@ -506,6 +520,10 @@ export class MNASolver {
             case 'Resistor':
             case 'Bulb':
                 this.stampResistor(A, i1, i2, comp.resistance);
+                break;
+
+            case 'Thermistor':
+                this.stampResistor(A, i1, i2, computeNtcThermistorResistance(comp));
                 break;
 
             case 'Diode':
@@ -912,6 +930,11 @@ export class MNASolver {
             case 'Resistor':
             case 'Bulb':
                 return comp.resistance > 0 ? dV / comp.resistance : 0;
+
+            case 'Thermistor': {
+                const resistance = computeNtcThermistorResistance(comp);
+                return resistance > 0 ? dV / resistance : 0;
+            }
 
             case 'Diode':
             case 'LED': {

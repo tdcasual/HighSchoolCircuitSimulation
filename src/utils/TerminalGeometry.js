@@ -26,6 +26,7 @@ export function getTerminalLocalPosition(comp, terminalIndex) {
         case 'Bulb':
         case 'Motor':
         case 'Resistor':
+        case 'Thermistor':
         case 'Diode':
         case 'LED':
         case 'Capacitor':
