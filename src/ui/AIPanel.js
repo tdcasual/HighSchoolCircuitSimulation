@@ -7,6 +7,9 @@ import { CircuitExplainer } from '../ai/CircuitExplainer.js';
 import { CircuitAIAgent } from '../ai/agent/CircuitAIAgent.js';
 import { createKnowledgeProvider } from '../ai/resources/createKnowledgeProvider.js';
 import { AILogService } from '../ai/AILogService.js';
+import { ChatController } from './ai/ChatController.js';
+import { SettingsController } from './ai/SettingsController.js';
+import { PanelLayoutController } from './ai/PanelLayoutController.js';
 
 export class AIPanel {
     constructor(app) {
@@ -22,6 +25,14 @@ export class AIPanel {
             circuit: this.circuit,
             logger: this.aiLogger
         });
+        const controllerDeps = {
+            panel: this,
+            app: this.app,
+            circuit: this.circuit
+        };
+        this.chatController = new ChatController(controllerDeps);
+        this.settingsController = new SettingsController(controllerDeps);
+        this.layoutController = new PanelLayoutController(controllerDeps);
         this.layoutStorageKey = 'ai_panel_layout';
         this.panelGesture = null;
         this.minPanelWidth = 320;
