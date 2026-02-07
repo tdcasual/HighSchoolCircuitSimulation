@@ -5,7 +5,6 @@
 import { OpenAIClient } from '../ai/OpenAIClient.js';
 import { CircuitExplainer } from '../ai/CircuitExplainer.js';
 import { CircuitAIAgent } from '../ai/agent/CircuitAIAgent.js';
-import { createKnowledgeProvider } from '../ai/resources/createKnowledgeProvider.js';
 import { AILogService } from '../ai/AILogService.js';
 import { ChatController } from './ai/ChatController.js';
 import { SettingsController } from './ai/SettingsController.js';
@@ -473,389 +472,76 @@ export class AIPanel {
      * 初始化设置对话框
      */
     initializeSettingsDialog() {
-        const dialog = document.getElementById('ai-settings-dialog');
-        const saveBtn = document.getElementById('settings-save-btn');
-        const cancelBtn = document.getElementById('settings-cancel-btn');
-        const testBtn = document.getElementById('settings-test-btn');
-        const clearKeyBtn = document.getElementById('settings-clear-key-btn');
-        const fetchModelsBtn = document.getElementById('settings-fetch-models-btn');
-        const fetchStatus = document.getElementById('model-fetch-status');
-        const exportLogsBtn = document.getElementById('settings-export-logs-btn');
-        const clearLogsBtn = document.getElementById('settings-clear-logs-btn');
-        const textSelect = document.getElementById('text-model-select');
-        const textInput = document.getElementById('text-model');
-        const knowledgeSourceSelect = document.getElementById('knowledge-source');
-        const knowledgeMcpModeSelect = document.getElementById('knowledge-mcp-mode');
-
-        this.bindModelSelector(textSelect, textInput);
-        if (knowledgeSourceSelect) {
-            knowledgeSourceSelect.addEventListener('change', () => {
-                this.syncKnowledgeSettingsVisibility(
-                    knowledgeSourceSelect.value,
-                    knowledgeMcpModeSelect?.value
-                );
-            });
-        }
-        if (knowledgeMcpModeSelect) {
-            knowledgeMcpModeSelect.addEventListener('change', () => {
-                this.syncKnowledgeSettingsVisibility(
-                    knowledgeSourceSelect?.value,
-                    knowledgeMcpModeSelect.value
-                );
-            });
-        }
-
-        cancelBtn.addEventListener('click', () => {
-            dialog.classList.add('hidden');
-        });
-
-        saveBtn.addEventListener('click', () => {
-            this.saveSettings();
-            dialog.classList.add('hidden');
-        });
-
-        testBtn.addEventListener('click', async () => {
-            // 先保存当前设置
-            this.saveSettings();
-            
-            testBtn.disabled = true;
-            testBtn.textContent = '测试中...';
-            
-            try {
-                const result = await this.aiClient.testConnection();
-                alert(result.success ? '✅ ' + result.message : '❌ ' + result.message);
-            } catch (error) {
-                alert('❌ 测试失败: ' + error.message);
-            } finally {
-                testBtn.disabled = false;
-                testBtn.textContent = '测试连接';
-            }
-        });
-
-        clearKeyBtn.addEventListener('click', () => {
-            this.aiClient.clearApiKey();
-            document.getElementById('api-key').value = '';
-            this.app.updateStatus('API 密钥已清除（仅会话存储）');
-            this.logPanelEvent?.('warn', 'api_key_cleared');
-        });
-
-        fetchModelsBtn.addEventListener('click', async () => {
-            if (this.isProcessing) return;
-            fetchStatus.textContent = '正在获取模型列表...';
-            fetchModelsBtn.disabled = true;
-            try {
-                // 先保存当前设置，确保使用最新端点/密钥
-                this.saveSettings();
-                this.isProcessing = true;
-                const models = await this.aiClient.listModels();
-                this.populateModelLists(models);
-                fetchStatus.textContent = `已加载 ${models.length} 个模型`;
-                this.logPanelEvent?.('info', 'fetch_models_success', { count: models.length });
-            } catch (e) {
-                console.error(e);
-                fetchStatus.textContent = `获取失败: ${e.message}`;
-                this.logPanelEvent?.('error', 'fetch_models_failed', { error: e.message });
-            } finally {
-                this.isProcessing = false;
-                fetchModelsBtn.disabled = false;
-                this.updateLogSummaryDisplay?.();
-            }
-        });
-
-        if (exportLogsBtn) {
-            exportLogsBtn.addEventListener('click', () => {
-                this.exportAILogs();
-            });
-        }
-        if (clearLogsBtn) {
-            clearLogsBtn.addEventListener('click', () => {
-                this.clearAILogs();
-            });
-        }
-        this.updateLogSummaryDisplay?.();
+        return getOrCreateSettingsController(this).initializeSettingsDialog();
     }
 
     /**
      * 打开设置
      */
     openSettings() {
-        const config = this.aiClient.config;
-        
-        document.getElementById('api-endpoint').value = config.apiEndpoint;
-        document.getElementById('api-key').value = config.apiKey;
-        document.getElementById('text-model').value = config.textModel;
-        const knowledgeSource = document.getElementById('knowledge-source');
-        const knowledgeMcpEndpoint = document.getElementById('knowledge-mcp-endpoint');
-        const knowledgeMcpServer = document.getElementById('knowledge-mcp-server');
-        const knowledgeMcpMode = document.getElementById('knowledge-mcp-mode');
-        const knowledgeMcpMethod = document.getElementById('knowledge-mcp-method');
-        const knowledgeMcpResource = document.getElementById('knowledge-mcp-resource');
-        if (knowledgeSource) {
-            knowledgeSource.value = config.knowledgeSource || 'local';
-        }
-        if (knowledgeMcpMode) {
-            knowledgeMcpMode.value = config.knowledgeMcpMode || 'method';
-        }
-        if (knowledgeMcpEndpoint) {
-            knowledgeMcpEndpoint.value = config.knowledgeMcpEndpoint || '';
-        }
-        if (knowledgeMcpServer) {
-            knowledgeMcpServer.value = config.knowledgeMcpServer || 'circuit-knowledge';
-        }
-        if (knowledgeMcpMethod) {
-            knowledgeMcpMethod.value = config.knowledgeMcpMethod || 'knowledge.search';
-        }
-        if (knowledgeMcpResource) {
-            knowledgeMcpResource.value = config.knowledgeMcpResource || 'knowledge://circuit/high-school';
-        }
-        this.syncKnowledgeSettingsVisibility(
-            knowledgeSource?.value || config.knowledgeSource || 'local',
-            knowledgeMcpMode?.value || config.knowledgeMcpMode || 'method'
-        );
-        this.syncSelectToValue(document.getElementById('text-model-select'), config.textModel);
-        this.updateKnowledgeVersionDisplay();
-        this.updateLogSummaryDisplay?.();
-        
-        document.getElementById('ai-settings-dialog').classList.remove('hidden');
+        return getOrCreateSettingsController(this).openSettings();
     }
 
     /**
      * 保存设置
      */
     saveSettings() {
-        const knowledgeSource = document.getElementById('knowledge-source');
-        const knowledgeMcpEndpoint = document.getElementById('knowledge-mcp-endpoint');
-        const knowledgeMcpServer = document.getElementById('knowledge-mcp-server');
-        const knowledgeMcpMode = document.getElementById('knowledge-mcp-mode');
-        const knowledgeMcpMethod = document.getElementById('knowledge-mcp-method');
-        const knowledgeMcpResource = document.getElementById('knowledge-mcp-resource');
-        const config = {
-            apiEndpoint: document.getElementById('api-endpoint').value.trim(),
-            apiKey: document.getElementById('api-key').value.trim(),
-            textModel: document.getElementById('text-model').value.trim(),
-            knowledgeSource: knowledgeSource?.value || 'local',
-            knowledgeMcpEndpoint: knowledgeMcpEndpoint?.value?.trim?.() || '',
-            knowledgeMcpServer: knowledgeMcpServer?.value?.trim?.() || 'circuit-knowledge',
-            knowledgeMcpMode: knowledgeMcpMode?.value || 'method',
-            knowledgeMcpMethod: knowledgeMcpMethod?.value?.trim?.() || 'knowledge.search',
-            knowledgeMcpResource: knowledgeMcpResource?.value?.trim?.() || 'knowledge://circuit/high-school'
-        };
-        
-        this.aiClient.saveConfig(config);
-        this.refreshKnowledgeProvider();
-        const keyMsg = config.apiKey ? '（密钥仅保存在当前会话）' : '';
-        const sourceText = config.knowledgeSource === 'mcp'
-            ? `MCP(${config.knowledgeMcpMode === 'resource' ? 'resource' : 'method'})`
-            : '本地';
-        this.logPanelEvent?.('info', 'settings_saved', {
-            endpoint: config.apiEndpoint,
-            textModel: config.textModel,
-            knowledgeSource: config.knowledgeSource,
-            knowledgeMode: config.knowledgeMcpMode
-        });
-        this.updateLogSummaryDisplay?.();
-        this.app.updateStatus(`AI 设置已保存${keyMsg}，规则库来源：${sourceText}`);
+        return getOrCreateSettingsController(this).saveSettings();
     }
 
     /**
      * 加载设置
      */
     loadSettings() {
-        this.refreshKnowledgeProvider();
-        this.updateKnowledgeVersionDisplay();
-        this.logPanelEvent?.('info', 'settings_loaded', {
-            endpoint: this.aiClient.config?.apiEndpoint || '',
-            knowledgeSource: this.aiClient.config?.knowledgeSource || 'local'
-        });
+        return getOrCreateSettingsController(this).loadSettings();
     }
 
     refreshKnowledgeProvider() {
-        const provider = createKnowledgeProvider(this.aiClient.config || {});
-        this.aiAgent.setKnowledgeProvider(provider);
-        this.logPanelEvent?.('info', 'knowledge_provider_refreshed', {
-            source: this.aiClient.config?.knowledgeSource || 'local',
-            mode: this.aiClient.config?.knowledgeMcpMode || 'method'
-        });
-        this.updateKnowledgeVersionDisplay();
+        return getOrCreateSettingsController(this).refreshKnowledgeProvider();
     }
 
     syncKnowledgeSettingsVisibility(source, mode = null) {
-        const modeRow = document.getElementById('knowledge-mcp-mode-row');
-        const endpointRow = document.getElementById('knowledge-mcp-endpoint-row');
-        const methodRow = document.getElementById('knowledge-mcp-method-row');
-        const resourceRow = document.getElementById('knowledge-mcp-resource-row');
-        const modeSelect = document.getElementById('knowledge-mcp-mode');
-        if (!endpointRow) return;
-        const useMcp = String(source || '').trim().toLowerCase() === 'mcp';
-        const normalizedMode = String(mode || modeSelect?.value || 'method').trim().toLowerCase() === 'resource'
-            ? 'resource'
-            : 'method';
-        if (modeSelect) modeSelect.value = normalizedMode;
-        if (modeRow) modeRow.style.display = useMcp ? '' : 'none';
-        endpointRow.style.display = useMcp ? '' : 'none';
-        if (methodRow) methodRow.style.display = useMcp && normalizedMode === 'method' ? '' : 'none';
-        if (resourceRow) resourceRow.style.display = useMcp && normalizedMode === 'resource' ? '' : 'none';
+        return getOrCreateSettingsController(this).syncKnowledgeSettingsVisibility(source, mode);
     }
 
     formatKnowledgeVersionLabel(metadata = {}) {
-        const source = metadata.source || 'unknown';
-        const version = metadata.version || 'unknown';
-        if (source === 'local') return `规则库版本: ${version}（本地）`;
-        if (source === 'mcp') return `规则库版本: ${version}（MCP）`;
-        if (source === 'mcp-fallback-local') return `规则库版本: ${version}（MCP降级本地）`;
-        return `规则库版本: ${version}`;
+        return getOrCreateSettingsController(this).formatKnowledgeVersionLabel(metadata);
     }
 
     updateKnowledgeVersionDisplay() {
-        const metadata = this.aiAgent?.getKnowledgeMetadata?.() || {};
-        const label = this.formatKnowledgeVersionLabel(metadata);
-        const detail = metadata.detail ? ` | ${metadata.detail}` : '';
-        const hasStats = Number.isFinite(Number(metadata.knowledgeRequests)) && Number(metadata.knowledgeRequests) > 0;
-        const stats = hasStats
-            ? ` | 缓存命中率 ${(Number(metadata.cacheHitRate || 0) * 100).toFixed(0)}% (${Number(metadata.cacheHits || 0)}/${Number(metadata.knowledgeRequests || 0)})`
-            : '';
-        const badgeEl = document.getElementById('knowledge-version-badge');
-        if (badgeEl) {
-            badgeEl.textContent = label;
-            badgeEl.title = `${label}${detail}${stats}`;
-        }
-        const hintEl = document.getElementById('knowledge-source-version');
-        if (hintEl) {
-            hintEl.textContent = `${label}${detail}${stats}`;
-        }
+        return getOrCreateSettingsController(this).updateKnowledgeVersionDisplay();
     }
 
     logPanelEvent(level, stage, data = null, traceId = '') {
-        if (!this.aiLogger || typeof this.aiLogger.log !== 'function') return;
-        this.aiLogger.log({
-            level,
-            source: 'ai_panel',
-            stage,
-            traceId,
-            message: stage,
-            data
-        });
+        return getOrCreateSettingsController(this).logPanelEvent(level, stage, data, traceId);
     }
 
     updateLogSummaryDisplay() {
-        const summaryEl = document.getElementById('settings-log-summary');
-        if (!summaryEl || !this.aiLogger) return;
-        const summary = this.aiLogger.getSummary();
-        const lastTime = summary.lastTimestamp
-            ? new Date(summary.lastTimestamp).toLocaleString()
-            : '--';
-        const lastErrorText = summary.lastError
-            ? `最近错误: ${summary.lastError.source}/${summary.lastError.stage} - ${summary.lastError.message || 'unknown'}`
-            : '最近错误: 无';
-        summaryEl.textContent = `日志: ${summary.total} 条 | 错误 ${summary.errorCount} | 警告 ${summary.warnCount} | 最近更新 ${lastTime} | ${lastErrorText}`;
+        return getOrCreateSettingsController(this).updateLogSummaryDisplay();
     }
 
     exportAILogs() {
-        if (!this.aiLogger) return;
-        const payload = this.aiLogger.exportPayload(3000);
-        const fileName = `ai-runtime-logs-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
-        try {
-            const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const anchor = document.createElement('a');
-            anchor.href = url;
-            anchor.download = fileName;
-            document.body.appendChild(anchor);
-            anchor.click();
-            anchor.remove();
-            URL.revokeObjectURL(url);
-            this.logPanelEvent?.('info', 'export_logs', {
-                entries: Array.isArray(payload.entries) ? payload.entries.length : 0,
-                fileName
-            });
-            this.app.updateStatus('AI 运行日志已导出');
-        } catch (error) {
-            this.logPanelEvent?.('error', 'export_logs_failed', {
-                error: error?.message || String(error)
-            });
-            this.app.updateStatus(`AI 日志导出失败: ${error.message}`);
-        } finally {
-            this.updateLogSummaryDisplay?.();
-        }
+        return getOrCreateSettingsController(this).exportAILogs();
     }
 
     clearAILogs() {
-        if (!this.aiLogger) return;
-        const allowed = typeof window?.confirm === 'function'
-            ? window.confirm('确定清空 AI 运行日志吗？此操作不可恢复。')
-            : true;
-        if (!allowed) return;
-        this.aiLogger.clear();
-        this.logPanelEvent?.('warn', 'logs_cleared');
-        this.updateLogSummaryDisplay?.();
-        this.app.updateStatus('AI 运行日志已清空');
+        return getOrCreateSettingsController(this).clearAILogs();
     }
 
     bindModelSelector(selectEl, inputEl) {
-        if (!selectEl || !inputEl) return;
-        selectEl.addEventListener('change', () => {
-            if (selectEl.value) {
-                inputEl.value = selectEl.value;
-            }
-        });
+        return getOrCreateSettingsController(this).bindModelSelector(selectEl, inputEl);
     }
 
     fillSelectOptions(selectEl, options = [], currentValue = '') {
-        if (!selectEl) return;
-        const current = currentValue?.trim();
-        selectEl.innerHTML = '<option value=\"\">从列表选择</option>';
-        options.forEach(id => {
-            const opt = document.createElement('option');
-            opt.value = id;
-            opt.textContent = id;
-            selectEl.appendChild(opt);
-        });
-        // 保留当前值，即便它不在新列表中
-        if (current && !options.includes(current)) {
-            const customOpt = document.createElement('option');
-            customOpt.value = current;
-            customOpt.textContent = `${current} (自定义)`;
-            selectEl.appendChild(customOpt);
-        }
+        return getOrCreateSettingsController(this).fillSelectOptions(selectEl, options, currentValue);
     }
 
     syncSelectToValue(selectEl, value) {
-        if (!selectEl) return;
-        const val = value?.trim() || '';
-        const hasOption = Array.from(selectEl.options).some(opt => opt.value === val);
-        if (!hasOption && val) {
-            const opt = document.createElement('option');
-            opt.value = val;
-            opt.textContent = `${val} (自定义)`;
-            selectEl.appendChild(opt);
-        }
-        selectEl.value = val;
+        return getOrCreateSettingsController(this).syncSelectToValue(selectEl, value);
     }
 
     populateModelLists(models = []) {
-        const textList = document.getElementById('model-list-text');
-        const textSelect = document.getElementById('text-model-select');
-        const textInput = document.getElementById('text-model');
-        if (!textList) return;
-
-        const toOption = (id) => {
-            const opt = document.createElement('option');
-            opt.value = id;
-            return opt;
-        };
-
-        const textModels = [...new Set(models.map(id => String(id || '').trim()).filter(Boolean))];
-
-        textList.innerHTML = '';
-        textModels.forEach(id => textList.appendChild(toOption(id)));
-
-        if (textSelect) {
-            this.fillSelectOptions(textSelect, textModels, textInput?.value);
-        }
-
-        if (textSelect && textInput) {
-            this.syncSelectToValue(textSelect, textInput.value.trim());
-        }
+        return getOrCreateSettingsController(this).populateModelLists(models);
     }
 
     /**
@@ -895,479 +581,111 @@ export class AIPanel {
      * 初始化 AI 面板的拖拽和缩放
      */
     initializePanelLayoutControls() {
-        if (!this.panel) return;
-
-        this.boundPanelPointerMove = (event) => this.handlePanelPointerMove(event);
-        this.boundPanelPointerUp = (event) => this.handlePanelPointerUp(event);
-
-        this.restorePanelLayout();
-
-        if (this.panelHeader) {
-            this.panelHeader.addEventListener('pointerdown', (e) => this.tryStartPanelDrag(e));
-        }
-
-        if (this.panel) {
-            this.panel.addEventListener('pointerdown', (e) => this.tryStartCollapsedPanelDrag(e));
-        }
-
-        if (this.resizeHandle) {
-            this.resizeHandle.addEventListener('pointerdown', (e) => this.tryStartPanelResize(e));
-        }
-
-        window.addEventListener('resize', () => this.constrainPanelToViewport());
-        this.initializeIdleBehavior();
+        return getOrCreateLayoutController(this).initializePanelLayoutControls();
     }
 
     tryStartPanelDrag(event) {
-        if (!this.panel) return;
-        if (event.pointerType === 'mouse' && event.button !== 0) return;
-        if (event.target.closest('#ai-panel-actions')) return;
-
-        event.preventDefault();
-        this.startPanelGesture('drag', event);
+        return getOrCreateLayoutController(this).tryStartPanelDrag(event);
     }
 
     tryStartCollapsedPanelDrag(event) {
-        if (!this.panel || !this.isPanelCollapsed()) return;
-        if (event.pointerType === 'mouse' && event.button !== 0) return;
-        if (!event.target.closest('#ai-fab-btn')) return;
-        event.preventDefault();
-        event.stopPropagation();
-        this.startPanelGesture('drag', event);
+        return getOrCreateLayoutController(this).tryStartCollapsedPanelDrag(event);
     }
 
     tryStartPanelResize(event) {
-        if (!this.panel || this.panel.classList.contains('collapsed')) return;
-        if (event.pointerType === 'mouse' && event.button !== 0) return;
-
-        event.preventDefault();
-        event.stopPropagation();
-        this.startPanelGesture('resize', event);
+        return getOrCreateLayoutController(this).tryStartPanelResize(event);
     }
 
     startPanelGesture(type, event) {
-        const rect = this.panel.getBoundingClientRect();
-        const styleLeft = parseFloat(this.panel.style.left);
-        const styleTop = parseFloat(this.panel.style.top);
-        const startLeft = Number.isFinite(styleLeft) ? styleLeft : rect.left;
-        const startTop = Number.isFinite(styleTop) ? styleTop : rect.top;
-        this.setPanelAbsolutePosition(startLeft, startTop);
-        this.suppressFabClickOnce = false;
-
-        this.panelGesture = {
-            type,
-            pointerId: event.pointerId,
-            startX: event.clientX,
-            startY: event.clientY,
-            startLeft,
-            startTop,
-            startWidth: rect.width,
-            startHeight: rect.height,
-            moved: false
-        };
-
-        this.panel.classList.add(type === 'drag' ? 'dragging' : 'resizing');
-        window.addEventListener('pointermove', this.boundPanelPointerMove);
-        window.addEventListener('pointerup', this.boundPanelPointerUp);
-        window.addEventListener('pointercancel', this.boundPanelPointerUp);
-        this.markPanelActive();
+        return getOrCreateLayoutController(this).startPanelGesture(type, event);
     }
 
     handlePanelPointerMove(event) {
-        if (!this.panelGesture || event.pointerId !== this.panelGesture.pointerId) return;
-
-        event.preventDefault();
-        this.markPanelActive();
-        if (this.panelGesture.type === 'drag') {
-            this.updatePanelDrag(event);
-        } else {
-            this.updatePanelResize(event);
-        }
+        return getOrCreateLayoutController(this).handlePanelPointerMove(event);
     }
 
     handlePanelPointerUp(event) {
-        if (!this.panelGesture || event.pointerId !== this.panelGesture.pointerId) return;
-        const endedGestureType = this.panelGesture.type;
-        const moved = !!this.panelGesture.moved;
-
-        window.removeEventListener('pointermove', this.boundPanelPointerMove);
-        window.removeEventListener('pointerup', this.boundPanelPointerUp);
-        window.removeEventListener('pointercancel', this.boundPanelPointerUp);
-        this.panel.classList.remove('dragging', 'resizing');
-        this.panelGesture = null;
-        if (endedGestureType === 'resize' && !this.isPanelCollapsed()) {
-            this.rememberExpandedPanelSize();
-        }
-        if (endedGestureType === 'drag' && moved && this.isPanelCollapsed()) {
-            this.suppressFabClickOnce = true;
-        }
-        this.markPanelActive();
-        this.savePanelLayout();
+        return getOrCreateLayoutController(this).handlePanelPointerUp(event);
     }
 
     updatePanelDrag(event) {
-        if (!this.panelGesture) return;
-
-        const { startX, startY, startLeft, startTop, startWidth, startHeight } = this.panelGesture;
-        const bounds = this.getPanelBounds();
-        const dx = event.clientX - startX;
-        const dy = event.clientY - startY;
-        const maxLeft = Math.max(bounds.minX, bounds.maxX - startWidth);
-        const maxTop = Math.max(bounds.minY, bounds.maxY - startHeight);
-        const nextLeft = this.clamp(startLeft + dx, bounds.minX, maxLeft);
-        const nextTop = this.clamp(startTop + dy, bounds.minY, maxTop);
-        if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
-            this.panelGesture.moved = true;
-        }
-
-        this.setPanelAbsolutePosition(nextLeft, nextTop);
+        return getOrCreateLayoutController(this).updatePanelDrag(event);
     }
 
     updatePanelResize(event) {
-        if (!this.panelGesture) return;
-
-        const { startX, startY, startWidth, startHeight, startLeft, startTop } = this.panelGesture;
-        const dx = event.clientX - startX;
-        const dy = event.clientY - startY;
-        const bounds = this.getPanelBounds();
-
-        const availableWidth = Math.max(bounds.maxX - startLeft, 0);
-        const availableHeight = Math.max(bounds.maxY - startTop, 0);
-        const minWidth = Math.min(this.minPanelWidth, availableWidth || this.minPanelWidth);
-        const minHeight = Math.min(this.minPanelHeight, availableHeight || this.minPanelHeight);
-        const maxWidth = availableWidth || this.minPanelWidth;
-        const maxHeight = availableHeight || this.minPanelHeight;
-
-        const nextWidth = this.clamp(startWidth + dx, minWidth, Math.max(minWidth, maxWidth));
-        const nextHeight = this.clamp(startHeight + dy, minHeight, Math.max(minHeight, maxHeight));
-
-        this.panel.style.width = `${nextWidth}px`;
-        this.panel.style.height = `${nextHeight}px`;
-        this.expandedPanelWidth = nextWidth;
-        this.expandedPanelHeight = nextHeight;
+        return getOrCreateLayoutController(this).updatePanelResize(event);
     }
 
     setPanelAbsolutePosition(left, top) {
-        if (!this.panel) return;
-        this.panel.style.left = `${left}px`;
-        this.panel.style.top = `${top}px`;
-        this.panel.style.right = 'auto';
-        this.panel.style.bottom = 'auto';
+        return getOrCreateLayoutController(this).setPanelAbsolutePosition(left, top);
     }
 
     getPanelBounds() {
-        const padding = this.viewportPadding;
-        return {
-            minX: padding,
-            minY: padding,
-            maxX: window.innerWidth - padding,
-            maxY: window.innerHeight - padding
-        };
+        return getOrCreateLayoutController(this).getPanelBounds();
     }
 
     initializeIdleBehavior() {
-        if (!this.panel || typeof window === 'undefined') return;
-        const activate = () => this.markPanelActive();
-        this.panel.addEventListener('pointerdown', activate);
-        this.panel.addEventListener('pointermove', activate);
-        this.panel.addEventListener('keydown', activate);
-        this.panel.addEventListener('focusin', activate);
-        window.addEventListener('pointermove', activate);
-        window.addEventListener('keydown', activate);
-        window.addEventListener('wheel', activate, { passive: true });
-        window.addEventListener('touchstart', activate, { passive: true });
-        this.markPanelActive();
+        return getOrCreateLayoutController(this).initializeIdleBehavior();
     }
 
     markPanelActive() {
-        if (!this.panel) return;
-        this.panel.classList.remove('idle');
-        if (this.idleTimer) {
-            window.clearTimeout(this.idleTimer);
-            this.idleTimer = null;
-        }
-        this.idleTimer = window.setTimeout(() => {
-            this.panel?.classList.add('idle');
-        }, this.idleTimeoutMs);
+        return getOrCreateLayoutController(this).markPanelActive();
     }
 
     clamp(value, min, max) {
-        if (Number.isNaN(value)) return min;
-        if (max < min) max = min;
-        return Math.min(Math.max(value, min), max);
+        return getOrCreateLayoutController(this).clamp(value, min, max);
     }
 
     isPanelCollapsed() {
-        return !!(this.panel && this.panel.classList.contains('collapsed'));
+        return getOrCreateLayoutController(this).isPanelCollapsed();
     }
 
     getCollapsedPanelSize() {
-        return Math.max(40, Number(this.collapsedPanelSize) || 52);
+        return getOrCreateLayoutController(this).getCollapsedPanelSize();
     }
 
     getCollapsedPanelWidth() {
-        return this.getCollapsedPanelSize();
+        return getOrCreateLayoutController(this).getCollapsedPanelWidth();
     }
 
     getCollapsedPanelHeight() {
-        return this.getCollapsedPanelSize();
+        return getOrCreateLayoutController(this).getCollapsedPanelHeight();
     }
 
     rememberExpandedPanelSize() {
-        if (!this.panel || this.isPanelCollapsed()) return;
-        const styleWidth = parseFloat(this.panel.style.width);
-        const styleHeight = parseFloat(this.panel.style.height);
-        const rectWidth = this.panel.getBoundingClientRect().width;
-        const rectHeight = this.panel.getBoundingClientRect().height;
-        const nextWidth = Number.isFinite(styleWidth) ? styleWidth : rectWidth;
-        const nextHeight = Number.isFinite(styleHeight) ? styleHeight : rectHeight;
-        if (Number.isFinite(nextWidth) && nextWidth > this.getCollapsedPanelWidth()) {
-            this.expandedPanelWidth = nextWidth;
-        }
-        if (Number.isFinite(nextHeight) && nextHeight > this.getCollapsedPanelHeight()) {
-            this.expandedPanelHeight = nextHeight;
-        }
+        return getOrCreateLayoutController(this).rememberExpandedPanelSize();
     }
 
     syncPanelCollapsedUI() {
-        const collapsed = this.isPanelCollapsed();
-        if (this.toggleBtn) {
-            this.toggleBtn.textContent = collapsed ? '展开' : '最小化';
-            this.toggleBtn.title = collapsed ? '展开面板' : '最小化面板';
-            if (typeof this.toggleBtn.setAttribute === 'function') {
-                this.toggleBtn.setAttribute('aria-label', this.toggleBtn.title);
-                this.toggleBtn.setAttribute('aria-expanded', String(!collapsed));
-            }
-        }
-        if (this.fabBtn && typeof this.fabBtn.setAttribute === 'function') {
-            this.fabBtn.setAttribute('aria-hidden', String(!collapsed));
-            this.fabBtn.setAttribute('title', collapsed ? '展开 AI 助手' : 'AI 助手');
-        }
+        return getOrCreateLayoutController(this).syncPanelCollapsedUI();
     }
 
-    setPanelCollapsed(collapsed, options = {}) {
-        if (!this.panel) return;
-        const { persist = true, constrain = true } = options;
-        const shouldCollapse = !!collapsed;
-        const currentlyCollapsed = this.isPanelCollapsed();
-
-        if (shouldCollapse === currentlyCollapsed) {
-            this.syncPanelCollapsedUI();
-            if (persist) this.savePanelLayout();
-            return;
-        }
-
-        if (shouldCollapse) {
-            this.rememberExpandedPanelSize();
-            this.panel.classList.add('collapsed');
-            this.panel.style.width = `${this.getCollapsedPanelWidth()}px`;
-            this.panel.style.height = `${this.getCollapsedPanelHeight()}px`;
-        } else {
-            this.panel.classList.remove('collapsed');
-            const bounds = this.getPanelBounds();
-            const availableWidth = Math.max(bounds.maxX - bounds.minX, 0);
-            const availableHeight = Math.max(bounds.maxY - bounds.minY, 0);
-            const restoredWidth = this.clamp(
-                this.expandedPanelWidth || 420,
-                availableWidth ? Math.min(this.minPanelWidth, availableWidth) : this.minPanelWidth,
-                availableWidth || this.minPanelWidth
-            );
-            const restoredHeight = this.clamp(
-                this.expandedPanelHeight || 420,
-                availableHeight ? Math.min(this.minPanelHeight, availableHeight) : this.minPanelHeight,
-                availableHeight || this.minPanelHeight
-            );
-            this.panel.style.width = `${restoredWidth}px`;
-            this.panel.style.height = `${restoredHeight}px`;
-            this.expandedPanelWidth = restoredWidth;
-            this.expandedPanelHeight = restoredHeight;
-        }
-
-        this.syncPanelCollapsedUI();
-        this.markPanelActive();
-        if (constrain) {
-            this.constrainPanelToViewport();
-        } else if (persist) {
-            this.savePanelLayout();
-        }
+    setPanelCollapsed(collapsed, options) {
+        return getOrCreateLayoutController(this).setPanelCollapsed(collapsed, options);
     }
 
     restorePanelLayout() {
-        const saved = this.getSavedPanelLayout();
-        const layout = saved || this.getDefaultPanelLayout();
-        this.applyPanelLayout(layout);
+        return getOrCreateLayoutController(this).restorePanelLayout();
     }
 
     applyPanelLayout(layout) {
-        if (!this.panel) return;
-
-        const bounds = this.getPanelBounds();
-        const availableWidth = Math.max(bounds.maxX - bounds.minX, 0);
-        const availableHeight = Math.max(bounds.maxY - bounds.minY, 0);
-        const currentCollapsed = this.isPanelCollapsed();
-        const shouldCollapse = typeof layout.collapsed === 'boolean' ? layout.collapsed : currentCollapsed;
-        const measuredWidth = this.panel.offsetWidth || 420;
-        const measuredHeight = this.panel.offsetHeight || 420;
-        const baseExpandedWidth = Number.isFinite(this.expandedPanelWidth)
-            ? this.expandedPanelWidth
-            : (currentCollapsed ? 420 : measuredWidth);
-        const baseExpandedHeight = Number.isFinite(this.expandedPanelHeight)
-            ? this.expandedPanelHeight
-            : (currentCollapsed ? 420 : measuredHeight);
-
-        const expandedWidth = this.clamp(
-            typeof layout.expandedWidth === 'number'
-                ? layout.expandedWidth
-                : (typeof layout.width === 'number' ? layout.width : baseExpandedWidth),
-            availableWidth ? Math.min(this.minPanelWidth, availableWidth) : this.minPanelWidth,
-            availableWidth || this.minPanelWidth
-        );
-
-        const expandedHeight = this.clamp(
-            typeof layout.expandedHeight === 'number'
-                ? layout.expandedHeight
-                : (typeof layout.height === 'number' ? layout.height : baseExpandedHeight),
-            availableHeight ? Math.min(this.minPanelHeight, availableHeight) : this.minPanelHeight,
-            availableHeight || this.minPanelHeight
-        );
-
-        this.expandedPanelWidth = expandedWidth;
-        this.expandedPanelHeight = expandedHeight;
-
-        const effectiveWidth = shouldCollapse ? this.getCollapsedPanelWidth() : expandedWidth;
-        const effectiveHeight = shouldCollapse ? this.getCollapsedPanelHeight() : expandedHeight;
-        const maxLeft = Math.max(bounds.minX, bounds.maxX - effectiveWidth);
-        const maxTop = Math.max(bounds.minY, bounds.maxY - effectiveHeight);
-        const left = this.clamp(
-            typeof layout.left === 'number' ? layout.left : (bounds.maxX - effectiveWidth - this.defaultRightOffset),
-            bounds.minX,
-            maxLeft
-        );
-        const top = this.clamp(
-            typeof layout.top === 'number' ? layout.top : (bounds.maxY - effectiveHeight - this.defaultBottomOffset),
-            bounds.minY,
-            maxTop
-        );
-
-        this.panel.classList.toggle('collapsed', shouldCollapse);
-        this.panel.style.width = `${effectiveWidth}px`;
-        this.panel.style.height = `${effectiveHeight}px`;
-        this.setPanelAbsolutePosition(left, top);
-
-        this.syncPanelCollapsedUI();
+        return getOrCreateLayoutController(this).applyPanelLayout(layout);
     }
 
     getSavedPanelLayout() {
-        try {
-            const raw = localStorage.getItem(this.layoutStorageKey);
-            if (!raw) return null;
-            const data = JSON.parse(raw);
-            const keys = ['left', 'top', 'width', 'height'];
-            if (keys.every(key => typeof data[key] === 'number' && !Number.isNaN(data[key]))) {
-                return {
-                    left: data.left,
-                    top: data.top,
-                    width: data.width,
-                    height: data.height,
-                    expandedWidth: typeof data.expandedWidth === 'number' && !Number.isNaN(data.expandedWidth)
-                        ? data.expandedWidth
-                        : (typeof data.width === 'number' ? data.width : undefined),
-                    expandedHeight: typeof data.expandedHeight === 'number' && !Number.isNaN(data.expandedHeight)
-                        ? data.expandedHeight
-                        : undefined,
-                    collapsed: typeof data.collapsed === 'boolean' ? data.collapsed : undefined
-                };
-            }
-        } catch (error) {
-            console.warn('Failed to load AI panel layout:', error);
-        }
-        return null;
+        return getOrCreateLayoutController(this).getSavedPanelLayout();
     }
 
     savePanelLayout() {
-        if (!this.panel) return;
-        try {
-            const rect = this.panel.getBoundingClientRect();
-            const styleLeft = parseFloat(this.panel.style.left);
-            const styleTop = parseFloat(this.panel.style.top);
-            const styleWidth = parseFloat(this.panel.style.width);
-            const styleHeight = parseFloat(this.panel.style.height);
-            if (!this.isPanelCollapsed()) {
-                this.rememberExpandedPanelSize();
-            }
-            const expandedWidth = Number.isFinite(this.expandedPanelWidth)
-                ? this.expandedPanelWidth
-                : (Number.isFinite(styleWidth) ? styleWidth : rect.width);
-            const expandedHeight = Number.isFinite(this.expandedPanelHeight)
-                ? this.expandedPanelHeight
-                : (Number.isFinite(styleHeight) ? styleHeight : rect.height);
-            const payload = {
-                left: Number.isFinite(styleLeft) ? styleLeft : rect.left,
-                top: Number.isFinite(styleTop) ? styleTop : rect.top,
-                width: Number.isFinite(styleWidth) ? styleWidth : rect.width,
-                height: Number.isFinite(styleHeight) ? styleHeight : rect.height,
-                expandedWidth,
-                expandedHeight,
-                collapsed: this.isPanelCollapsed()
-            };
-            localStorage.setItem(this.layoutStorageKey, JSON.stringify(payload));
-        } catch (error) {
-            console.warn('Failed to save AI panel layout:', error);
-        }
+        return getOrCreateLayoutController(this).savePanelLayout();
     }
 
     getDefaultPanelLayout() {
-        const measuredWidth = this.panel?.offsetWidth || 420;
-        const measuredHeight = this.panel?.offsetHeight || 420;
-        const width = Number.isFinite(this.expandedPanelWidth)
-            ? this.expandedPanelWidth
-            : (this.isPanelCollapsed() ? 420 : measuredWidth);
-        const isCollapsed = this.isPanelCollapsed();
-        const expandedHeight = Number.isFinite(this.expandedPanelHeight)
-            ? this.expandedPanelHeight
-            : (isCollapsed ? 420 : measuredHeight);
-        const widthForPosition = isCollapsed ? this.getCollapsedPanelWidth() : width;
-        const heightForPosition = isCollapsed ? this.getCollapsedPanelHeight() : expandedHeight;
-        let reservedRight = 0;
-        const sidePanel = document.getElementById('side-panel');
-        if (sidePanel) {
-            const rect = sidePanel.getBoundingClientRect();
-            if (rect.width > 0) {
-                reservedRight = rect.width + 12;
-            }
-        }
-        const left = Math.max(this.viewportPadding, window.innerWidth - widthForPosition - this.defaultRightOffset - reservedRight);
-        const top = Math.max(this.viewportPadding, window.innerHeight - heightForPosition - this.defaultBottomOffset);
-        return { left, top, width, height: expandedHeight, expandedWidth: width, expandedHeight, collapsed: isCollapsed };
+        return getOrCreateLayoutController(this).getDefaultPanelLayout();
     }
 
     constrainPanelToViewport() {
-        if (!this.panel) return;
-        const rect = this.panel.getBoundingClientRect();
-        const styleLeft = parseFloat(this.panel.style.left);
-        const styleTop = parseFloat(this.panel.style.top);
-        const styleWidth = parseFloat(this.panel.style.width);
-        const styleHeight = parseFloat(this.panel.style.height);
-        const collapsed = this.isPanelCollapsed();
-        if (!collapsed) {
-            this.rememberExpandedPanelSize();
-        }
-        const measuredExpandedWidth = Number.isFinite(this.expandedPanelWidth)
-            ? this.expandedPanelWidth
-            : (Number.isFinite(styleWidth) ? styleWidth : rect.width);
-        const measuredExpandedHeight = Number.isFinite(this.expandedPanelHeight)
-            ? this.expandedPanelHeight
-            : (Number.isFinite(styleHeight) ? styleHeight : rect.height);
-        this.applyPanelLayout({
-            left: Number.isFinite(styleLeft) ? styleLeft : rect.left,
-            top: Number.isFinite(styleTop) ? styleTop : rect.top,
-            width: measuredExpandedWidth,
-            height: measuredExpandedHeight,
-            expandedWidth: measuredExpandedWidth,
-            expandedHeight: measuredExpandedHeight,
-            collapsed
-        });
-        this.savePanelLayout();
+        return getOrCreateLayoutController(this).constrainPanelToViewport();
     }
 
 }
@@ -1381,4 +699,26 @@ function getOrCreateChatController(panel) {
         });
     }
     return panel.chatController;
+}
+
+function getOrCreateSettingsController(panel) {
+    if (!panel.settingsController) {
+        panel.settingsController = new SettingsController({
+            panel,
+            app: panel.app,
+            circuit: panel.circuit
+        });
+    }
+    return panel.settingsController;
+}
+
+function getOrCreateLayoutController(panel) {
+    if (!panel.layoutController) {
+        panel.layoutController = new PanelLayoutController({
+            panel,
+            app: panel.app,
+            circuit: panel.circuit
+        });
+    }
+    return panel.layoutController;
 }
