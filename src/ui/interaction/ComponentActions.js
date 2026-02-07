@@ -3,9 +3,11 @@ import { toCanvasInt } from '../../utils/CanvasCoords.js';
 
 export function addComponent(type, x, y) {
     console.log('Adding component:', type, 'at', x, y);
+    let createdComponent = null;
     try {
         this.runWithHistory(`添加${ComponentNames[type] || type}`, () => {
             const comp = createComponent(type, toCanvasInt(x), toCanvasInt(y));
+            createdComponent = comp;
             console.log('Created component:', comp);
             this.circuit.addComponent(comp);
             const svgElement = this.renderer.addComponent(comp);
@@ -15,9 +17,22 @@ export function addComponent(type, x, y) {
             this.app.observationPanel?.refreshDialGauges();
             this.updateStatus(`已添加 ${ComponentNames[type]}`);
         });
+        return {
+            ok: true,
+            type: 'component.added',
+            payload: {
+                componentId: createdComponent?.id || null,
+                componentType: type
+            }
+        };
     } catch (error) {
         console.error('Error adding component:', error);
         this.updateStatus(`添加失败: ${error.message}`);
+        return {
+            ok: false,
+            type: 'component.add_failed',
+            error
+        };
     }
 }
 

@@ -117,6 +117,37 @@ describe('ComponentActions.addComponent', () => {
         expect(context.updateStatus).toHaveBeenCalledWith(expect.stringContaining('已添加'));
     });
 
+    it('returns action result DTO on success', () => {
+        const context = {
+            runWithHistory: vi.fn((_, action) => action()),
+            circuit: {
+                addComponent: vi.fn()
+            },
+            renderer: {
+                addComponent: vi.fn(() => ({ tag: 'g' }))
+            },
+            selectComponent: vi.fn(),
+            app: {
+                observationPanel: {
+                    refreshComponentOptions: vi.fn(),
+                    refreshDialGauges: vi.fn()
+                }
+            },
+            updateStatus: vi.fn()
+        };
+
+        const result = ComponentActions.addComponent.call(context, 'Resistor', 30, 40);
+
+        expect(result).toEqual(expect.objectContaining({
+            ok: true,
+            type: 'component.added'
+        }));
+        expect(result.payload).toEqual(expect.objectContaining({
+            componentId: expect.any(String),
+            componentType: 'Resistor'
+        }));
+    });
+
     it('reports failure when component add throws', () => {
         vi.spyOn(console, 'error').mockImplementation(() => {});
         const context = {
