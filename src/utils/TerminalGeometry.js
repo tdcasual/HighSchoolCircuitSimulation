@@ -82,6 +82,25 @@ export function getTerminalLocalPosition(comp, terminalIndex) {
             relY = 0;
             break;
         }
+        case 'Relay':
+            // 0=coil left, 1=coil right, 2=contact left, 3=contact right
+            if (terminalIndex === 0) {
+                relX = -30;
+                relY = -12;
+            } else if (terminalIndex === 1) {
+                relX = 30;
+                relY = -12;
+            } else if (terminalIndex === 2) {
+                relX = -30;
+                relY = 12;
+            } else if (terminalIndex === 3) {
+                relX = 30;
+                relY = 12;
+            } else {
+                relX = 0;
+                relY = 0;
+            }
+            break;
         default:
             relX = terminalIndex === 0 ? -30 : 30;
             relY = 0;

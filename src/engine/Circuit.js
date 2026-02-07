@@ -852,6 +852,14 @@ export class Circuit {
             return hasValidNode(comp.nodes[0]) && hasTerminalWire(0);
         }
 
+        if (comp.type === 'Relay') {
+            const coilConnected = hasValidNode(comp.nodes[0]) && hasValidNode(comp.nodes[1])
+                && hasTerminalWire(0) && hasTerminalWire(1);
+            const contactConnected = hasValidNode(comp.nodes[2]) && hasValidNode(comp.nodes[3])
+                && hasTerminalWire(2) && hasTerminalWire(3);
+            return coilConnected || contactConnected;
+        }
+
         if (comp.type !== 'Rheostat' && comp.type !== 'SPDTSwitch') {
             if (terminalCount < 2) return false;
             return hasValidNode(comp.nodes[0]) && hasValidNode(comp.nodes[1])
@@ -973,6 +981,9 @@ export class Circuit {
                     comp.brightness = 0;
                 }
             }
+            if (comp.type === 'Relay') {
+                comp.energized = false;
+            }
         }
 
         // 准备求解器（仅在拓扑/关键参数变化后重建）
@@ -1050,6 +1061,9 @@ export class Circuit {
                     comp._isShorted = false;
                     if (comp.type === 'Diode' || comp.type === 'LED') {
                         comp.conducting = false;
+                    }
+                    if (comp.type === 'Relay') {
+                        comp.energized = false;
                     }
                     if (comp.type === 'Bulb' || comp.type === 'LED') {
                         comp.brightness = 0;
@@ -1145,6 +1159,24 @@ export class Circuit {
                     const voltage = Math.abs(vCommon - vTarget);
                     comp.voltageValue = voltage;
                     comp.powerValue = Math.abs(current * voltage);
+                } else if (comp.type === 'Relay') {
+                    const getVoltage = (nodeIdx) => {
+                        if (nodeIdx === undefined || nodeIdx < 0) return 0;
+                        return this.lastResults.voltages[nodeIdx] || 0;
+                    };
+                    const vCoilA = getVoltage(comp.nodes[0]);
+                    const vCoilB = getVoltage(comp.nodes[1]);
+                    const vContactA = getVoltage(comp.nodes[2]);
+                    const vContactB = getVoltage(comp.nodes[3]);
+                    const coilVoltage = Math.abs(vCoilA - vCoilB);
+                    const coilCurrent = current;
+                    const contactR = comp.energized
+                        ? Math.max(1e-9, Number(comp.contactOnResistance) || 1e-3)
+                        : Math.max(1, Number(comp.contactOffResistance) || 1e12);
+                    const contactCurrent = (vContactA - vContactB) / contactR;
+                    comp.contactCurrent = contactCurrent;
+                    comp.voltageValue = coilVoltage;
+                    comp.powerValue = Math.abs(coilVoltage * coilCurrent) + Math.abs((vContactA - vContactB) * contactCurrent);
                 } else {
                     comp.voltageValue = Math.abs(v1 - v2);
                     comp.powerValue = Math.abs(current * (v1 - v2));
@@ -1239,6 +1271,10 @@ export class Circuit {
         }
         if (comp.type === 'SPDTSwitch') {
             const flows = this.getSpdtTerminalFlows(comp, results.voltages);
+            return flows[terminalIndex] || 0;
+        }
+        if (comp.type === 'Relay') {
+            const flows = this.getRelayTerminalFlows(comp, results.voltages);
             return flows[terminalIndex] || 0;
         }
         
@@ -1351,6 +1387,44 @@ export class Circuit {
         const I = (vCommon - vTarget) / R;
         flows[0] = -I;
         flows[targetIdx] = I;
+        return flows;
+    }
+
+    /**
+     * 计算继电器各端子的等效电流流向
+     * 端子: 0/1=线圈, 2/3=触点
+     * @param {Object} comp
+     * @param {number[]} voltages
+     * @returns {number[]}
+     */
+    getRelayTerminalFlows(comp, voltages) {
+        const flows = [0, 0, 0, 0];
+        const getVoltage = (nodeIdx) => {
+            if (nodeIdx === undefined || nodeIdx < 0) return 0;
+            return voltages[nodeIdx] || 0;
+        };
+
+        const n0 = comp.nodes?.[0];
+        const n1 = comp.nodes?.[1];
+        const n2 = comp.nodes?.[2];
+        const n3 = comp.nodes?.[3];
+
+        if (n0 != null && n0 >= 0 && n1 != null && n1 >= 0) {
+            const coilR = Math.max(1e-9, Number(comp.coilResistance) || 200);
+            const iCoil = (getVoltage(n0) - getVoltage(n1)) / coilR;
+            flows[0] = -iCoil;
+            flows[1] = iCoil;
+        }
+
+        if (n2 != null && n2 >= 0 && n3 != null && n3 >= 0) {
+            const contactR = comp.energized
+                ? Math.max(1e-9, Number(comp.contactOnResistance) || 1e-3)
+                : Math.max(1, Number(comp.contactOffResistance) || 1e12);
+            const iContact = (getVoltage(n2) - getVoltage(n3)) / contactR;
+            flows[2] = -iContact;
+            flows[3] = iContact;
+        }
+
         return flows;
     }
 
@@ -1911,6 +1985,15 @@ export class Circuit {
                     position: comp.position === 'b' ? 'b' : 'a',
                     onResistance: comp.onResistance,
                     offResistance: comp.offResistance
+                };
+            case 'Relay':
+                return {
+                    coilResistance: comp.coilResistance,
+                    pullInCurrent: comp.pullInCurrent,
+                    dropOutCurrent: comp.dropOutCurrent,
+                    contactOnResistance: comp.contactOnResistance,
+                    contactOffResistance: comp.contactOffResistance,
+                    energized: !!comp.energized
                 };
             case 'Fuse':
                 return {

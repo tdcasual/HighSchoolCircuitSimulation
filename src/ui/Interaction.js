@@ -163,7 +163,7 @@ export class InteractionManager {
      */
     bindToolboxEvents() {
         const toolItems = document.querySelectorAll('.tool-item');
-        const validTypes = ['Ground', 'PowerSource', 'ACVoltageSource', 'Resistor', 'Diode', 'LED', 'Thermistor', 'Photoresistor', 'Rheostat', 'Bulb', 'Capacitor', 'Inductor', 'ParallelPlateCapacitor', 'Motor', 'Switch', 'SPDTSwitch', 'Fuse', 'Ammeter', 'Voltmeter', 'BlackBox', 'Wire'];
+        const validTypes = ['Ground', 'PowerSource', 'ACVoltageSource', 'Resistor', 'Diode', 'LED', 'Thermistor', 'Photoresistor', 'Rheostat', 'Bulb', 'Capacitor', 'Inductor', 'ParallelPlateCapacitor', 'Motor', 'Switch', 'SPDTSwitch', 'Relay', 'Fuse', 'Ammeter', 'Voltmeter', 'BlackBox', 'Wire'];
         
         // 标记是否正在从工具箱拖放
         this.isToolboxDrag = false;
@@ -2274,6 +2274,44 @@ export class InteractionManager {
                     step: 1
                 }));
                 break;
+
+            case 'Relay':
+                content.appendChild(createFormGroup('线圈电阻 (Ω)', {
+                    id: 'edit-coil-resistance',
+                    value: Number.isFinite(comp.coilResistance) ? comp.coilResistance : 200,
+                    min: 0.001,
+                    step: 1,
+                    unit: 'Ω'
+                }));
+                content.appendChild(createFormGroup('吸合电流 (mA)', {
+                    id: 'edit-pullin-current',
+                    value: (Number.isFinite(comp.pullInCurrent) ? comp.pullInCurrent : 0.02) * 1000,
+                    min: 0.1,
+                    step: 0.1,
+                    unit: 'mA'
+                }));
+                content.appendChild(createFormGroup('释放电流 (mA)', {
+                    id: 'edit-dropout-current',
+                    value: (Number.isFinite(comp.dropOutCurrent) ? comp.dropOutCurrent : 0.01) * 1000,
+                    min: 0.1,
+                    step: 0.1,
+                    unit: 'mA'
+                }));
+                content.appendChild(createFormGroup('触点导通电阻 (Ω)', {
+                    id: 'edit-contact-on-resistance',
+                    value: Number.isFinite(comp.contactOnResistance) ? comp.contactOnResistance : 1e-3,
+                    min: 1e-9,
+                    step: 0.001,
+                    unit: 'Ω'
+                }));
+                content.appendChild(createFormGroup('触点断开电阻 (Ω)', {
+                    id: 'edit-contact-off-resistance',
+                    value: Number.isFinite(comp.contactOffResistance) ? comp.contactOffResistance : 1e12,
+                    min: 1,
+                    step: 1000,
+                    unit: 'Ω'
+                }));
+                break;
                 
             case 'Rheostat':
                 content.appendChild(createFormGroup('最小电阻 (Ω)', {
@@ -2734,6 +2772,24 @@ export class InteractionManager {
                     comp.lightLevel = this.safeParseFloat(
                         document.getElementById('edit-light-level').value, 50, 0, 100
                     ) / 100;
+                    break;
+
+                case 'Relay':
+                    comp.coilResistance = this.safeParseFloat(
+                        document.getElementById('edit-coil-resistance').value, 200, 1e-9, 1e15
+                    );
+                    comp.pullInCurrent = this.safeParseFloat(
+                        document.getElementById('edit-pullin-current').value, 20, 0.1, 1e6
+                    ) / 1000;
+                    comp.dropOutCurrent = this.safeParseFloat(
+                        document.getElementById('edit-dropout-current').value, 10, 0.1, 1e6
+                    ) / 1000;
+                    comp.contactOnResistance = this.safeParseFloat(
+                        document.getElementById('edit-contact-on-resistance').value, 1e-3, 1e-9, 1e9
+                    );
+                    comp.contactOffResistance = this.safeParseFloat(
+                        document.getElementById('edit-contact-off-resistance').value, 1e12, 1, 1e15
+                    );
                     break;
                     
                 case 'Rheostat':

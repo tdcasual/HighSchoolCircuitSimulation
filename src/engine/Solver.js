@@ -60,6 +60,10 @@ export class MNASolver {
                     : comp.nodes[1];
                 // 如果两端节点相同且有效，说明被短路了
                 comp._isShorted = (n1 === n2 && n1 >= 0);
+                // Relay 具有两组独立端子，不使用 _isShorted 快速裁剪
+                if (comp.type === 'Relay') {
+                    comp._isShorted = false;
+                }
                 
                 // 电源被短路是危险的
                 if (comp._isShorted && isPowerSource) {
@@ -141,6 +145,14 @@ export class MNASolver {
                 comp.resistanceDark = Number.isFinite(comp.resistanceDark) ? comp.resistanceDark : 100000;
                 comp.resistanceLight = Number.isFinite(comp.resistanceLight) ? comp.resistanceLight : 500;
                 comp.lightLevel = Number.isFinite(comp.lightLevel) ? comp.lightLevel : 0.5;
+            }
+            if (comp.type === 'Relay') {
+                comp.coilResistance = Number.isFinite(comp.coilResistance) ? comp.coilResistance : 200;
+                comp.pullInCurrent = Number.isFinite(comp.pullInCurrent) ? comp.pullInCurrent : 0.02;
+                comp.dropOutCurrent = Number.isFinite(comp.dropOutCurrent) ? comp.dropOutCurrent : 0.01;
+                comp.contactOnResistance = Number.isFinite(comp.contactOnResistance) ? comp.contactOnResistance : 1e-3;
+                comp.contactOffResistance = Number.isFinite(comp.contactOffResistance) ? comp.contactOffResistance : 1e12;
+                comp.energized = !!comp.energized;
             }
             if (comp.type === 'Switch' || comp.type === 'SPDTSwitch') {
                 const n1 = comp.nodes?.[0];
@@ -261,6 +273,16 @@ export class MNASolver {
                         `roff:${this.formatMatrixKeyNumber(comp.offResistance ?? 1e12)}`
                     );
                     break;
+                case 'Relay':
+                    keyParts.push(
+                        `Rcoil:${this.formatMatrixKeyNumber(comp.coilResistance ?? 200)}`,
+                        `Ion:${this.formatMatrixKeyNumber(comp.pullInCurrent ?? 0.02)}`,
+                        `Ioff:${this.formatMatrixKeyNumber(comp.dropOutCurrent ?? 0.01)}`,
+                        `Ron:${this.formatMatrixKeyNumber(comp.contactOnResistance ?? 1e-3)}`,
+                        `Roff:${this.formatMatrixKeyNumber(comp.contactOffResistance ?? 1e12)}`,
+                        `en:${comp.energized ? 1 : 0}`
+                    );
+                    break;
                 case 'Fuse':
                     keyParts.push(
                         `blown:${comp.blown ? 1 : 0}`,
@@ -314,7 +336,9 @@ export class MNASolver {
         }
 
         const hasJunction = this.components.some((comp) => comp?.type === 'Diode' || comp?.type === 'LED');
-        const maxIterations = hasJunction ? 6 : 1;
+        const hasRelay = this.components.some((comp) => comp?.type === 'Relay');
+        const hasStateful = hasJunction || hasRelay;
+        const maxIterations = hasStateful ? 6 : 1;
 
         let solvedVoltages = [];
         let solvedCurrents = new Map();
@@ -404,12 +428,18 @@ export class MNASolver {
             solvedCurrents = currents;
             solvedValid = true;
 
-            if (!hasJunction) {
+            if (!hasStateful) {
                 break;
             }
 
-            const junctionStateChanged = this.updateJunctionConductionStates(voltages, currents);
-            if (!junctionStateChanged) {
+            let stateChanged = false;
+            if (hasJunction) {
+                stateChanged = this.updateJunctionConductionStates(voltages, currents) || stateChanged;
+            }
+            if (hasRelay) {
+                stateChanged = this.updateRelayEnergizedStates(currents) || stateChanged;
+            }
+            if (!stateChanged) {
                 break;
             }
         }
@@ -442,6 +472,27 @@ export class MNASolver {
             }
         }
 
+        return changed;
+    }
+
+    updateRelayEnergizedStates(currents) {
+        let changed = false;
+        for (const comp of this.components) {
+            if (!comp || comp.type !== 'Relay') continue;
+            const pullIn = Math.max(1e-9, Number(comp.pullInCurrent) || 0.02);
+            const dropOutRaw = Math.max(1e-9, Number(comp.dropOutCurrent) || pullIn * 0.5);
+            const dropOut = Math.min(dropOutRaw, pullIn);
+            const coilCurrentAbs = Math.abs(Number(currents?.get(comp.id)) || 0);
+
+            const nextEnergized = comp.energized
+                ? coilCurrentAbs >= dropOut
+                : coilCurrentAbs >= pullIn;
+
+            if (nextEnergized !== !!comp.energized) {
+                comp.energized = nextEnergized;
+                changed = true;
+            }
+        }
         return changed;
     }
 
@@ -516,7 +567,7 @@ export class MNASolver {
         const isValidNode = (nodeIdx) => nodeIdx !== undefined && nodeIdx >= 0;
         
         // 检查节点是否有效（滑动变阻器在后续分支中单独判断）
-        if (comp.type !== 'Rheostat' && comp.type !== 'SPDTSwitch' && (!isValidNode(n1) || !isValidNode(n2))) {
+        if (comp.type !== 'Rheostat' && comp.type !== 'SPDTSwitch' && comp.type !== 'Relay' && (!isValidNode(n1) || !isValidNode(n2))) {
             return;
         }
         
@@ -541,6 +592,29 @@ export class MNASolver {
             case 'Photoresistor':
                 this.stampResistor(A, i1, i2, computePhotoresistorResistance(comp));
                 break;
+            case 'Relay': {
+                // 端子: 0/1=线圈, 2/3=触点
+                const nCoilA = comp.nodes?.[0];
+                const nCoilB = comp.nodes?.[1];
+                const nContactA = comp.nodes?.[2];
+                const nContactB = comp.nodes?.[3];
+                const iCoilA = isValidNode(nCoilA) ? nCoilA - 1 : null;
+                const iCoilB = isValidNode(nCoilB) ? nCoilB - 1 : null;
+                const iContactA = isValidNode(nContactA) ? nContactA - 1 : null;
+                const iContactB = isValidNode(nContactB) ? nContactB - 1 : null;
+
+                const coilR = Math.max(1e-9, Number(comp.coilResistance) || 200);
+                const onR = Math.max(1e-9, Number(comp.contactOnResistance) || 1e-3);
+                const offR = Math.max(1, Number(comp.contactOffResistance) || 1e12);
+
+                if (isValidNode(nCoilA) && isValidNode(nCoilB)) {
+                    this.stampResistor(A, iCoilA, iCoilB, coilR);
+                }
+                if (isValidNode(nContactA) && isValidNode(nContactB)) {
+                    this.stampResistor(A, iContactA, iContactB, comp.energized ? onR : offR);
+                }
+                break;
+            }
 
             case 'Diode':
             case 'LED': {
@@ -902,7 +976,11 @@ export class MNASolver {
         // They are skipped during stamping, so their current must be forced to 0 here as well.
         // Otherwise we can leak "phantom" currents into wire animation logic via results.currents.
         const isValidNode = (nodeIdx) => nodeIdx !== undefined && nodeIdx !== null && nodeIdx >= 0;
-        if (comp.type !== 'Rheostat' && comp.type !== 'SPDTSwitch') {
+        if (comp.type !== 'Rheostat' && comp.type !== 'SPDTSwitch' && comp.type !== 'Relay') {
+            if (!comp.nodes || !isValidNode(comp.nodes[0]) || !isValidNode(comp.nodes[1])) {
+                return 0;
+            }
+        } else if (comp.type === 'Relay') {
             if (!comp.nodes || !isValidNode(comp.nodes[0]) || !isValidNode(comp.nodes[1])) {
                 return 0;
             }
@@ -954,6 +1032,10 @@ export class MNASolver {
             case 'Photoresistor': {
                 const resistance = computePhotoresistorResistance(comp);
                 return resistance > 0 ? dV / resistance : 0;
+            }
+            case 'Relay': {
+                const coilR = Math.max(1e-9, Number(comp.coilResistance) || 200);
+                return dV / coilR; // 元件“主电流”定义为线圈电流
             }
 
             case 'Diode':

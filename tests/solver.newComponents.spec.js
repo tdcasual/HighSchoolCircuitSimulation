@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { addComponent, connectWire, createTestCircuit, solveCircuit } from './helpers/circuitTestUtils.js';
 import { computeNtcThermistorResistance, computePhotoresistorResistance } from '../src/utils/Physics.js';
 
-describe('New component models (Ground / AC source / Inductor / SPDT / Fuse / Diode / LED / Thermistor / Photoresistor)', () => {
+describe('New component models (Ground / AC source / Inductor / SPDT / Fuse / Diode / LED / Thermistor / Photoresistor / Relay)', () => {
     it('uses explicit Ground as reference node (node 0)', () => {
         const circuit = createTestCircuit();
         const ground = addComponent(circuit, 'Ground', 'GND');
@@ -431,5 +431,75 @@ describe('New component models (Ground / AC source / Inductor / SPDT / Fuse / Di
         expect(brightResults.valid).toBe(true);
         expect(brightR).toBeLessThan(dimR);
         expect(Math.abs(brightCurrent)).toBeGreaterThan(Math.abs(dimCurrent));
+    });
+
+    it('keeps relay contact open when coil current is below pull-in threshold', () => {
+        const circuit = createTestCircuit();
+        const coilSource = addComponent(circuit, 'PowerSource', 'Vcoil', {
+            voltage: 1,
+            internalResistance: 0
+        });
+        const loadSource = addComponent(circuit, 'PowerSource', 'Vload', {
+            voltage: 10,
+            internalResistance: 0
+        });
+        const relay = addComponent(circuit, 'Relay', 'K1', {
+            coilResistance: 100,
+            pullInCurrent: 0.02,
+            dropOutCurrent: 0.01,
+            contactOnResistance: 1e-3,
+            contactOffResistance: 1e12,
+            energized: false
+        });
+        const load = addComponent(circuit, 'Resistor', 'Rload', { resistance: 10 });
+
+        // Coil loop
+        connectWire(circuit, 'W1', coilSource, 0, relay, 0);
+        connectWire(circuit, 'W2', relay, 1, coilSource, 1);
+        // Contact loop
+        connectWire(circuit, 'W3', loadSource, 0, relay, 2);
+        connectWire(circuit, 'W4', relay, 3, load, 0);
+        connectWire(circuit, 'W5', load, 1, loadSource, 1);
+
+        const results = solveCircuit(circuit, 0);
+        const loadCurrent = results.currents.get('Rload') || 0;
+        expect(results.valid).toBe(true);
+        expect(relay.energized).toBe(false);
+        expect(Math.abs(loadCurrent)).toBeLessThan(1e-6);
+    });
+
+    it('closes relay contact when coil current reaches pull-in threshold', () => {
+        const circuit = createTestCircuit();
+        const coilSource = addComponent(circuit, 'PowerSource', 'Vcoil', {
+            voltage: 5,
+            internalResistance: 0
+        });
+        const loadSource = addComponent(circuit, 'PowerSource', 'Vload', {
+            voltage: 10,
+            internalResistance: 0
+        });
+        const relay = addComponent(circuit, 'Relay', 'K1', {
+            coilResistance: 100,
+            pullInCurrent: 0.02,
+            dropOutCurrent: 0.01,
+            contactOnResistance: 1e-3,
+            contactOffResistance: 1e12,
+            energized: false
+        });
+        const load = addComponent(circuit, 'Resistor', 'Rload', { resistance: 10 });
+
+        connectWire(circuit, 'W1', coilSource, 0, relay, 0);
+        connectWire(circuit, 'W2', relay, 1, coilSource, 1);
+        connectWire(circuit, 'W3', loadSource, 0, relay, 2);
+        connectWire(circuit, 'W4', relay, 3, load, 0);
+        connectWire(circuit, 'W5', load, 1, loadSource, 1);
+
+        const results = solveCircuit(circuit, 0);
+        const coilCurrent = results.currents.get('K1') || 0;
+        const loadCurrent = results.currents.get('Rload') || 0;
+        expect(results.valid).toBe(true);
+        expect(Math.abs(coilCurrent)).toBeGreaterThanOrEqual(0.02);
+        expect(relay.energized).toBe(true);
+        expect(loadCurrent).toBeCloseTo(10 / (10 + 1e-3), 6);
     });
 });

@@ -160,6 +160,15 @@ export function updatePropertyPanel(comp) {
             break;
         }
 
+        case 'Relay':
+            content.appendChild(createPropertyRow('线圈电阻', `${Number.isFinite(comp.coilResistance) ? comp.coilResistance : 200} Ω`));
+            content.appendChild(createPropertyRow('吸合电流', `${((Number.isFinite(comp.pullInCurrent) ? comp.pullInCurrent : 0.02) * 1000).toFixed(1)} mA`));
+            content.appendChild(createPropertyRow('释放电流', `${((Number.isFinite(comp.dropOutCurrent) ? comp.dropOutCurrent : 0.01) * 1000).toFixed(1)} mA`));
+            content.appendChild(createPropertyRow('触点导通电阻', `${Number.isFinite(comp.contactOnResistance) ? comp.contactOnResistance : 1e-3} Ω`));
+            content.appendChild(createPropertyRow('触点断开电阻', `${Number.isFinite(comp.contactOffResistance) ? comp.contactOffResistance : 1e12} Ω`));
+            content.appendChild(createPropertyRow('状态', comp.energized ? '吸合' : '释放'));
+            break;
+
         case 'Rheostat': {
             const connectionModeText = {
                 'left-slider': '左端-滑块',

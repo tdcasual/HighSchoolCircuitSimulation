@@ -187,6 +187,18 @@
                     </svg>
                     <span>单刀双掷开关</span>
                 </div>
+                <div class="tool-item" data-type="Relay" draggable="true">
+                    <svg viewBox="0 0 60 40" width="60" height="40">
+                        <line x1="0" y1="13" x2="10" y2="13" stroke="#333" stroke-width="2"/>
+                        <path d="M10 13 a3 3 0 0 1 6 0 a3 3 0 0 1 6 0 a3 3 0 0 1 6 0 a3 3 0 0 1 6 0" fill="none" stroke="#333" stroke-width="2"/>
+                        <line x1="34" y1="13" x2="44" y2="13" stroke="#333" stroke-width="2"/>
+                        <line x1="0" y1="27" x2="16" y2="27" stroke="#333" stroke-width="2"/>
+                        <line x1="16" y1="27" x2="28" y2="20" stroke="#333" stroke-width="2"/>
+                        <line x1="32" y1="27" x2="60" y2="27" stroke="#333" stroke-width="2"/>
+                        <line x1="30" y1="16" x2="30" y2="23" stroke="#333" stroke-width="1.2"/>
+                    </svg>
+                    <span>继电器</span>
+                </div>
                 <div class="tool-item" data-type="Fuse" draggable="true">
                     <svg viewBox="0 0 60 40" width="60" height="40">
                         <line x1="0" y1="20" x2="18" y2="20" stroke="#333" stroke-width="2"/>
@@ -512,6 +524,14 @@
                 Method模式请求体：{server, method, params}；Resource模式请求体：{server, resource, params}
             </div>
             <div id="knowledge-source-version" class="hint-text"></div>
+            <div class="form-group" id="settings-log-group">
+                <label>AI 运行日志</label>
+                <div class="settings-inline-actions">
+                    <button id="settings-export-logs-btn" type="button">导出日志</button>
+                    <button id="settings-clear-logs-btn" type="button">清空日志</button>
+                </div>
+                <div id="settings-log-summary" class="hint-text">日志: --</div>
+            </div>
             <div class="dialog-buttons">
                 <button id="settings-fetch-models-btn">获取模型</button>
                 <button id="settings-clear-key-btn">清除密钥</button>

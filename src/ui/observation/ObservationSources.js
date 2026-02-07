@@ -173,6 +173,10 @@ export function getQuantitiesForSource(sourceId, circuit) {
         case 'SPDTSwitch':
             list.push({ id: QuantityIds.SwitchRoute, label: '拨杆(上掷=0,下掷=1)', unit: '' });
             break;
+        case 'Relay':
+            list.push({ id: QuantityIds.SwitchClosed, label: '吸合(是=1)', unit: '' });
+            list.push({ id: QuantityIds.Resistance, label: '触点等效电阻 R', unit: 'Ω' });
+            break;
         default:
             break;
     }
@@ -257,6 +261,11 @@ export function evaluateSourceQuantity(circuit, sourceId, quantityId) {
             if (comp.type === 'Photoresistor') {
                 return computePhotoresistorResistance(comp);
             }
+            if (comp.type === 'Relay') {
+                const onR = Number.isFinite(comp.contactOnResistance) ? comp.contactOnResistance : 1e-3;
+                const offR = Number.isFinite(comp.contactOffResistance) ? comp.contactOffResistance : 1e12;
+                return comp.energized ? onR : offR;
+            }
             if (comp.type === 'LED') {
                 if (comp.conducting) return Number.isFinite(comp.onResistance) ? comp.onResistance : 2;
                 return Number.isFinite(comp.offResistance) ? comp.offResistance : 1e9;
@@ -297,6 +306,7 @@ export function evaluateSourceQuantity(circuit, sourceId, quantityId) {
         case QuantityIds.MotorBackEmf:
             return Number.isFinite(comp.backEmf) ? comp.backEmf : 0;
         case QuantityIds.SwitchClosed:
+            if (comp.type === 'Relay') return comp.energized ? 1 : 0;
             return comp.closed ? 1 : 0;
         case QuantityIds.SwitchRoute:
             return comp.position === 'b' ? 1 : 0;

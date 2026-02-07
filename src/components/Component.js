@@ -89,6 +89,14 @@ export const ComponentDefaults = {
         resistanceLight: 500,   // 亮态电阻 (Ω)
         lightLevel: 0.5         // 光照强度 0..1
     },
+    Relay: {
+        coilResistance: 200,        // 线圈电阻 (Ω)
+        pullInCurrent: 0.02,        // 吸合电流阈值 (A)
+        dropOutCurrent: 0.01,       // 释放电流阈值 (A)
+        contactOnResistance: 1e-3,  // 触点导通电阻 (Ω)
+        contactOffResistance: 1e12, // 触点断开电阻 (Ω)
+        energized: false            // 是否吸合
+    },
     Rheostat: {
         minResistance: 0,      // 最小电阻 (Ω)
         maxResistance: 100,    // 最大电阻 (Ω)
@@ -177,6 +185,7 @@ export const ComponentNames = {
     LED: '发光二极管',
     Thermistor: '热敏电阻',
     Photoresistor: '光敏电阻',
+    Relay: '继电器',
     Rheostat: '滑动变阻器',
     Bulb: '灯泡',
     Capacitor: '电容',
@@ -194,7 +203,8 @@ export const ComponentNames = {
 const COMPONENT_TERMINAL_COUNT = Object.freeze({
     Ground: 1,
     Rheostat: 3,
-    SPDTSwitch: 3
+    SPDTSwitch: 3,
+    Relay: 4
 });
 
 export function getComponentTerminalCount(type) {
@@ -205,6 +215,7 @@ const VALUE_DISPLAY_STACK_ORDER = ['power', 'voltage', 'current'];
 const DEFAULT_VALUE_DISPLAY_ANCHOR = Object.freeze({ x: 0, y: -14 });
 const VALUE_DISPLAY_ANCHOR_BY_TYPE = Object.freeze({
     Rheostat: Object.freeze({ x: 0, y: -22 }),
+    Relay: Object.freeze({ x: 0, y: -24 }),
     Ammeter: Object.freeze({ x: 0, y: -18 }),
     Voltmeter: Object.freeze({ x: 0, y: -18 }),
     Motor: Object.freeze({ x: 0, y: -18 }),
@@ -354,6 +365,9 @@ export const SVGRenderer = {
                 break;
             case 'Photoresistor':
                 this.renderPhotoresistor(g, comp);
+                break;
+            case 'Relay':
+                this.renderRelay(g, comp);
                 break;
             case 'Rheostat':
                 this.renderRheostat(g, comp);
@@ -638,6 +652,51 @@ export const SVGRenderer = {
         const lightPercent = Math.round((Number.isFinite(comp.lightLevel) ? comp.lightLevel : 0.5) * 100);
         const labelText = comp.label || `LDR ${lightPercent}%`;
         this.addText(g, 0, 25, labelText, 9, 'label');
+    },
+
+    /**
+     * 渲染继电器（4端：线圈2端 + 触点2端）
+     */
+    renderRelay(g, comp) {
+        // 线圈（上方）
+        this.addLine(g, -30, -12, -18, -12);
+        this.addLine(g, 18, -12, 30, -12);
+        const loops = 4;
+        const radius = 4;
+        const startX = -14;
+        for (let i = 0; i < loops; i++) {
+            const cx = startX + i * (radius * 2) + radius;
+            const arc = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            arc.setAttribute('d', `M ${cx - radius} -12 A ${radius} ${radius} 0 0 1 ${cx + radius} -12`);
+            arc.setAttribute('fill', 'none');
+            arc.setAttribute('stroke', '#333');
+            arc.setAttribute('stroke-width', '2');
+            g.appendChild(arc);
+        }
+
+        // 触点（下方，常开）
+        this.addLine(g, -30, 12, -10, 12);
+        this.addLine(g, 10, 12, 30, 12);
+        const contact = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        contact.setAttribute('x1', '-10');
+        contact.setAttribute('y1', '12');
+        contact.setAttribute('x2', comp.energized ? '10' : '6');
+        contact.setAttribute('y2', comp.energized ? '12' : '4');
+        contact.setAttribute('stroke', '#333');
+        contact.setAttribute('stroke-width', '2');
+        g.appendChild(contact);
+
+        // 机械连杆示意
+        this.addLine(g, 0, -4, 0, 4, 1.2);
+
+        // 端子：0/1=线圈，2/3=触点
+        this.addTerminal(g, -30, -12, 0, comp);
+        this.addTerminal(g, 30, -12, 1, comp);
+        this.addTerminal(g, -30, 12, 2, comp);
+        this.addTerminal(g, 30, 12, 3, comp);
+
+        const labelText = comp.label || `Relay ${comp.energized ? '吸合' : '释放'}`;
+        this.addText(g, 0, 30, labelText, 9, 'label');
     },
 
     /**
