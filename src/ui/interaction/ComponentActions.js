@@ -1,5 +1,7 @@
 import { createComponent, ComponentNames } from '../../components/Component.js';
 import { toCanvasInt } from '../../utils/CanvasCoords.js';
+import { ErrorCodes } from '../../core/errors/ErrorCodes.js';
+import { AppError } from '../../core/errors/AppError.js';
 
 function createSuccessResult(type, payload = undefined, message = null) {
     const result = { ok: true, type };
@@ -8,11 +10,25 @@ function createSuccessResult(type, payload = undefined, message = null) {
     return result;
 }
 
-function createFailureResult(type, error = null, message = null, payload = undefined, notified = false) {
+function createFailureResult(
+    type,
+    error = null,
+    message = null,
+    payload = undefined,
+    notified = false,
+    code = ErrorCodes.APP_ERR_ACTION_FAILED
+) {
+    const normalizedError = error instanceof AppError
+        ? error
+        : new AppError(code, message || type, {
+            cause: error || undefined,
+            details: { actionType: type, payload: payload || null }
+        });
     const result = { ok: false, type };
     if (payload !== undefined) result.payload = payload;
     if (message) result.message = message;
-    if (error) result.error = error;
+    result.error = normalizedError;
+    result.code = normalizedError.code;
     if (notified) result.notified = true;
     return result;
 }
@@ -90,7 +106,14 @@ export function deleteWire(id) {
 export function rotateComponent(id) {
     const comp = this.circuit.getComponent(id);
     if (!comp) {
-        return createFailureResult('component.rotate_not_found', null, '未找到元器件', { componentId: id });
+        return createFailureResult(
+            'component.rotate_not_found',
+            null,
+            '未找到元器件',
+            { componentId: id },
+            false,
+            ErrorCodes.UI_ERR_COMPONENT_NOT_FOUND
+        );
     }
     try {
         this.runWithHistory('旋转元器件', () => {
@@ -114,7 +137,14 @@ export function rotateComponent(id) {
 export function toggleSwitch(id) {
     const comp = this.circuit.getComponent(id);
     if (!comp || (comp.type !== 'Switch' && comp.type !== 'SPDTSwitch')) {
-        return createFailureResult('switch.toggle_not_supported', null, '当前元器件不支持切换', { componentId: id });
+        return createFailureResult(
+            'switch.toggle_not_supported',
+            null,
+            '当前元器件不支持切换',
+            { componentId: id },
+            false,
+            ErrorCodes.UI_ERR_UNSUPPORTED_COMPONENT_ACTION
+        );
     }
     try {
         let statusMessage = '';
@@ -156,7 +186,14 @@ export function toggleSwitch(id) {
 export function duplicateComponent(id) {
     const comp = this.circuit.getComponent(id);
     if (!comp) {
-        return createFailureResult('component.duplicate_not_found', null, '未找到元器件', { sourceComponentId: id });
+        return createFailureResult(
+            'component.duplicate_not_found',
+            null,
+            '未找到元器件',
+            { sourceComponentId: id },
+            false,
+            ErrorCodes.UI_ERR_COMPONENT_NOT_FOUND
+        );
     }
 
     // 在原位置偏移一点创建新元器件

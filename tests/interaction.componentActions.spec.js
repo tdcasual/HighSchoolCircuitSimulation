@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as ComponentActions from '../src/ui/interaction/ComponentActions.js';
+import { ErrorCodes } from '../src/core/errors/ErrorCodes.js';
 
 describe('ComponentActions.rotateComponent', () => {
     it('rotates component by 90 degrees and refreshes renderer', () => {
@@ -47,6 +48,7 @@ describe('ComponentActions.rotateComponent', () => {
             ok: false,
             type: 'component.rotate_not_found'
         }));
+        expect(result.code).toBe(ErrorCodes.UI_ERR_COMPONENT_NOT_FOUND);
         expect(context.runWithHistory).not.toHaveBeenCalled();
     });
 });
@@ -125,6 +127,7 @@ describe('ComponentActions.toggleSwitch', () => {
             ok: false,
             type: 'switch.toggle_not_supported'
         }));
+        expect(result.code).toBe(ErrorCodes.UI_ERR_UNSUPPORTED_COMPONENT_ACTION);
         expect(context.runWithHistory).not.toHaveBeenCalled();
     });
 });
@@ -224,6 +227,7 @@ describe('ComponentActions.addComponent', () => {
             type: 'component.add_failed',
             message: '添加失败: boom'
         }));
+        expect(result.code).toBe(ErrorCodes.APP_ERR_ACTION_FAILED);
     });
 });
 
@@ -342,6 +346,7 @@ describe('ComponentActions.duplicateComponent', () => {
             ok: false,
             type: 'component.duplicate_not_found'
         }));
+        expect(result.code).toBe(ErrorCodes.UI_ERR_COMPONENT_NOT_FOUND);
         expect(context.addComponent).not.toHaveBeenCalled();
     });
 });

@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as InteractionOrchestrator from '../src/app/interaction/InteractionOrchestrator.js';
+import { ErrorCodes } from '../src/core/errors/ErrorCodes.js';
+import { AppError } from '../src/core/errors/AppError.js';
 
 function makeTarget({
     classes = [],
@@ -430,6 +432,89 @@ describe('InteractionOrchestrator.onKeyDown', () => {
         expect(context.updateStatus).toHaveBeenCalledWith('删除失败: boom');
         expect(context.deleteWire).toHaveBeenCalledWith('W1');
         expect(context.deleteComponent).not.toHaveBeenCalled();
+    });
+
+    it('maps interaction failure to APP_ERR_* code', () => {
+        vi.stubGlobal('document', {
+            getElementById: vi.fn(() => ({
+                classList: { contains: vi.fn(() => true) }
+            })),
+            activeElement: null
+        });
+
+        const failureResult = {
+            ok: false,
+            type: 'wire.delete_failed',
+            message: '删除失败: boom',
+            error: new Error('boom')
+        };
+        const context = {
+            selectedComponent: null,
+            selectedWire: 'W1',
+            deleteWire: vi.fn(() => failureResult),
+            deleteComponent: vi.fn(),
+            updateStatus: vi.fn()
+        };
+        const event = {
+            key: 'Delete',
+            preventDefault: vi.fn(),
+            metaKey: false,
+            ctrlKey: false,
+            shiftKey: false
+        };
+
+        InteractionOrchestrator.onKeyDown.call(context, event);
+
+        expect(failureResult.error).toBeInstanceOf(AppError);
+        expect(failureResult.error.code).toBe(ErrorCodes.APP_ERR_ACTION_FAILED);
+        expect(context.lastActionError.code).toBe(ErrorCodes.APP_ERR_ACTION_FAILED);
+    });
+
+    it('logger attaches traceId for action failures', () => {
+        vi.stubGlobal('document', {
+            getElementById: vi.fn(() => ({
+                classList: { contains: vi.fn(() => true) }
+            })),
+            activeElement: null
+        });
+
+        const logger = {
+            error: vi.fn()
+        };
+        const failureResult = {
+            ok: false,
+            type: 'wire.delete_failed',
+            message: '删除失败: boom'
+        };
+        const context = {
+            selectedComponent: null,
+            selectedWire: 'W1',
+            deleteWire: vi.fn(() => failureResult),
+            deleteComponent: vi.fn(),
+            updateStatus: vi.fn(),
+            logger
+        };
+        const event = {
+            key: 'Delete',
+            preventDefault: vi.fn(),
+            metaKey: false,
+            ctrlKey: false,
+            shiftKey: false
+        };
+
+        InteractionOrchestrator.onKeyDown.call(context, event);
+
+        expect(logger.error).toHaveBeenCalledWith(expect.objectContaining({
+            source: 'interaction',
+            stage: 'action_failed',
+            traceId: expect.any(String),
+            error: expect.objectContaining({
+                code: ErrorCodes.APP_ERR_ACTION_FAILED
+            }),
+            actionType: 'wire.delete_failed'
+        }));
+        expect(typeof failureResult.traceId).toBe('string');
+        expect(failureResult.traceId.length).toBeGreaterThan(0);
     });
 
     it('ignores shortcuts when focus is in editable input', () => {

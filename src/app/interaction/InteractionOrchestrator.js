@@ -1,9 +1,46 @@
 import { GRID_SIZE, snapToGrid, toCanvasInt } from '../../utils/CanvasCoords.js';
+import { ErrorCodes } from '../../core/errors/ErrorCodes.js';
+import { AppError } from '../../core/errors/AppError.js';
+import { createTraceId, logActionFailure } from '../../utils/Logger.js';
 
 function consumeActionResult(context, result) {
     if (!result || result.ok !== false) {
         return result;
     }
+    const actionType = typeof result.type === 'string' && result.type
+        ? result.type
+        : 'unknown.action';
+    const traceId = result.traceId || createTraceId('interaction');
+    const code = typeof result.code === 'string' && result.code
+        ? result.code
+        : (actionType === 'unknown.action' ? ErrorCodes.APP_ERR_INVALID_ACTION_RESULT : ErrorCodes.APP_ERR_ACTION_FAILED);
+    const appError = result.error instanceof AppError
+        ? result.error
+        : new AppError(code, result.message || '交互动作执行失败', {
+            traceId,
+            cause: result.error || undefined,
+            details: { actionType, payload: result.payload || null }
+        });
+
+    if (!appError.traceId) {
+        appError.traceId = traceId;
+    }
+    result.traceId = traceId;
+    result.error = appError;
+    result.code = appError.code;
+    context.lastActionError = appError;
+
+    logActionFailure(context.logger, {
+        traceId,
+        actionType,
+        message: appError.message,
+        error: {
+            code: appError.code,
+            message: appError.message
+        },
+        payload: result.payload || null
+    });
+
     if (result.message && !result.notified && typeof context.updateStatus === 'function') {
         context.updateStatus(result.message);
     }
