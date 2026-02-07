@@ -28,6 +28,7 @@ import * as InteractionOrchestrator from '../app/interaction/InteractionOrchestr
 import * as ComponentActions from './interaction/ComponentActions.js';
 import * as ContextMenuController from './interaction/ContextMenuController.js';
 import * as ProbeActions from './interaction/ProbeActions.js';
+import * as ToolPlacementController from './interaction/ToolPlacementController.js';
 
 const INTEGRATION_METHOD_OPTIONS = Object.freeze([
     { value: 'auto', label: '自动（默认梯形法）' },
@@ -342,46 +343,15 @@ export class InteractionManager {
     }
 
     setPendingToolType(type, item = null) {
-        if (!type) return;
-        if (this.pendingToolType === type) {
-            if (type === 'Wire' && this.isWiring) {
-                this.cancelWiring();
-            }
-            this.clearPendingToolType();
-            this.updateStatus('已取消工具放置模式');
-            return;
-        }
-
-        this.pendingToolType = type;
-        this.pendingToolItem = item;
-        document.querySelectorAll('.tool-item.tool-item-pending').forEach((el) => el.classList.remove('tool-item-pending'));
-        if (item) item.classList.add('tool-item-pending');
-        this.updateStatus(`已选择 ${ComponentNames[type] || type}，点击画布放置`);
+        return ToolPlacementController.setPendingToolType.call(this, type, item);
     }
 
     clearPendingToolType(options = {}) {
-        this.pendingToolType = null;
-        if (this.pendingToolItem) {
-            this.pendingToolItem.classList.remove('tool-item-pending');
-            this.pendingToolItem = null;
-        }
-        if (!options.silent) {
-            document.querySelectorAll('.tool-item.tool-item-pending').forEach((el) => el.classList.remove('tool-item-pending'));
-        }
+        return ToolPlacementController.clearPendingToolType.call(this, options);
     }
 
     placePendingToolAt(clientX, clientY) {
-        if (!this.pendingToolType) return false;
-        const canvas = this.screenToCanvas(clientX, clientY);
-        const x = snapToGrid(canvas.x, GRID_SIZE);
-        const y = snapToGrid(canvas.y, GRID_SIZE);
-        if (this.pendingToolType === 'Wire') {
-            this.addWireAt(x, y);
-        } else {
-            this.addComponent(this.pendingToolType, x, y);
-        }
-        this.clearPendingToolType({ silent: true });
-        return true;
+        return ToolPlacementController.placePendingToolAt.call(this, clientX, clientY);
     }
     
     /**
