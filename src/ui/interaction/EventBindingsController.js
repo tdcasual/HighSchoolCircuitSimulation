@@ -1,6 +1,29 @@
 import * as InteractionOrchestrator from '../../app/interaction/InteractionOrchestrator.js';
 
 /**
+ * 绑定所有事件
+ */
+export function bindEvents() {
+    // 工具箱拖放
+    this.bindToolboxEvents();
+
+    // SVG画布事件
+    this.bindCanvasEvents();
+
+    // 按钮事件
+    this.bindButtonEvents();
+
+    // 右侧面板 Tab 切换
+    this.bindSidePanelEvents();
+
+    // 键盘事件
+    this.bindKeyboardEvents();
+
+    // 缩放显示点击重置
+    this.bindZoomEvents();
+}
+
+/**
  * 缩放控制事件
  */
 export function bindZoomEvents() {

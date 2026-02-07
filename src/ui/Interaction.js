@@ -25,6 +25,8 @@ import * as PropertyDialogController from './interaction/PropertyDialogControlle
 import * as MeasurementReadoutController from './interaction/MeasurementReadoutController.js';
 import * as ToolboxBindingsController from './interaction/ToolboxBindingsController.js';
 import * as EventBindingsController from './interaction/EventBindingsController.js';
+import * as HistoryFacadeController from './interaction/HistoryFacadeController.js';
+import * as CoordinateTransforms from './interaction/CoordinateTransforms.js';
 
 export class InteractionManager {
     constructor(app) {
@@ -93,38 +95,14 @@ export class InteractionManager {
      * 将画布坐标转换为元器件局部坐标（考虑旋转）
      */
     canvasToComponentLocal(comp, canvasPoint) {
-        const dx = canvasPoint.x - (comp.x || 0);
-        const dy = canvasPoint.y - (comp.y || 0);
-        const rotation = (comp.rotation || 0) * Math.PI / 180;
-        const cos = Math.cos(-rotation);
-        const sin = Math.sin(-rotation);
-        return {
-            x: dx * cos - dy * sin,
-            y: dx * sin + dy * cos
-        };
+        return CoordinateTransforms.canvasToComponentLocal(comp, canvasPoint);
     }
 
     /**
      * 绑定所有事件
      */
     bindEvents() {
-        // 工具箱拖放
-        this.bindToolboxEvents();
-        
-        // SVG画布事件
-        this.bindCanvasEvents();
-        
-        // 按钮事件
-        this.bindButtonEvents();
-
-        // 右侧面板 Tab 切换
-        this.bindSidePanelEvents();
-        
-        // 键盘事件
-        this.bindKeyboardEvents();
-        
-        // 缩放显示点击重置
-        this.bindZoomEvents();
+        return EventBindingsController.bindEvents.call(this);
     }
 
     /**
@@ -666,47 +644,47 @@ export class InteractionManager {
      * =========================
      */
     captureHistoryState() {
-        return this.historyManager.captureState();
+        return HistoryFacadeController.captureHistoryState.call(this);
     }
 
     historyKey(state) {
-        return this.historyManager.stateKey(state);
+        return HistoryFacadeController.historyKey.call(this, state);
     }
 
     getSelectionSnapshot() {
-        return this.historyManager.getSelectionSnapshot();
+        return HistoryFacadeController.getSelectionSnapshot.call(this);
     }
 
     restoreSelectionSnapshot(snapshot) {
-        this.historyManager.restoreSelectionSnapshot(snapshot);
+        HistoryFacadeController.restoreSelectionSnapshot.call(this, snapshot);
     }
 
     pushHistoryEntry(entry) {
-        this.historyManager.pushEntry(entry);
+        HistoryFacadeController.pushHistoryEntry.call(this, entry);
     }
 
     runWithHistory(label, action) {
-        this.historyManager.runWithHistory(label, action);
+        HistoryFacadeController.runWithHistory.call(this, label, action);
     }
 
     beginHistoryTransaction(label) {
-        this.historyManager.beginTransaction(label);
+        HistoryFacadeController.beginHistoryTransaction.call(this, label);
     }
 
     commitHistoryTransaction() {
-        this.historyManager.commitTransaction();
+        HistoryFacadeController.commitHistoryTransaction.call(this);
     }
 
     applyHistoryState(state, selection) {
-        this.historyManager.applyState(state, selection);
+        HistoryFacadeController.applyHistoryState.call(this, state, selection);
     }
 
     undo() {
-        this.historyManager.undo();
+        HistoryFacadeController.undo.call(this);
     }
 
     redo() {
-        this.historyManager.redo();
+        HistoryFacadeController.redo.call(this);
     }
 
     /**

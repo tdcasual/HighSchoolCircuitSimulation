@@ -41,6 +41,30 @@ describe('EventBindingsController.bindZoomEvents', () => {
     });
 });
 
+describe('EventBindingsController.bindEvents', () => {
+    it('binds toolbox/canvas/button/side-panel/keyboard/zoom in order', () => {
+        const ctx = {
+            bindToolboxEvents: vi.fn(),
+            bindCanvasEvents: vi.fn(),
+            bindButtonEvents: vi.fn(),
+            bindSidePanelEvents: vi.fn(),
+            bindKeyboardEvents: vi.fn(),
+            bindZoomEvents: vi.fn()
+        };
+
+        EventBindingsController.bindEvents.call(ctx);
+
+        expect(ctx.bindToolboxEvents).toHaveBeenCalledTimes(1);
+        expect(ctx.bindCanvasEvents).toHaveBeenCalledTimes(1);
+        expect(ctx.bindButtonEvents).toHaveBeenCalledTimes(1);
+        expect(ctx.bindSidePanelEvents).toHaveBeenCalledTimes(1);
+        expect(ctx.bindKeyboardEvents).toHaveBeenCalledTimes(1);
+        expect(ctx.bindZoomEvents).toHaveBeenCalledTimes(1);
+        expect(ctx.bindToolboxEvents.mock.invocationCallOrder[0]).toBeLessThan(ctx.bindCanvasEvents.mock.invocationCallOrder[0]);
+        expect(ctx.bindCanvasEvents.mock.invocationCallOrder[0]).toBeLessThan(ctx.bindButtonEvents.mock.invocationCallOrder[0]);
+    });
+});
+
 describe('EventBindingsController.bindKeyboardEvents', () => {
     it('forwards keydown event to orchestrator', () => {
         let keydownHandler = null;
