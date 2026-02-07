@@ -398,6 +398,40 @@ describe('InteractionOrchestrator.onKeyDown', () => {
         expect(context.deleteComponent).not.toHaveBeenCalled();
     });
 
+    it('surfaces action failure message from DTO on Delete key', () => {
+        vi.stubGlobal('document', {
+            getElementById: vi.fn(() => ({
+                classList: { contains: vi.fn(() => true) }
+            })),
+            activeElement: null
+        });
+
+        const context = {
+            selectedComponent: null,
+            selectedWire: 'W1',
+            deleteWire: vi.fn(() => ({
+                ok: false,
+                type: 'wire.delete_failed',
+                message: '删除失败: boom'
+            })),
+            deleteComponent: vi.fn(),
+            updateStatus: vi.fn()
+        };
+        const event = {
+            key: 'Delete',
+            preventDefault: vi.fn(),
+            metaKey: false,
+            ctrlKey: false,
+            shiftKey: false
+        };
+
+        InteractionOrchestrator.onKeyDown.call(context, event);
+
+        expect(context.updateStatus).toHaveBeenCalledWith('删除失败: boom');
+        expect(context.deleteWire).toHaveBeenCalledWith('W1');
+        expect(context.deleteComponent).not.toHaveBeenCalled();
+    });
+
     it('ignores shortcuts when focus is in editable input', () => {
         vi.stubGlobal('document', {
             getElementById: vi.fn(() => ({

@@ -1,5 +1,15 @@
 import { GRID_SIZE, snapToGrid, toCanvasInt } from '../../utils/CanvasCoords.js';
 
+function consumeActionResult(context, result) {
+    if (!result || result.ok !== false) {
+        return result;
+    }
+    if (result.message && !result.notified && typeof context.updateStatus === 'function') {
+        context.updateStatus(result.message);
+    }
+    return result;
+}
+
 export function onMouseDown(e) {
     // 阻止默认的拖拽行为，防止触发drop事件创建重复元器件
     e.preventDefault();
@@ -72,7 +82,7 @@ export function onMouseDown(e) {
     // 检查是否点击了开关（切换开关状态）
     if (target.classList.contains('switch-blade') || target.classList.contains('switch-touch')) {
         if (componentGroup) {
-            this.toggleSwitch(componentGroup.dataset.id);
+            consumeActionResult(this, this.toggleSwitch(componentGroup.dataset.id));
             return;
         }
     }
@@ -583,16 +593,16 @@ export function onKeyDown(e) {
     if (e.key === 'Delete' || e.key === 'Backspace') {
         e.preventDefault();
         if (this.selectedComponent) {
-            this.deleteComponent(this.selectedComponent);
+            consumeActionResult(this, this.deleteComponent(this.selectedComponent));
         } else if (this.selectedWire) {
-            this.deleteWire(this.selectedWire);
+            consumeActionResult(this, this.deleteWire(this.selectedWire));
         }
     }
 
     // R键旋转
     if (e.key === 'r' || e.key === 'R') {
         if (this.selectedComponent) {
-            this.rotateComponent(this.selectedComponent);
+            consumeActionResult(this, this.rotateComponent(this.selectedComponent));
         }
     }
 

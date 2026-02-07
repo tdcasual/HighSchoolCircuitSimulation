@@ -17,9 +17,17 @@ describe('ComponentActions.rotateComponent', () => {
             runWithHistory: vi.fn((_, action) => action())
         };
 
-        ComponentActions.rotateComponent.call(context, 'R1');
+        const result = ComponentActions.rotateComponent.call(context, 'R1');
 
         expect(comp.rotation).toBe(180);
+        expect(result).toEqual(expect.objectContaining({
+            ok: true,
+            type: 'component.rotated',
+            payload: expect.objectContaining({
+                componentId: 'R1',
+                rotation: 180
+            })
+        }));
         expect(context.runWithHistory).toHaveBeenCalledWith('旋转元器件', expect.any(Function));
         expect(context.renderer.refreshComponent).toHaveBeenCalledWith(comp);
         expect(context.renderer.updateConnectedWires).toHaveBeenCalledWith('R1');
@@ -33,8 +41,12 @@ describe('ComponentActions.rotateComponent', () => {
             runWithHistory: vi.fn()
         };
 
-        ComponentActions.rotateComponent.call(context, 'R404');
+        const result = ComponentActions.rotateComponent.call(context, 'R404');
 
+        expect(result).toEqual(expect.objectContaining({
+            ok: false,
+            type: 'component.rotate_not_found'
+        }));
         expect(context.runWithHistory).not.toHaveBeenCalled();
     });
 });
@@ -53,9 +65,18 @@ describe('ComponentActions.toggleSwitch', () => {
             updateStatus: vi.fn()
         };
 
-        ComponentActions.toggleSwitch.call(context, 'S1');
+        const result = ComponentActions.toggleSwitch.call(context, 'S1');
 
         expect(comp.closed).toBe(true);
+        expect(result).toEqual(expect.objectContaining({
+            ok: true,
+            type: 'switch.toggled',
+            payload: expect.objectContaining({
+                componentId: 'S1',
+                componentType: 'Switch',
+                closed: true
+            })
+        }));
         expect(context.runWithHistory).toHaveBeenCalledWith('切换开关', expect.any(Function));
         expect(context.renderer.refreshComponent).toHaveBeenCalledWith(comp);
         expect(context.renderer.setSelected).toHaveBeenCalledWith('S1', true);
@@ -76,10 +97,35 @@ describe('ComponentActions.toggleSwitch', () => {
             updateStatus: vi.fn()
         };
 
-        ComponentActions.toggleSwitch.call(context, 'S2');
+        const result = ComponentActions.toggleSwitch.call(context, 'S2');
 
         expect(comp.position).toBe('b');
+        expect(result).toEqual(expect.objectContaining({
+            ok: true,
+            type: 'switch.toggled',
+            payload: expect.objectContaining({
+                componentId: 'S2',
+                componentType: 'SPDTSwitch',
+                position: 'b'
+            })
+        }));
         expect(context.updateStatus).toHaveBeenCalledWith('单刀双掷开关已切换到 下掷');
+    });
+
+    it('returns failure DTO for unsupported component types', () => {
+        const context = {
+            circuit: { getComponent: vi.fn(() => ({ id: 'R1', type: 'Resistor' })) },
+            runWithHistory: vi.fn(),
+            updateStatus: vi.fn()
+        };
+
+        const result = ComponentActions.toggleSwitch.call(context, 'R1');
+
+        expect(result).toEqual(expect.objectContaining({
+            ok: false,
+            type: 'switch.toggle_not_supported'
+        }));
+        expect(context.runWithHistory).not.toHaveBeenCalled();
     });
 });
 
@@ -103,12 +149,17 @@ describe('ComponentActions.addComponent', () => {
             updateStatus: vi.fn()
         };
 
-        ComponentActions.addComponent.call(context, 'Resistor', 10.4, 20.6);
+        const result = ComponentActions.addComponent.call(context, 'Resistor', 10.4, 20.6);
 
         const added = context.circuit.addComponent.mock.calls[0][0];
         expect(added.type).toBe('Resistor');
         expect(added.x).toBe(10);
         expect(added.y).toBe(21);
+        expect(result).toEqual(expect.objectContaining({
+            ok: true,
+            type: 'component.added',
+            message: expect.stringContaining('已添加')
+        }));
         expect(context.runWithHistory).toHaveBeenCalledWith(expect.stringContaining('添加'), expect.any(Function));
         expect(context.renderer.addComponent).toHaveBeenCalledWith(added);
         expect(context.selectComponent).toHaveBeenCalledWith(added.id);
@@ -165,9 +216,14 @@ describe('ComponentActions.addComponent', () => {
             updateStatus: vi.fn()
         };
 
-        ComponentActions.addComponent.call(context, 'Resistor', 1, 2);
+        const result = ComponentActions.addComponent.call(context, 'Resistor', 1, 2);
 
         expect(context.updateStatus).toHaveBeenCalledWith('添加失败: boom');
+        expect(result).toEqual(expect.objectContaining({
+            ok: false,
+            type: 'component.add_failed',
+            message: '添加失败: boom'
+        }));
     });
 });
 
@@ -190,8 +246,14 @@ describe('ComponentActions.deleteComponent', () => {
             updateStatus: vi.fn()
         };
 
-        ComponentActions.deleteComponent.call(context, 'R1');
+        const result = ComponentActions.deleteComponent.call(context, 'R1');
 
+        expect(result).toEqual(expect.objectContaining({
+            ok: true,
+            type: 'component.deleted',
+            payload: { componentId: 'R1' },
+            message: '已删除元器件'
+        }));
         expect(context.runWithHistory).toHaveBeenCalledWith('删除元器件', expect.any(Function));
         expect(context.circuit.removeComponent).toHaveBeenCalledWith('R1');
         expect(context.renderer.removeComponent).toHaveBeenCalledWith('R1');
@@ -218,8 +280,14 @@ describe('ComponentActions.deleteWire', () => {
             updateStatus: vi.fn()
         };
 
-        ComponentActions.deleteWire.call(context, 'W1');
+        const result = ComponentActions.deleteWire.call(context, 'W1');
 
+        expect(result).toEqual(expect.objectContaining({
+            ok: true,
+            type: 'wire.deleted',
+            payload: { wireId: 'W1' },
+            message: '已删除导线'
+        }));
         expect(context.runWithHistory).toHaveBeenCalledWith('删除导线', expect.any(Function));
         expect(context.circuit.removeWire).toHaveBeenCalledWith('W1');
         expect(context.renderer.removeWire).toHaveBeenCalledWith('W1');
@@ -243,9 +311,23 @@ describe('ComponentActions.duplicateComponent', () => {
             addComponent: vi.fn()
         };
 
-        ComponentActions.duplicateComponent.call(context, 'R1');
+        context.addComponent.mockReturnValue({
+            ok: true,
+            type: 'component.added',
+            payload: { componentId: 'R2' }
+        });
+
+        const result = ComponentActions.duplicateComponent.call(context, 'R1');
 
         expect(context.addComponent).toHaveBeenCalledWith('Resistor', 160, 120);
+        expect(result).toEqual(expect.objectContaining({
+            ok: true,
+            type: 'component.duplicated',
+            payload: {
+                sourceComponentId: 'R1',
+                componentId: 'R2'
+            }
+        }));
     });
 
     it('does nothing for missing component', () => {
@@ -254,8 +336,12 @@ describe('ComponentActions.duplicateComponent', () => {
             addComponent: vi.fn()
         };
 
-        ComponentActions.duplicateComponent.call(context, 'R404');
+        const result = ComponentActions.duplicateComponent.call(context, 'R404');
 
+        expect(result).toEqual(expect.objectContaining({
+            ok: false,
+            type: 'component.duplicate_not_found'
+        }));
         expect(context.addComponent).not.toHaveBeenCalled();
     });
 });
