@@ -4,7 +4,7 @@
  */
 
 import { Matrix } from './Matrix.js';
-import { computeNtcThermistorResistance } from '../utils/Physics.js';
+import { computeNtcThermistorResistance, computePhotoresistorResistance } from '../utils/Physics.js';
 
 const DynamicIntegrationMethods = Object.freeze({
     Auto: 'auto',
@@ -137,6 +137,11 @@ export class MNASolver {
                 comp.beta = Number.isFinite(comp.beta) ? comp.beta : 3950;
                 comp.temperatureC = Number.isFinite(comp.temperatureC) ? comp.temperatureC : 25;
             }
+            if (comp.type === 'Photoresistor') {
+                comp.resistanceDark = Number.isFinite(comp.resistanceDark) ? comp.resistanceDark : 100000;
+                comp.resistanceLight = Number.isFinite(comp.resistanceLight) ? comp.resistanceLight : 500;
+                comp.lightLevel = Number.isFinite(comp.lightLevel) ? comp.lightLevel : 0.5;
+            }
             if (comp.type === 'Switch' || comp.type === 'SPDTSwitch') {
                 const n1 = comp.nodes?.[0];
                 const n2 = comp.type === 'SPDTSwitch'
@@ -199,6 +204,14 @@ export class MNASolver {
                         `beta:${this.formatMatrixKeyNumber(comp.beta ?? 3950)}`,
                         `tempC:${this.formatMatrixKeyNumber(comp.temperatureC ?? 25)}`,
                         `R:${this.formatMatrixKeyNumber(computeNtcThermistorResistance(comp))}`
+                    );
+                    break;
+                case 'Photoresistor':
+                    keyParts.push(
+                        `Rdark:${this.formatMatrixKeyNumber(comp.resistanceDark ?? 100000)}`,
+                        `Rlight:${this.formatMatrixKeyNumber(comp.resistanceLight ?? 500)}`,
+                        `light:${this.formatMatrixKeyNumber(comp.lightLevel ?? 0.5)}`,
+                        `R:${this.formatMatrixKeyNumber(computePhotoresistorResistance(comp))}`
                     );
                     break;
                 case 'Diode':
@@ -524,6 +537,9 @@ export class MNASolver {
 
             case 'Thermistor':
                 this.stampResistor(A, i1, i2, computeNtcThermistorResistance(comp));
+                break;
+            case 'Photoresistor':
+                this.stampResistor(A, i1, i2, computePhotoresistorResistance(comp));
                 break;
 
             case 'Diode':
@@ -933,6 +949,10 @@ export class MNASolver {
 
             case 'Thermistor': {
                 const resistance = computeNtcThermistorResistance(comp);
+                return resistance > 0 ? dV / resistance : 0;
+            }
+            case 'Photoresistor': {
+                const resistance = computePhotoresistorResistance(comp);
                 return resistance > 0 ? dV / resistance : 0;
             }
 

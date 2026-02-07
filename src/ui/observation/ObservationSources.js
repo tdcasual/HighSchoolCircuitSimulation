@@ -4,7 +4,11 @@
  */
 
 import { ComponentNames } from '../../components/Component.js';
-import { computeNtcThermistorResistance, computeOverlapFractionFromOffsetPx } from '../../utils/Physics.js';
+import {
+    computeNtcThermistorResistance,
+    computeOverlapFractionFromOffsetPx,
+    computePhotoresistorResistance
+} from '../../utils/Physics.js';
 
 export const TIME_SOURCE_ID = '__time__';
 export const PROBE_SOURCE_PREFIX = '__probe__:';
@@ -136,6 +140,9 @@ export function getQuantitiesForSource(sourceId, circuit) {
         case 'Thermistor':
             list.push({ id: QuantityIds.Resistance, label: '当前电阻 R', unit: 'Ω' });
             break;
+        case 'Photoresistor':
+            list.push({ id: QuantityIds.Resistance, label: '当前电阻 R', unit: 'Ω' });
+            break;
         case 'LED':
             list.push({ id: QuantityIds.Resistance, label: '等效电阻 R', unit: 'Ω' });
             list.push({ id: QuantityIds.BulbBrightness, label: '亮度', unit: '' });
@@ -246,6 +253,9 @@ export function evaluateSourceQuantity(circuit, sourceId, quantityId) {
             }
             if (comp.type === 'Thermistor') {
                 return computeNtcThermistorResistance(comp);
+            }
+            if (comp.type === 'Photoresistor') {
+                return computePhotoresistorResistance(comp);
             }
             if (comp.type === 'LED') {
                 if (comp.conducting) return Number.isFinite(comp.onResistance) ? comp.onResistance : 2;

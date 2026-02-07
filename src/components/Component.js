@@ -84,6 +84,11 @@ export const ComponentDefaults = {
         beta: 3950,            // Beta 常数 (K)
         temperatureC: 25       // 当前温度 (°C)
     },
+    Photoresistor: {
+        resistanceDark: 100000, // 暗态电阻 (Ω)
+        resistanceLight: 500,   // 亮态电阻 (Ω)
+        lightLevel: 0.5         // 光照强度 0..1
+    },
     Rheostat: {
         minResistance: 0,      // 最小电阻 (Ω)
         maxResistance: 100,    // 最大电阻 (Ω)
@@ -171,6 +176,7 @@ export const ComponentNames = {
     Diode: '二极管',
     LED: '发光二极管',
     Thermistor: '热敏电阻',
+    Photoresistor: '光敏电阻',
     Rheostat: '滑动变阻器',
     Bulb: '灯泡',
     Capacitor: '电容',
@@ -345,6 +351,9 @@ export const SVGRenderer = {
                 break;
             case 'Thermistor':
                 this.renderThermistor(g, comp);
+                break;
+            case 'Photoresistor':
+                this.renderPhotoresistor(g, comp);
                 break;
             case 'Rheostat':
                 this.renderRheostat(g, comp);
@@ -593,6 +602,41 @@ export const SVGRenderer = {
         this.addTerminal(g, 30, 0, 1, comp);
 
         const labelText = comp.label || `NTC ${Math.round(comp.temperatureC ?? 25)}°C`;
+        this.addText(g, 0, 25, labelText, 9, 'label');
+    },
+
+    /**
+     * 渲染光敏电阻（LDR）
+     */
+    renderPhotoresistor(g, comp) {
+        this.addLine(g, -30, 0, -20, 0);
+        this.addLine(g, 20, 0, 30, 0);
+
+        const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        rect.setAttribute('x', -20);
+        rect.setAttribute('y', -8);
+        rect.setAttribute('width', 40);
+        rect.setAttribute('height', 16);
+        rect.setAttribute('class', 'body');
+        g.appendChild(rect);
+
+        // 入射光箭头
+        this.addLine(g, -12, -18, -2, -8, 1.6);
+        this.addLine(g, -2, -18, 8, -8, 1.6);
+        const arrow1 = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+        arrow1.setAttribute('points', '-2,-8 -5,-9 -4,-6');
+        arrow1.setAttribute('fill', '#333');
+        g.appendChild(arrow1);
+        const arrow2 = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+        arrow2.setAttribute('points', '8,-8 5,-9 6,-6');
+        arrow2.setAttribute('fill', '#333');
+        g.appendChild(arrow2);
+
+        this.addTerminal(g, -30, 0, 0, comp);
+        this.addTerminal(g, 30, 0, 1, comp);
+
+        const lightPercent = Math.round((Number.isFinite(comp.lightLevel) ? comp.lightLevel : 0.5) * 100);
+        const labelText = comp.label || `LDR ${lightPercent}%`;
         this.addText(g, 0, 25, labelText, 9, 'label');
     },
 

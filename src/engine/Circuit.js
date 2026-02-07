@@ -1844,6 +1844,12 @@ export class Circuit {
                     beta: comp.beta,
                     temperatureC: comp.temperatureC
                 };
+            case 'Photoresistor':
+                return {
+                    resistanceDark: comp.resistanceDark,
+                    resistanceLight: comp.resistanceLight,
+                    lightLevel: comp.lightLevel
+                };
             case 'Diode':
                 return {
                     forwardVoltage: comp.forwardVoltage,

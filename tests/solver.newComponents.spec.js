@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { addComponent, connectWire, createTestCircuit, solveCircuit } from './helpers/circuitTestUtils.js';
-import { computeNtcThermistorResistance } from '../src/utils/Physics.js';
+import { computeNtcThermistorResistance, computePhotoresistorResistance } from '../src/utils/Physics.js';
 
-describe('New component models (Ground / AC source / Inductor / SPDT / Fuse / Diode / LED / Thermistor)', () => {
+describe('New component models (Ground / AC source / Inductor / SPDT / Fuse / Diode / LED / Thermistor / Photoresistor)', () => {
     it('uses explicit Ground as reference node (node 0)', () => {
         const circuit = createTestCircuit();
         const ground = addComponent(circuit, 'Ground', 'GND');
@@ -377,5 +377,59 @@ describe('New component models (Ground / AC source / Inductor / SPDT / Fuse / Di
         expect(hotResults.valid).toBe(true);
         expect(hotR).toBeLessThan(coolR);
         expect(Math.abs(hotCurrent)).toBeGreaterThan(Math.abs(coolCurrent));
+    });
+
+    it('solves photoresistor current from light level', () => {
+        const circuit = createTestCircuit();
+        const source = addComponent(circuit, 'PowerSource', 'V1', {
+            voltage: 5,
+            internalResistance: 0
+        });
+        const ldr = addComponent(circuit, 'Photoresistor', 'LDR1', {
+            resistanceDark: 100000,
+            resistanceLight: 500,
+            lightLevel: 0.5
+        });
+
+        connectWire(circuit, 'W1', source, 0, ldr, 0);
+        connectWire(circuit, 'W2', ldr, 1, source, 1);
+
+        const results = solveCircuit(circuit, 0);
+        const resistance = computePhotoresistorResistance(ldr);
+        const expectedCurrent = 5 / resistance;
+
+        expect(results.valid).toBe(true);
+        expect(results.currents.get('LDR1')).toBeCloseTo(expectedCurrent, 8);
+    });
+
+    it('decreases photoresistor resistance and increases current as light grows', () => {
+        const circuit = createTestCircuit();
+        const source = addComponent(circuit, 'PowerSource', 'V1', {
+            voltage: 5,
+            internalResistance: 0
+        });
+        const ldr = addComponent(circuit, 'Photoresistor', 'LDR1', {
+            resistanceDark: 100000,
+            resistanceLight: 500,
+            lightLevel: 0.1
+        });
+
+        connectWire(circuit, 'W1', source, 0, ldr, 0);
+        connectWire(circuit, 'W2', ldr, 1, source, 1);
+
+        const dimResults = solveCircuit(circuit, 0);
+        const dimCurrent = dimResults.currents.get('LDR1') || 0;
+
+        ldr.lightLevel = 0.9;
+        const brightResults = solveCircuit(circuit, 0);
+        const brightCurrent = brightResults.currents.get('LDR1') || 0;
+
+        const dimR = computePhotoresistorResistance({ ...ldr, lightLevel: 0.1 });
+        const brightR = computePhotoresistorResistance({ ...ldr, lightLevel: 0.9 });
+
+        expect(dimResults.valid).toBe(true);
+        expect(brightResults.valid).toBe(true);
+        expect(brightR).toBeLessThan(dimR);
+        expect(Math.abs(brightCurrent)).toBeGreaterThan(Math.abs(dimCurrent));
     });
 });

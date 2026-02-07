@@ -18,6 +18,7 @@ const LABEL_PREFIX_BY_TYPE = Object.freeze({
     Diode: 'D',
     LED: 'LED',
     Thermistor: 'RT',
+    Photoresistor: 'LDR',
     Rheostat: 'R',
     Bulb: 'L',
     Capacitor: 'C',

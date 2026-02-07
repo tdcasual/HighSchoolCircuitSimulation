@@ -59,3 +59,29 @@ export function computeNtcThermistorResistance(params) {
     if (!Number.isFinite(resistance)) return 1e12;
     return clamp(resistance, 1e-6, 1e15);
 }
+
+/**
+ * 光敏电阻阻值模型（对数插值）
+ * lightLevel: 0(暗) .. 1(亮)
+ */
+export function computePhotoresistorResistance(params) {
+    const darkRaw = Number(params?.resistanceDark);
+    const lightRaw = Number(params?.resistanceLight);
+    const levelRaw = Number(params?.lightLevel);
+
+    let resistanceDark = Number.isFinite(darkRaw) ? Math.max(1e-6, darkRaw) : 100000;
+    let resistanceLight = Number.isFinite(lightRaw) ? Math.max(1e-6, lightRaw) : 500;
+    const lightLevel = clamp(Number.isFinite(levelRaw) ? levelRaw : 0.5, 0, 1);
+
+    // 约束为暗态电阻 >= 亮态电阻，保证单调下降
+    if (resistanceDark < resistanceLight) {
+        const tmp = resistanceDark;
+        resistanceDark = resistanceLight;
+        resistanceLight = tmp;
+    }
+
+    const lnR = Math.log(resistanceDark) * (1 - lightLevel) + Math.log(resistanceLight) * lightLevel;
+    const resistance = Math.exp(lnR);
+    if (!Number.isFinite(resistance)) return 1e12;
+    return clamp(resistance, 1e-6, 1e15);
+}

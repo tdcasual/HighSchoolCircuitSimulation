@@ -163,7 +163,7 @@ export class InteractionManager {
      */
     bindToolboxEvents() {
         const toolItems = document.querySelectorAll('.tool-item');
-        const validTypes = ['Ground', 'PowerSource', 'ACVoltageSource', 'Resistor', 'Diode', 'LED', 'Thermistor', 'Rheostat', 'Bulb', 'Capacitor', 'Inductor', 'ParallelPlateCapacitor', 'Motor', 'Switch', 'SPDTSwitch', 'Fuse', 'Ammeter', 'Voltmeter', 'BlackBox', 'Wire'];
+        const validTypes = ['Ground', 'PowerSource', 'ACVoltageSource', 'Resistor', 'Diode', 'LED', 'Thermistor', 'Photoresistor', 'Rheostat', 'Bulb', 'Capacitor', 'Inductor', 'ParallelPlateCapacitor', 'Motor', 'Switch', 'SPDTSwitch', 'Fuse', 'Ammeter', 'Voltmeter', 'BlackBox', 'Wire'];
         
         // 标记是否正在从工具箱拖放
         this.isToolboxDrag = false;
@@ -2248,6 +2248,32 @@ export class InteractionManager {
                     unit: '°C'
                 }));
                 break;
+
+            case 'Photoresistor':
+                content.appendChild(createFormGroup('暗态电阻 Rdark (Ω)', {
+                    id: 'edit-resistance-dark',
+                    value: Number.isFinite(comp.resistanceDark) ? comp.resistanceDark : 100000,
+                    min: 0.001,
+                    step: 100,
+                    unit: 'Ω'
+                }));
+                content.appendChild(createFormGroup('亮态电阻 Rlight (Ω)', {
+                    id: 'edit-resistance-light',
+                    value: Number.isFinite(comp.resistanceLight) ? comp.resistanceLight : 500,
+                    min: 0.001,
+                    step: 1,
+                    unit: 'Ω'
+                }));
+                content.appendChild(createSliderFormGroup('光照强度', {
+                    id: 'edit-light-level',
+                    valueId: 'light-level-value',
+                    value: (Number.isFinite(comp.lightLevel) ? comp.lightLevel : 0.5) * 100,
+                    displayValue: `${Math.round((Number.isFinite(comp.lightLevel) ? comp.lightLevel : 0.5) * 100)}%`,
+                    min: 0,
+                    max: 100,
+                    step: 1
+                }));
+                break;
                 
             case 'Rheostat':
                 content.appendChild(createFormGroup('最小电阻 (Ω)', {
@@ -2528,6 +2554,14 @@ export class InteractionManager {
                 positionValue.textContent = `${positionSlider.value}%`;
             });
         }
+
+        const lightLevelSlider = document.getElementById('edit-light-level');
+        const lightLevelValue = document.getElementById('light-level-value');
+        if (lightLevelSlider && lightLevelValue) {
+            lightLevelSlider.addEventListener('input', () => {
+                lightLevelValue.textContent = `${Math.round(Number(lightLevelSlider.value) || 0)}%`;
+            });
+        }
         
         // 开关状态切换按钮
         const switchOpen = document.getElementById('switch-open');
@@ -2688,6 +2722,18 @@ export class InteractionManager {
                     comp.temperatureC = this.safeParseFloat(
                         document.getElementById('edit-temperature-c').value, 25, -100, 300
                     );
+                    break;
+
+                case 'Photoresistor':
+                    comp.resistanceDark = this.safeParseFloat(
+                        document.getElementById('edit-resistance-dark').value, 100000, 1e-9, 1e15
+                    );
+                    comp.resistanceLight = this.safeParseFloat(
+                        document.getElementById('edit-resistance-light').value, 500, 1e-9, 1e15
+                    );
+                    comp.lightLevel = this.safeParseFloat(
+                        document.getElementById('edit-light-level').value, 50, 0, 100
+                    ) / 100;
                     break;
                     
                 case 'Rheostat':

@@ -6,7 +6,7 @@ import {
     createFormGroup,
     clearElement
 } from '../../utils/SafeDOM.js';
-import { computeNtcThermistorResistance } from '../../utils/Physics.js';
+import { computeNtcThermistorResistance, computePhotoresistorResistance } from '../../utils/Physics.js';
 
 function resolveIntegrationMethodLabel(method) {
     const normalized = typeof method === 'string' ? method.toLowerCase() : 'auto';
@@ -147,6 +147,15 @@ export function updatePropertyPanel(comp) {
             content.appendChild(createPropertyRow('R25', `${Number.isFinite(comp.resistanceAt25) ? comp.resistanceAt25 : 1000} Ω`));
             content.appendChild(createPropertyRow('Beta', `${Number.isFinite(comp.beta) ? comp.beta : 3950} K`));
             content.appendChild(createPropertyRow('温度', `${Number.isFinite(comp.temperatureC) ? comp.temperatureC : 25} °C`));
+            content.appendChild(createPropertyRow('当前电阻', `${resistance.toFixed(2)} Ω`));
+            break;
+        }
+
+        case 'Photoresistor': {
+            const resistance = computePhotoresistorResistance(comp);
+            content.appendChild(createPropertyRow('暗态电阻', `${Number.isFinite(comp.resistanceDark) ? comp.resistanceDark : 100000} Ω`));
+            content.appendChild(createPropertyRow('亮态电阻', `${Number.isFinite(comp.resistanceLight) ? comp.resistanceLight : 500} Ω`));
+            content.appendChild(createPropertyRow('光照强度', `${Math.round((Number.isFinite(comp.lightLevel) ? comp.lightLevel : 0.5) * 100)}%`));
             content.appendChild(createPropertyRow('当前电阻', `${resistance.toFixed(2)} Ω`));
             break;
         }
