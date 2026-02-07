@@ -30,6 +30,7 @@ import * as ContextMenuController from './interaction/ContextMenuController.js';
 import * as ProbeActions from './interaction/ProbeActions.js';
 import * as ToolPlacementController from './interaction/ToolPlacementController.js';
 import * as PanelBindingsController from './interaction/PanelBindingsController.js';
+import * as InputResolver from './interaction/InputResolver.js';
 
 const INTEGRATION_METHOD_OPTIONS = Object.freeze([
     { value: 'auto', label: '自动（默认梯形法）' },
@@ -391,23 +392,15 @@ export class InteractionManager {
     }
 
     resolveTerminalTarget(target) {
-        if (!target || !target.classList) return null;
-        if (target.classList.contains('terminal')) return target;
-        if (target.classList.contains('terminal-hit-area')) return target;
-        return null;
+        return InputResolver.resolveTerminalTarget.call(this, target);
     }
 
     resolveProbeMarkerTarget(target) {
-        if (!target || typeof target.closest !== 'function') return null;
-        return target.closest('.wire-probe-marker');
+        return InputResolver.resolveProbeMarkerTarget.call(this, target);
     }
 
     resolvePointerType(event) {
-        const pointerType = event?.pointerType;
-        if (pointerType === 'mouse' || pointerType === 'touch' || pointerType === 'pen') {
-            return pointerType;
-        }
-        return this.lastPrimaryPointerType || 'mouse';
+        return InputResolver.resolvePointerType.call(this, event);
     }
 
     getAdaptiveSnapThreshold(options = {}) {
@@ -415,8 +408,7 @@ export class InteractionManager {
     }
 
     isWireEndpointTarget(target) {
-        if (!target || !target.classList) return false;
-        return target.classList.contains('wire-endpoint') || target.classList.contains('wire-endpoint-hit');
+        return InputResolver.isWireEndpointTarget.call(this, target);
     }
 
     /**
