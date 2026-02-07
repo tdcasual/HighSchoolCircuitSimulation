@@ -1,0 +1,67 @@
+import * as HistoryFacadeController from './HistoryFacadeController.js';
+import * as UIStateController from './UIStateController.js';
+import * as AlignmentGuideController from './AlignmentGuideController.js';
+
+export function installInteractionTailHistoryAlignmentDelegates(InteractionManagerClass) {
+    Object.assign(InteractionManagerClass.prototype, {
+        captureHistoryState() {
+            return HistoryFacadeController.captureHistoryState.call(this);
+        },
+
+        historyKey(state) {
+            return HistoryFacadeController.historyKey.call(this, state);
+        },
+
+        getSelectionSnapshot() {
+            return HistoryFacadeController.getSelectionSnapshot.call(this);
+        },
+
+        restoreSelectionSnapshot(snapshot) {
+            HistoryFacadeController.restoreSelectionSnapshot.call(this, snapshot);
+        },
+
+        pushHistoryEntry(entry) {
+            HistoryFacadeController.pushHistoryEntry.call(this, entry);
+        },
+
+        runWithHistory(label, action) {
+            return HistoryFacadeController.runWithHistory.call(this, label, action);
+        },
+
+        beginHistoryTransaction(label) {
+            return HistoryFacadeController.beginHistoryTransaction.call(this, label);
+        },
+
+        commitHistoryTransaction() {
+            return HistoryFacadeController.commitHistoryTransaction.call(this);
+        },
+
+        applyHistoryState(state, selection) {
+            return HistoryFacadeController.applyHistoryState.call(this, state, selection);
+        },
+
+        undo() {
+            return HistoryFacadeController.undo.call(this);
+        },
+
+        redo() {
+            return HistoryFacadeController.redo.call(this);
+        },
+
+        updateStatus(text) {
+            return UIStateController.updateStatus.call(this, text);
+        },
+
+        detectAlignment(draggedId, x, y) {
+            return AlignmentGuideController.detectAlignment.call(this, draggedId, x, y);
+        },
+
+        showAlignmentGuides(alignment) {
+            return AlignmentGuideController.showAlignmentGuides.call(this, alignment);
+        },
+
+        hideAlignmentGuides() {
+            return AlignmentGuideController.hideAlignmentGuides.call(this);
+        }
+    });
+}
