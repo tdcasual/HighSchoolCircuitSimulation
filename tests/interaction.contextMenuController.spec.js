@@ -134,3 +134,42 @@ describe('ContextMenuController.showWireContextMenu', () => {
         expect(labels).toContain('删除导线 (Del)');
     });
 });
+
+describe('ContextMenuController.showProbeContextMenu', () => {
+    it('renders probe menu items and optional select-wire action', () => {
+        const appended = [];
+        const body = { appendChild: vi.fn((el) => appended.push(el)) };
+        vi.stubGlobal('document', {
+            getElementById: vi.fn(() => null),
+            createElement: vi.fn(() => createFakeElement()),
+            body,
+            addEventListener: vi.fn(),
+            removeEventListener: vi.fn()
+        });
+        vi.stubGlobal('setTimeout', vi.fn((fn) => fn()));
+
+        const context = {
+            hideContextMenu: vi.fn(),
+            hideContextMenuHandler: vi.fn(),
+            selectedWire: 'W0',
+            circuit: {
+                getObservationProbe: vi.fn(() => ({ id: 'P1', wireId: 'W1' }))
+            },
+            renameObservationProbe: vi.fn(),
+            addProbePlot: vi.fn(),
+            deleteObservationProbe: vi.fn(),
+            selectWire: vi.fn()
+        };
+        const event = { clientX: 10, clientY: 20 };
+
+        ContextMenuController.showProbeContextMenu.call(context, event, 'P1', 'W1');
+
+        expect(context.hideContextMenu).toHaveBeenCalledTimes(1);
+        expect(appended).toHaveLength(1);
+        const labels = appended[0].children.map((item) => item.textContent);
+        expect(labels).toContain('选中所属导线');
+        expect(labels).toContain('重命名探针');
+        expect(labels).toContain('加入观察图像');
+        expect(labels).toContain('删除探针');
+    });
+});

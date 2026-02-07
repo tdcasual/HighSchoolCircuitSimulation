@@ -161,3 +161,40 @@ export function hideContextMenu() {
         document.removeEventListener('click', this.hideContextMenuHandler);
     }
 }
+
+export function showProbeContextMenu(e, probeId, wireId) {
+    this.hideContextMenu();
+    const probe = this.circuit.getObservationProbe(probeId);
+    if (!probe) return;
+
+    const menu = document.createElement('div');
+    menu.id = 'context-menu';
+    menu.className = 'context-menu';
+    menu.style.left = e.clientX + 'px';
+    menu.style.top = e.clientY + 'px';
+
+    const menuItems = [
+        { label: '重命名探针', action: () => this.renameObservationProbe(probeId) },
+        { label: '加入观察图像', action: () => this.addProbePlot(probeId) },
+        { label: '删除探针', action: () => this.deleteObservationProbe(probeId), className: 'danger' }
+    ];
+    if (wireId && wireId !== this.selectedWire) {
+        menuItems.unshift({ label: '选中所属导线', action: () => this.selectWire(wireId) });
+    }
+
+    menuItems.forEach((item) => {
+        const menuItem = document.createElement('div');
+        menuItem.className = 'context-menu-item' + (item.className ? ` ${item.className}` : '');
+        menuItem.textContent = item.label;
+        menuItem.addEventListener('click', () => {
+            item.action();
+            this.hideContextMenu();
+        });
+        menu.appendChild(menuItem);
+    });
+
+    document.body.appendChild(menu);
+    setTimeout(() => {
+        document.addEventListener('click', this.hideContextMenuHandler);
+    }, 0);
+}
