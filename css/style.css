@@ -1411,6 +1411,10 @@ body {
     stroke: var(--primary-color);
 }
 
+.component.spdtswitch:hover .switch-blade {
+    stroke: var(--primary-color);
+}
+
 /* 黑箱 */
 .component.blackbox .blackbox-body.transparent {
     fill: rgba(33, 150, 243, 0.06);
@@ -1990,6 +1994,11 @@ body {
     flex-direction: column;
 }
 
+#tab-explain {
+    min-height: 0;
+    overflow: hidden;
+}
+
 /* 图片上传区域 - 简约风 */
 #image-upload-zone {
     flex: 1;
@@ -2166,17 +2175,22 @@ body {
 
 /* 聊天区域 - ChatGPT 风格 */
 #chat-messages {
-    flex: 1;
+    flex: 1 1 auto;
     overflow-y: auto;
     padding: 12px 4px;
     margin-bottom: 10px;
-    max-height: 190px;
+    min-height: 120px;
+    max-height: none;
 }
 
 #followup-actions {
-    display: flex;
+    display: none;
     gap: 8px;
     margin: 6px 0 10px;
+}
+
+#followup-actions.visible {
+    display: flex;
 }
 
 #chat-controls {
@@ -2334,10 +2348,14 @@ body {
 }
 
 #quick-questions {
-    display: flex;
+    display: none;
     gap: 8px;
     margin-bottom: 12px;
     flex-wrap: wrap;
+}
+
+#quick-questions.visible {
+    display: flex;
 }
 
 .quick-question-btn {

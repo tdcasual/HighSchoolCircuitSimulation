@@ -47,6 +47,7 @@ export function updatePropertyPanel(comp) {
     const displayKeys = (() => {
         switch (comp.type) {
             case 'Switch':
+            case 'SPDTSwitch':
             case 'BlackBox':
             case 'Ground':
                 return [];
@@ -259,6 +260,12 @@ export function updatePropertyPanel(comp) {
 
         case 'Switch':
             content.appendChild(createPropertyRow('状态', comp.closed ? '闭合' : '断开'));
+            break;
+
+        case 'SPDTSwitch':
+            content.appendChild(createPropertyRow('拨杆位置', comp.position === 'b' ? '下掷 (B)' : '上掷 (A)'));
+            content.appendChild(createPropertyRow('导通电阻', `${Number.isFinite(comp.onResistance) ? comp.onResistance : 1e-9} Ω`));
+            content.appendChild(createPropertyRow('断开支路电阻', `${Number.isFinite(comp.offResistance) ? comp.offResistance : 1e12} Ω`));
             break;
 
         case 'Ammeter':

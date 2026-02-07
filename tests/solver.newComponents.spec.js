@@ -145,4 +145,38 @@ describe('New component models (Ground / AC source / Inductor)', () => {
 
         expect(inductor.currentValue).toBeCloseTo(expectedFirstStepCurrent, 6);
     });
+
+    it('routes SPDT switch current through the selected throw', () => {
+        const circuit = createTestCircuit();
+        const source = addComponent(circuit, 'PowerSource', 'V1', {
+            voltage: 10,
+            internalResistance: 0
+        });
+        const spdt = addComponent(circuit, 'SPDTSwitch', 'SW1', {
+            position: 'a',
+            onResistance: 1e-9,
+            offResistance: 1e12
+        });
+        const topResistor = addComponent(circuit, 'Resistor', 'Rtop', { resistance: 10 });
+        const bottomResistor = addComponent(circuit, 'Resistor', 'Rbottom', { resistance: 20 });
+
+        connectWire(circuit, 'W1', source, 0, spdt, 0);
+        connectWire(circuit, 'W2', spdt, 1, topResistor, 0);
+        connectWire(circuit, 'W3', topResistor, 1, source, 1);
+        connectWire(circuit, 'W4', spdt, 2, bottomResistor, 0);
+        connectWire(circuit, 'W5', bottomResistor, 1, source, 1);
+
+        let results = solveCircuit(circuit, 0);
+        expect(results.valid).toBe(true);
+        expect(results.currents.get('Rtop')).toBeCloseTo(1, 6);
+        expect(Math.abs(results.currents.get('Rbottom') || 0)).toBeLessThan(1e-6);
+        expect(results.currents.get('SW1')).toBeCloseTo(1, 6);
+
+        spdt.position = 'b';
+        results = solveCircuit(circuit, 0);
+        expect(results.valid).toBe(true);
+        expect(Math.abs(results.currents.get('Rtop') || 0)).toBeLessThan(1e-6);
+        expect(results.currents.get('Rbottom')).toBeCloseTo(0.5, 6);
+        expect(results.currents.get('SW1')).toBeCloseTo(0.5, 6);
+    });
 });

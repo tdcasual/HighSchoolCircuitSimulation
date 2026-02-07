@@ -54,7 +54,9 @@ export class MNASolver {
             }
             if (comp.nodes && comp.nodes.length >= 2) {
                 const n1 = comp.nodes[0];
-                const n2 = comp.nodes[1];
+                const n2 = comp.type === 'SPDTSwitch'
+                    ? comp.nodes[comp.position === 'b' ? 2 : 1]
+                    : comp.nodes[1];
                 // 如果两端节点相同且有效，说明被短路了
                 comp._isShorted = (n1 === n2 && n1 >= 0);
                 
@@ -121,9 +123,11 @@ export class MNASolver {
             if ((comp.type === 'Capacitor' || comp.type === 'ParallelPlateCapacitor') && !Number.isFinite(comp.prevVoltage)) {
                 comp.prevVoltage = 0;
             }
-            if (comp.type === 'Switch') {
+            if (comp.type === 'Switch' || comp.type === 'SPDTSwitch') {
                 const n1 = comp.nodes?.[0];
-                const n2 = comp.nodes?.[1];
+                const n2 = comp.type === 'SPDTSwitch'
+                    ? comp.nodes?.[comp.position === 'b' ? 2 : 1]
+                    : comp.nodes?.[1];
                 if (isValidNode(n1) && isValidNode(n2)) {
                     this.hasConnectedSwitch = true;
                 }
@@ -205,6 +209,13 @@ export class MNASolver {
                     break;
                 case 'Switch':
                     keyParts.push(`closed:${comp.closed ? 1 : 0}`);
+                    break;
+                case 'SPDTSwitch':
+                    keyParts.push(
+                        `pos:${comp.position === 'b' ? 'b' : 'a'}`,
+                        `ron:${this.formatMatrixKeyNumber(comp.onResistance ?? 1e-9)}`,
+                        `roff:${this.formatMatrixKeyNumber(comp.offResistance ?? 1e12)}`
+                    );
                     break;
                 case 'Ammeter':
                     keyParts.push(`R:${this.formatMatrixKeyNumber(comp.resistance ?? 0)}`);
@@ -405,7 +416,7 @@ export class MNASolver {
         const isValidNode = (nodeIdx) => nodeIdx !== undefined && nodeIdx >= 0;
         
         // 检查节点是否有效（滑动变阻器在后续分支中单独判断）
-        if (comp.type !== 'Rheostat' && (!isValidNode(n1) || !isValidNode(n2))) {
+        if (comp.type !== 'Rheostat' && comp.type !== 'SPDTSwitch' && (!isValidNode(n1) || !isValidNode(n2))) {
             return;
         }
         
@@ -628,6 +639,26 @@ export class MNASolver {
                     this.stampResistor(A, i1, i2, 1e12);
                 }
                 break;
+
+            case 'SPDTSwitch': {
+                const nCommon = comp.nodes?.[0];
+                const nA = comp.nodes?.[1];
+                const nB = comp.nodes?.[2];
+                const iCommon = isValidNode(nCommon) ? nCommon - 1 : null;
+                const iA = isValidNode(nA) ? nA - 1 : null;
+                const iB = isValidNode(nB) ? nB - 1 : null;
+                const routeToB = comp.position === 'b';
+                const onR = Math.max(1e-9, Number(comp.onResistance) || 1e-9);
+                const offR = Math.max(onR, Number(comp.offResistance) || 1e12);
+
+                if (iCommon !== null && iA !== null) {
+                    this.stampResistor(A, iCommon, iA, routeToB ? offR : onR);
+                }
+                if (iCommon !== null && iB !== null) {
+                    this.stampResistor(A, iCommon, iB, routeToB ? onR : offR);
+                }
+                break;
+            }
                 
             case 'Ammeter':
                 // 电流表模型
@@ -737,8 +768,14 @@ export class MNASolver {
         // They are skipped during stamping, so their current must be forced to 0 here as well.
         // Otherwise we can leak "phantom" currents into wire animation logic via results.currents.
         const isValidNode = (nodeIdx) => nodeIdx !== undefined && nodeIdx !== null && nodeIdx >= 0;
-        if (comp.type !== 'Rheostat') {
+        if (comp.type !== 'Rheostat' && comp.type !== 'SPDTSwitch') {
             if (!comp.nodes || !isValidNode(comp.nodes[0]) || !isValidNode(comp.nodes[1])) {
+                return 0;
+            }
+        } else if (comp.type === 'SPDTSwitch') {
+            const routeToB = comp.position === 'b';
+            const targetIdx = routeToB ? 2 : 1;
+            if (!comp.nodes || !isValidNode(comp.nodes[0]) || !isValidNode(comp.nodes[targetIdx])) {
                 return 0;
             }
         } else {
@@ -906,6 +943,17 @@ export class MNASolver {
                     return dV / 1e-9;
                 }
                 return 0; // 断开时无电流
+
+            case 'SPDTSwitch': {
+                const routeToB = comp.position === 'b';
+                const targetIdx = routeToB ? 2 : 1;
+                const commonNode = comp.nodes?.[0];
+                const targetNode = comp.nodes?.[targetIdx];
+                const vCommon = commonNode !== undefined && commonNode >= 0 ? (voltages[commonNode] || 0) : 0;
+                const vTarget = targetNode !== undefined && targetNode >= 0 ? (voltages[targetNode] || 0) : 0;
+                const onR = Math.max(1e-9, Number(comp.onResistance) || 1e-9);
+                return (vCommon - vTarget) / onR;
+            }
                 
             case 'Ammeter':
                 // 电流表电流

@@ -22,6 +22,7 @@ const LABEL_PREFIX_BY_TYPE = Object.freeze({
     Inductor: 'L',
     Motor: 'M',
     Switch: 'S',
+    SPDTSwitch: 'S',
     Ammeter: 'A',
     Voltmeter: 'V',
     BlackBox: 'B'

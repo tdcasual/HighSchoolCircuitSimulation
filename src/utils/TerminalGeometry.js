@@ -55,6 +55,22 @@ export function getTerminalLocalPosition(comp, terminalIndex) {
                 relY = 0;
             }
             break;
+        case 'SPDTSwitch':
+            // 0=common(left), 1=throw-a(upper right), 2=throw-b(lower right)
+            if (terminalIndex === 0) {
+                relX = -30;
+                relY = 0;
+            } else if (terminalIndex === 1) {
+                relX = 30;
+                relY = -10;
+            } else if (terminalIndex === 2) {
+                relX = 30;
+                relY = 10;
+            } else {
+                relX = 0;
+                relY = 0;
+            }
+            break;
         case 'BlackBox': {
             const w = Math.max(80, comp.boxWidth || 180);
             relX = terminalIndex === 0 ? -w / 2 : w / 2;

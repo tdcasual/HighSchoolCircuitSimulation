@@ -25,6 +25,7 @@ export const QuantityIds = /** @type {const} */ ({
     MotorSpeedRpm: 'rpm',
     MotorBackEmf: 'backEmf',
     SwitchClosed: 'closed',
+    SwitchRoute: 'route',
     BulbBrightness: 'brightness',
     SourceEmf: 'emf',
     SourceInternalResistance: 'rInternal'
@@ -149,6 +150,9 @@ export function getQuantitiesForSource(sourceId, circuit) {
         case 'Switch':
             list.push({ id: QuantityIds.SwitchClosed, label: '开关(闭合=1)', unit: '' });
             break;
+        case 'SPDTSwitch':
+            list.push({ id: QuantityIds.SwitchRoute, label: '拨杆(上掷=0,下掷=1)', unit: '' });
+            break;
         default:
             break;
     }
@@ -255,6 +259,8 @@ export function evaluateSourceQuantity(circuit, sourceId, quantityId) {
             return Number.isFinite(comp.backEmf) ? comp.backEmf : 0;
         case QuantityIds.SwitchClosed:
             return comp.closed ? 1 : 0;
+        case QuantityIds.SwitchRoute:
+            return comp.position === 'b' ? 1 : 0;
         case QuantityIds.BulbBrightness:
             return Number.isFinite(comp.brightness) ? comp.brightness : 0;
         case QuantityIds.SourceEmf:

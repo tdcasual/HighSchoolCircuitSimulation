@@ -163,7 +163,7 @@ export class InteractionManager {
      */
     bindToolboxEvents() {
         const toolItems = document.querySelectorAll('.tool-item');
-        const validTypes = ['Ground', 'PowerSource', 'ACVoltageSource', 'Resistor', 'Rheostat', 'Bulb', 'Capacitor', 'Inductor', 'ParallelPlateCapacitor', 'Motor', 'Switch', 'Ammeter', 'Voltmeter', 'BlackBox', 'Wire'];
+        const validTypes = ['Ground', 'PowerSource', 'ACVoltageSource', 'Resistor', 'Rheostat', 'Bulb', 'Capacitor', 'Inductor', 'ParallelPlateCapacitor', 'Motor', 'Switch', 'SPDTSwitch', 'Ammeter', 'Voltmeter', 'BlackBox', 'Wire'];
         
         // 标记是否正在从工具箱拖放
         this.isToolboxDrag = false;
@@ -1571,13 +1571,21 @@ export class InteractionManager {
      */
     toggleSwitch(id) {
         const comp = this.circuit.getComponent(id);
-        if (comp && comp.type === 'Switch') {
+        if (comp && (comp.type === 'Switch' || comp.type === 'SPDTSwitch')) {
             this.runWithHistory('切换开关', () => {
-                comp.closed = !comp.closed;
+                if (comp.type === 'Switch') {
+                    comp.closed = !comp.closed;
+                } else {
+                    comp.position = comp.position === 'b' ? 'a' : 'b';
+                }
                 this.renderer.refreshComponent(comp);
                 this.renderer.setSelected(id, true);
                 this.selectComponent(id);
-                this.updateStatus(`开关已${comp.closed ? '闭合' : '断开'}`);
+                if (comp.type === 'Switch') {
+                    this.updateStatus(`开关已${comp.closed ? '闭合' : '断开'}`);
+                } else {
+                    this.updateStatus(`单刀双掷开关已切换到 ${comp.position === 'b' ? '下掷' : '上掷'}`);
+                }
             });
         }
     }
@@ -2295,6 +2303,31 @@ export class InteractionManager {
             case 'Switch':
                 content.appendChild(createSwitchToggleGroup(comp.closed));
                 break;
+
+            case 'SPDTSwitch':
+                content.appendChild(createSelectFormGroup('拨杆位置', {
+                    id: 'edit-spdt-position',
+                    value: comp.position === 'b' ? 'b' : 'a',
+                    options: [
+                        { value: 'a', label: '上掷 (A)' },
+                        { value: 'b', label: '下掷 (B)' }
+                    ]
+                }));
+                content.appendChild(createFormGroup('导通电阻 (Ω)', {
+                    id: 'edit-on-resistance',
+                    value: Number.isFinite(comp.onResistance) ? comp.onResistance : 1e-9,
+                    min: 1e-9,
+                    step: 0.001,
+                    unit: 'Ω'
+                }));
+                content.appendChild(createFormGroup('断开支路电阻 (Ω)', {
+                    id: 'edit-off-resistance',
+                    value: Number.isFinite(comp.offResistance) ? comp.offResistance : 1e12,
+                    min: 1,
+                    step: 1000,
+                    unit: 'Ω'
+                }, '数值越大越接近理想断开'));
+                break;
                 
             case 'Ammeter':
                 content.appendChild(createFormGroup('内阻 (Ω)', {
@@ -2580,6 +2613,16 @@ export class InteractionManager {
                     // 检查哪个按钮被选中
                     const switchClose = document.getElementById('switch-close');
                     comp.closed = switchClose && switchClose.classList.contains('active');
+                    break;
+
+                case 'SPDTSwitch':
+                    comp.position = document.getElementById('edit-spdt-position')?.value === 'b' ? 'b' : 'a';
+                    comp.onResistance = this.safeParseFloat(
+                        document.getElementById('edit-on-resistance').value, 1e-9, 1e-9, 1e9
+                    );
+                    comp.offResistance = this.safeParseFloat(
+                        document.getElementById('edit-off-resistance').value, 1e12, 1, 1e15
+                    );
                     break;
                     
                 case 'Ammeter':

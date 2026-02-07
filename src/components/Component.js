@@ -109,6 +109,11 @@ export const ComponentDefaults = {
     Switch: {
         closed: false          // 开关状态：false=断开，true=闭合
     },
+    SPDTSwitch: {
+        position: 'a',         // 拨到 a(上掷) / b(下掷)
+        onResistance: 1e-9,    // 导通电阻
+        offResistance: 1e12    // 断开支路电阻
+    },
     Ammeter: {
         resistance: 0,         // 内阻 (Ω)，0表示理想电流表
         range: 3,              // 量程 (A)
@@ -142,6 +147,7 @@ export const ComponentNames = {
     ParallelPlateCapacitor: '平行板电容',
     Motor: '电动机',
     Switch: '开关',
+    SPDTSwitch: '单刀双掷开关',
     Ammeter: '电流表',
     Voltmeter: '电压表',
     BlackBox: '黑箱'
@@ -149,7 +155,8 @@ export const ComponentNames = {
 
 const COMPONENT_TERMINAL_COUNT = Object.freeze({
     Ground: 1,
-    Rheostat: 3
+    Rheostat: 3,
+    SPDTSwitch: 3
 });
 
 export function getComponentTerminalCount(type) {
@@ -221,7 +228,7 @@ export function createComponent(type, x, y, existingId = null) {
         defaultDisplay.voltage = true;
     }
     // 开关默认不显示数值（避免干扰）
-    if (type === 'Switch' || type === 'Ground') {
+    if (type === 'Switch' || type === 'SPDTSwitch' || type === 'Ground') {
         defaultDisplay.current = false;
         defaultDisplay.voltage = false;
         defaultDisplay.power = false;
@@ -318,6 +325,9 @@ export const SVGRenderer = {
                 break;
             case 'Switch':
                 this.renderSwitch(g, comp);
+                break;
+            case 'SPDTSwitch':
+                this.renderSPDTSwitch(g, comp);
                 break;
             case 'Ammeter':
                 this.renderAmmeter(g, comp);
@@ -773,6 +783,73 @@ export const SVGRenderer = {
     },
 
     /**
+     * 渲染单刀双掷开关（SPDT）
+     * 端子: 0=公共端, 1=上掷(a), 2=下掷(b)
+     */
+    renderSPDTSwitch(g, comp) {
+        const route = comp.position === 'b' ? 'b' : 'a';
+
+        // 三个端子的引线
+        this.addLine(g, -30, 0, -12, 0);
+        this.addLine(g, 12, -10, 30, -10);
+        this.addLine(g, 12, 10, 30, 10);
+
+        // 触点
+        const commonDot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        commonDot.setAttribute('cx', -10);
+        commonDot.setAttribute('cy', 0);
+        commonDot.setAttribute('r', 3);
+        commonDot.setAttribute('fill', '#333');
+        g.appendChild(commonDot);
+
+        const topDot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        topDot.setAttribute('cx', 10);
+        topDot.setAttribute('cy', -10);
+        topDot.setAttribute('r', 3);
+        topDot.setAttribute('fill', '#333');
+        g.appendChild(topDot);
+
+        const bottomDot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        bottomDot.setAttribute('cx', 10);
+        bottomDot.setAttribute('cy', 10);
+        bottomDot.setAttribute('r', 3);
+        bottomDot.setAttribute('fill', '#333');
+        g.appendChild(bottomDot);
+
+        // 透明触摸区域（沿用 switch-touch，便于复用交互逻辑）
+        const touchArea = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        touchArea.setAttribute('x', -12);
+        touchArea.setAttribute('y', -18);
+        touchArea.setAttribute('width', 26);
+        touchArea.setAttribute('height', 36);
+        touchArea.setAttribute('fill', 'transparent');
+        touchArea.setAttribute('class', 'switch-touch');
+        touchArea.style.cursor = 'pointer';
+        g.appendChild(touchArea);
+
+        // 拨片（沿用 switch-blade 样式与点击识别）
+        const blade = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        blade.setAttribute('x1', -10);
+        blade.setAttribute('y1', 0);
+        blade.setAttribute('x2', 10);
+        blade.setAttribute('y2', route === 'a' ? -10 : 10);
+        blade.setAttribute('stroke', '#333');
+        blade.setAttribute('stroke-width', 2.5);
+        blade.setAttribute('stroke-linecap', 'round');
+        blade.setAttribute('class', 'switch-blade');
+        blade.style.cursor = 'pointer';
+        g.appendChild(blade);
+
+        // 端子（支持延长）
+        this.addTerminal(g, -30, 0, 0, comp);
+        this.addTerminal(g, 30, -10, 1, comp);
+        this.addTerminal(g, 30, 10, 2, comp);
+
+        const labelText = comp.label || (route === 'a' ? '上掷' : '下掷');
+        this.addText(g, 0, 26, labelText, 9, 'label');
+    },
+
+    /**
      * 渲染电流表
      */
     renderAmmeter(g, comp) {
@@ -1143,7 +1220,7 @@ export const SVGRenderer = {
         }
         
         // 开关不需要显示电压电流
-        if (comp.type === 'Switch' || comp.type === 'Ground') {
+        if (comp.type === 'Switch' || comp.type === 'SPDTSwitch' || comp.type === 'Ground') {
             this.setDisplayTextAndStyle(currentDisplay, '');
             this.setDisplayTextAndStyle(voltageDisplay, '');
             this.setDisplayTextAndStyle(powerDisplay, '');

@@ -852,10 +852,17 @@ export class Circuit {
             return hasValidNode(comp.nodes[0]) && hasTerminalWire(0);
         }
 
-        if (comp.type !== 'Rheostat') {
+        if (comp.type !== 'Rheostat' && comp.type !== 'SPDTSwitch') {
             if (terminalCount < 2) return false;
             return hasValidNode(comp.nodes[0]) && hasValidNode(comp.nodes[1])
                 && hasTerminalWire(0) && hasTerminalWire(1);
+        }
+
+        if (comp.type === 'SPDTSwitch') {
+            const routeToB = comp.position === 'b';
+            const targetTerminal = routeToB ? 2 : 1;
+            return hasValidNode(comp.nodes[0]) && hasValidNode(comp.nodes[targetTerminal])
+                && hasTerminalWire(0) && hasTerminalWire(targetTerminal);
         }
 
         // 滑动变阻器需要至少两个不同节点接入，且端子必须真正接线
@@ -1118,6 +1125,14 @@ export class Circuit {
                     }
                     comp.voltageValue = voltage;
                     comp.powerValue = Math.abs(current * voltage);
+                } else if (comp.type === 'SPDTSwitch') {
+                    const routeToB = comp.position === 'b';
+                    const targetIdx = routeToB ? 2 : 1;
+                    const vCommon = this.lastResults.voltages[comp.nodes[0]] || 0;
+                    const vTarget = this.lastResults.voltages[comp.nodes[targetIdx]] || 0;
+                    const voltage = Math.abs(vCommon - vTarget);
+                    comp.voltageValue = voltage;
+                    comp.powerValue = Math.abs(current * voltage);
                 } else {
                     comp.voltageValue = Math.abs(v1 - v2);
                     comp.powerValue = Math.abs(current * (v1 - v2));
@@ -1180,6 +1195,10 @@ export class Circuit {
         // 三端器件单独处理
         if (comp.type === 'Rheostat') {
             const flows = this.getRheostatTerminalFlows(comp, results.voltages);
+            return flows[terminalIndex] || 0;
+        }
+        if (comp.type === 'SPDTSwitch') {
+            const flows = this.getSpdtTerminalFlows(comp, results.voltages);
             return flows[terminalIndex] || 0;
         }
         
@@ -1266,6 +1285,32 @@ export class Circuit {
                 break;
         }
 
+        return flows;
+    }
+
+    /**
+     * 计算单刀双掷开关各端子的等效电流流向
+     * 端子: 0=公共端, 1=上掷(a), 2=下掷(b)
+     * @param {Object} comp
+     * @param {number[]} voltages
+     * @returns {number[]}
+     */
+    getSpdtTerminalFlows(comp, voltages) {
+        const flows = [0, 0, 0];
+        const routeToB = comp.position === 'b';
+        const targetIdx = routeToB ? 2 : 1;
+        const commonNode = comp.nodes?.[0];
+        const targetNode = comp.nodes?.[targetIdx];
+        if (commonNode == null || commonNode < 0 || targetNode == null || targetNode < 0) {
+            return flows;
+        }
+
+        const vCommon = voltages[commonNode] || 0;
+        const vTarget = voltages[targetNode] || 0;
+        const R = Math.max(1e-9, Number(comp.onResistance) || 1e-9);
+        const I = (vCommon - vTarget) / R;
+        flows[0] = -I;
+        flows[targetIdx] = I;
         return flows;
     }
 
@@ -1795,6 +1840,12 @@ export class Circuit {
                 };
             case 'Switch':
                 return { closed: comp.closed };
+            case 'SPDTSwitch':
+                return {
+                    position: comp.position === 'b' ? 'b' : 'a',
+                    onResistance: comp.onResistance,
+                    offResistance: comp.offResistance
+                };
             case 'Ammeter':
                 return {
                     resistance: comp.resistance,
