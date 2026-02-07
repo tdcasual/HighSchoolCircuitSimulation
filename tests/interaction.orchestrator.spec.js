@@ -108,3 +108,75 @@ describe('InteractionOrchestrator.onMouseDown', () => {
         expect(context.startWireDrag).not.toHaveBeenCalled();
     });
 });
+
+describe('InteractionOrchestrator.onMouseUp', () => {
+    it('ends panning and resets cursor', () => {
+        const context = {
+            isPanning: true,
+            svg: { style: { cursor: 'grabbing' } }
+        };
+        const event = { target: makeTarget() };
+
+        InteractionOrchestrator.onMouseUp.call(context, event);
+
+        expect(context.isPanning).toBe(false);
+        expect(context.svg.style.cursor).toBe('');
+    });
+
+    it('finalizes wire endpoint drag transaction', () => {
+        const context = {
+            isPanning: false,
+            isDraggingWireEndpoint: true,
+            wireEndpointDrag: {
+                wireId: 'W1',
+                affected: [{ wireId: 'W1', end: 'a' }]
+            },
+            renderer: { clearTerminalHighlight: vi.fn() },
+            selectedWire: 'W1',
+            compactWiresAndRefresh: vi.fn(),
+            circuit: { rebuildNodes: vi.fn() },
+            commitHistoryTransaction: vi.fn()
+        };
+        const event = { target: makeTarget() };
+
+        InteractionOrchestrator.onMouseUp.call(context, event);
+
+        expect(context.isDraggingWireEndpoint).toBe(false);
+        expect(context.wireEndpointDrag).toBe(null);
+        expect(context.renderer.clearTerminalHighlight).toHaveBeenCalledTimes(1);
+        expect(context.compactWiresAndRefresh).toHaveBeenCalledWith({
+            preferredWireId: 'W1',
+            scopeWireIds: ['W1']
+        });
+        expect(context.circuit.rebuildNodes).toHaveBeenCalledTimes(1);
+        expect(context.commitHistoryTransaction).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('InteractionOrchestrator.onMouseLeave', () => {
+    it('cancels dragging state and commits history', () => {
+        const context = {
+            isPanning: false,
+            isDraggingWireEndpoint: false,
+            isDraggingWire: false,
+            isDragging: true,
+            dragTarget: 'R1',
+            dragGroup: { boxId: 'B1' },
+            isDraggingComponent: true,
+            hideAlignmentGuides: vi.fn(),
+            circuit: { rebuildNodes: vi.fn() },
+            commitHistoryTransaction: vi.fn()
+        };
+        const event = { target: makeTarget() };
+
+        InteractionOrchestrator.onMouseLeave.call(context, event);
+
+        expect(context.isDragging).toBe(false);
+        expect(context.dragTarget).toBe(null);
+        expect(context.dragGroup).toBe(null);
+        expect(context.isDraggingComponent).toBe(false);
+        expect(context.hideAlignmentGuides).toHaveBeenCalledTimes(1);
+        expect(context.circuit.rebuildNodes).toHaveBeenCalledTimes(1);
+        expect(context.commitHistoryTransaction).toHaveBeenCalledTimes(1);
+    });
+});

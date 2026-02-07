@@ -850,145 +850,14 @@ export class InteractionManager {
      * 鼠标释放事件
      */
     onMouseUp(e) {
-        // 结束画布平移
-        if (this.isPanning) {
-            this.isPanning = false;
-            this.svg.style.cursor = '';
-            return;
-        }
-
-        // 结束导线端点拖动
-        if (this.isDraggingWireEndpoint) {
-            const drag = this.wireEndpointDrag;
-            this.isDraggingWireEndpoint = false;
-            this.wireEndpointDrag = null;
-            this.renderer.clearTerminalHighlight();
-
-            const affectedIds = Array.isArray(drag?.affected)
-                ? drag.affected.map((item) => item?.wireId).filter(Boolean)
-                : [];
-            this.compactWiresAndRefresh({
-                preferredWireId: drag?.wireId || this.selectedWire,
-                scopeWireIds: affectedIds
-            });
-            this.circuit.rebuildNodes();
-            this.commitHistoryTransaction();
-            return;
-        }
-
-        // 结束导线整体拖动
-        if (this.isDraggingWire) {
-            const drag = this.wireDrag;
-            this.isDraggingWire = false;
-            this.wireDrag = null;
-            this.compactWiresAndRefresh({
-                preferredWireId: drag?.wireId || this.selectedWire,
-                scopeWireIds: drag?.wireId ? [drag.wireId] : null
-            });
-            this.circuit.rebuildNodes();
-            this.commitHistoryTransaction();
-            return;
-        }
-        
-        // 结束拖动
-        if (this.isDragging) {
-            this.isDragging = false;
-            this.dragTarget = null;
-            this.isDraggingComponent = false; // 清除拖动标志
-            this.dragGroup = null;
-            this.hideAlignmentGuides(); // 隐藏对齐辅助线
-            this.circuit.rebuildNodes();
-            this.commitHistoryTransaction();
-        }
-        
-        // 结束连线
-        if (this.isWiring) {
-            if (this.ignoreNextWireMouseUp) {
-                this.ignoreNextWireMouseUp = false;
-                return;
-            }
-            const target = e.target;
-            const terminalTarget = this.resolveTerminalTarget(target);
-            if (terminalTarget) {
-                const componentG = target.closest('.component');
-                if (componentG) {
-                    const componentId = componentG.dataset.id;
-                    const terminalIndex = parseInt(terminalTarget.dataset.terminal);
-                    const pos = this.renderer.getTerminalPosition(componentId, terminalIndex);
-                    if (pos) {
-                        this.finishWiringToPoint(pos, { pointerType: this.resolvePointerType(e) });
-                    } else {
-                        this.cancelWiring();
-                    }
-                }
-                return;
-            } else if (this.isWireEndpointTarget(target)) {
-                const wireGroup = target.closest('.wire-group');
-                if (wireGroup) {
-                    const wireId = wireGroup.dataset.id;
-                    const end = target.dataset.end;
-                    const wire = this.circuit.getWire(wireId);
-                    const pos = wire && (end === 'a' || end === 'b') ? wire[end] : null;
-                    if (pos) {
-                        this.finishWiringToPoint(pos, { pointerType: this.resolvePointerType(e) });
-                        return;
-                    }
-                }
-            } else {
-                const canvasCoords = this.screenToCanvas(e.clientX, e.clientY);
-                const snapped = this.snapPoint(canvasCoords.x, canvasCoords.y, {
-                    allowWireSegmentSnap: false,
-                    pointerType: this.resolvePointerType(e)
-                });
-                this.finishWiringToPoint(snapped, { pointerType: this.resolvePointerType(e) });
-                return;
-            }
-        }
+        return InteractionOrchestrator.onMouseUp.call(this, e);
     }
 
     /**
      * 鼠标离开事件
      */
     onMouseLeave(e) {
-        if (this.isPanning) {
-            this.isPanning = false;
-            this.svg.style.cursor = '';
-        }
-        if (this.isDraggingWireEndpoint) {
-            const drag = this.wireEndpointDrag;
-            this.isDraggingWireEndpoint = false;
-            this.wireEndpointDrag = null;
-            this.renderer.clearTerminalHighlight();
-            const affectedIds = Array.isArray(drag?.affected)
-                ? drag.affected.map((item) => item?.wireId).filter(Boolean)
-                : [];
-            this.compactWiresAndRefresh({
-                preferredWireId: drag?.wireId || this.selectedWire,
-                scopeWireIds: affectedIds
-            });
-            this.circuit.rebuildNodes();
-            this.commitHistoryTransaction();
-        }
-        if (this.isDraggingWire) {
-            const drag = this.wireDrag;
-            this.isDraggingWire = false;
-            this.wireDrag = null;
-            this.compactWiresAndRefresh({
-                preferredWireId: drag?.wireId || this.selectedWire,
-                scopeWireIds: drag?.wireId ? [drag.wireId] : null
-            });
-            this.circuit.rebuildNodes();
-            this.commitHistoryTransaction();
-        }
-        if (this.isDragging) {
-            this.isDragging = false;
-            this.dragTarget = null;
-            this.dragGroup = null;
-            this.isDraggingComponent = false;
-            this.hideAlignmentGuides();
-            this.circuit.rebuildNodes();
-            this.commitHistoryTransaction();
-        }
+        return InteractionOrchestrator.onMouseLeave.call(this, e);
     }
 
     /**
