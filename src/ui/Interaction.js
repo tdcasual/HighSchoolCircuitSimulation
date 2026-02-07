@@ -163,7 +163,7 @@ export class InteractionManager {
      */
     bindToolboxEvents() {
         const toolItems = document.querySelectorAll('.tool-item');
-        const validTypes = ['Ground', 'PowerSource', 'ACVoltageSource', 'Resistor', 'Diode', 'Rheostat', 'Bulb', 'Capacitor', 'Inductor', 'ParallelPlateCapacitor', 'Motor', 'Switch', 'SPDTSwitch', 'Fuse', 'Ammeter', 'Voltmeter', 'BlackBox', 'Wire'];
+        const validTypes = ['Ground', 'PowerSource', 'ACVoltageSource', 'Resistor', 'Diode', 'LED', 'Rheostat', 'Bulb', 'Capacitor', 'Inductor', 'ParallelPlateCapacitor', 'Motor', 'Switch', 'SPDTSwitch', 'Fuse', 'Ammeter', 'Voltmeter', 'BlackBox', 'Wire'];
         
         // 标记是否正在从工具箱拖放
         this.isToolboxDrag = false;
@@ -2192,6 +2192,37 @@ export class InteractionManager {
                     unit: 'Ω'
                 }));
                 break;
+
+            case 'LED':
+                content.appendChild(createFormGroup('导通压降 Vf (V)', {
+                    id: 'edit-forward-voltage',
+                    value: Number.isFinite(comp.forwardVoltage) ? comp.forwardVoltage : 2.0,
+                    min: 0,
+                    step: 0.01,
+                    unit: 'V'
+                }));
+                content.appendChild(createFormGroup('导通电阻 Ron (Ω)', {
+                    id: 'edit-on-resistance',
+                    value: Number.isFinite(comp.onResistance) ? comp.onResistance : 2,
+                    min: 1e-9,
+                    step: 0.01,
+                    unit: 'Ω'
+                }));
+                content.appendChild(createFormGroup('截止电阻 Roff (Ω)', {
+                    id: 'edit-off-resistance',
+                    value: Number.isFinite(comp.offResistance) ? comp.offResistance : 1e9,
+                    min: 1,
+                    step: 1000,
+                    unit: 'Ω'
+                }));
+                content.appendChild(createFormGroup('额定电流 If (mA)', {
+                    id: 'edit-rated-current',
+                    value: (Number.isFinite(comp.ratedCurrent) ? comp.ratedCurrent : 0.02) * 1000,
+                    min: 0.1,
+                    step: 0.1,
+                    unit: 'mA'
+                }));
+                break;
                 
             case 'Rheostat':
                 content.appendChild(createFormGroup('最小电阻 (Ω)', {
@@ -2605,6 +2636,21 @@ export class InteractionManager {
                     comp.offResistance = this.safeParseFloat(
                         document.getElementById('edit-off-resistance').value, 1e9, 1, 1e15
                     );
+                    break;
+
+                case 'LED':
+                    comp.forwardVoltage = this.safeParseFloat(
+                        document.getElementById('edit-forward-voltage').value, 2, 0, 1000
+                    );
+                    comp.onResistance = this.safeParseFloat(
+                        document.getElementById('edit-on-resistance').value, 2, 1e-9, 1e9
+                    );
+                    comp.offResistance = this.safeParseFloat(
+                        document.getElementById('edit-off-resistance').value, 1e9, 1, 1e15
+                    );
+                    comp.ratedCurrent = this.safeParseFloat(
+                        document.getElementById('edit-rated-current').value, 20, 0.1, 100000
+                    ) / 1000;
                     break;
                     
                 case 'Rheostat':

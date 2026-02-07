@@ -833,6 +833,17 @@ body {
     fill: rgba(255, 235, 59, 0.8);
 }
 
+/* LED 发光效果 */
+.component.led .glow {
+    fill: #ff4d6d;
+    fill-opacity: 0;
+    transition: fill-opacity 0.2s ease;
+}
+
+.component.led.on .glow {
+    fill-opacity: 0.9;
+}
+
 /* 导线样式 */
 .wire-group {
     cursor: pointer;

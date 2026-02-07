@@ -123,9 +123,11 @@ export class MNASolver {
             if ((comp.type === 'Capacitor' || comp.type === 'ParallelPlateCapacitor') && !Number.isFinite(comp.prevVoltage)) {
                 comp.prevVoltage = 0;
             }
-            if (comp.type === 'Diode') {
-                comp.forwardVoltage = Number.isFinite(comp.forwardVoltage) ? comp.forwardVoltage : 0.7;
-                comp.onResistance = Number.isFinite(comp.onResistance) ? comp.onResistance : 1;
+            if (comp.type === 'Diode' || comp.type === 'LED') {
+                const defaultVf = comp.type === 'LED' ? 2.0 : 0.7;
+                const defaultRon = comp.type === 'LED' ? 2 : 1;
+                comp.forwardVoltage = Number.isFinite(comp.forwardVoltage) ? comp.forwardVoltage : defaultVf;
+                comp.onResistance = Number.isFinite(comp.onResistance) ? comp.onResistance : defaultRon;
                 comp.offResistance = Number.isFinite(comp.offResistance) ? comp.offResistance : 1e9;
                 comp.conducting = !!comp.conducting;
             }
@@ -186,9 +188,10 @@ export class MNASolver {
                     keyParts.push(`R:${this.formatMatrixKeyNumber(comp.resistance ?? 0)}`);
                     break;
                 case 'Diode':
+                case 'LED':
                     keyParts.push(
-                        `vf:${this.formatMatrixKeyNumber(comp.forwardVoltage ?? 0.7)}`,
-                        `ron:${this.formatMatrixKeyNumber(comp.onResistance ?? 1)}`,
+                        `vf:${this.formatMatrixKeyNumber(comp.forwardVoltage ?? (comp.type === 'LED' ? 2 : 0.7))}`,
+                        `ron:${this.formatMatrixKeyNumber(comp.onResistance ?? (comp.type === 'LED' ? 2 : 1))}`,
                         `roff:${this.formatMatrixKeyNumber(comp.offResistance ?? 1e9)}`,
                         `on:${comp.conducting ? 1 : 0}`
                     );
@@ -283,8 +286,8 @@ export class MNASolver {
             return { voltages, currents, valid: true };
         }
 
-        const hasDiode = this.components.some((comp) => comp?.type === 'Diode');
-        const maxIterations = hasDiode ? 6 : 1;
+        const hasJunction = this.components.some((comp) => comp?.type === 'Diode' || comp?.type === 'LED');
+        const maxIterations = hasJunction ? 6 : 1;
 
         let solvedVoltages = [];
         let solvedCurrents = new Map();
@@ -374,12 +377,12 @@ export class MNASolver {
             solvedCurrents = currents;
             solvedValid = true;
 
-            if (!hasDiode) {
+            if (!hasJunction) {
                 break;
             }
 
-            const diodeStateChanged = this.updateDiodeConductionStates(voltages, currents);
-            if (!diodeStateChanged) {
+            const junctionStateChanged = this.updateJunctionConductionStates(voltages, currents);
+            if (!junctionStateChanged) {
                 break;
             }
         }
@@ -388,17 +391,18 @@ export class MNASolver {
         return { voltages: solvedVoltages, currents: solvedCurrents, valid: solvedValid };
     }
 
-    updateDiodeConductionStates(voltages, currents) {
+    updateJunctionConductionStates(voltages, currents) {
         let changed = false;
         const holdMargin = 0.05; // 避免在阈值附近抖动
 
         for (const comp of this.components) {
-            if (!comp || comp.type !== 'Diode') continue;
+            if (!comp || (comp.type !== 'Diode' && comp.type !== 'LED')) continue;
             const nAnode = comp.nodes?.[0];
             const nCathode = comp.nodes?.[1];
             if (nAnode == null || nCathode == null || nAnode < 0 || nCathode < 0) continue;
 
-            const vf = Math.max(0, Number(comp.forwardVoltage) || 0.7);
+            const vfDefault = comp.type === 'LED' ? 2.0 : 0.7;
+            const vf = Math.max(0, Number(comp.forwardVoltage) || vfDefault);
             const vAk = (voltages[nAnode] || 0) - (voltages[nCathode] || 0);
             const i = Number(currents?.get(comp.id)) || 0;
             const currentOn = i > 1e-9;
@@ -504,9 +508,12 @@ export class MNASolver {
                 this.stampResistor(A, i1, i2, comp.resistance);
                 break;
 
-            case 'Diode': {
-                const vf = Math.max(0, Number(comp.forwardVoltage) || 0.7);
-                const ron = Math.max(1e-9, Number(comp.onResistance) || 1);
+            case 'Diode':
+            case 'LED': {
+                const vfDefault = comp.type === 'LED' ? 2.0 : 0.7;
+                const ronDefault = comp.type === 'LED' ? 2 : 1;
+                const vf = Math.max(0, Number(comp.forwardVoltage) || vfDefault);
+                const ron = Math.max(1e-9, Number(comp.onResistance) || ronDefault);
                 const roff = Math.max(1, Number(comp.offResistance) || 1e9);
                 if (comp.conducting) {
                     // 线性化导通模型：I = (V - Vf) / Ron
@@ -906,9 +913,12 @@ export class MNASolver {
             case 'Bulb':
                 return comp.resistance > 0 ? dV / comp.resistance : 0;
 
-            case 'Diode': {
-                const vf = Math.max(0, Number(comp.forwardVoltage) || 0.7);
-                const ron = Math.max(1e-9, Number(comp.onResistance) || 1);
+            case 'Diode':
+            case 'LED': {
+                const vfDefault = comp.type === 'LED' ? 2.0 : 0.7;
+                const ronDefault = comp.type === 'LED' ? 2 : 1;
+                const vf = Math.max(0, Number(comp.forwardVoltage) || vfDefault);
+                const ron = Math.max(1e-9, Number(comp.onResistance) || ronDefault);
                 const roff = Math.max(1, Number(comp.offResistance) || 1e9);
                 if (comp.conducting) {
                     return (dV - vf) / ron;

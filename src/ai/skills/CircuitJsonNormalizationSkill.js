@@ -16,6 +16,7 @@ const LABEL_PREFIX_BY_TYPE = Object.freeze({
     ACVoltageSource: 'AC',
     Resistor: 'R',
     Diode: 'D',
+    LED: 'LED',
     Rheostat: 'R',
     Bulb: 'L',
     Capacitor: 'C',

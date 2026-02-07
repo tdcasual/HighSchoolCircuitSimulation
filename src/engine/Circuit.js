@@ -967,6 +967,12 @@ export class Circuit {
             if (comp.type === 'Fuse' && !comp.blown) {
                 comp.i2tAccum = 0;
             }
+            if (comp.type === 'Diode' || comp.type === 'LED') {
+                comp.conducting = false;
+                if (comp.type === 'LED') {
+                    comp.brightness = 0;
+                }
+            }
         }
 
         // 准备求解器（仅在拓扑/关键参数变化后重建）
@@ -1042,10 +1048,10 @@ export class Circuit {
                     comp.voltageValue = 0;
                     comp.powerValue = 0;
                     comp._isShorted = false;
-                    if (comp.type === 'Diode') {
+                    if (comp.type === 'Diode' || comp.type === 'LED') {
                         comp.conducting = false;
                     }
-                    if (comp.type === 'Bulb') {
+                    if (comp.type === 'Bulb' || comp.type === 'LED') {
                         comp.brightness = 0;
                     }
                     continue;
@@ -1066,7 +1072,7 @@ export class Circuit {
                     comp.currentValue = 0;
                     comp.voltageValue = 0;
                     comp.powerValue = 0;
-                    if (comp.type === 'Bulb') {
+                    if (comp.type === 'Bulb' || comp.type === 'LED') {
                         comp.brightness = 0;
                     }
                     continue;
@@ -1147,6 +1153,11 @@ export class Circuit {
                 // 灯泡亮度
                 if (comp.type === 'Bulb') {
                     comp.brightness = Math.min(1, comp.powerValue / comp.ratedPower);
+                }
+                if (comp.type === 'LED') {
+                    const ratedCurrent = Math.max(1e-6, Number(comp.ratedCurrent) || 0.02);
+                    const currentAbs = Math.abs(current);
+                    comp.brightness = comp.conducting ? Math.min(1, currentAbs / ratedCurrent) : 0;
                 }
             }
 
@@ -1832,6 +1843,14 @@ export class Circuit {
                     forwardVoltage: comp.forwardVoltage,
                     onResistance: comp.onResistance,
                     offResistance: comp.offResistance
+                };
+            case 'LED':
+                return {
+                    forwardVoltage: comp.forwardVoltage,
+                    onResistance: comp.onResistance,
+                    offResistance: comp.offResistance,
+                    ratedCurrent: comp.ratedCurrent,
+                    color: comp.color
                 };
             case 'Rheostat':
                 return {

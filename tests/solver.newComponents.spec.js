@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { addComponent, connectWire, createTestCircuit, solveCircuit } from './helpers/circuitTestUtils.js';
 
-describe('New component models (Ground / AC source / Inductor / SPDT / Fuse / Diode)', () => {
+describe('New component models (Ground / AC source / Inductor / SPDT / Fuse / Diode / LED)', () => {
     it('uses explicit Ground as reference node (node 0)', () => {
         const circuit = createTestCircuit();
         const ground = addComponent(circuit, 'Ground', 'GND');
@@ -264,5 +264,63 @@ describe('New component models (Ground / AC source / Inductor / SPDT / Fuse / Di
         expect(results.valid).toBe(true);
         expect(diode.conducting).toBe(false);
         expect(Math.abs(diodeCurrent)).toBeLessThan(1e-6);
+    });
+
+    it('solves LED forward conduction and updates brightness', () => {
+        const circuit = createTestCircuit();
+        const source = addComponent(circuit, 'PowerSource', 'V1', {
+            voltage: 3,
+            internalResistance: 0
+        });
+        const led = addComponent(circuit, 'LED', 'LED1', {
+            forwardVoltage: 2.0,
+            onResistance: 2,
+            offResistance: 1e9,
+            ratedCurrent: 0.02,
+            conducting: false
+        });
+        const resistor = addComponent(circuit, 'Resistor', 'R1', { resistance: 100 });
+
+        connectWire(circuit, 'W1', source, 0, led, 0);
+        connectWire(circuit, 'W2', led, 1, resistor, 0);
+        connectWire(circuit, 'W3', resistor, 1, source, 1);
+
+        const results = solveCircuit(circuit, 0);
+        const expectedCurrent = (3 - 2) / (100 + 2);
+
+        expect(results.valid).toBe(true);
+        expect(led.conducting).toBe(true);
+        expect(results.currents.get('LED1')).toBeCloseTo(expectedCurrent, 6);
+
+        circuit.isRunning = true;
+        circuit.step();
+        circuit.isRunning = false;
+        expect(led.brightness).toBeCloseTo(Math.min(1, expectedCurrent / 0.02), 6);
+    });
+
+    it('keeps LED off under reverse bias', () => {
+        const circuit = createTestCircuit();
+        const source = addComponent(circuit, 'PowerSource', 'V1', {
+            voltage: 5,
+            internalResistance: 0
+        });
+        const led = addComponent(circuit, 'LED', 'LED1', {
+            forwardVoltage: 2.0,
+            onResistance: 2,
+            offResistance: 1e9,
+            ratedCurrent: 0.02,
+            conducting: false
+        });
+        const resistor = addComponent(circuit, 'Resistor', 'R1', { resistance: 100 });
+
+        connectWire(circuit, 'W1', source, 0, led, 1);
+        connectWire(circuit, 'W2', led, 0, resistor, 0);
+        connectWire(circuit, 'W3', resistor, 1, source, 1);
+
+        const results = solveCircuit(circuit, 0);
+
+        expect(results.valid).toBe(true);
+        expect(led.conducting).toBe(false);
+        expect(Math.abs(results.currents.get('LED1') || 0)).toBeLessThan(1e-6);
     });
 });

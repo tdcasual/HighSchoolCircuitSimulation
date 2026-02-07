@@ -70,6 +70,15 @@ export const ComponentDefaults = {
         offResistance: 1e9,    // 截止等效电阻 (Ω)
         conducting: false      // 当前导通状态（求解过程会更新）
     },
+    LED: {
+        forwardVoltage: 2.0,   // 正向导通电压 (V)
+        onResistance: 2,       // 导通等效电阻 (Ω)
+        offResistance: 1e9,    // 截止等效电阻 (Ω)
+        ratedCurrent: 0.02,    // 额定工作电流 (A)
+        color: '#ff4d6d',      // 发光颜色
+        conducting: false,     // 当前导通状态（求解过程会更新）
+        brightness: 0          // 当前亮度（0-1）
+    },
     Rheostat: {
         minResistance: 0,      // 最小电阻 (Ω)
         maxResistance: 100,    // 最大电阻 (Ω)
@@ -155,6 +164,7 @@ export const ComponentNames = {
     ACVoltageSource: '交流电源',
     Resistor: '定值电阻',
     Diode: '二极管',
+    LED: '发光二极管',
     Rheostat: '滑动变阻器',
     Bulb: '灯泡',
     Capacitor: '电容',
@@ -323,6 +333,9 @@ export const SVGRenderer = {
                 break;
             case 'Diode':
                 this.renderDiode(g, comp);
+                break;
+            case 'LED':
+                this.renderLED(g, comp);
                 break;
             case 'Rheostat':
                 this.renderRheostat(g, comp);
@@ -494,6 +507,58 @@ export const SVGRenderer = {
 
         const isOn = !!comp.conducting;
         const labelText = comp.label || `${comp.forwardVoltage}V ${isOn ? '导通' : '截止'}`;
+        this.addText(g, 0, 25, labelText, 9, 'label');
+    },
+
+    /**
+     * 渲染 LED（发光二极管）
+     */
+    renderLED(g, comp) {
+        this.addLine(g, -30, 0, -14, 0);
+        this.addLine(g, 14, 0, 30, 0);
+
+        const glow = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        glow.setAttribute('cx', 0);
+        glow.setAttribute('cy', 0);
+        glow.setAttribute('r', 13);
+        glow.setAttribute('class', 'glow led-glow');
+        const color = comp.color || '#ff4d6d';
+        const baseBrightness = Math.max(0, Math.min(1, Number(comp.brightness) || 0));
+        glow.setAttribute('fill', color);
+        glow.setAttribute('fill-opacity', String(baseBrightness * 0.85));
+        g.appendChild(glow);
+
+        const triangle = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+        triangle.setAttribute('points', '-14,-10 -14,10 6,0');
+        triangle.setAttribute('fill', '#fff8fb');
+        triangle.setAttribute('stroke', '#333');
+        triangle.setAttribute('stroke-width', 2);
+        g.appendChild(triangle);
+
+        const cathodeBar = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        cathodeBar.setAttribute('x1', '9');
+        cathodeBar.setAttribute('y1', '-12');
+        cathodeBar.setAttribute('x2', '9');
+        cathodeBar.setAttribute('y2', '12');
+        cathodeBar.setAttribute('stroke', '#333');
+        cathodeBar.setAttribute('stroke-width', 2.2);
+        g.appendChild(cathodeBar);
+
+        this.addLine(g, -2, -14, 4, -20, 1.6);
+        this.addLine(g, 2, -10, 8, -16, 1.6);
+        const arrow1 = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+        arrow1.setAttribute('points', '4,-20 2,-18 5,-18');
+        arrow1.setAttribute('fill', color);
+        g.appendChild(arrow1);
+        const arrow2 = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+        arrow2.setAttribute('points', '8,-16 6,-14 9,-14');
+        arrow2.setAttribute('fill', color);
+        g.appendChild(arrow2);
+
+        this.addTerminal(g, -30, 0, 0, comp); // anode
+        this.addTerminal(g, 30, 0, 1, comp);  // cathode
+
+        const labelText = comp.label || `LED ${comp.forwardVoltage}V`;
         this.addText(g, 0, 25, labelText, 9, 'label');
     },
 
@@ -1381,6 +1446,17 @@ export const SVGRenderer = {
                 const brightness = Math.min(1, comp.powerValue / comp.ratedPower);
                 this.setElementAttributeIfChanged(glow, 'fill', `rgba(255, 235, 59, ${brightness * 0.8})`);
                 g.classList.toggle('on', brightness > 0.1);
+            }
+        }
+
+        if (comp.type === 'LED') {
+            const glow = g.querySelector('.led-glow');
+            if (glow) {
+                const color = comp.color || '#ff4d6d';
+                const brightness = Math.max(0, Math.min(1, Number(comp.brightness) || 0));
+                this.setElementAttributeIfChanged(glow, 'fill', color);
+                this.setElementAttributeIfChanged(glow, 'fill-opacity', String(brightness * 0.85));
+                g.classList.toggle('on', brightness > 0.05);
             }
         }
         

@@ -133,6 +133,10 @@ export function getQuantitiesForSource(sourceId, circuit) {
         case 'Diode':
             list.push({ id: QuantityIds.Resistance, label: '等效电阻 R', unit: 'Ω' });
             break;
+        case 'LED':
+            list.push({ id: QuantityIds.Resistance, label: '等效电阻 R', unit: 'Ω' });
+            list.push({ id: QuantityIds.BulbBrightness, label: '亮度', unit: '' });
+            break;
         case 'Rheostat':
             list.push({ id: QuantityIds.Resistance, label: '接入电阻 R', unit: 'Ω' });
             break;
@@ -235,6 +239,10 @@ export function evaluateSourceQuantity(circuit, sourceId, quantityId) {
             }
             if (comp.type === 'Diode') {
                 if (comp.conducting) return Number.isFinite(comp.onResistance) ? comp.onResistance : 1;
+                return Number.isFinite(comp.offResistance) ? comp.offResistance : 1e9;
+            }
+            if (comp.type === 'LED') {
+                if (comp.conducting) return Number.isFinite(comp.onResistance) ? comp.onResistance : 2;
                 return Number.isFinite(comp.offResistance) ? comp.offResistance : 1e9;
             }
             if (Number.isFinite(comp.resistance)) return comp.resistance;

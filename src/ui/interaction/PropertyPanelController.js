@@ -132,6 +132,15 @@ export function updatePropertyPanel(comp) {
             content.appendChild(createPropertyRow('状态', comp.conducting ? '导通' : '截止'));
             break;
 
+        case 'LED':
+            content.appendChild(createPropertyRow('导通压降', `${Number.isFinite(comp.forwardVoltage) ? comp.forwardVoltage : 2.0} V`));
+            content.appendChild(createPropertyRow('导通电阻', `${Number.isFinite(comp.onResistance) ? comp.onResistance : 2} Ω`));
+            content.appendChild(createPropertyRow('截止电阻', `${Number.isFinite(comp.offResistance) ? comp.offResistance : 1e9} Ω`));
+            content.appendChild(createPropertyRow('额定电流', `${((Number.isFinite(comp.ratedCurrent) ? comp.ratedCurrent : 0.02) * 1000).toFixed(1)} mA`));
+            content.appendChild(createPropertyRow('亮度', `${((Number.isFinite(comp.brightness) ? comp.brightness : 0) * 100).toFixed(0)}%`));
+            content.appendChild(createPropertyRow('状态', comp.conducting ? '导通' : '截止'));
+            break;
+
         case 'Rheostat': {
             const connectionModeText = {
                 'left-slider': '左端-滑块',
