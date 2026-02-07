@@ -26,6 +26,7 @@ import * as ViewportController from './interaction/ViewportController.js';
 import * as SnapController from './interaction/SnapController.js';
 import * as InteractionOrchestrator from './interaction/InteractionOrchestrator.js';
 import * as ComponentActions from './interaction/ComponentActions.js';
+import * as ContextMenuController from './interaction/ContextMenuController.js';
 
 const INTEGRATION_METHOD_OPTIONS = Object.freeze([
     { value: 'auto', label: '自动（默认梯形法）' },
@@ -2190,11 +2191,7 @@ export class InteractionManager {
      * 隐藏上下文菜单
      */
     hideContextMenu() {
-        const menu = document.getElementById('context-menu');
-        if (menu) {
-            menu.remove();
-            document.removeEventListener('click', this.hideContextMenuHandler);
-        }
+        return ContextMenuController.hideContextMenu.call(this);
     }
     
     /**
