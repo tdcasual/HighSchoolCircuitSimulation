@@ -139,7 +139,11 @@ npm run baseline:ai:update
 ├── css/
 ├── src/
 │   ├── components/      # 元器件定义、默认参数、SVG渲染
-│   ├── engine/          # Circuit / Solver / Matrix
+│   ├── core/            # 拓扑、仿真、IO 内核服务
+│   │   ├── topology/
+│   │   ├── simulation/
+│   │   └── io/
+│   ├── engine/          # facade: Circuit / Solver / Matrix
 │   ├── ui/              # 交互、渲染、观察面板、AI面板、习题板
 │   ├── ai/              # AI客户端、Agent、Skills、知识资源、日志
 │   └── utils/           # 坐标、物理计算、JSON校验等工具
@@ -155,6 +159,15 @@ npm run baseline:ai:update
 - 电路可导入/导出 JSON。
 - 导线采用显式端点结构（`a/b` + 可选 `aRef/bRef`）。
 - 为兼容历史数据，项目包含部分旧导线结构迁移逻辑与测试。
+- 当前保存/加载与 schema 校验经 `core/io` 网关统一处理，`Circuit` 保留兼容 facade API（`toJSON/fromJSON`）。
+
+## 架构分层（重构后）
+
+- facade 层：`AIPanel`、`Circuit`、`Solver`（对外 API 保持稳定）。
+- `src/core/topology`：节点重建、导线压缩、连通缓存。
+- `src/core/simulation`：印记分发、动态积分、结果后处理。
+- `src/core/io`：JSON 序列化/反序列化与 schema 校验网关。
+- `src/ui/ai`：聊天、设置、面板布局控制器拆分。
 
 ## 当前边界（非缺陷，属建模取舍）
 

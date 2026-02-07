@@ -162,3 +162,33 @@ Implementation can start when:
 - Baseline tag and CI gates are in place.
 
 Next step after this design: produce an executable task checklist per phase (file-level tasks, owners, and expected verification command set).
+
+## 8. Freeze Completion Update (2026-02-07)
+
+This freeze refactor has been implemented with facade compatibility preserved.
+
+Extracted modules:
+
+- `src/ui/ai/ChatController.js`
+- `src/ui/ai/SettingsController.js`
+- `src/ui/ai/PanelLayoutController.js`
+- `src/core/topology/NodeBuilder.js`
+- `src/core/topology/WireCompactor.js`
+- `src/core/topology/ConnectivityCache.js`
+- `src/core/simulation/StampDispatcher.js`
+- `src/core/simulation/DynamicIntegrator.js`
+- `src/core/simulation/ResultPostprocessor.js`
+- `src/core/io/CircuitSerializer.js`
+- `src/core/io/CircuitDeserializer.js`
+- `src/core/io/CircuitSchemaGateway.js`
+
+Compatibility notes:
+
+- `AIPanel`, `Circuit`, and `Solver` remain as stable facades for existing call sites.
+- Legacy wire JSON formats (`start/end`, flat startComponentId/endComponentId) are still migrated into canonical `a/b` segments.
+- Schema validation entrypoint remains `validateCircuitJSON`, now delegated to IO gateway.
+
+Deferred cleanup (intentionally postponed):
+
+- Additional error-code typing (`TOPO_*`, `SIM_*`, `IO_*`) is not yet enforced in runtime exceptions.
+- Some facade methods can be narrowed in later non-freeze cleanup once integration callers are fully migrated.
