@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import * as InteractionOrchestrator from '../src/ui/interaction/InteractionOrchestrator.js';
+import * as InteractionOrchestrator from '../src/app/interaction/InteractionOrchestrator.js';
 
 function makeTarget({
     classes = [],

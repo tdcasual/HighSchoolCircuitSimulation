@@ -24,7 +24,7 @@ import * as PropertyPanelController from './interaction/PropertyPanelController.
 import * as PointerSessionManager from './interaction/PointerSessionManager.js';
 import * as ViewportController from './interaction/ViewportController.js';
 import * as SnapController from './interaction/SnapController.js';
-import * as InteractionOrchestrator from './interaction/InteractionOrchestrator.js';
+import * as InteractionOrchestrator from '../app/interaction/InteractionOrchestrator.js';
 import * as ComponentActions from './interaction/ComponentActions.js';
 import * as ContextMenuController from './interaction/ContextMenuController.js';
 import * as ProbeActions from './interaction/ProbeActions.js';
