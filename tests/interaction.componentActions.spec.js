@@ -82,3 +82,118 @@ describe('ComponentActions.toggleSwitch', () => {
         expect(context.updateStatus).toHaveBeenCalledWith('单刀双掷开关已切换到 下掷');
     });
 });
+
+describe('ComponentActions.addComponent', () => {
+    it('creates component and refreshes UI state', () => {
+        const context = {
+            runWithHistory: vi.fn((_, action) => action()),
+            circuit: {
+                addComponent: vi.fn()
+            },
+            renderer: {
+                addComponent: vi.fn(() => ({ tag: 'g' }))
+            },
+            selectComponent: vi.fn(),
+            app: {
+                observationPanel: {
+                    refreshComponentOptions: vi.fn(),
+                    refreshDialGauges: vi.fn()
+                }
+            },
+            updateStatus: vi.fn()
+        };
+
+        ComponentActions.addComponent.call(context, 'Resistor', 10.4, 20.6);
+
+        const added = context.circuit.addComponent.mock.calls[0][0];
+        expect(added.type).toBe('Resistor');
+        expect(added.x).toBe(10);
+        expect(added.y).toBe(21);
+        expect(context.runWithHistory).toHaveBeenCalledWith(expect.stringContaining('添加'), expect.any(Function));
+        expect(context.renderer.addComponent).toHaveBeenCalledWith(added);
+        expect(context.selectComponent).toHaveBeenCalledWith(added.id);
+        expect(context.app.observationPanel.refreshComponentOptions).toHaveBeenCalledTimes(1);
+        expect(context.app.observationPanel.refreshDialGauges).toHaveBeenCalledTimes(1);
+        expect(context.updateStatus).toHaveBeenCalledWith(expect.stringContaining('已添加'));
+    });
+
+    it('reports failure when component add throws', () => {
+        vi.spyOn(console, 'error').mockImplementation(() => {});
+        const context = {
+            runWithHistory: vi.fn((_, action) => action()),
+            circuit: {
+                addComponent: vi.fn(() => {
+                    throw new Error('boom');
+                })
+            },
+            renderer: {
+                addComponent: vi.fn()
+            },
+            selectComponent: vi.fn(),
+            app: {},
+            updateStatus: vi.fn()
+        };
+
+        ComponentActions.addComponent.call(context, 'Resistor', 1, 2);
+
+        expect(context.updateStatus).toHaveBeenCalledWith('添加失败: boom');
+    });
+});
+
+describe('ComponentActions.deleteComponent', () => {
+    it('removes component and refreshes dependent UI', () => {
+        const context = {
+            runWithHistory: vi.fn((_, action) => action()),
+            circuit: { removeComponent: vi.fn() },
+            renderer: {
+                removeComponent: vi.fn(),
+                renderWires: vi.fn()
+            },
+            clearSelection: vi.fn(),
+            app: {
+                observationPanel: {
+                    refreshComponentOptions: vi.fn(),
+                    refreshDialGauges: vi.fn()
+                }
+            },
+            updateStatus: vi.fn()
+        };
+
+        ComponentActions.deleteComponent.call(context, 'R1');
+
+        expect(context.runWithHistory).toHaveBeenCalledWith('删除元器件', expect.any(Function));
+        expect(context.circuit.removeComponent).toHaveBeenCalledWith('R1');
+        expect(context.renderer.removeComponent).toHaveBeenCalledWith('R1');
+        expect(context.renderer.renderWires).toHaveBeenCalledTimes(1);
+        expect(context.clearSelection).toHaveBeenCalledTimes(1);
+        expect(context.app.observationPanel.refreshComponentOptions).toHaveBeenCalledTimes(1);
+        expect(context.app.observationPanel.refreshDialGauges).toHaveBeenCalledTimes(1);
+        expect(context.updateStatus).toHaveBeenCalledWith('已删除元器件');
+    });
+});
+
+describe('ComponentActions.deleteWire', () => {
+    it('removes wire and refreshes dependent UI', () => {
+        const context = {
+            runWithHistory: vi.fn((_, action) => action()),
+            circuit: { removeWire: vi.fn() },
+            renderer: { removeWire: vi.fn() },
+            clearSelection: vi.fn(),
+            app: {
+                observationPanel: {
+                    refreshComponentOptions: vi.fn()
+                }
+            },
+            updateStatus: vi.fn()
+        };
+
+        ComponentActions.deleteWire.call(context, 'W1');
+
+        expect(context.runWithHistory).toHaveBeenCalledWith('删除导线', expect.any(Function));
+        expect(context.circuit.removeWire).toHaveBeenCalledWith('W1');
+        expect(context.renderer.removeWire).toHaveBeenCalledWith('W1');
+        expect(context.clearSelection).toHaveBeenCalledTimes(1);
+        expect(context.app.observationPanel.refreshComponentOptions).toHaveBeenCalledTimes(1);
+        expect(context.updateStatus).toHaveBeenCalledWith('已删除导线');
+    });
+});
