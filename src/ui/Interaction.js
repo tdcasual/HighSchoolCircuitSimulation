@@ -27,6 +27,7 @@ import * as SnapController from './interaction/SnapController.js';
 import * as InteractionOrchestrator from './interaction/InteractionOrchestrator.js';
 import * as ComponentActions from './interaction/ComponentActions.js';
 import * as ContextMenuController from './interaction/ContextMenuController.js';
+import * as ProbeActions from './interaction/ProbeActions.js';
 
 const INTEGRATION_METHOD_OPTIONS = Object.freeze([
     { value: 'auto', label: '自动（默认梯形法）' },
@@ -1922,90 +1923,19 @@ export class InteractionManager {
     }
 
     renameObservationProbe(probeId, nextLabel = null) {
-        const probe = this.circuit.getObservationProbe(probeId);
-        if (!probe) return false;
-
-        let resolvedLabel = nextLabel;
-        if (resolvedLabel === null && typeof window !== 'undefined' && typeof window.prompt === 'function') {
-            const currentLabel = probe.label && String(probe.label).trim() ? String(probe.label).trim() : probe.id;
-            resolvedLabel = window.prompt('输入探针名称（留空使用ID）', currentLabel);
-        }
-        if (resolvedLabel === null) return false;
-
-        const normalized = String(resolvedLabel).trim();
-        this.runWithHistory('重命名探针', () => {
-            probe.label = normalized || null;
-            this.renderer.renderWires();
-            this.app.observationPanel?.refreshComponentOptions();
-            this.app.observationPanel?.requestRender?.({ onlyIfActive: false });
-            this.updateStatus('探针名称已更新');
-        });
-        return true;
+        return ProbeActions.renameObservationProbe.call(this, probeId, nextLabel);
     }
 
     deleteObservationProbe(probeId) {
-        const probe = this.circuit.getObservationProbe(probeId);
-        if (!probe) return false;
-
-        this.runWithHistory('删除探针', () => {
-            this.circuit.removeObservationProbe(probeId);
-            this.renderer.renderWires();
-            this.app.observationPanel?.refreshComponentOptions();
-            this.app.observationPanel?.requestRender?.({ onlyIfActive: false });
-            this.updateStatus('已删除探针');
-        });
-        return true;
+        return ProbeActions.deleteObservationProbe.call(this, probeId);
     }
 
     addProbePlot(probeId) {
-        const probe = this.circuit.getObservationProbe(probeId);
-        if (!probe) return false;
-        const panel = this.app.observationPanel;
-        if (!panel || typeof panel.addPlotForSource !== 'function') {
-            this.updateStatus('观察面板不可用');
-            return false;
-        }
-
-        if (typeof this.activateSidePanelTab === 'function' && !this.isObservationTabActive()) {
-            this.activateSidePanelTab('observation');
-        }
-        panel.addPlotForSource(probeId);
-        panel.requestRender?.({ onlyIfActive: false });
-        this.updateStatus('已添加探针观察图像');
-        return true;
+        return ProbeActions.addProbePlot.call(this, probeId);
     }
 
     addObservationProbeForWire(wireId, probeType) {
-        const wire = this.circuit.getWire(wireId);
-        if (!wire) return;
-
-        const labelPrefix = probeType === 'NodeVoltageProbe' ? '节点电压' : '支路电流';
-        const typeLabel = probeType === 'NodeVoltageProbe' ? '节点电压探针' : '支路电流探针';
-
-        this.runWithHistory(`添加${typeLabel}`, () => {
-            const sameTypeCount = this.circuit.getAllObservationProbes()
-                .filter((probe) => probe?.type === probeType).length;
-            const probeId = this.circuit.ensureUniqueObservationProbeId(`probe_${Date.now()}`);
-            const probe = this.circuit.addObservationProbe({
-                id: probeId,
-                type: probeType,
-                wireId,
-                label: `${labelPrefix}${sameTypeCount + 1}`
-            });
-
-            if (!probe) {
-                this.updateStatus('添加探针失败');
-                return;
-            }
-
-            this.renderer.renderWires();
-            this.app.observationPanel?.refreshComponentOptions();
-            if (typeof this.activateSidePanelTab === 'function' && !this.isObservationTabActive()) {
-                this.activateSidePanelTab('observation');
-            }
-            this.app.observationPanel?.requestRender?.({ onlyIfActive: false });
-            this.updateStatus(`已添加${typeLabel}`);
-        });
+        return ProbeActions.addObservationProbeForWire.call(this, wireId, probeType);
     }
     
     /**
