@@ -1,3 +1,4 @@
 node_modules/*
 _reference/*
 output/baselines/*
+.DS_Store
