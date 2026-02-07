@@ -699,49 +699,7 @@ export class InteractionManager {
      * 开始拖动
      */
     startDragging(componentG, e) {
-        const id = componentG.dataset.id;
-        const comp = this.circuit.getComponent(id);
-        if (!comp) return;
-        
-        this.isDragging = true;
-        this.dragTarget = id;
-        this.isDraggingComponent = true; // 标记正在拖动元器件
-        this.dragGroup = null;
-
-        this.beginHistoryTransaction('移动元器件');
-        
-        // 使用统一的坐标转换，计算鼠标相对于元器件中心的偏移
-        const canvasCoords = this.screenToCanvas(e.clientX, e.clientY);
-        this.dragOffset = {
-            x: canvasCoords.x - comp.x,
-            y: canvasCoords.y - comp.y
-        };
-
-        // 黑箱：准备整体移动信息（盒内元件 + 与盒相关的导线端点）
-        if (comp.type === 'BlackBox') {
-            const componentIds = this.getBlackBoxContainedComponentIds(comp, { includeBoxes: true });
-            const connectedWireIds = new Set();
-            const wireEndpointMask = new Map(); // wireId -> {aInside,bInside}
-            const inside = (pt) => this.renderer.isPointInsideBlackBox(pt, comp);
-
-            for (const wire of this.circuit.getAllWires()) {
-                const aInside = !!(wire?.a && inside(wire.a));
-                const bInside = !!(wire?.b && inside(wire.b));
-                if (aInside || bInside) {
-                    connectedWireIds.add(wire.id);
-                    wireEndpointMask.set(wire.id, { aInside, bInside });
-                }
-            }
-
-            this.dragGroup = {
-                boxId: comp.id,
-                componentIds,
-                connectedWireIds: Array.from(connectedWireIds),
-                wireEndpointMask
-            };
-        }
-        
-        this.selectComponent(id);
+        return DragBehaviors.startDragging.call(this, componentG, e);
     }
 
     /**
