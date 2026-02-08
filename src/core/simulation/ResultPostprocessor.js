@@ -34,7 +34,8 @@ export class ResultPostprocessor {
         dt = 0.001,
         debugMode = false,
         resolveDynamicIntegrationMethod,
-        getSourceInstantVoltage
+        getSourceInstantVoltage,
+        simulationState
     } = {}) {
         const currents = new Map();
         for (const comp of components || []) {
@@ -45,7 +46,8 @@ export class ResultPostprocessor {
                 nodeCount,
                 dt,
                 resolveDynamicIntegrationMethod,
-                getSourceInstantVoltage
+                getSourceInstantVoltage,
+                simulationState
             });
             currents.set(comp.id, current);
 
@@ -60,6 +62,9 @@ export class ResultPostprocessor {
         const voltages = Array.isArray(context.voltages) ? context.voltages : [];
         const x = Array.isArray(context.x) ? context.x : [];
         const nodeCount = Number.isFinite(context.nodeCount) ? context.nodeCount : 0;
+        const state = context.simulationState && comp?.id
+            ? context.simulationState.get(comp.id)
+            : null;
 
         if (comp.type === 'Ground') {
             return 0;
@@ -142,7 +147,8 @@ export class ResultPostprocessor {
                 const vf = Math.max(0, Number(comp.forwardVoltage) || vfDefault);
                 const ron = Math.max(1e-9, Number(comp.onResistance) || ronDefault);
                 const roff = Math.max(1, Number(comp.offResistance) || 1e9);
-                if (comp.conducting) {
+                const conducting = state ? !!state.conducting : !!comp.conducting;
+                if (conducting) {
                     return (dV - vf) / ron;
                 }
                 return dV / roff;
@@ -224,13 +230,15 @@ export class ResultPostprocessor {
                 const method = this.resolveDynamicIntegrationMethod(comp, context);
                 if (method === DynamicIntegrationMethods.Trapezoidal) {
                     const Req = context.dt / (2 * Math.max(1e-18, C));
-                    const prevVoltage = Number.isFinite(comp.prevVoltage) ? comp.prevVoltage : 0;
-                    const prevCurrent = Number.isFinite(comp.prevCurrent) ? comp.prevCurrent : 0;
+                    const prevVoltage = Number.isFinite(state?.prevVoltage) ? state.prevVoltage
+                        : (Number.isFinite(comp.prevVoltage) ? comp.prevVoltage : 0);
+                    const prevCurrent = Number.isFinite(state?.prevCurrent) ? state.prevCurrent
+                        : (Number.isFinite(comp.prevCurrent) ? comp.prevCurrent : 0);
                     const Ieq = -(prevVoltage / Req + prevCurrent);
                     return dV / Req + Ieq;
                 }
 
-                const qPrev = comp.prevCharge || 0;
+                const qPrev = Number.isFinite(state?.prevCharge) ? state.prevCharge : (comp.prevCharge || 0);
                 const qNew = C * dV;
                 const dQ = qNew - qPrev;
                 const dt = Number.isFinite(context.dt) && context.dt > 0 ? context.dt : 0.001;
@@ -240,13 +248,16 @@ export class ResultPostprocessor {
             case 'Inductor': {
                 const L = Math.max(1e-12, comp.inductance || 0);
                 const method = this.resolveDynamicIntegrationMethod(comp, context);
-                const prevCurrent = Number.isFinite(comp.prevCurrent)
-                    ? comp.prevCurrent
-                    : (Number.isFinite(comp.initialCurrent) ? comp.initialCurrent : 0);
+                const prevCurrent = Number.isFinite(state?.prevCurrent)
+                    ? state.prevCurrent
+                    : (Number.isFinite(comp.prevCurrent)
+                        ? comp.prevCurrent
+                        : (Number.isFinite(comp.initialCurrent) ? comp.initialCurrent : 0));
                 if (method === DynamicIntegrationMethods.Trapezoidal) {
                     const dt = Number.isFinite(context.dt) && context.dt > 0 ? context.dt : 0.001;
                     const Req = (2 * L) / dt;
-                    const prevVoltage = Number.isFinite(comp.prevVoltage) ? comp.prevVoltage : 0;
+                    const prevVoltage = Number.isFinite(state?.prevVoltage) ? state.prevVoltage
+                        : (Number.isFinite(comp.prevVoltage) ? comp.prevVoltage : 0);
                     const Ieq = prevCurrent + (prevVoltage / Req);
                     return dV / Req + Ieq;
                 }

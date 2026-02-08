@@ -8,6 +8,7 @@ import { computeNtcThermistorResistance, computePhotoresistorResistance } from '
 import { StampDispatcher } from '../core/simulation/StampDispatcher.js';
 import { DynamicIntegrator, DynamicIntegrationMethods } from '../core/simulation/DynamicIntegrator.js';
 import { ResultPostprocessor } from '../core/simulation/ResultPostprocessor.js';
+import { SimulationState } from '../core/simulation/SimulationState.js';
 
 export class MNASolver {
     constructor() {
@@ -33,6 +34,7 @@ export class MNASolver {
         });
         this.dynamicIntegrator = new DynamicIntegrator();
         this.resultPostprocessor = new ResultPostprocessor();
+        this.simulationState = new SimulationState();
     }
 
     /**
@@ -167,6 +169,12 @@ export class MNASolver {
                     this.hasConnectedSwitch = true;
                 }
             }
+        }
+    }
+
+    setSimulationState(state) {
+        if (state instanceof SimulationState) {
+            this.simulationState = state;
         }
     }
 
@@ -426,7 +434,8 @@ export class MNASolver {
                 dt: this.dt,
                 debugMode: this.debugMode,
                 resolveDynamicIntegrationMethod: (component) => this.resolveDynamicIntegrationMethod(component),
-                getSourceInstantVoltage: (component) => this.getSourceInstantVoltage(component)
+                getSourceInstantVoltage: (component) => this.getSourceInstantVoltage(component),
+                simulationState: this.simulationState
             });
 
             solvedVoltages = voltages;
@@ -459,6 +468,7 @@ export class MNASolver {
 
         for (const comp of this.components) {
             if (!comp || (comp.type !== 'Diode' && comp.type !== 'LED')) continue;
+            const entry = this.simulationState && comp.id ? this.simulationState.ensure(comp.id) : null;
             const nAnode = comp.nodes?.[0];
             const nCathode = comp.nodes?.[1];
             if (nAnode == null || nCathode == null || nAnode < 0 || nCathode < 0) continue;
@@ -468,13 +478,19 @@ export class MNASolver {
             const vAk = (voltages[nAnode] || 0) - (voltages[nCathode] || 0);
             const i = Number(currents?.get(comp.id)) || 0;
             const currentOn = i > 1e-9;
-            const keepOn = !!comp.conducting && vAk >= (vf - holdMargin);
+            const currentConducting = entry && typeof entry.conducting === 'boolean'
+                ? entry.conducting
+                : !!comp.conducting;
+            const keepOn = currentConducting && vAk >= (vf - holdMargin);
             const nextConducting = vAk >= vf || currentOn || keepOn;
 
+            if (entry) {
+                entry.conducting = nextConducting;
+            }
             if (nextConducting !== !!comp.conducting) {
-                comp.conducting = nextConducting;
                 changed = true;
             }
+            comp.conducting = nextConducting;
         }
 
         return changed;
@@ -484,19 +500,26 @@ export class MNASolver {
         let changed = false;
         for (const comp of this.components) {
             if (!comp || comp.type !== 'Relay') continue;
+            const entry = this.simulationState && comp.id ? this.simulationState.ensure(comp.id) : null;
             const pullIn = Math.max(1e-9, Number(comp.pullInCurrent) || 0.02);
             const dropOutRaw = Math.max(1e-9, Number(comp.dropOutCurrent) || pullIn * 0.5);
             const dropOut = Math.min(dropOutRaw, pullIn);
             const coilCurrentAbs = Math.abs(Number(currents?.get(comp.id)) || 0);
 
-            const nextEnergized = comp.energized
+            const currentEnergized = entry && typeof entry.energized === 'boolean'
+                ? entry.energized
+                : !!comp.energized;
+            const nextEnergized = currentEnergized
                 ? coilCurrentAbs >= dropOut
                 : coilCurrentAbs >= pullIn;
 
+            if (entry) {
+                entry.energized = nextEnergized;
+            }
             if (nextEnergized !== !!comp.energized) {
-                comp.energized = nextEnergized;
                 changed = true;
             }
+            comp.energized = nextEnergized;
         }
         return changed;
     }
@@ -1000,7 +1023,8 @@ export class MNASolver {
             voltages,
             currents,
             this.dt,
-            this.hasConnectedSwitch
+            this.hasConnectedSwitch,
+            this.simulationState
         );
     }
 
