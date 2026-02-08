@@ -31,25 +31,39 @@ export class DynamicIntegrator {
         return DynamicIntegrationMethods.Trapezoidal;
     }
 
-    updateDynamicComponents(components, voltages, currents = null, dt = 0.001, hasConnectedSwitch = false) {
+    updateDynamicComponents(components, voltages, currents = null, dt = 0.001, hasConnectedSwitch = false, simulationState = null) {
         const list = Array.isArray(components) ? components : [];
         const nodeVoltages = Array.isArray(voltages) ? voltages : [];
         const isValidNode = (nodeIdx) => nodeIdx !== undefined && nodeIdx !== null && nodeIdx >= 0;
         for (const comp of list) {
+            const entry = simulationState && comp?.id ? simulationState.ensure(comp.id) : null;
             if (comp.type === 'Capacitor' || comp.type === 'ParallelPlateCapacitor') {
                 if (!comp.nodes || !isValidNode(comp.nodes[0]) || !isValidNode(comp.nodes[1])) continue;
                 const v1 = nodeVoltages[comp.nodes[0]] || 0;
                 const v2 = nodeVoltages[comp.nodes[1]] || 0;
                 const v = v1 - v2;
-                comp.prevVoltage = v;
-                comp.prevCharge = (comp.capacitance || 0) * v;
+                if (entry) {
+                    entry.prevVoltage = v;
+                    entry.prevCharge = (comp.capacitance || 0) * v;
+                }
                 const measuredCurrent = currents && typeof currents.get === 'function'
                     ? currents.get(comp.id)
                     : undefined;
-                if (Number.isFinite(measuredCurrent)) {
+                if (entry && Number.isFinite(measuredCurrent)) {
+                    entry.prevCurrent = measuredCurrent;
+                }
+                if (entry) {
+                    entry._dynamicHistoryReady = true;
+                }
+
+                comp.prevVoltage = entry?.prevVoltage ?? v;
+                comp.prevCharge = entry?.prevCharge ?? ((comp.capacitance || 0) * v);
+                if (Number.isFinite(entry?.prevCurrent)) {
+                    comp.prevCurrent = entry.prevCurrent;
+                } else if (Number.isFinite(measuredCurrent)) {
                     comp.prevCurrent = measuredCurrent;
                 }
-                comp._dynamicHistoryReady = true;
+                comp._dynamicHistoryReady = entry?._dynamicHistoryReady ?? true;
             }
 
             if (comp.type === 'Motor') {
@@ -57,14 +71,22 @@ export class DynamicIntegrator {
                 const v1 = nodeVoltages[comp.nodes[0]] || 0;
                 const v2 = nodeVoltages[comp.nodes[1]] || 0;
                 const voltage = v1 - v2;
-                const current = (voltage - (comp.backEmf || 0)) / comp.resistance;
+                const prevBackEmf = Number.isFinite(entry?.backEmf) ? entry.backEmf : (comp.backEmf || 0);
+                const prevSpeed = Number.isFinite(entry?.speed) ? entry.speed : (comp.speed || 0);
+                const current = (voltage - prevBackEmf) / comp.resistance;
 
                 const torque = comp.torqueConstant * current;
                 const acceleration = (torque - comp.loadTorque) / comp.inertia;
-                comp.speed = (comp.speed || 0) + acceleration * dt;
-                comp.speed = Math.max(0, comp.speed);
+                const nextSpeed = Math.max(0, prevSpeed + acceleration * dt);
+                const nextBackEmf = comp.emfConstant * nextSpeed;
 
-                comp.backEmf = comp.emfConstant * comp.speed;
+                if (entry) {
+                    entry.speed = nextSpeed;
+                    entry.backEmf = nextBackEmf;
+                }
+
+                comp.speed = nextSpeed;
+                comp.backEmf = nextBackEmf;
             }
 
             if (comp.type === 'Inductor') {
@@ -76,14 +98,22 @@ export class DynamicIntegrator {
                 const measuredCurrent = currents && typeof currents.get === 'function'
                     ? currents.get(comp.id)
                     : undefined;
-                if (Number.isFinite(measuredCurrent)) {
-                    comp.prevCurrent = measuredCurrent;
-                } else {
-                    const prevCurrent = Number.isFinite(comp.prevCurrent)
+                const priorCurrent = Number.isFinite(entry?.prevCurrent)
+                    ? entry.prevCurrent
+                    : (Number.isFinite(comp.prevCurrent)
                         ? comp.prevCurrent
-                        : (Number.isFinite(comp.initialCurrent) ? comp.initialCurrent : 0);
-                    comp.prevCurrent = prevCurrent + (dt / L) * dV;
+                        : (Number.isFinite(comp.initialCurrent) ? comp.initialCurrent : 0));
+                const nextCurrent = Number.isFinite(measuredCurrent)
+                    ? measuredCurrent
+                    : (priorCurrent + (dt / L) * dV);
+
+                if (entry) {
+                    entry.prevCurrent = nextCurrent;
+                    entry.prevVoltage = dV;
+                    entry._dynamicHistoryReady = true;
                 }
+
+                comp.prevCurrent = nextCurrent;
                 comp.prevVoltage = dV;
                 comp._dynamicHistoryReady = true;
             }
