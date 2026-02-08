@@ -9,6 +9,7 @@ import { StampDispatcher } from '../core/simulation/StampDispatcher.js';
 import { DynamicIntegrator, DynamicIntegrationMethods } from '../core/simulation/DynamicIntegrator.js';
 import { ResultPostprocessor } from '../core/simulation/ResultPostprocessor.js';
 import { SimulationState } from '../core/simulation/SimulationState.js';
+import { DefaultComponentRegistry } from '../core/simulation/ComponentRegistry.js';
 
 export class MNASolver {
     constructor() {
@@ -35,6 +36,7 @@ export class MNASolver {
         this.dynamicIntegrator = new DynamicIntegrator();
         this.resultPostprocessor = new ResultPostprocessor();
         this.simulationState = new SimulationState();
+        this.componentRegistry = DefaultComponentRegistry;
     }
 
     /**
@@ -606,6 +608,22 @@ export class MNASolver {
         
         if (this.debugMode) {
             console.log(`Stamp ${comp.type} ${comp.id}: nodes=[${n1},${n2}], matrix idx=[${i1},${i2}]`);
+        }
+
+        const registry = this.componentRegistry || DefaultComponentRegistry;
+        const handler = registry.get(comp.type);
+        if (handler && typeof handler.stamp === 'function') {
+            handler.stamp(comp, {
+                stampResistor: (rI1, rI2, rValue) => this.stampResistor(A, rI1, rI2, rValue)
+            }, {
+                n1,
+                n2,
+                i1,
+                i2,
+                nodeCount,
+                isValidNode
+            });
+            return;
         }
 
         const handledByDispatcher = this.stampDispatcher.stamp(comp, {
