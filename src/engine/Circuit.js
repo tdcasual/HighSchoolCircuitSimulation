@@ -13,6 +13,7 @@ import { WireCompactor } from '../core/topology/WireCompactor.js';
 import { ConnectivityCache } from '../core/topology/ConnectivityCache.js';
 import { CircuitSerializer } from '../core/io/CircuitSerializer.js';
 import { CircuitDeserializer } from '../core/io/CircuitDeserializer.js';
+import { SimulationState } from '../core/simulation/SimulationState.js';
 
 export class Circuit {
     constructor() {
@@ -44,6 +45,7 @@ export class Circuit {
         this.connectivityCache = new ConnectivityCache();
         this.componentTerminalTopologyKeys = new Map(); // componentId -> topology key used for terminal geometry cache
         this.terminalWorldPosCache = new Map(); // componentId -> Map(terminalIndex -> {x,y})
+        this.simulationState = new SimulationState();
         this.debugMode = false;
         this.loadDebugFlag();
         this.solver.debugMode = this.debugMode;
@@ -593,7 +595,9 @@ export class Circuit {
         
         this.isRunning = true;
         this.simTime = 0;
-        
+
+        this.resetSimulationState();
+
         // 重置动态元器件状态
         for (const [id, comp] of this.components) {
             if (comp.type === 'Capacitor' || comp.type === 'ParallelPlateCapacitor') {
@@ -634,6 +638,10 @@ export class Circuit {
         this.simulationInterval = setInterval(() => {
             this.step();
         }, this.dt * 1000);
+    }
+
+    resetSimulationState() {
+        this.simulationState.resetForComponents(Array.from(this.components.values()));
     }
 
     /**
