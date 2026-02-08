@@ -143,6 +143,9 @@ export class Circuit {
             Array.from(this.components.values()),
             this.nodes
         );
+        if (typeof this.solver.setSimulationState === 'function') {
+            this.solver.setSimulationState(this.simulationState);
+        }
         this.solverPreparedTopologyVersion = this.topologyVersion;
         this.solverCircuitDirty = false;
         return true;
@@ -644,6 +647,35 @@ export class Circuit {
         this.simulationState.resetForComponents(Array.from(this.components.values()));
     }
 
+    syncSimulationStateToComponents() {
+        for (const comp of this.components.values()) {
+            const entry = this.simulationState.get(comp.id);
+            if (!entry) continue;
+            if (comp.type === 'Diode' || comp.type === 'LED') {
+                comp.conducting = !!entry.conducting;
+            }
+            if (comp.type === 'Relay') {
+                comp.energized = !!entry.energized;
+            }
+            if (comp.type === 'Motor') {
+                if (Number.isFinite(entry.backEmf)) {
+                    comp.backEmf = entry.backEmf;
+                }
+                if (Number.isFinite(entry.speed)) {
+                    comp.speed = entry.speed;
+                }
+            }
+            if (comp.type === 'Capacitor' || comp.type === 'ParallelPlateCapacitor' || comp.type === 'Inductor') {
+                if (Number.isFinite(entry.prevCurrent)) comp.prevCurrent = entry.prevCurrent;
+                if (Number.isFinite(entry.prevVoltage)) comp.prevVoltage = entry.prevVoltage;
+                if (Number.isFinite(entry.prevCharge)) comp.prevCharge = entry.prevCharge;
+                if (typeof entry._dynamicHistoryReady === 'boolean') {
+                    comp._dynamicHistoryReady = entry._dynamicHistoryReady;
+                }
+            }
+        }
+    }
+
     /**
      * 停止模拟
      */
@@ -677,6 +709,7 @@ export class Circuit {
 
             this.simTime += substepDt;
             this.solver.updateDynamicComponents(substepResults.voltages, substepResults.currents);
+            this.syncSimulationStateToComponents();
         }
         this.lastResults = latestResults || { voltages: [], currents: new Map(), valid: false };
         
