@@ -615,7 +615,11 @@ export class MNASolver {
         const handler = registry.get(comp.type);
         if (handler && typeof handler.stamp === 'function') {
             handler.stamp(comp, {
-                stampResistor: (rI1, rI2, rValue) => this.stampResistor(A, rI1, rI2, rValue)
+                stampResistor: (rI1, rI2, rValue) => this.stampResistor(A, rI1, rI2, rValue),
+                stampCurrentSource: (cFrom, cTo, current) => this.stampCurrentSource(z, cFrom, cTo, current),
+                dt: this.dt,
+                resolveDynamicIntegrationMethod: (targetComp) => this.resolveDynamicIntegrationMethod(targetComp),
+                state: this.simulationState
             }, {
                 n1,
                 n2,
