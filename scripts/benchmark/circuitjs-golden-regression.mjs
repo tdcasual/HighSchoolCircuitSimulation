@@ -400,6 +400,14 @@ function flattenObject(value, prefix = '', output = new Map()) {
     return output;
 }
 
+function normalizeSnapshotValue(key, value) {
+    if (typeof value !== 'string') return value;
+    if (key.endsWith('sourcePath')) {
+        return value.split(/[\\/]/).pop();
+    }
+    return value;
+}
+
 function withinTolerance(current, baseline) {
     const diff = Math.abs(current - baseline);
     if (diff <= ABS_TOL) return true;
@@ -440,8 +448,8 @@ function compareSnapshots(currentSnapshot, baselineSnapshot) {
                 continue;
             }
 
-            const currentValue = currentFlat.get(key);
-            const baselineValue = baselineFlat.get(key);
+            const currentValue = normalizeSnapshotValue(key, currentFlat.get(key));
+            const baselineValue = normalizeSnapshotValue(key, baselineFlat.get(key));
             if (typeof currentValue === 'number' && typeof baselineValue === 'number') {
                 if (!withinTolerance(currentValue, baselineValue)) {
                     errors.push(
