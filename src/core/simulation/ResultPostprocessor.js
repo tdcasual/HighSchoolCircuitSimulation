@@ -1,5 +1,6 @@
 import { computeNtcThermistorResistance, computePhotoresistorResistance } from '../../utils/Physics.js';
 import { DynamicIntegrationMethods } from './DynamicIntegrator.js';
+import { DefaultComponentRegistry } from './ComponentRegistry.js';
 
 export class ResultPostprocessor {
     constructor(deps = {}) {
@@ -35,7 +36,8 @@ export class ResultPostprocessor {
         debugMode = false,
         resolveDynamicIntegrationMethod,
         getSourceInstantVoltage,
-        simulationState
+        simulationState,
+        registry
     } = {}) {
         const currents = new Map();
         for (const comp of components || []) {
@@ -47,7 +49,8 @@ export class ResultPostprocessor {
                 dt,
                 resolveDynamicIntegrationMethod,
                 getSourceInstantVoltage,
-                simulationState
+                simulationState,
+                registry
             });
             currents.set(comp.id, current);
 
@@ -121,6 +124,17 @@ export class ResultPostprocessor {
         const v1 = voltages[comp.nodes[0]] || 0;
         const v2 = voltages[comp.nodes[1]] || 0;
         const dV = v1 - v2;
+
+        const registryRef = context.registry || DefaultComponentRegistry;
+        const handler = registryRef ? registryRef.get(comp.type) : null;
+        if (handler && typeof handler.current === 'function') {
+            return handler.current(comp, {
+                voltage: (nodeIdx) => {
+                    if (nodeIdx === undefined || nodeIdx < 0) return 0;
+                    return voltages[nodeIdx] || 0;
+                }
+            }, { n1: comp.nodes?.[0], n2: comp.nodes?.[1] });
+        }
 
         switch (comp.type) {
             case 'Resistor':

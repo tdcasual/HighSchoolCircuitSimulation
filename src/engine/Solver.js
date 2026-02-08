@@ -437,7 +437,8 @@ export class MNASolver {
                 debugMode: this.debugMode,
                 resolveDynamicIntegrationMethod: (component) => this.resolveDynamicIntegrationMethod(component),
                 getSourceInstantVoltage: (component) => this.getSourceInstantVoltage(component),
-                simulationState: this.simulationState
+                simulationState: this.simulationState,
+                registry: this.componentRegistry
             });
 
             solvedVoltages = voltages;
