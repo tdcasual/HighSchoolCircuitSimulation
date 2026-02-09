@@ -25,4 +25,55 @@ describe('DynamicIntegrator with SimulationState', () => {
 
         expect(capacitor.prevVoltage).toBeCloseTo(4, 6);
     });
+
+    it('accelerates a motor under constant voltage with no load', () => {
+        const integrator = new DynamicIntegrator();
+        const motor = createComponent('Motor', 0, 0, 'M1');
+        motor.nodes = [0, 1];
+        motor.resistance = 5;
+        motor.torqueConstant = 0.1;
+        motor.emfConstant = 0.1;
+        motor.inertia = 0.01;
+        motor.loadTorque = 0;
+
+        const state = new SimulationState();
+        const voltages = [12, 0];
+        const dt = 0.01;
+
+        integrator.updateDynamicComponents([motor], voltages, null, dt, false, state);
+        const initialSpeed = motor.speed || 0;
+        const initialBackEmf = motor.backEmf || 0;
+        const initialCurrent = (voltages[0] - voltages[1] - initialBackEmf) / motor.resistance;
+
+        for (let i = 0; i < 100; i++) {
+            integrator.updateDynamicComponents([motor], voltages, null, dt, false, state);
+        }
+
+        const laterCurrent = (voltages[0] - voltages[1] - motor.backEmf) / motor.resistance;
+        expect(motor.speed).toBeGreaterThan(initialSpeed);
+        expect(motor.backEmf).toBeGreaterThan(initialBackEmf);
+        expect(laterCurrent).toBeLessThan(initialCurrent);
+    });
+
+    it('keeps motor stalled when load torque dominates', () => {
+        const integrator = new DynamicIntegrator();
+        const motor = createComponent('Motor', 0, 0, 'M1');
+        motor.nodes = [0, 1];
+        motor.resistance = 5;
+        motor.torqueConstant = 0.1;
+        motor.emfConstant = 0.1;
+        motor.inertia = 0.01;
+        motor.loadTorque = 100;
+
+        const state = new SimulationState();
+        const voltages = [12, 0];
+        const dt = 0.01;
+
+        for (let i = 0; i < 50; i++) {
+            integrator.updateDynamicComponents([motor], voltages, null, dt, false, state);
+        }
+
+        expect(motor.speed).toBeLessThan(1e-6);
+        expect(motor.backEmf).toBeLessThan(1e-6);
+    });
 });
