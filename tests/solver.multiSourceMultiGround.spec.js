@@ -73,4 +73,33 @@ describe('Solver multi-source / multi-ground cases', () => {
         const iLoad = results.currents.get('R1') || 0;
         expect(iLoad).toBeCloseTo(1, 6);
     });
+
+    it('keeps floating ground from becoming the global reference', () => {
+        const circuit = createTestCircuit();
+        const gMain = addComponent(circuit, 'Ground', 'GMAIN');
+        const source = addComponent(circuit, 'PowerSource', 'V1', { voltage: 10, internalResistance: 0 });
+        const load = addComponent(circuit, 'Resistor', 'R1', { resistance: 10 });
+
+        connectWire(circuit, 'Wg', source, 1, gMain, 0);
+        connectWire(circuit, 'W1', source, 0, load, 0);
+        connectWire(circuit, 'W2', load, 1, gMain, 0);
+
+        const gFloat = addComponent(circuit, 'Ground', 'GFLOAT');
+        const vFloat = addComponent(circuit, 'PowerSource', 'V2', { voltage: 4, internalResistance: 0 });
+        const rFloat = addComponent(circuit, 'Resistor', 'R2', { resistance: 4 });
+
+        connectWire(circuit, 'W3', vFloat, 1, gFloat, 0);
+        connectWire(circuit, 'W4', vFloat, 0, rFloat, 0);
+        connectWire(circuit, 'W5', rFloat, 1, gFloat, 0);
+
+        const results = solveCircuit(circuit);
+        expect(results.valid).toBe(true);
+        expect(gMain.nodes[0]).toBe(0);
+        expect(gFloat.nodes[0]).not.toBe(0);
+
+        const iMain = results.currents.get('R1') || 0;
+        const iFloat = results.currents.get('R2') || 0;
+        expect(iMain).toBeCloseTo(1, 6);
+        expect(iFloat).toBeCloseTo(1, 6);
+    });
 });
