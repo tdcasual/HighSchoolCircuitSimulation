@@ -110,6 +110,82 @@ describe('Solver common wiring mistakes', () => {
         const iLoad = Math.abs(results.currents.get('R1') || 0);
         expect(iLoad).toBeLessThan(1e-9);
     });
+
+    it('bypasses the load when a parallel switch is closed', () => {
+        const circuit = createTestCircuit();
+        const source = addComponent(circuit, 'PowerSource', 'V1', { voltage: 12, internalResistance: 0 });
+        const limiter = addComponent(circuit, 'Resistor', 'Rlim', { resistance: 10 });
+        const load = addComponent(circuit, 'Resistor', 'Rload', { resistance: 100 });
+        const sw = addComponent(circuit, 'Switch', 'S1', { closed: true });
+
+        connectWire(circuit, 'W1', source, 0, limiter, 0);
+        connectWire(circuit, 'W2', limiter, 1, load, 0);
+        connectWire(circuit, 'W3', load, 1, source, 1);
+        connectWire(circuit, 'W4', limiter, 1, sw, 0);
+        connectWire(circuit, 'W5', sw, 1, source, 1);
+
+        const results = solveCircuit(circuit);
+        expect(results.valid).toBe(true);
+        expect(circuit.solver.shortCircuitDetected).toBe(false);
+
+        const expectedCurrent = source.voltage / limiter.resistance;
+        const iLimiter = Math.abs(results.currents.get('Rlim') || 0);
+        const iLoad = Math.abs(results.currents.get('Rload') || 0);
+        const vNode = results.voltages[limiter.nodes[1]] || 0;
+        expect(iLimiter).toBeCloseTo(expectedCurrent, 6);
+        expect(iLoad).toBeLessThan(1e-3);
+        expect(Math.abs(vNode)).toBeLessThan(1e-3);
+    });
+
+    it('routes current through a parallel ammeter and starves the load', () => {
+        const circuit = createTestCircuit();
+        const source = addComponent(circuit, 'PowerSource', 'V1', { voltage: 12, internalResistance: 0 });
+        const limiter = addComponent(circuit, 'Resistor', 'Rlim', { resistance: 10 });
+        const load = addComponent(circuit, 'Resistor', 'Rload', { resistance: 100 });
+        const ammeter = addComponent(circuit, 'Ammeter', 'A1', { resistance: 0, range: 3 });
+
+        connectWire(circuit, 'W1', source, 0, limiter, 0);
+        connectWire(circuit, 'W2', limiter, 1, load, 0);
+        connectWire(circuit, 'W3', load, 1, source, 1);
+        connectWire(circuit, 'W4', limiter, 1, ammeter, 0);
+        connectWire(circuit, 'W5', ammeter, 1, source, 1);
+
+        const results = solveCircuit(circuit);
+        expect(results.valid).toBe(true);
+        expect(circuit.solver.shortCircuitDetected).toBe(false);
+
+        const expectedCurrent = source.voltage / limiter.resistance;
+        const iLimiter = Math.abs(results.currents.get('Rlim') || 0);
+        const iLoad = Math.abs(results.currents.get('Rload') || 0);
+        const iAmmeter = Math.abs(results.currents.get('A1') || 0);
+        expect(iLimiter).toBeCloseTo(expectedCurrent, 6);
+        expect(iAmmeter).toBeCloseTo(expectedCurrent, 6);
+        expect(iLoad).toBeLessThan(1e-3);
+    });
+
+    it('reduces current when a finite-resistance voltmeter is placed in series', () => {
+        const circuit = createTestCircuit();
+        const source = addComponent(circuit, 'PowerSource', 'V1', { voltage: 12, internalResistance: 0 });
+        const voltmeter = addComponent(circuit, 'Voltmeter', 'VM1', { resistance: 1000, range: 15 });
+        const load = addComponent(circuit, 'Resistor', 'R1', { resistance: 100 });
+
+        connectWire(circuit, 'W1', source, 0, voltmeter, 0);
+        connectWire(circuit, 'W2', voltmeter, 1, load, 0);
+        connectWire(circuit, 'W3', load, 1, source, 1);
+
+        const results = solveCircuit(circuit);
+        expect(results.valid).toBe(true);
+
+        const expectedCurrent = source.voltage / (voltmeter.resistance + load.resistance);
+        const iLoad = results.currents.get('R1') || 0;
+        const iVoltmeter = results.currents.get('VM1') || 0;
+        expect(iLoad).toBeCloseTo(expectedCurrent, 6);
+        expect(iVoltmeter).toBeCloseTo(expectedCurrent, 6);
+
+        const vDropVm = (results.voltages[voltmeter.nodes[0]] || 0)
+            - (results.voltages[voltmeter.nodes[1]] || 0);
+        expect(Math.abs(vDropVm)).toBeCloseTo(expectedCurrent * voltmeter.resistance, 6);
+    });
 });
 
 describe('Rheostat connection modes', () => {
