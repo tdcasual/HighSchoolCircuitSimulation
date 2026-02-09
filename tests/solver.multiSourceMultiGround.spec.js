@@ -52,4 +52,25 @@ describe('Solver multi-source / multi-ground cases', () => {
         const iLoad = results.currents.get('R1') || 0;
         expect(iLoad).toBeCloseTo(12 / 6, 6);
     });
+
+    it('assigns node 0 to multiple grounds tied to the same node', () => {
+        const circuit = createTestCircuit();
+        const g1 = addComponent(circuit, 'Ground', 'GND1');
+        const g2 = addComponent(circuit, 'Ground', 'GND2');
+        const source = addComponent(circuit, 'PowerSource', 'V1', { voltage: 9, internalResistance: 0 });
+        const load = addComponent(circuit, 'Resistor', 'R1', { resistance: 9 });
+
+        connectWire(circuit, 'Wg1', source, 1, g1, 0);
+        connectWire(circuit, 'Wg2', g1, 0, g2, 0);
+        connectWire(circuit, 'W1', source, 0, load, 0);
+        connectWire(circuit, 'W2', load, 1, g1, 0);
+
+        const results = solveCircuit(circuit);
+        expect(results.valid).toBe(true);
+        expect(g1.nodes[0]).toBe(0);
+        expect(g2.nodes[0]).toBe(0);
+
+        const iLoad = results.currents.get('R1') || 0;
+        expect(iLoad).toBeCloseTo(1, 6);
+    });
 });
