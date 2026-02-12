@@ -44,14 +44,14 @@
 
 ## 支持元器件
 
-| 类别 | 元器件 |
-| --- | --- |
-| 电源/参考 | 接地（Ground）、直流电源（PowerSource）、交流电源（ACVoltageSource） |
+| 类别         | 元器件                                                                                                                              |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
+| 电源/参考    | 接地（Ground）、直流电源（PowerSource）、交流电源（ACVoltageSource）                                                                |
 | 电阻与半导体 | 定值电阻（Resistor）、滑动变阻器（Rheostat）、灯泡（Bulb）、二极管（Diode）、LED、热敏电阻（Thermistor）、光敏电阻（Photoresistor） |
-| 储能与机电 | 电容（Capacitor）、平行板电容（ParallelPlateCapacitor）、电感（Inductor）、电动机（Motor） |
-| 开关与保护 | 开关（Switch）、单刀双掷开关（SPDTSwitch）、继电器（Relay）、保险丝（Fuse） |
-| 仪表与容器 | 电流表（Ammeter）、电压表（Voltmeter）、黑箱（BlackBox） |
-| 连接 | 导线（Wire） |
+| 储能与机电   | 电容（Capacitor）、平行板电容（ParallelPlateCapacitor）、电感（Inductor）、电动机（Motor）                                          |
+| 开关与保护   | 开关（Switch）、单刀双掷开关（SPDTSwitch）、继电器（Relay）、保险丝（Fuse）                                                         |
+| 仪表与容器   | 电流表（Ammeter）、电压表（Voltmeter）、黑箱（BlackBox）                                                                            |
+| 连接         | 导线（Wire）                                                                                                                        |
 
 说明：多端器件已支持（如 Rheostat/Relay/SPDTSwitch），并在节点重建与求解中按端子数处理。
 
@@ -83,6 +83,31 @@ npm test
 
 ```bash
 npm run test:watch
+```
+
+工程检查（lint + 格式检查 + 单测）：
+
+```bash
+npm run check
+```
+
+完整门禁（含三套回归基线）：
+
+```bash
+npm run check:full
+```
+
+架构边界说明（ESLint `boundaries`）：
+
+- 采用“默认禁止、按层放行”策略，限制 `src` 目录跨层依赖。
+- 当前层次：`entry`（`src/main.js`）/ `ui` / `app` / `ai` / `engine` / `core` / `components` / `utils`。
+- 已收紧：`utils` 仅允许依赖 `utils`，不再允许 `utils -> core` 的反向依赖。
+- 新增模块时请优先放在对应层内，若确需跨层依赖，先更新 `.eslintrc.cjs` 中 `boundaries/element-types` 规则并说明理由。
+
+可选：运行时日志级别可通过 `localStorage` 控制（`silent/error/warn/info/debug`）：
+
+```js
+localStorage.setItem("app_log_level", "debug");
 ```
 
 ### 部署

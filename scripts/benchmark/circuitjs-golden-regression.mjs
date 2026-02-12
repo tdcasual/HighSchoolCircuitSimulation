@@ -36,18 +36,6 @@ function safeNumber(value, fallback = 0) {
     return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-function toBool(value, fallback = false) {
-    if (typeof value === 'boolean') return value;
-    if (value === 'true') return true;
-    if (value === 'false') return false;
-    return fallback;
-}
-
-function coordinateKey(point) {
-    if (!point) return '';
-    return `${point.x},${point.y}`;
-}
-
 function worldToLocal(rotation, dx, dy) {
     const rot = ((rotation % 360) + 360) % 360;
     switch (rot) {

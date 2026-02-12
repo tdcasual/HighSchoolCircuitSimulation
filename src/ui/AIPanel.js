@@ -553,7 +553,10 @@ export class AIPanel {
             const payload = this.app?.buildSaveData ? this.app.buildSaveData() : circuitJSON;
             localStorage.setItem('saved_circuit', JSON.stringify(payload));
         } catch (e) {
-            console.error('Failed to save circuit:', e);
+            this.logPanelEvent?.('error', 'save_circuit_failed', {
+                error: e?.message || String(e)
+            });
+            this.app?.logger?.error?.('Failed to save circuit:', e);
         }
     }
 
@@ -572,7 +575,10 @@ export class AIPanel {
                 return true;
             }
         } catch (e) {
-            console.error('Failed to load circuit:', e);
+            this.logPanelEvent?.('error', 'load_circuit_failed', {
+                error: e?.message || String(e)
+            });
+            this.app?.logger?.error?.('Failed to load circuit:', e);
         }
         return false;
     }

@@ -25,6 +25,18 @@ const VALID_TOOL_TYPES = Object.freeze([
     'Wire'
 ]);
 
+function logDebug(context, ...args) {
+    if (context?.logger && typeof context.logger.debug === 'function') {
+        context.logger.debug(...args);
+    }
+}
+
+function logWarn(context, ...args) {
+    if (context?.logger && typeof context.logger.warn === 'function') {
+        context.logger.warn(...args);
+    }
+}
+
 /**
  * 工具箱拖放事件
  */
@@ -39,7 +51,7 @@ export function bindToolboxEvents() {
         item.addEventListener('dragstart', (e) => {
             const type = item.dataset.type;
             if (!type || !VALID_TOOL_TYPES.includes(type)) {
-                console.error('Invalid component type:', type);
+                logWarn(this, 'Invalid component type:', type);
                 e.preventDefault();
                 return;
             }
@@ -48,7 +60,7 @@ export function bindToolboxEvents() {
             e.dataTransfer.effectAllowed = 'copy';
             item.classList.add('dragging');
             this.isToolboxDrag = true;
-            console.log('Toolbox drag started:', type);
+            logDebug(this, 'Toolbox drag started:', type);
         });
 
         // 结束拖动
@@ -83,17 +95,17 @@ export function bindToolboxEvents() {
 
         // 如果正在拖动画布上的元器件，不创建新元器件
         if (this.isDraggingComponent) {
-            console.log('Ignoring drop: dragging existing component');
+            logDebug(this, 'Ignoring drop: dragging existing component');
             return;
         }
 
         // 只接受工具箱的拖放
         const type = e.dataTransfer.getData('application/x-circuit-component');
-        console.log('Drop event, type:', type);
+        logDebug(this, 'Drop event, type:', type);
 
         // 验证类型
         if (!type || !VALID_TOOL_TYPES.includes(type)) {
-            console.log('Invalid component type, ignoring drop:', type);
+            logWarn(this, 'Invalid component type, ignoring drop:', type);
             return;
         }
 

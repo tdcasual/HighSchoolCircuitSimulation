@@ -3,7 +3,20 @@
  * 用于MNA（改进节点分析法）的线性方程组求解
  */
 
+import { createRuntimeLogger } from '../utils/Logger.js';
+
 export class Matrix {
+    static getLogger() {
+        if (!Matrix._logger) {
+            Matrix._logger = createRuntimeLogger({ scope: 'matrix' });
+        }
+        return Matrix._logger;
+    }
+
+    static setLogger(logger) {
+        Matrix._logger = logger || createRuntimeLogger({ scope: 'matrix' });
+    }
+
     /**
      * 创建一个 rows x cols 的零矩阵
      * @param {number} rows - 行数
@@ -72,6 +85,7 @@ export class Matrix {
 
         const pivotEpsilon = Number.isFinite(options.pivotEpsilon) ? options.pivotEpsilon : 1e-15;
         const warnOnFailure = options.warnOnFailure !== false;
+        const logger = options.logger || Matrix.getLogger();
 
         const lu = A.map((row) => [...row]);
         const pivot = Array.from({ length: n }, (_, idx) => idx);
@@ -90,7 +104,7 @@ export class Matrix {
 
             if (maxVal < pivotEpsilon) {
                 if (warnOnFailure) {
-                    console.warn('Matrix is singular or nearly singular');
+                    logger?.warn?.('Matrix is singular or nearly singular');
                 }
                 return null;
             }
@@ -156,7 +170,7 @@ export class Matrix {
             }
             const pivotValue = lu[i][i];
             if (Math.abs(pivotValue) < pivotEpsilon) {
-                console.warn('Matrix is singular or nearly singular');
+                Matrix.getLogger()?.warn?.('Matrix is singular or nearly singular');
                 return null;
             }
             x[i] = sum / pivotValue;
@@ -220,9 +234,9 @@ export class Matrix {
      * @param {string} name - 矩阵名称
      */
     static print(matrix, name = 'Matrix') {
-        console.log(`${name}:`);
-        matrix.forEach((row, i) => {
-            console.log(`  [${row.map(v => v.toFixed(4).padStart(10)).join(', ')}]`);
+        Matrix.getLogger()?.info?.(`${name}:`);
+        matrix.forEach((row) => {
+            Matrix.getLogger()?.info?.(`  [${row.map(v => v.toFixed(4).padStart(10)).join(', ')}]`);
         });
     }
 
@@ -232,6 +246,6 @@ export class Matrix {
      * @param {string} name - 向量名称
      */
     static printVector(vector, name = 'Vector') {
-        console.log(`${name}: [${vector.map(v => v.toFixed(4)).join(', ')}]`);
+        Matrix.getLogger()?.info?.(`${name}: [${vector.map(v => v.toFixed(4)).join(', ')}]`);
     }
 }

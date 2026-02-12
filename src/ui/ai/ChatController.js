@@ -77,7 +77,7 @@ function initializeChatImpl() {
         try {
             await this.askQuestion(question);
         } catch (error) {
-            console.error('Ask question failed:', error);
+            this.app?.logger?.error?.('Ask question failed:', error);
             this.addChatMessage('system', `抱歉，出现错误: ${error.message}`);
             this.logPanelEvent?.('error', 'question_outer_failed', {
                 error: error?.message || String(error)
@@ -233,7 +233,7 @@ async function askQuestionImpl(question) {
             fallbackUsed
         });
     } catch (error) {
-        console.error('Question error:', error);
+        this.app?.logger?.error?.('Question error:', error);
         if (loadingId) {
             this.removeChatMessage(loadingId);
             loadingId = null;
@@ -278,7 +278,7 @@ function triggerFollowupImpl(mode) {
     }
     const composite = `基于我们上一轮对话，${prompt}`;
     this.askQuestion(composite).catch((error) => {
-        console.error('Followup question failed:', error);
+        this.app?.logger?.error?.('Followup question failed:', error);
         this.addChatMessage('system', `抱歉，出现错误: ${error.message}`);
         this.logPanelEvent?.('error', 'followup_failed', {
             mode,
@@ -385,7 +385,10 @@ function archiveCurrentConversationImpl() {
     try {
         localStorage.setItem('ai_chat_history', JSON.stringify(trimmed));
     } catch (e) {
-        console.warn('保存历史失败', e);
+        this.logPanelEvent?.('warn', 'chat_history_save_failed', {
+            error: e?.message || String(e)
+        });
+        this.app?.logger?.warn?.('保存历史失败', e);
     }
 }
 

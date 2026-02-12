@@ -478,7 +478,10 @@ function getSavedPanelLayoutImpl() {
             collapsed: !!parsed.collapsed
         };
     } catch (error) {
-        console.warn('Failed to load AI panel layout:', error);
+        this.logPanelEvent?.('warn', 'load_panel_layout_failed', {
+            error: error?.message || String(error)
+        });
+        this.app?.logger?.warn?.('Failed to load AI panel layout:', error);
         return null;
     }
 }
@@ -503,7 +506,10 @@ function savePanelLayoutImpl() {
         };
         localStorage.setItem(this.layoutStorageKey, JSON.stringify(payload));
     } catch (error) {
-        console.warn('Failed to save AI panel layout:', error);
+        this.logPanelEvent?.('warn', 'save_panel_layout_failed', {
+            error: error?.message || String(error)
+        });
+        this.app?.logger?.warn?.('Failed to save AI panel layout:', error);
     }
 }
 

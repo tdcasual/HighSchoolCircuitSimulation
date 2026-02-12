@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validateCircuitJSON } from '../src/utils/circuitSchema.js';
+import { validateCircuitJSON } from '../src/engine/CircuitSchema.js';
 
 const base = {
     meta: { version: '1.0' },

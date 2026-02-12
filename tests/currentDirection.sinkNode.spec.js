@@ -14,7 +14,7 @@ describe('Sink-only node direction inference', () => {
         // Series chain with explicit bottom-node wires
         connectWire(circuit, 'top-a', source, 0, r1, 0);
         connectWire(circuit, 'top-b', r1, 1, r2, 0);
-        const middleBottom = connectWire(circuit, 'bottom-mid', r2, 1, r1, 1);
+        connectWire(circuit, 'bottom-mid', r2, 1, r1, 1);
         const returnWire = connectWire(circuit, 'bottom-return', r1, 1, source, 1);
 
         const results = solveCircuit(circuit);

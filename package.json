@@ -3,6 +3,12 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
+    "check": "npm run lint && npm run format:check && npm test",
+    "check:full": "npm run check && npm run baseline:p0 && npm run baseline:circuitjs && npm run baseline:ai",
+    "lint": "eslint . --ext .js,.mjs,.cjs",
+    "lint:fix": "npm run lint -- --fix",
+    "format": "prettier --write \"package*.json\" \"vercel.json\" \"README.md\" \".github/**/*.yml\"",
+    "format:check": "prettier --check \"package*.json\" \"vercel.json\" \"README.md\" \".github/**/*.yml\"",
     "test": "vitest run",
     "test:watch": "vitest",
     "benchmark:p0": "node scripts/benchmark/p0-baseline.mjs",
@@ -14,6 +20,9 @@
     "baseline:ai:update": "node scripts/benchmark/ai-eval-regression.mjs --update"
   },
   "devDependencies": {
+    "eslint": "^8.57.1",
+    "eslint-plugin-boundaries": "^5.4.0",
+    "prettier": "^3.6.2",
     "vitest": "^1.6.0"
   }
 }

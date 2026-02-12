@@ -10,14 +10,17 @@ import { AIPanel } from './ui/AIPanel.js';
 import { ObservationPanel } from './ui/ObservationPanel.js';
 import { ExerciseBoard } from './ui/ExerciseBoard.js';
 import { resetIdCounter, updateIdCounterFromExisting } from './components/Component.js';
+import { createRuntimeLogger } from './utils/Logger.js';
 
 class CircuitSimulatorApp {
     constructor() {
         // 获取SVG画布
         this.svg = document.getElementById('circuit-canvas');
+        this.logger = createRuntimeLogger({ scope: 'app' });
         
         // 初始化电路引擎
         this.circuit = new Circuit();
+        this.circuit.setLogger?.(this.logger.child('circuit'));
         
         // 初始化渲染器
         this.renderer = new Renderer(this.svg, this.circuit);
@@ -42,7 +45,7 @@ class CircuitSimulatorApp {
         
         // 初始化完成
         this.updateStatus('电路模拟器已就绪');
-        console.log('Circuit Simulator initialized');
+        this.logger.info('Circuit Simulator initialized');
         
         // 暴露调试接口到全局
         window.debugCircuit = () => this.debugCircuit();
@@ -52,20 +55,21 @@ class CircuitSimulatorApp {
      * 调试电路状态
      */
     debugCircuit() {
+        const logger = this.logger.child('debugCircuit');
         // 启用 solver 调试模式
         this.circuit.solver.debugMode = true;
         
-        console.log('=== Circuit Debug Info ===');
-        console.log('Components:', this.circuit.components.size);
-        console.log('Wires:', this.circuit.wires.size);
-        console.log('Nodes:', this.circuit.nodes.length);
+        logger.info('=== Circuit Debug Info ===');
+        logger.info('Components:', this.circuit.components.size);
+        logger.info('Wires:', this.circuit.wires.size);
+        logger.info('Nodes:', this.circuit.nodes.length);
         
-        console.log('\n--- Components ---');
+        logger.info('\n--- Components ---');
         for (const [id, comp] of this.circuit.components) {
-            console.log(`${id} (${comp.type}): nodes=[${comp.nodes}], V=${comp.voltageValue?.toFixed(3)}, I=${comp.currentValue?.toFixed(3)}, R=${comp.resistance || comp.maxResistance || 'N/A'}`);
+            logger.info(`${id} (${comp.type}): nodes=[${comp.nodes}], V=${comp.voltageValue?.toFixed(3)}, I=${comp.currentValue?.toFixed(3)}, R=${comp.resistance || comp.maxResistance || 'N/A'}`);
         }
         
-        console.log('\n--- Wires ---');
+        logger.info('\n--- Wires ---');
         for (const [id, wire] of this.circuit.wires) {
             const fmtEnd = (which) => {
                 const ref = which === 'a' ? wire.aRef : wire.bRef;
@@ -78,10 +82,10 @@ class CircuitSimulatorApp {
                 }
                 return '?';
             };
-            console.log(`${id}: ${fmtEnd('a')} -> ${fmtEnd('b')}`);
+            logger.info(`${id}: ${fmtEnd('a')} -> ${fmtEnd('b')}`);
         }
         
-        console.log('\n--- Node Connections ---');
+        logger.info('\n--- Node Connections ---');
         // 分析每个节点连接了哪些端子
         const nodeConnections = {};
         for (const [id, comp] of this.circuit.components) {
@@ -91,17 +95,17 @@ class CircuitSimulatorApp {
             });
         }
         for (const [node, terminals] of Object.entries(nodeConnections)) {
-            console.log(`Node ${node}: ${terminals.join(', ')}`);
+            logger.info(`Node ${node}: ${terminals.join(', ')}`);
         }
         
         // 强制运行一次求解
-        console.log('\n--- Running Solve ---');
+        logger.info('\n--- Running Solve ---');
         this.circuit.rebuildNodes();
         
-        console.log('\n--- After rebuildNodes ---');
-        console.log('Total nodes:', this.circuit.nodes.length);
+        logger.info('\n--- After rebuildNodes ---');
+        logger.info('Total nodes:', this.circuit.nodes.length);
         for (const [id, comp] of this.circuit.components) {
-            console.log(`  ${id}: nodes = [${comp.nodes}]`);
+            logger.info(`  ${id}: nodes = [${comp.nodes}]`);
         }
         
         this.circuit.solver.setCircuit(
@@ -109,17 +113,17 @@ class CircuitSimulatorApp {
             this.circuit.nodes
         );
         
-        console.log('VoltageSourceCount:', this.circuit.solver.voltageSourceCount);
+        logger.info('VoltageSourceCount:', this.circuit.solver.voltageSourceCount);
         
         const results = this.circuit.solver.solve(this.circuit.dt);
         
-        console.log('\n--- Solve Results ---');
-        console.log('Valid:', results.valid);
-        console.log('Voltages:', results.voltages);
+        logger.info('\n--- Solve Results ---');
+        logger.info('Valid:', results.valid);
+        logger.info('Voltages:', results.voltages);
         if (results.currents instanceof Map) {
-            console.log('Currents:', Object.fromEntries(results.currents));
+            logger.info('Currents:', Object.fromEntries(results.currents));
         } else {
-            console.log('Currents:', results.currents);
+            logger.info('Currents:', results.currents);
         }
         
         // 禁用调试模式
@@ -283,7 +287,7 @@ class CircuitSimulatorApp {
                 
                 this.updateStatus(`已导入电路: ${data.meta?.name || '未命名'}`);
             } catch (err) {
-                console.error('Import error:', err);
+                this.logger.error('Import error:', err);
                 this.updateStatus('导入失败: ' + err.message);
                 alert('导入失败: ' + err.message);
             }
@@ -308,7 +312,7 @@ class CircuitSimulatorApp {
                 const payload = this.buildSaveData();
                 localStorage.setItem('saved_circuit', JSON.stringify(payload));
             } catch (e) {
-                console.error('Auto-save failed:', e);
+                this.logger.error('Auto-save failed:', e);
             }
         };
 
@@ -365,7 +369,7 @@ class CircuitSimulatorApp {
                 this.updateStatus(`已从缓存恢复电路 (${circuitJSON.components.length} 个元器件)`);
             }
         } catch (e) {
-            console.error('Failed to load saved circuit:', e);
+            this.logger.error('Failed to load saved circuit:', e);
         }
     }
 }

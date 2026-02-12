@@ -61,7 +61,11 @@ export class OpenAIClient {
             }
             return { ...merged, apiKey: sessionKey };
         } catch (e) {
-            console.warn('Failed to load AI config, using defaults.', e);
+            this.logEvent('warn', 'load_config_failed', {
+                error: e?.message || String(e)
+            }, {
+                source: 'openai_client.load_config'
+            });
             return defaultConfig;
         }
     }
@@ -122,7 +126,7 @@ export class OpenAIClient {
         }
 
         try {
-            const response = await this.callAPI([
+            await this.callAPI([
                 { role: 'user', content: 'Hello' }
             ], this.config.textModel, 10, {
                 source: 'openai_client.test_connection'
@@ -170,7 +174,11 @@ ${circuitState}`;
                 source: 'openai_client.explain_circuit'
             });
         } catch (error) {
-            console.error('Explanation error:', error);
+            this.logEvent('error', 'explain_circuit_failed', {
+                error: error?.message || String(error)
+            }, {
+                source: 'openai_client.explain_circuit'
+            });
             throw new Error(`解释失败: ${error.message}`);
         }
     }
@@ -356,7 +364,7 @@ ${circuitState}`;
                 }
 
                 if (json && typeof json === 'object') {
-                    const answerText = this.extractResponseText(json, useResponsesApi);
+                    const answerText = this.extractResponseText(json);
                     this.logEvent('info', 'call_api_success', {
                         attempt: attempt + 1,
                         durationMs: Date.now() - startedAt,
@@ -539,7 +547,7 @@ ${circuitState}`;
     /**
      * 提取响应文本，兼容两种 API 格式
      */
-    extractResponseText(data, preferResponsesFormat = false) {
+    extractResponseText(data) {
         if (!data) throw new Error('响应为空');
 
         // responses API 常见字段

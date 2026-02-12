@@ -1,4 +1,5 @@
 import { HistoryManager } from './HistoryManager.js';
+import { createRuntimeLogger } from '../../utils/Logger.js';
 
 /**
  * 初始化 InteractionManager 的运行时状态。
@@ -10,6 +11,13 @@ export function initializeInteractionState(context, app, options = {}) {
     context.circuit = app.circuit;
     context.renderer = app.renderer;
     context.svg = app.svg;
+    if (app.logger && typeof app.logger.child === 'function') {
+        context.logger = app.logger.child('interaction');
+    } else if (app.logger) {
+        context.logger = app.logger;
+    } else {
+        context.logger = createRuntimeLogger({ scope: 'interaction' });
+    }
 
     // 交互状态
     context.isDragging = false;

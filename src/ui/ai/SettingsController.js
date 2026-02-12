@@ -153,7 +153,7 @@ function initializeSettingsDialogImpl() {
             fetchStatus.textContent = `已加载 ${models.length} 个模型`;
             this.logPanelEvent?.('info', 'fetch_models_success', { count: models.length });
         } catch (e) {
-            console.error(e);
+            this.app?.logger?.error?.('Fetch models failed:', e);
             fetchStatus.textContent = `获取失败: ${e.message}`;
             this.logPanelEvent?.('error', 'fetch_models_failed', { error: e.message });
         } finally {
@@ -395,7 +395,7 @@ function bindModelSelectorImpl(selectEl, inputEl) {
 function fillSelectOptionsImpl(selectEl, options = [], currentValue = '') {
     if (!selectEl) return;
     const current = currentValue?.trim();
-    selectEl.innerHTML = '<option value=\"\">从列表选择</option>';
+    selectEl.innerHTML = '<option value="">从列表选择</option>';
     options.forEach((id) => {
         const opt = document.createElement('option');
         opt.value = id;

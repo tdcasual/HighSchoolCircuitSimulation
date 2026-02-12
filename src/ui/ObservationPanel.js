@@ -4,8 +4,8 @@
  */
 
 import { createElement, clearElement } from '../utils/SafeDOM.js';
-import { applyTransform, computeNiceTicks, computeRangeFromBuffer, formatNumberCompact, RingBuffer2D, TransformIds, TransformOptions } from './observation/ObservationMath.js';
-import { evaluateSourceQuantity, getQuantitiesForSource, getSourceOptions, PROBE_SOURCE_PREFIX, QuantityIds, TIME_SOURCE_ID } from './observation/ObservationSources.js';
+import { applyTransform, computeNiceTicks, computeRangeFromBuffer, formatNumberCompact, RingBuffer2D, TransformOptions } from './observation/ObservationMath.js';
+import { evaluateSourceQuantity, getQuantitiesForSource, getSourceOptions, PROBE_SOURCE_PREFIX, TIME_SOURCE_ID } from './observation/ObservationSources.js';
 import { createDefaultPlotState, DEFAULT_SAMPLE_INTERVAL_MS, normalizeObservationState, normalizeSampleIntervalMs, ObservationDisplayModes, shouldSampleAtTime } from './observation/ObservationState.js';
 
 function setSelectOptions(selectEl, options, selectedId) {

@@ -1,10 +1,16 @@
 import { computeNtcThermistorResistance, computePhotoresistorResistance } from '../../utils/Physics.js';
 import { DynamicIntegrationMethods } from './DynamicIntegrator.js';
 import { DefaultComponentRegistry } from './ComponentRegistry.js';
+import { createRuntimeLogger } from '../../utils/Logger.js';
 
 export class ResultPostprocessor {
     constructor(deps = {}) {
         this.deps = deps;
+        this.logger = deps.logger || createRuntimeLogger({ scope: 'solver:postprocessor' });
+    }
+
+    setLogger(logger) {
+        this.logger = logger || createRuntimeLogger({ scope: 'solver:postprocessor' });
     }
 
     resolveDynamicIntegrationMethod(comp, context = {}) {
@@ -55,7 +61,7 @@ export class ResultPostprocessor {
             currents.set(comp.id, current);
 
             if (debugMode) {
-                console.log(`Current for ${comp.id}: ${current.toFixed(6)}A`);
+                this.logger?.debug?.(`Current for ${comp.id}: ${current.toFixed(6)}A`);
             }
         }
         return { currents };

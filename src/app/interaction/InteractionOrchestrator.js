@@ -494,7 +494,7 @@ export function onMouseUp(e) {
     }
 }
 
-export function onMouseLeave(e) {
+export function onMouseLeave(_e) {
     if (this.isPanning) {
         this.isPanning = false;
         this.svg.style.cursor = '';

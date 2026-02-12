@@ -3,6 +3,18 @@ import { toCanvasInt } from '../../utils/CanvasCoords.js';
 import { ErrorCodes } from '../../core/errors/ErrorCodes.js';
 import { AppError } from '../../core/errors/AppError.js';
 
+function logDebug(context, ...args) {
+    if (context?.logger && typeof context.logger.debug === 'function') {
+        context.logger.debug(...args);
+    }
+}
+
+function logError(context, ...args) {
+    if (context?.logger && typeof context.logger.error === 'function') {
+        context.logger.error(...args);
+    }
+}
+
 function createSuccessResult(type, payload = undefined, message = null) {
     const result = { ok: true, type };
     if (payload !== undefined) result.payload = payload;
@@ -34,16 +46,16 @@ function createFailureResult(
 }
 
 export function addComponent(type, x, y) {
-    console.log('Adding component:', type, 'at', x, y);
+    logDebug(this, 'Adding component:', type, 'at', x, y);
     let createdComponent = null;
     try {
         this.runWithHistory(`添加${ComponentNames[type] || type}`, () => {
             const comp = createComponent(type, toCanvasInt(x), toCanvasInt(y));
             createdComponent = comp;
-            console.log('Created component:', comp);
+            logDebug(this, 'Created component:', comp);
             this.circuit.addComponent(comp);
             const svgElement = this.renderer.addComponent(comp);
-            console.log('Rendered SVG element:', svgElement);
+            logDebug(this, 'Rendered SVG element:', svgElement);
             this.selectComponent(comp.id);
             this.app.observationPanel?.refreshComponentOptions();
             this.app.observationPanel?.refreshDialGauges();
@@ -58,7 +70,7 @@ export function addComponent(type, x, y) {
             `已添加 ${ComponentNames[type]}`
         );
     } catch (error) {
-        console.error('Error adding component:', error);
+        logError(this, 'Error adding component:', error);
         const message = `添加失败: ${error.message}`;
         this.updateStatus(message);
         return createFailureResult('component.add_failed', error, message, undefined, true);

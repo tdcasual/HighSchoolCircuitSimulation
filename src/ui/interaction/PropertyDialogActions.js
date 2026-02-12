@@ -294,7 +294,9 @@ export function applyDialogChanges() {
         this.updateStatus('属性已更新');
         });
     } catch (error) {
-        console.error('Error applying dialog changes:', error);
+        if (this.logger && typeof this.logger.error === 'function') {
+            this.logger.error('Error applying dialog changes:', error);
+        }
         this.updateStatus('更新失败：' + error.message);
     }
 }

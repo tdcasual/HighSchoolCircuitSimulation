@@ -38,7 +38,6 @@ describe('OpenAIClient listModels', () => {
 
     it('throws on timeout', async () => {
         client.config.requestTimeout = 10;
-        const controller = new AbortController();
         global.fetch = vi.fn().mockImplementation(() => new Promise((_, reject) => {
             setTimeout(() => reject(Object.assign(new Error('Aborted'), { name: 'AbortError' })), 20);
         }));

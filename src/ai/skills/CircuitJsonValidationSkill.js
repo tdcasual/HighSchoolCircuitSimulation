@@ -2,7 +2,7 @@
  * CircuitJsonValidationSkill.js - schema guard for generated circuit JSON
  */
 
-import { validateCircuitJSON } from '../../utils/circuitSchema.js';
+import { validateCircuitJSON } from '../../engine/CircuitSchema.js';
 import { Circuit } from '../../engine/Circuit.js';
 
 function runElectricalCheck(input) {

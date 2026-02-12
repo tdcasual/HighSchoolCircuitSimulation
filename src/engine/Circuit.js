@@ -5,7 +5,6 @@
 
 import { MNASolver } from './Solver.js';
 import { Matrix } from './Matrix.js';
-import { getComponentTerminalCount } from '../components/Component.js';
 import { getTerminalWorldPosition } from '../utils/TerminalGeometry.js';
 import { normalizeCanvasPoint, pointKey, toCanvasInt } from '../utils/CanvasCoords.js';
 import { NodeBuilder } from '../core/topology/NodeBuilder.js';
@@ -14,6 +13,7 @@ import { ConnectivityCache } from '../core/topology/ConnectivityCache.js';
 import { CircuitSerializer } from '../core/io/CircuitSerializer.js';
 import { CircuitDeserializer } from '../core/io/CircuitDeserializer.js';
 import { SimulationState } from '../core/simulation/SimulationState.js';
+import { createRuntimeLogger } from '../utils/Logger.js';
 
 export class Circuit {
     constructor() {
@@ -47,8 +47,15 @@ export class Circuit {
         this.terminalWorldPosCache = new Map(); // componentId -> Map(terminalIndex -> {x,y})
         this.simulationState = new SimulationState();
         this.debugMode = false;
+        this.logger = createRuntimeLogger({ scope: 'circuit' });
+        this.solver.setLogger?.(this.logger.child?.('solver') || this.logger);
         this.loadDebugFlag();
         this.solver.debugMode = this.debugMode;
+    }
+
+    setLogger(logger) {
+        this.logger = logger || createRuntimeLogger({ scope: 'circuit' });
+        this.solver.setLogger?.(this.logger.child?.('solver') || this.logger);
     }
 
     beginTopologyBatch() {
@@ -357,7 +364,7 @@ export class Circuit {
 
         // Debug: print node to terminal mapping.
         if (this.debugMode) {
-            console.warn('--- Node mapping ---');
+            this.logger?.debug?.('--- Node mapping ---');
             const nodeTerminals = Array.from({ length: this.nodes.length }, () => []);
             for (const [id, comp] of this.components) {
                 const append = (node, terminalIdx) => {
@@ -368,7 +375,7 @@ export class Circuit {
                 (comp.nodes || []).forEach((node, terminalIdx) => append(node, terminalIdx));
             }
             nodeTerminals.forEach((ts, idx) => {
-                console.warn(`node ${idx}: ${ts.join(', ')}`);
+                this.logger?.debug?.(`node ${idx}: ${ts.join(', ')}`);
             });
         }
 
@@ -442,7 +449,7 @@ export class Circuit {
             }
             
             if (this.debugMode) {
-                console.log(`Rheostat ${id}: terminals connected = [left:${terminalConnected[0]}, right:${terminalConnected[1]}, slider:${terminalConnected[2]}]`);
+                this.logger?.debug?.(`Rheostat ${id}: terminals connected = [left:${terminalConnected[0]}, right:${terminalConnected[1]}, slider:${terminalConnected[2]}]`);
             }
             
             // 确定连接模式
@@ -470,7 +477,7 @@ export class Circuit {
             }
             
             if (this.debugMode) {
-                console.log(`Rheostat ${id}: connectionMode = ${comp.connectionMode}`);
+                this.logger?.debug?.(`Rheostat ${id}: connectionMode = ${comp.connectionMode}`);
             }
             
             // 计算接入电路的实际电阻
@@ -602,7 +609,7 @@ export class Circuit {
         this.resetSimulationState();
 
         // 重置动态元器件状态
-        for (const [id, comp] of this.components) {
+        for (const [_id, comp] of this.components) {
             if (comp.type === 'Capacitor' || comp.type === 'ParallelPlateCapacitor') {
                 comp.prevVoltage = 0;
                 comp.prevCharge = 0;
@@ -715,10 +722,10 @@ export class Circuit {
         
         // 调试输出
         if (this.debugMode) {
-            console.log('Nodes:', this.nodes.length);
-            console.log('Voltages:', this.lastResults.voltages);
+            this.logger?.debug?.('Nodes:', this.nodes.length);
+            this.logger?.debug?.('Voltages:', this.lastResults.voltages);
             for (const [id, comp] of this.components) {
-                console.log(`${comp.type} ${id}: nodes=[${comp.nodes}]`);
+                this.logger?.debug?.(`${comp.type} ${id}: nodes=[${comp.nodes}]`);
             }
         }
 
@@ -1293,7 +1300,7 @@ export class Circuit {
         return nodeResult;
     }
 
-    computeNodeWireFlowHeuristic(nodeWires, results) {
+    computeNodeWireFlowHeuristic(_nodeWires, _results) {
         return null;
     }
 

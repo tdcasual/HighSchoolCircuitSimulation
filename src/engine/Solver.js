@@ -10,6 +10,7 @@ import { DynamicIntegrator, DynamicIntegrationMethods } from '../core/simulation
 import { ResultPostprocessor } from '../core/simulation/ResultPostprocessor.js';
 import { SimulationState } from '../core/simulation/SimulationState.js';
 import { DefaultComponentRegistry } from '../core/simulation/ComponentRegistry.js';
+import { createRuntimeLogger } from '../utils/Logger.js';
 
 export class MNASolver {
     constructor() {
@@ -37,6 +38,18 @@ export class MNASolver {
         this.resultPostprocessor = new ResultPostprocessor();
         this.simulationState = new SimulationState();
         this.componentRegistry = DefaultComponentRegistry;
+        this.setLogger(null);
+    }
+
+    setLogger(logger) {
+        this.logger = logger || createRuntimeLogger({ scope: 'solver' });
+        if (typeof this.logger?.child === 'function') {
+            Matrix.setLogger(this.logger.child('matrix'));
+            this.resultPostprocessor?.setLogger?.(this.logger.child('postprocessor'));
+        } else {
+            Matrix.setLogger(this.logger);
+            this.resultPostprocessor?.setLogger?.(this.logger);
+        }
     }
 
     /**
@@ -76,7 +89,7 @@ export class MNASolver {
                 // 电源被短路是危险的
                 if (comp._isShorted && isPowerSource) {
                     this.shortCircuitDetected = true;
-                    console.warn(`Power source ${comp.id} is short-circuited!`);
+                    this.logger?.warn?.(`Power source ${comp.id} is short-circuited!`);
                 }
             } else {
                 comp._isShorted = false;
@@ -378,11 +391,11 @@ export class MNASolver {
 
             // 调试输出矩阵
             if (this.debugMode) {
-                console.log('MNA Matrix A:');
+                this.logger?.debug?.('MNA Matrix A:');
                 for (let i = 0; i < n; i++) {
-                    console.log(`  [${A[i].map(v => v.toFixed(4)).join(', ')}]`);
+                    this.logger?.debug?.(`  [${A[i].map(v => v.toFixed(4)).join(', ')}]`);
                 }
-                console.log('Vector z:', z.map(v => v.toFixed(4)));
+                this.logger?.debug?.('Vector z:', z.map(v => v.toFixed(4)));
             }
 
             const matrixCacheKey = this.buildSystemMatrixCacheKey(nodeCount);
@@ -399,7 +412,7 @@ export class MNASolver {
             } else {
                 factorization = Matrix.factorize(A);
                 if (!factorization) {
-                    console.warn('Matrix factorization failed');
+                    this.logger?.warn?.('Matrix factorization failed');
                     this.resetMatrixFactorizationCache();
                     return { voltages: [], currents: new Map(), valid: false };
                 }
@@ -412,13 +425,13 @@ export class MNASolver {
             const x = Matrix.solveWithFactorization(factorization, z);
 
             if (!x) {
-                console.warn('Matrix solve failed');
+                this.logger?.warn?.('Matrix solve failed');
                 this.resetMatrixFactorizationCache();
                 return { voltages: [], currents: new Map(), valid: false };
             }
 
             if (this.debugMode) {
-                console.log('Solution x:', x.map(v => v.toFixed(4)));
+                this.logger?.debug?.('Solution x:', x.map(v => v.toFixed(4)));
             }
 
             // 提取节点电压（添加地节点的0电压）
@@ -579,7 +592,7 @@ export class MNASolver {
 
         // 安全检查：确保 nodes 数组存在且有效
         if (!comp.nodes || comp.nodes.length < 2) {
-            console.warn(`Component ${comp.id} has no valid nodes array`);
+            this.logger?.warn?.(`Component ${comp.id} has no valid nodes array`);
             return;
         }
         
@@ -608,7 +621,7 @@ export class MNASolver {
         const i2 = toMatrixIndex(n2);
         
         if (this.debugMode) {
-            console.log(`Stamp ${comp.type} ${comp.id}: nodes=[${n1},${n2}], matrix idx=[${i1},${i2}]`);
+            this.logger?.debug?.(`Stamp ${comp.type} ${comp.id}: nodes=[${n1},${n2}], matrix idx=[${i1},${i2}]`);
         }
 
         const registry = this.componentRegistry || DefaultComponentRegistry;
@@ -726,7 +739,7 @@ export class MNASolver {
                 const i_slider = sliderValid ? n_slider - 1 : null;
                 
                 const debugWarn = (...args) => {
-                    if (this.debugMode) console.warn(...args);
+                    if (this.debugMode) this.logger?.debug?.(...args);
                 };
 
                 debugWarn(`[Rheostat] nodes=[${n_left},${n_right},${n_slider}], idx=[${i_left},${i_right},${i_slider}], mode=${comp.connectionMode}, R1=${R1.toFixed(2)}, R2=${R2.toFixed(2)}`);

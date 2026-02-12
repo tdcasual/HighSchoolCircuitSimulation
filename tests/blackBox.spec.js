@@ -4,7 +4,7 @@ import { createTestCircuit, addComponent, connectWire, solveCircuit } from './he
 describe('BlackBox component', () => {
     it('serializes and restores viewMode/size', () => {
         const circuit = createTestCircuit();
-        const box = addComponent(circuit, 'BlackBox', 'B1', { boxWidth: 240, boxHeight: 160, viewMode: 'opaque' });
+        addComponent(circuit, 'BlackBox', 'B1', { boxWidth: 240, boxHeight: 160, viewMode: 'opaque' });
 
         const json = circuit.toJSON();
         const boxJson = json.components.find((c) => c.id === 'B1');
@@ -42,4 +42,3 @@ describe('BlackBox component', () => {
         expect(results.currents.get('Rin')).toBeCloseTo(1, 6);
     });
 });
-

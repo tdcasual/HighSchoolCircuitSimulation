@@ -3,7 +3,7 @@
  * 负责将电路数据渲染到SVG画布
  */
 
-import { SVGRenderer, ComponentNames } from '../components/Component.js';
+import { SVGRenderer } from '../components/Component.js';
 import { getTerminalWorldPosition } from '../utils/TerminalGeometry.js';
 import { normalizeCanvasPoint } from '../utils/CanvasCoords.js';
 
