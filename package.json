@@ -22,7 +22,7 @@
   "devDependencies": {
     "eslint": "^8.57.1",
     "eslint-plugin-boundaries": "^5.4.0",
-    "prettier": "^3.6.2",
-    "vitest": "^1.6.0"
+    "prettier": "^3.8.1",
+    "vitest": "^4.0.18"
   }
 }

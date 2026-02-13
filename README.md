@@ -31,7 +31,7 @@ python3 -m http.server 8080
 ```
 
 3. 打开浏览器访问  
-[http://localhost:8080](http://localhost:8080)
+   [http://localhost:8080](http://localhost:8080)
 
 ## 🧪 常用命令
 
