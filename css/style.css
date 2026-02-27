@@ -22,6 +22,7 @@
     --shadow: 0 2px 8px rgba(0,0,0,0.1);
     --toolbox-width: 180px;
     --side-panel-width: 340px;
+    --top-action-bar-height: 56px;
 }
 
 body {
@@ -34,13 +35,23 @@ body {
 
 #app {
     display: flex;
-    height: 100vh;
+    height: calc(100vh - var(--top-action-bar-height));
     width: 100vw;
+    margin-top: var(--top-action-bar-height);
 }
 
 /* ==========================================
    嵌入模式（deploycircuit.js / iframe）
    ========================================== */
+body.embed-hide-toolbox #top-action-bar {
+    display: none !important;
+}
+
+body.embed-hide-toolbox #app {
+    margin-top: 0;
+    height: 100vh;
+}
+
 body.embed-hide-toolbox #toolbox {
     display: none !important;
 }
@@ -72,6 +83,56 @@ body.embed-readonly #circuit-canvas {
 }
 
 /* ==========================================
+   页面顶部操作栏
+   ========================================== */
+#top-action-bar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: var(--top-action-bar-height);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 14px;
+    background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+    border-bottom: 1px solid var(--border-color);
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
+    z-index: 260;
+    overflow-x: auto;
+    white-space: nowrap;
+}
+
+.top-action-btn {
+    border: 1px solid rgba(33, 150, 243, 0.28);
+    background: #edf6ff;
+    color: #1565c0;
+    border-radius: 8px;
+    padding: 8px 14px;
+    min-height: 40px;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    touch-action: manipulation;
+    transition: all 0.18s ease;
+}
+
+.top-action-btn:hover {
+    background: #dceeff;
+    border-color: rgba(33, 150, 243, 0.42);
+}
+
+.top-action-btn:active {
+    transform: translateY(1px);
+}
+
+.top-action-btn.top-action-btn-danger {
+    border-color: rgba(244, 67, 54, 0.3);
+    background: #ffebee;
+    color: #c62828;
+}
+
+/* ==========================================
    左侧工具箱
    ========================================== */
 #toolbox {
@@ -99,61 +160,43 @@ body.embed-readonly #circuit-canvas {
 .tool-category h3 {
     font-size: 13px;
     color: var(--text-light);
-    margin-bottom: 10px;
+    margin-bottom: 0;
     text-transform: uppercase;
     letter-spacing: 1px;
 }
 
-.tool-category h3[role="button"] {
-    position: relative;
-    padding-right: 18px;
+.tool-category-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.tool-category-toggle {
+    border: 1px solid rgba(15, 23, 42, 0.18);
+    background: #f8fafc;
+    color: #334155;
+    border-radius: 999px;
+    padding: 3px 10px;
+    min-height: 28px;
+    font-size: 12px;
+    font-weight: 700;
     cursor: pointer;
-    user-select: none;
     touch-action: manipulation;
 }
 
-.tool-category h3[role="button"]::after {
-    content: '▾';
-    position: absolute;
-    right: 0;
-    top: 50%;
-    transform: translateY(-50%);
-    transition: transform 0.2s ease;
+.tool-category-toggle:hover {
+    background: #e2e8f0;
 }
 
-.tool-category.collapsed h3[role="button"]::after {
-    transform: translateY(-50%) rotate(-90deg);
-}
-
-.tool-category h3[role="button"]:focus-visible {
+.tool-category-toggle:focus-visible {
     outline: 2px solid var(--primary-color);
     outline-offset: 2px;
-    border-radius: 4px;
 }
 
-.tool-category.collapsed > :not(h3) {
+.tool-category.collapsed > :not(.tool-category-header) {
     display: none;
-}
-
-.tool-category-actions {
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    background: #f8fbff;
-    padding: 10px;
-}
-
-.tool-category-actions h3 {
-    margin-bottom: 8px;
-}
-
-.toolbox-action-grid {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 8px;
-}
-
-.toolbox-action-grid .action-btn {
-    margin-bottom: 0;
 }
 
 .tool-item {
@@ -237,7 +280,7 @@ body.embed-readonly #circuit-canvas {
 
 #canvas-mobile-controls {
     position: absolute;
-    top: max(12px, env(safe-area-inset-top));
+    top: calc(var(--top-action-bar-height) + max(10px, env(safe-area-inset-top)));
     left: max(12px, env(safe-area-inset-left));
     z-index: 180;
     display: none;
@@ -1436,7 +1479,7 @@ body.layout-mode-phone #app {
 body.layout-mode-compact #canvas-container,
 body.layout-mode-phone #canvas-container {
     width: 100vw;
-    height: 100vh;
+    height: calc(100vh - var(--top-action-bar-height));
 }
 
 body.layout-mode-compact #canvas-mobile-controls,
@@ -1447,7 +1490,7 @@ body.layout-mode-phone #canvas-mobile-controls {
 body.layout-mode-compact #toolbox,
 body.layout-mode-phone #toolbox {
     position: fixed;
-    top: 0;
+    top: var(--top-action-bar-height);
     left: 0;
     bottom: 0;
     width: min(84vw, 340px);
@@ -1468,7 +1511,7 @@ body.layout-mode-phone #toolbox.layout-open {
 body.layout-mode-compact #side-panel,
 body.layout-mode-phone #side-panel {
     position: fixed;
-    top: 0;
+    top: var(--top-action-bar-height);
     right: 0;
     bottom: 0;
     width: min(88vw, 380px);
@@ -1513,6 +1556,7 @@ body.layout-mode-phone .status-mode-btn {
 body.classroom-mode {
     --toolbox-width: 220px;
     --side-panel-width: 400px;
+    --top-action-bar-height: 64px;
 }
 
 body.classroom-mode #toolbox {
@@ -1543,6 +1587,7 @@ body.classroom-mode .tool-item span {
 }
 
 body.classroom-mode .action-btn,
+body.classroom-mode .top-action-btn,
 body.classroom-mode .panel-tab-btn,
 body.classroom-mode .control-btn,
 body.classroom-mode .observation-actions .control-btn {
@@ -1613,6 +1658,7 @@ body.classroom-mode .component .value-display {
 body.classroom-mode-enhanced {
     --toolbox-width: 250px;
     --side-panel-width: 440px;
+    --top-action-bar-height: 68px;
 }
 
 body.classroom-mode-enhanced #toolbox h2 {
@@ -1633,6 +1679,7 @@ body.classroom-mode-enhanced .tool-item span {
 }
 
 body.classroom-mode-enhanced .action-btn,
+body.classroom-mode-enhanced .top-action-btn,
 body.classroom-mode-enhanced .panel-tab-btn,
 body.classroom-mode-enhanced .control-btn,
 body.classroom-mode-enhanced .observation-actions .control-btn {
@@ -1915,14 +1962,14 @@ body.classroom-mode-enhanced .component .value-display {
    ========================================== */
 #exercise-board-panel {
     position: fixed;
-    top: 16px;
+    top: calc(var(--top-action-bar-height) + 12px);
     left: 220px;
     width: 420px;
     height: 360px;
     min-width: 320px;
     min-height: 240px;
     max-width: calc(100vw - 32px);
-    max-height: calc(100vh - 32px);
+    max-height: calc(100vh - var(--top-action-bar-height) - 24px);
     /* Typography (overridable via JS) */
     --ex-font-size: 14px;
     --ex-line-height: 1.7;

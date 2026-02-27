@@ -18,20 +18,17 @@
     <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js" id="MathJax-script" async></script>
 </head>
 <body>
+    <div id="top-action-bar" role="toolbar" aria-label="全局操作">
+        <button id="btn-clear" class="top-action-btn top-action-btn-danger">清空电路</button>
+        <button id="btn-export" class="top-action-btn">导出JSON</button>
+        <button id="btn-import" class="top-action-btn">导入JSON</button>
+        <button id="btn-exercise-board" class="top-action-btn">习题板</button>
+        <input type="file" id="file-import" accept=".json" style="display:none"/>
+    </div>
     <div id="app">
         <!-- 左侧工具箱 -->
         <aside id="toolbox">
             <h2>元器件</h2>
-            <div class="tool-category tool-category-actions" data-category="actions" data-collapsible="false">
-                <h3>操作</h3>
-                <div class="toolbox-action-grid">
-                    <button id="btn-clear" class="action-btn">清空电路</button>
-                    <button id="btn-export" class="action-btn">导出JSON</button>
-                    <button id="btn-import" class="action-btn">导入JSON</button>
-                    <button id="btn-exercise-board" class="action-btn">习题板</button>
-                </div>
-                <input type="file" id="file-import" accept=".json" style="display:none"/>
-            </div>
             <div class="tool-category" data-category="power">
                 <h3>电源</h3>
                 <div class="tool-item" data-type="Ground" draggable="true">
