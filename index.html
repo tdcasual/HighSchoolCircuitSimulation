@@ -22,7 +22,17 @@
         <!-- 左侧工具箱 -->
         <aside id="toolbox">
             <h2>元器件</h2>
-            <div class="tool-category">
+            <div class="tool-category tool-category-actions" data-category="actions" data-collapsible="false">
+                <h3>操作</h3>
+                <div class="toolbox-action-grid">
+                    <button id="btn-clear" class="action-btn">清空电路</button>
+                    <button id="btn-export" class="action-btn">导出JSON</button>
+                    <button id="btn-import" class="action-btn">导入JSON</button>
+                    <button id="btn-exercise-board" class="action-btn">习题板</button>
+                </div>
+                <input type="file" id="file-import" accept=".json" style="display:none"/>
+            </div>
+            <div class="tool-category" data-category="power">
                 <h3>电源</h3>
                 <div class="tool-item" data-type="Ground" draggable="true">
                     <svg viewBox="0 0 60 40" width="60" height="40">
@@ -52,7 +62,7 @@
                     <span>交流电源</span>
                 </div>
             </div>
-            <div class="tool-category">
+            <div class="tool-category" data-category="resistors">
                 <h3>电阻类</h3>
                 <div class="tool-item" data-type="Resistor" draggable="true">
                     <svg viewBox="0 0 60 40" width="60" height="40">
@@ -116,7 +126,7 @@
                     <span>滑动变阻器</span>
                 </div>
             </div>
-            <div class="tool-category">
+            <div class="tool-category" data-category="others">
                 <h3>其他元件</h3>
                 <div class="tool-item" data-type="Bulb" draggable="true">
                     <svg viewBox="0 0 60 40" width="60" height="40">
@@ -217,7 +227,7 @@
                     <span>黑箱</span>
                 </div>
             </div>
-            <div class="tool-category">
+            <div class="tool-category" data-category="meters">
                 <h3>测量仪表</h3>
                 <div class="tool-item" data-type="Ammeter" draggable="true">
                     <svg viewBox="0 0 60 40" width="60" height="40">
@@ -238,7 +248,7 @@
                     <span>电压表</span>
                 </div>
             </div>
-            <div class="tool-category">
+            <div class="tool-category" data-category="wiring">
                 <h3>连接</h3>
                 <div class="tool-item" data-type="Wire" draggable="true">
                     <svg viewBox="0 0 60 40" width="60" height="40">
@@ -248,14 +258,6 @@
                     </svg>
                     <span>导线</span>
                 </div>
-            </div>
-            <div class="tool-category">
-                <h3>操作</h3>
-                <button id="btn-clear" class="action-btn">清空电路</button>
-                <button id="btn-export" class="action-btn">导出JSON</button>
-                <button id="btn-import" class="action-btn">导入JSON</button>
-                <button id="btn-exercise-board" class="action-btn">习题板</button>
-                <input type="file" id="file-import" accept=".json" style="display:none"/>
             </div>
         </aside>
 

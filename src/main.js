@@ -11,6 +11,7 @@ import { ObservationPanel } from './ui/ObservationPanel.js';
 import { ExerciseBoard } from './ui/ExerciseBoard.js';
 import { ResponsiveLayoutController } from './ui/ResponsiveLayoutController.js';
 import { ClassroomModeController } from './ui/ClassroomModeController.js';
+import { ToolboxCategoryController } from './ui/ToolboxCategoryController.js';
 import { EmbedRuntimeBridge, parseEmbedRuntimeOptionsFromSearch } from './embed/EmbedRuntimeBridge.js';
 import { resetIdCounter, updateIdCounterFromExisting } from './components/Component.js';
 import { createRuntimeLogger } from './utils/Logger.js';
@@ -46,6 +47,9 @@ class CircuitSimulatorApp {
 
         // 初始化响应式布局控制
         this.responsiveLayout = new ResponsiveLayoutController(this);
+
+        // 初始化工具箱分类折叠控制
+        this.toolboxCategoryController = new ToolboxCategoryController(this);
 
         // 初始化课堂模式控制（大屏演示可读性增强）
         this.classroomMode = new ClassroomModeController(this);
