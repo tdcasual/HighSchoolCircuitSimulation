@@ -19,6 +19,17 @@ export function bindButtonEvents() {
     bindClick('btn-stop', handleStop);
     bindClick('btn-mobile-stop', handleStop);
 
+    // 手机端模拟切换按钮
+    const handleMobileSimToggle = () => {
+        const running = !!this.app?.circuit?.isRunning;
+        if (running) {
+            this.app.stopSimulation();
+        } else {
+            this.app.startSimulation();
+        }
+    };
+    bindClick('btn-mobile-sim-toggle', handleMobileSimToggle);
+
     // 清空按钮
     const handleClear = () => {
         if (confirm('确定要清空整个电路吗？')) {

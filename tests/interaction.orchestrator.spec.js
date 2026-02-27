@@ -80,6 +80,86 @@ describe('InteractionOrchestrator.onMouseDown', () => {
         expect(context.placePendingToolAt).not.toHaveBeenCalled();
     });
 
+    it('starts pending-wire wiring from targeted terminal position', () => {
+        const terminalTarget = makeTarget({ classes: ['terminal-hit-area'] });
+        const componentGroup = { dataset: { id: 'R1' } };
+        terminalTarget.dataset.terminal = '1';
+        const context = {
+            resolvePointerType: vi.fn(() => 'mouse'),
+            resolveProbeMarkerTarget: vi.fn(() => null),
+            resolveTerminalTarget: vi.fn(() => terminalTarget),
+            pendingToolType: 'Wire',
+            isWiring: false,
+            screenToCanvas: vi.fn(() => ({ x: 5, y: 6 })),
+            renderer: {
+                getTerminalPosition: vi.fn(() => ({ x: 210, y: 310 }))
+            },
+            startWiringFromPoint: vi.fn(),
+            updateStatus: vi.fn(),
+            placePendingToolAt: vi.fn()
+        };
+        const event = {
+            button: 0,
+            clientX: 100,
+            clientY: 70,
+            target: {
+                ...terminalTarget,
+                closest: (selector) => {
+                    if (selector === '.component') return componentGroup;
+                    return null;
+                }
+            },
+            preventDefault: vi.fn(),
+            stopPropagation: vi.fn()
+        };
+
+        InteractionOrchestrator.onMouseDown.call(context, event);
+
+        expect(context.startWiringFromPoint).toHaveBeenCalledWith({ x: 210, y: 310 }, event, true);
+        expect(context.screenToCanvas).not.toHaveBeenCalled();
+    });
+
+    it('finishes pending-wire wiring to targeted terminal position', () => {
+        const terminalTarget = makeTarget({ classes: ['terminal'] });
+        const componentGroup = { dataset: { id: 'R2' } };
+        terminalTarget.dataset.terminal = '0';
+        const context = {
+            resolvePointerType: vi.fn(() => 'mouse'),
+            resolveProbeMarkerTarget: vi.fn(() => null),
+            resolveTerminalTarget: vi.fn(() => terminalTarget),
+            pendingToolType: 'Wire',
+            isWiring: true,
+            renderer: {
+                getTerminalPosition: vi.fn(() => ({ x: 420, y: 180 }))
+            },
+            screenToCanvas: vi.fn(() => ({ x: 1, y: 2 })),
+            finishWiringToPoint: vi.fn(),
+            clearPendingToolType: vi.fn(),
+            updateStatus: vi.fn(),
+            placePendingToolAt: vi.fn()
+        };
+        const event = {
+            button: 0,
+            clientX: 200,
+            clientY: 120,
+            target: {
+                ...terminalTarget,
+                closest: (selector) => {
+                    if (selector === '.component') return componentGroup;
+                    return null;
+                }
+            },
+            preventDefault: vi.fn(),
+            stopPropagation: vi.fn()
+        };
+
+        InteractionOrchestrator.onMouseDown.call(context, event);
+
+        expect(context.finishWiringToPoint).toHaveBeenCalledWith({ x: 420, y: 180 }, { pointerType: 'mouse' });
+        expect(context.clearPendingToolType).toHaveBeenCalledWith({ silent: true });
+        expect(context.screenToCanvas).not.toHaveBeenCalled();
+    });
+
     it('splits wire on ctrl-click', () => {
         const context = {
             resolvePointerType: vi.fn(() => 'mouse'),
@@ -113,6 +193,85 @@ describe('InteractionOrchestrator.onMouseDown', () => {
         expect(context.selectWire).toHaveBeenCalledWith('W1');
         expect(context.splitWireAtPoint).toHaveBeenCalledWith('W1', 44, 33);
         expect(context.startWireDrag).not.toHaveBeenCalled();
+    });
+
+    it('starts wiring from terminal by default', () => {
+        const terminalTarget = makeTarget({ classes: ['terminal-hit-area'] });
+        terminalTarget.dataset.terminal = '1';
+        const componentGroup = { dataset: { id: 'R1' } };
+        const context = {
+            resolvePointerType: vi.fn(() => 'mouse'),
+            resolveProbeMarkerTarget: vi.fn(() => null),
+            resolveTerminalTarget: vi.fn(() => terminalTarget),
+            pendingToolType: null,
+            isWiring: false,
+            selectedComponent: null,
+            selectComponent: vi.fn(),
+            startTerminalExtend: vi.fn(),
+            startWiringFromPoint: vi.fn(),
+            renderer: {
+                getTerminalPosition: vi.fn(() => ({ x: 210, y: 140 }))
+            },
+            isWireEndpointTarget: vi.fn(() => false),
+            clearSelection: vi.fn()
+        };
+        const event = {
+            button: 0,
+            altKey: false,
+            clientX: 100,
+            clientY: 80,
+            target: {
+                ...terminalTarget,
+                closest: (selector) => (selector === '.component' ? componentGroup : null)
+            },
+            preventDefault: vi.fn(),
+            stopPropagation: vi.fn()
+        };
+
+        InteractionOrchestrator.onMouseDown.call(context, event);
+
+        expect(context.selectComponent).toHaveBeenCalledWith('R1');
+        expect(context.startWiringFromPoint).toHaveBeenCalledWith({ x: 210, y: 140 }, event, true);
+        expect(context.startTerminalExtend).not.toHaveBeenCalled();
+    });
+
+    it('uses alt+terminal drag to extend terminal lead', () => {
+        const terminalTarget = makeTarget({ classes: ['terminal-hit-area'] });
+        terminalTarget.dataset.terminal = '0';
+        const componentGroup = { dataset: { id: 'R2' } };
+        const context = {
+            resolvePointerType: vi.fn(() => 'mouse'),
+            resolveProbeMarkerTarget: vi.fn(() => null),
+            resolveTerminalTarget: vi.fn(() => terminalTarget),
+            pendingToolType: null,
+            isWiring: false,
+            selectedComponent: 'R2',
+            selectComponent: vi.fn(),
+            startTerminalExtend: vi.fn(),
+            startWiringFromPoint: vi.fn(),
+            renderer: {
+                getTerminalPosition: vi.fn(() => ({ x: 12, y: 34 }))
+            },
+            isWireEndpointTarget: vi.fn(() => false),
+            clearSelection: vi.fn()
+        };
+        const event = {
+            button: 0,
+            altKey: true,
+            clientX: 100,
+            clientY: 80,
+            target: {
+                ...terminalTarget,
+                closest: (selector) => (selector === '.component' ? componentGroup : null)
+            },
+            preventDefault: vi.fn(),
+            stopPropagation: vi.fn()
+        };
+
+        InteractionOrchestrator.onMouseDown.call(context, event);
+
+        expect(context.startTerminalExtend).toHaveBeenCalledWith('R2', 0, event);
+        expect(context.startWiringFromPoint).not.toHaveBeenCalled();
     });
 });
 
@@ -308,12 +467,92 @@ describe('InteractionOrchestrator.onMouseMove', () => {
         InteractionOrchestrator.onMouseMove.call(context, event);
 
         expect(context.snapPoint).toHaveBeenCalledWith(100, 120, {
-            allowWireSegmentSnap: false,
+            allowWireSegmentSnap: true,
             pointerType: 'mouse'
         });
         expect(context.renderer.updateTempWire).toHaveBeenCalledWith('TEMP', 10, 20, 130, 140);
         expect(context.renderer.highlightTerminal).toHaveBeenCalledWith('R1', 0);
         expect(context.renderer.clearTerminalHighlight).not.toHaveBeenCalled();
+    });
+
+    it('updates temp wire preview and wire-node highlight for segment snap while wiring', () => {
+        const context = {
+            isPanning: false,
+            screenToCanvas: vi.fn(() => ({ x: 100, y: 120 })),
+            isDraggingWireEndpoint: false,
+            isDraggingWire: false,
+            isDragging: false,
+            isWiring: true,
+            wireStart: { x: 10, y: 20 },
+            tempWire: 'TEMP',
+            resolvePointerType: vi.fn(() => 'mouse'),
+            snapPoint: vi.fn(() => ({
+                x: 131,
+                y: 141,
+                snap: { type: 'wire-segment', wireId: 'W2' }
+            })),
+            renderer: {
+                updateTempWire: vi.fn(),
+                highlightTerminal: vi.fn(),
+                highlightWireNode: vi.fn(),
+                clearTerminalHighlight: vi.fn()
+            }
+        };
+        const event = { clientX: 300, clientY: 320 };
+
+        InteractionOrchestrator.onMouseMove.call(context, event);
+
+        expect(context.snapPoint).toHaveBeenCalledWith(100, 120, {
+            allowWireSegmentSnap: true,
+            pointerType: 'mouse'
+        });
+        expect(context.renderer.updateTempWire).toHaveBeenCalledWith('TEMP', 10, 20, 131, 141);
+        expect(context.renderer.highlightWireNode).toHaveBeenCalledWith(131, 141);
+        expect(context.renderer.highlightTerminal).not.toHaveBeenCalled();
+        expect(context.renderer.clearTerminalHighlight).not.toHaveBeenCalled();
+    });
+
+    it('shows wire-node highlight while dragging endpoint over wire segment', () => {
+        const wire = {
+            id: 'W1',
+            a: { x: 10, y: 10 },
+            b: { x: 90, y: 10 },
+            aRef: { componentId: 'R1', terminalIndex: 0 }
+        };
+        const context = {
+            isPanning: false,
+            screenToCanvas: vi.fn(() => ({ x: 60, y: 40 })),
+            isDraggingWireEndpoint: true,
+            wireEndpointDrag: {
+                wireId: 'W1',
+                end: 'a',
+                origin: { x: 10, y: 10 },
+                affected: [{ wireId: 'W1', end: 'a' }],
+                detached: false
+            },
+            resolvePointerType: vi.fn(() => 'mouse'),
+            snapPoint: vi.fn(() => ({ x: 80, y: 20, snap: { type: 'wire-segment', wireId: 'W2' } })),
+            circuit: {
+                getWire: vi.fn((id) => (id === 'W1' ? wire : null))
+            },
+            renderer: {
+                highlightTerminal: vi.fn(),
+                highlightWireNode: vi.fn(),
+                clearTerminalHighlight: vi.fn(),
+                refreshWire: vi.fn()
+            }
+        };
+        const event = { clientX: 300, clientY: 320 };
+
+        InteractionOrchestrator.onMouseMove.call(context, event);
+
+        expect(wire.a).toEqual({ x: 80, y: 20 });
+        expect(wire.aRef).toBeUndefined();
+        expect(context.wireEndpointDrag.detached).toBe(true);
+        expect(context.renderer.highlightWireNode).toHaveBeenCalledWith(80, 20);
+        expect(context.renderer.highlightTerminal).not.toHaveBeenCalled();
+        expect(context.renderer.clearTerminalHighlight).not.toHaveBeenCalled();
+        expect(context.renderer.refreshWire).toHaveBeenCalledWith('W1');
     });
 });
 

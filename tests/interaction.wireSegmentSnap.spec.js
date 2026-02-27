@@ -3,6 +3,33 @@ import { Circuit } from '../src/engine/Circuit.js';
 import { InteractionManager } from '../src/ui/Interaction.js';
 
 describe('Interaction wire segment snap/split helpers', () => {
+    it('enables wire segment snapping when starting wiring from a point', () => {
+        const snapPoint = vi.fn(() => ({ x: 20, y: 30, snap: { type: 'wire-segment', wireId: 'W1' } }));
+        const updateTempWire = vi.fn();
+        const createTempWire = vi.fn(() => 'TEMP');
+        const ctx = {
+            hideAlignmentGuides: vi.fn(),
+            renderer: {
+                clearTerminalHighlight: vi.fn(),
+                createTempWire,
+                updateTempWire
+            },
+            snapPoint,
+            resolvePointerType: vi.fn(() => 'mouse'),
+            screenToCanvas: vi.fn(() => ({ x: 40, y: 30 }))
+        };
+
+        InteractionManager.prototype.startWiringFromPoint.call(ctx, { x: 21, y: 29 }, { clientX: 40, clientY: 30 });
+
+        expect(snapPoint).toHaveBeenCalledWith(21, 29, {
+            allowWireSegmentSnap: true,
+            pointerType: 'mouse'
+        });
+        expect(ctx.wireStart).toEqual({ x: 20, y: 30, snap: { type: 'wire-segment', wireId: 'W1' } });
+        expect(createTempWire).toHaveBeenCalledTimes(1);
+        expect(updateTempWire).toHaveBeenCalledWith('TEMP', 20, 30, 40, 30);
+    });
+
     it('finds projected snap point on nearby wire segment', () => {
         const ctx = {
             circuit: {
@@ -31,6 +58,21 @@ describe('Interaction wire segment snap/split helpers', () => {
 
         const nearStart = InteractionManager.prototype.findNearbyWireSegment.call(ctx, 1, 0, 15);
         expect(nearStart).toBeNull();
+    });
+
+    it('finds projected snap point on non-orthogonal wire segment', () => {
+        const ctx = {
+            circuit: {
+                getAllWires() {
+                    return [
+                        { id: 'W1', a: { x: 0, y: 0 }, b: { x: 100, y: 100 } }
+                    ];
+                }
+            }
+        };
+
+        const found = InteractionManager.prototype.findNearbyWireSegment.call(ctx, 40, 50, 20);
+        expect(found).toEqual({ wireId: 'W1', x: 45, y: 45 });
     });
 
     it('splits wire at projected point and preserves far-end terminal binding', () => {
@@ -99,7 +141,7 @@ describe('Interaction wire segment snap/split helpers', () => {
         expect(circuit.getAllWires().length).toBe(1);
     });
 
-    it('does not split non-orthogonal wires', () => {
+    it('splits non-orthogonal wires using projected split point', () => {
         const circuit = new Circuit();
         circuit.addWire({
             id: 'W1',
@@ -123,9 +165,12 @@ describe('Interaction wire segment snap/split helpers', () => {
             { ensureUniqueWireId: () => 'W2' }
         );
 
-        expect(result).toBeNull();
-        expect(circuit.getWire('W2')).toBeUndefined();
-        expect(circuit.getAllWires().length).toBe(1);
+        expect(result?.created).toBe(true);
+        expect(result?.point).toEqual({ x: 50, y: 30 });
+        expect(circuit.getAllWires().length).toBe(2);
+        expect(circuit.getWire('W1')?.b).toEqual({ x: 50, y: 30 });
+        expect(circuit.getWire('W2')?.a).toEqual({ x: 50, y: 30 });
+        expect(circuit.getWire('W2')?.b).toEqual({ x: 100, y: 60 });
     });
 
     it('clears terminal highlight when endpoint drag ends on mouseup', () => {
@@ -155,12 +200,12 @@ describe('Interaction wire segment snap/split helpers', () => {
         expect(commitHistoryTransaction).toHaveBeenCalledTimes(1);
     });
 
-    it('does not auto-split when endpoint drag ends on wire segment', () => {
+    it('auto-splits target wire when endpoint drag ends on wire segment', () => {
         const clearTerminalHighlight = vi.fn();
         const rebuildNodes = vi.fn();
         const commitHistoryTransaction = vi.fn();
         const compactWiresAndRefresh = vi.fn();
-        const splitWireAtPointInternal = vi.fn();
+        const splitWireAtPointInternal = vi.fn(() => ({ created: true, newWireId: 'W3' }));
         const ctx = {
             isPanning: false,
             isDraggingWireEndpoint: true,
@@ -181,9 +226,12 @@ describe('Interaction wire segment snap/split helpers', () => {
             target: { classList: { contains: () => false } }
         });
 
-        expect(splitWireAtPointInternal).not.toHaveBeenCalled();
+        expect(splitWireAtPointInternal).toHaveBeenCalledWith('W2', 30, 40);
         expect(clearTerminalHighlight).toHaveBeenCalledTimes(1);
-        expect(compactWiresAndRefresh).toHaveBeenCalledTimes(1);
+        expect(compactWiresAndRefresh).toHaveBeenCalledWith({
+            preferredWireId: 'W1',
+            scopeWireIds: expect.arrayContaining(['W1', 'W2', 'W3'])
+        });
         expect(rebuildNodes).toHaveBeenCalledTimes(1);
         expect(commitHistoryTransaction).toHaveBeenCalledTimes(1);
     });
@@ -425,13 +473,55 @@ describe('Interaction wire segment snap/split helpers', () => {
         });
 
         expect(snapPoint).toHaveBeenCalledWith(15, 31, {
-            allowWireSegmentSnap: false,
+            allowWireSegmentSnap: true,
             pointerType: 'mouse'
         });
         expect(finishWiringToPoint).toHaveBeenCalledWith(
             { x: 16, y: 32, snap: { type: 'grid' } },
             { pointerType: 'mouse' }
         );
+    });
+
+    it('splits wire segments snapped by wiring start/end before creating new wire', () => {
+        const splitWireAtPointInternal = vi.fn((wireId) => {
+            if (wireId === 'WS') return { created: true, point: { x: 20, y: 20 }, newWireId: 'WS_SPLIT' };
+            if (wireId === 'WE') return { created: true, point: { x: 80, y: 20 }, newWireId: 'WE_SPLIT' };
+            return null;
+        });
+        const addWire = vi.fn();
+        const addWireRender = vi.fn();
+        const compactWiresAndRefresh = vi.fn(() => ({ resolvedWireId: null }));
+        const cancelWiring = vi.fn();
+        const endTopologyBatch = vi.fn();
+        const ctx = {
+            wireStart: { x: 10, y: 20, snap: { type: 'wire-segment', wireId: 'WS' } },
+            snapPoint: vi.fn(() => ({ x: 90, y: 20, snap: { type: 'wire-segment', wireId: 'WE' } })),
+            runWithHistory: (_label, action) => action(),
+            circuit: {
+                beginTopologyBatch: vi.fn(),
+                endTopologyBatch,
+                getWire: vi.fn(() => null),
+                addWire
+            },
+            renderer: {
+                addWire: addWireRender
+            },
+            splitWireAtPointInternal,
+            compactWiresAndRefresh,
+            cancelWiring,
+            selectWire: vi.fn(),
+            updateStatus: vi.fn()
+        };
+
+        InteractionManager.prototype.finishWiringToPoint.call(ctx, { x: 90, y: 20 }, { pointerType: 'mouse' });
+
+        expect(splitWireAtPointInternal).toHaveBeenCalledWith('WS', 10, 20, expect.any(Object));
+        expect(splitWireAtPointInternal).toHaveBeenCalledWith('WE', 90, 20, expect.any(Object));
+        expect(addWire).toHaveBeenCalledTimes(1);
+        expect(addWireRender).toHaveBeenCalledTimes(1);
+        expect(compactWiresAndRefresh).toHaveBeenCalledTimes(1);
+        expect(cancelWiring).toHaveBeenCalledTimes(1);
+        expect(endTopologyBatch).toHaveBeenCalledTimes(1);
     });
 
     it('drags full junction when Shift is held', () => {

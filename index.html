@@ -27,6 +27,7 @@
         <input type="file" id="file-import" accept=".json" style="display:none"/>
     </div>
     <div id="top-action-more-menu" class="top-action-more-menu" hidden>
+        <button id="btn-top-action-close" class="top-action-more-item" type="button">关闭菜单</button>
         <button id="btn-mobile-clear" class="top-action-more-item top-action-more-item-danger" type="button">清空电路</button>
         <button id="btn-mobile-export" class="top-action-more-item" type="button">导出JSON</button>
         <button id="btn-mobile-import" class="top-action-more-item" type="button">导入JSON</button>
@@ -35,7 +36,10 @@
     <div id="app">
         <!-- 左侧工具箱 -->
         <aside id="toolbox">
-            <h2>元器件</h2>
+            <div class="toolbox-header">
+                <h2>元器件</h2>
+                <button id="btn-close-toolbox" class="toolbox-close-btn" type="button" aria-label="关闭元件库">关闭</button>
+            </div>
             <div class="tool-category" data-category="power">
                 <h3>电源</h3>
                 <div class="tool-item" data-type="Ground" draggable="true">
@@ -273,6 +277,7 @@
                 <button id="btn-mobile-run" class="mobile-toggle-btn mobile-run-btn" type="button">运行</button>
                 <button id="btn-mobile-stop" class="mobile-toggle-btn mobile-stop-btn" type="button" disabled>停止</button>
             </div>
+            <button id="btn-mobile-sim-toggle" class="mobile-sim-toggle" type="button" aria-pressed="false">运行</button>
             <svg id="circuit-canvas" xmlns="http://www.w3.org/2000/svg">
                 <defs>
                     <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
@@ -305,7 +310,10 @@
         <!-- 右侧观察面板（含“属性/观察”切换） -->
         <aside id="side-panel">
             <div class="side-panel-header">
-                <h2>面板</h2>
+                <div class="side-panel-title-row">
+                    <h2>面板</h2>
+                    <button id="btn-close-side-panel" class="panel-close-btn" type="button" aria-label="关闭面板">关闭</button>
+                </div>
                 <div class="side-panel-tabs" role="tablist" aria-label="右侧面板">
                     <button class="panel-tab-btn active" data-panel="properties" role="tab" aria-selected="true">属性</button>
                     <button class="panel-tab-btn" data-panel="observation" role="tab" aria-selected="false">观察</button>

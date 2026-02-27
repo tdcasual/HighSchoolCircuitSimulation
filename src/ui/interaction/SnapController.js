@@ -1,12 +1,16 @@
 import { GRID_SIZE, normalizeCanvasPoint, snapToGrid } from '../../utils/CanvasCoords.js';
-import { getComponentTerminalCount } from '../../components/Component.js';
+import { getComponentTerminalCount, TERMINAL_HIT_RADIUS_PX } from '../../components/Component.js';
 
 export function getAdaptiveSnapThreshold(options = {}) {
     const baseThreshold = Number.isFinite(options.threshold) ? options.threshold : 15;
     const pointerType = options.pointerType || this.lastPrimaryPointerType || 'mouse';
-    if (pointerType === 'touch') return Math.max(baseThreshold, 24);
-    if (pointerType === 'pen') return Math.max(baseThreshold, 18);
-    return baseThreshold;
+    const screenThreshold = pointerType === 'touch'
+        ? Math.max(baseThreshold, 24)
+        : pointerType === 'pen'
+            ? Math.max(baseThreshold, 18)
+            : baseThreshold;
+    const scale = Number.isFinite(this.scale) && this.scale > 0 ? this.scale : 1;
+    return screenThreshold / scale;
 }
 
 /**
@@ -14,8 +18,9 @@ export function getAdaptiveSnapThreshold(options = {}) {
  */
 export function snapPoint(x, y, options = {}) {
     const threshold = this.getAdaptiveSnapThreshold(options);
+    const terminalThreshold = Math.max(threshold, TERMINAL_HIT_RADIUS_PX);
 
-    const nearbyTerminal = this.findNearbyTerminal(x, y, threshold);
+    const nearbyTerminal = this.findNearbyTerminal(x, y, terminalThreshold);
     if (nearbyTerminal) {
         const pos = this.renderer.getTerminalPosition(nearbyTerminal.componentId, nearbyTerminal.terminalIndex);
         const normalizedPos = normalizeCanvasPoint(pos);
@@ -38,7 +43,8 @@ export function snapPoint(x, y, options = {}) {
         threshold,
         options.excludeWireId,
         options.excludeEnd,
-        options.excludeWireEndpoints
+        options.excludeWireEndpoints,
+        options.excludeWireIds
     );
     if (nearbyEndpoint) {
         const normalizedEndpoint = normalizeCanvasPoint(nearbyEndpoint);
@@ -82,6 +88,9 @@ export function snapPoint(x, y, options = {}) {
  * @returns {Object|null} 端点信息 {componentId, terminalIndex} 或 null
  */
 export function findNearbyTerminal(x, y, threshold) {
+    let best = null;
+    let bestDist = Infinity;
+
     for (const [id, comp] of this.circuit.components) {
         // 检查每个端点
         const terminalCount = getComponentTerminalCount(comp.type);
@@ -89,11 +98,12 @@ export function findNearbyTerminal(x, y, threshold) {
             const pos = this.renderer.getTerminalPosition(id, ti);
             if (pos) {
                 const dist = Math.sqrt((x - pos.x) ** 2 + (y - pos.y) ** 2);
-                if (dist < threshold) {
-                    return { componentId: id, terminalIndex: ti };
+                if (dist < threshold && dist < bestDist) {
+                    bestDist = dist;
+                    best = { componentId: id, terminalIndex: ti };
                 }
             }
         }
     }
-    return null;
+    return best;
 }

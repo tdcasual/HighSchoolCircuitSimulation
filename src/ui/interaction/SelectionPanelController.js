@@ -14,6 +14,22 @@ function renderDefaultPropertyHint() {
     content.appendChild(hint);
 }
 
+function isTouchPreferredMode() {
+    if (typeof document === 'undefined') return false;
+    const body = document.body;
+    if (body?.classList?.contains('layout-mode-compact') || body?.classList?.contains('layout-mode-phone')) {
+        return true;
+    }
+    if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
+        try {
+            return window.matchMedia('(pointer: coarse)').matches;
+        } catch (_) {
+            return false;
+        }
+    }
+    return false;
+}
+
 export function clearSelection() {
     // 清除自动隐藏计时器
     if (this.wireAutoHideTimer) {
@@ -26,6 +42,7 @@ export function clearSelection() {
     this.selectedWire = null;
 
     renderDefaultPropertyHint();
+    this.quickActionBar?.notifyActivity?.();
     this.quickActionBar?.update?.();
 }
 
@@ -43,6 +60,8 @@ export function selectComponent(id) {
     if (comp) {
         this.updatePropertyPanel(comp);
     }
+    this.quickActionBar?.notifyActivity?.();
+    this.quickActionBar?.maybeShowLongPressHint?.();
     this.quickActionBar?.update?.();
 }
 
@@ -59,15 +78,17 @@ export function selectWire(id) {
         this.activateSidePanelTab('properties');
     }
 
-    // 设置10秒后自动取消选择
-    this.wireAutoHideTimer = setTimeout(() => {
-        if (this.selectedWire === id) {
-            this.renderer.setWireSelected(id, false);
-            this.selectedWire = null;
-            renderDefaultPropertyHint();
-            this.quickActionBar?.update?.();
-        }
-    }, 10000);
+    // 触屏模式下保持选择态，避免用户困惑；桌面端仍保留自动取消
+    if (!isTouchPreferredMode()) {
+        this.wireAutoHideTimer = setTimeout(() => {
+            if (this.selectedWire === id) {
+                this.renderer.setWireSelected(id, false);
+                this.selectedWire = null;
+                renderDefaultPropertyHint();
+                this.quickActionBar?.update?.();
+            }
+        }, 10000);
+    }
 
     const wire = this.circuit.getWire(id);
     const fmtEnd = (which) => {
@@ -100,5 +121,7 @@ export function selectWire(id) {
         'Shift + 点击空白处可从任意位置开始画导线（允许独立导线）',
         '拖动端子可伸长/缩短元器件引脚'
     ]));
+    this.quickActionBar?.notifyActivity?.();
+    this.quickActionBar?.maybeShowLongPressHint?.();
     this.quickActionBar?.update?.();
 }

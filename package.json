@@ -21,7 +21,8 @@
     "baseline:circuitjs:update": "node scripts/benchmark/circuitjs-golden-regression.mjs --update",
     "baseline:ai": "node scripts/benchmark/ai-eval-regression.mjs",
     "baseline:ai:update": "node scripts/benchmark/ai-eval-regression.mjs --update",
-    "test:e2e:responsive": "node scripts/e2e/responsive-touch-regression.mjs"
+    "test:e2e:responsive": "node scripts/e2e/responsive-touch-regression.mjs",
+    "test:e2e:wire": "node scripts/e2e/wire-interaction-regression.mjs"
   },
   "devDependencies": {
     "eslint": "^8.57.1",

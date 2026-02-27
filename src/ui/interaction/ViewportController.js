@@ -108,6 +108,7 @@ export function getCircuitBounds() {
 
 export function onWheel(e) {
     e.preventDefault();
+    this.quickActionBar?.notifyActivity?.();
 
     const rect = this.svg.getBoundingClientRect();
     // 鼠标在SVG中的位置

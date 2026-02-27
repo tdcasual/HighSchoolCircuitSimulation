@@ -52,6 +52,12 @@ export function onMouseDown(e) {
     e.preventDefault();
     e.stopPropagation();
     this.lastPrimaryPointerType = this.resolvePointerType(e);
+    this.lastPointerScreen = { x: e.clientX, y: e.clientY };
+    this.lastPointerCanvas = this.screenToCanvas(e.clientX, e.clientY);
+    this.quickActionBar?.notifyActivity?.();
+    this.pointerDownInfo = null;
+    this.hideContextMenu?.();
+    this.app?.topActionMenu?.setOpen?.(false);
 
     const target = e.target;
     const probeMarker = this.resolveProbeMarkerTarget(target);
@@ -60,12 +66,37 @@ export function onMouseDown(e) {
 
     if (this.pendingToolType && e.button === 0) {
         if (this.pendingToolType === 'Wire') {
-            const canvasCoords = this.screenToCanvas(e.clientX, e.clientY);
+            const resolveWireToolPoint = () => {
+                if (terminalTarget && componentGroup) {
+                    const componentId = componentGroup.dataset.id;
+                    const terminalIndex = parseInt(terminalTarget.dataset.terminal, 10);
+                    if (!Number.isNaN(terminalIndex) && terminalIndex >= 0) {
+                        const terminalPos = this.renderer.getTerminalPosition(componentId, terminalIndex);
+                        if (terminalPos) return terminalPos;
+                    }
+                }
+
+                if (typeof this.isWireEndpointTarget === 'function' && this.isWireEndpointTarget(target)) {
+                    const wireGroup = target.closest('.wire-group');
+                    if (wireGroup) {
+                        const wireId = wireGroup.dataset.id;
+                        const end = target.dataset.end;
+                        const wire = this.circuit.getWire(wireId);
+                        const pos = wire && (end === 'a' || end === 'b') ? wire[end] : null;
+                        if (pos) return pos;
+                    }
+                }
+
+                return this.screenToCanvas(e.clientX, e.clientY);
+            };
+
+            const wireToolPoint = resolveWireToolPoint();
+            const pointerType = this.resolvePointerType(e);
             if (this.isWiring) {
-                this.finishWiringToPoint(canvasCoords);
+                this.finishWiringToPoint(wireToolPoint, { pointerType });
                 this.clearPendingToolType({ silent: true });
             } else {
-                this.startWiringFromPoint(canvasCoords, e, true);
+                this.startWiringFromPoint(wireToolPoint, e, true);
                 this.updateStatus('导线模式：选择终点');
             }
         } else {
@@ -93,7 +124,7 @@ export function onMouseDown(e) {
         return;
     }
 
-    // 端子交互：默认拖动端子即延长/缩短引脚
+    // 端子交互：默认从端子起线；按住 Alt 再拖动用于延长/缩短引脚
     if (terminalTarget) {
         if (componentGroup) {
             const componentId = componentGroup.dataset.id;
@@ -102,7 +133,19 @@ export function onMouseDown(e) {
                 if (this.selectedComponent !== componentId) {
                     this.selectComponent(componentId);
                 }
-                this.startTerminalExtend(componentId, terminalIndex, e);
+                if (e.altKey) {
+                    this.startTerminalExtend(componentId, terminalIndex, e);
+                    return;
+                }
+                const terminalPos = this.renderer.getTerminalPosition(componentId, terminalIndex);
+                if (terminalPos) {
+                    this.startWiringFromPoint(terminalPos, e, true);
+                    if (typeof this.updateStatus === 'function') {
+                        this.updateStatus('导线模式：选择终点');
+                    }
+                } else {
+                    this.startTerminalExtend(componentId, terminalIndex, e);
+                }
             }
             return;
         }
@@ -151,6 +194,16 @@ export function onMouseDown(e) {
 
     // 检查是否点击了元器件
     if (componentGroup) {
+        const componentId = componentGroup.dataset.id;
+        const wasSelected = this.selectedComponent === componentId;
+        this.pointerDownInfo = {
+            componentId,
+            wasSelected,
+            screenX: e.clientX,
+            screenY: e.clientY,
+            pointerType: this.resolvePointerType(e),
+            moved: false
+        };
         this.startDragging(componentGroup, e);
         return;
     }
@@ -181,11 +234,24 @@ export function onMouseDown(e) {
         return;
     }
 
-    // 左键点击空白处取消选择
+    // 左键点击空白处取消选择，并关闭可能打开的抽屉（移动端）
     this.clearSelection();
+    this.app?.responsiveLayout?.closeDrawers?.();
 }
 
 export function onMouseMove(e) {
+    this.quickActionBar?.notifyActivity?.();
+    if (this.pointerDownInfo && !this.pointerDownInfo.moved) {
+        const pointerType = this.pointerDownInfo.pointerType || this.resolvePointerType(e);
+        const threshold = pointerType === 'touch' ? 12 : pointerType === 'pen' ? 10 : 6;
+        const moved = Math.hypot(
+            (e.clientX || 0) - (this.pointerDownInfo.screenX || 0),
+            (e.clientY || 0) - (this.pointerDownInfo.screenY || 0)
+        );
+        if (moved > threshold) {
+            this.pointerDownInfo.moved = true;
+        }
+    }
     // 画布平移（使用屏幕坐标）
     if (this.isPanning) {
         this.viewOffset = {
@@ -212,7 +278,7 @@ export function onMouseMove(e) {
         const excludeWireIds = new Set(affected.map((a) => a.wireId));
         const snapped = this.snapPoint(canvasX, canvasY, {
             excludeWireEndpoints,
-            allowWireSegmentSnap: false,
+            allowWireSegmentSnap: true,
             excludeWireIds,
             pointerType: this.resolvePointerType(e)
         });
@@ -236,6 +302,9 @@ export function onMouseMove(e) {
         const terminalSnap = snapped.snap && snapped.snap.type === 'terminal'
             ? { componentId: snapped.snap.componentId, terminalIndex: snapped.snap.terminalIndex }
             : null;
+        const wireSegmentSnap = snapped.snap && snapped.snap.type === 'wire-segment'
+            ? { x: snapped.x, y: snapped.y }
+            : null;
 
         const changedWireIds = new Set();
         for (const a of affected) {
@@ -255,6 +324,8 @@ export function onMouseMove(e) {
 
         if (terminalSnap) {
             this.renderer.highlightTerminal(terminalSnap.componentId, terminalSnap.terminalIndex);
+        } else if (wireSegmentSnap && typeof this.renderer.highlightWireNode === 'function') {
+            this.renderer.highlightWireNode(wireSegmentSnap.x, wireSegmentSnap.y);
         } else {
             this.renderer.clearTerminalHighlight();
         }
@@ -385,12 +456,14 @@ export function onMouseMove(e) {
     // 连线预览
     if (this.isWiring && this.wireStart && this.tempWire) {
         const preview = this.snapPoint(canvasX, canvasY, {
-            allowWireSegmentSnap: false,
+            allowWireSegmentSnap: true,
             pointerType: this.resolvePointerType(e)
         });
         this.renderer.updateTempWire(this.tempWire, this.wireStart.x, this.wireStart.y, preview.x, preview.y);
         if (preview.snap?.type === 'terminal') {
             this.renderer.highlightTerminal(preview.snap.componentId, preview.snap.terminalIndex);
+        } else if (preview.snap?.type === 'wire-segment' && typeof this.renderer.highlightWireNode === 'function') {
+            this.renderer.highlightWireNode(preview.x, preview.y);
         } else {
             this.renderer.clearTerminalHighlight();
         }
@@ -398,10 +471,14 @@ export function onMouseMove(e) {
 }
 
 export function onMouseUp(e) {
+    this.quickActionBar?.notifyActivity?.();
+    const pointerDownInfo = this.pointerDownInfo;
+
     // 结束画布平移
     if (this.isPanning) {
         this.isPanning = false;
         this.svg.style.cursor = '';
+        this.pointerDownInfo = null;
         return;
     }
 
@@ -415,12 +492,35 @@ export function onMouseUp(e) {
         const affectedIds = Array.isArray(drag?.affected)
             ? drag.affected.map((item) => item?.wireId).filter(Boolean)
             : [];
+        const scopeWireIds = [drag?.wireId, ...affectedIds].filter(Boolean);
+        const shouldSplitTargetWire = drag?.lastSnap?.type === 'wire-segment'
+            && drag?.lastSnap?.wireId
+            && drag?.lastPoint
+            && typeof this.splitWireAtPointInternal === 'function';
+
+        if (shouldSplitTargetWire) {
+            const targetWireId = drag.lastSnap.wireId;
+            if (!affectedIds.includes(targetWireId)) {
+                const splitResult = this.splitWireAtPointInternal(
+                    targetWireId,
+                    drag.lastPoint.x,
+                    drag.lastPoint.y
+                );
+                scopeWireIds.push(targetWireId);
+                if (splitResult?.created && splitResult?.newWireId) {
+                    scopeWireIds.push(splitResult.newWireId);
+                }
+            }
+        }
+
+        const uniqueScopeWireIds = Array.from(new Set(scopeWireIds.filter(Boolean)));
         this.compactWiresAndRefresh({
             preferredWireId: drag?.wireId || this.selectedWire,
-            scopeWireIds: affectedIds
+            scopeWireIds: uniqueScopeWireIds.length > 0 ? uniqueScopeWireIds : null
         });
         this.circuit.rebuildNodes();
         this.commitHistoryTransaction();
+        this.pointerDownInfo = null;
         return;
     }
 
@@ -435,6 +535,7 @@ export function onMouseUp(e) {
         });
         this.circuit.rebuildNodes();
         this.commitHistoryTransaction();
+        this.pointerDownInfo = null;
         return;
     }
 
@@ -447,6 +548,24 @@ export function onMouseUp(e) {
         this.hideAlignmentGuides();
         this.circuit.rebuildNodes();
         this.commitHistoryTransaction();
+    }
+
+    if (pointerDownInfo?.componentId && pointerDownInfo.wasSelected && !pointerDownInfo.moved) {
+        const pointerType = pointerDownInfo.pointerType || this.resolvePointerType(e);
+        const threshold = pointerType === 'touch' ? 12 : pointerType === 'pen' ? 10 : 6;
+        const moved = Math.hypot(
+            (e.clientX || 0) - (pointerDownInfo.screenX || 0),
+            (e.clientY || 0) - (pointerDownInfo.screenY || 0)
+        );
+        if (moved <= threshold) {
+            const componentG = e.target?.closest?.('.component');
+            const componentId = componentG?.dataset?.id;
+            if (componentId && componentId === pointerDownInfo.componentId) {
+                this.clearSelection();
+                this.pointerDownInfo = null;
+                return;
+            }
+        }
     }
 
     // 结束连线
@@ -485,16 +604,19 @@ export function onMouseUp(e) {
         } else {
             const canvasCoords = this.screenToCanvas(e.clientX, e.clientY);
             const snapped = this.snapPoint(canvasCoords.x, canvasCoords.y, {
-                allowWireSegmentSnap: false,
+                allowWireSegmentSnap: true,
                 pointerType: this.resolvePointerType(e)
             });
             this.finishWiringToPoint(snapped, { pointerType: this.resolvePointerType(e) });
             return;
         }
     }
+
+    this.pointerDownInfo = null;
 }
 
 export function onMouseLeave(_e) {
+    this.quickActionBar?.notifyActivity?.();
     if (this.isPanning) {
         this.isPanning = false;
         this.svg.style.cursor = '';
@@ -507,9 +629,10 @@ export function onMouseLeave(_e) {
         const affectedIds = Array.isArray(drag?.affected)
             ? drag.affected.map((item) => item?.wireId).filter(Boolean)
             : [];
+        const scopeWireIds = Array.from(new Set([drag?.wireId, ...affectedIds].filter(Boolean)));
         this.compactWiresAndRefresh({
             preferredWireId: drag?.wireId || this.selectedWire,
-            scopeWireIds: affectedIds
+            scopeWireIds
         });
         this.circuit.rebuildNodes();
         this.commitHistoryTransaction();
@@ -534,6 +657,7 @@ export function onMouseLeave(_e) {
         this.circuit.rebuildNodes();
         this.commitHistoryTransaction();
     }
+    this.pointerDownInfo = null;
 }
 
 export function onContextMenu(e) {

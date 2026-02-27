@@ -232,6 +232,12 @@ class CircuitSimulatorApp {
         const mobileStopBtn = document.getElementById('btn-mobile-stop');
         if (mobileRunBtn) mobileRunBtn.disabled = true;
         if (mobileStopBtn) mobileStopBtn.disabled = false;
+        const mobileSimToggle = document.getElementById('btn-mobile-sim-toggle');
+        if (mobileSimToggle) {
+            mobileSimToggle.textContent = '停止';
+            mobileSimToggle.setAttribute('aria-pressed', 'true');
+            mobileSimToggle.classList.add('running');
+        }
         
         const statusEl = document.getElementById('simulation-status');
         statusEl.textContent = '模拟: 运行中';
@@ -255,6 +261,12 @@ class CircuitSimulatorApp {
         const mobileStopBtn = document.getElementById('btn-mobile-stop');
         if (mobileRunBtn) mobileRunBtn.disabled = false;
         if (mobileStopBtn) mobileStopBtn.disabled = true;
+        const mobileSimToggle = document.getElementById('btn-mobile-sim-toggle');
+        if (mobileSimToggle) {
+            mobileSimToggle.textContent = '运行';
+            mobileSimToggle.setAttribute('aria-pressed', 'false');
+            mobileSimToggle.classList.remove('running');
+        }
         
         const statusEl = document.getElementById('simulation-status');
         statusEl.textContent = '模拟: 停止';

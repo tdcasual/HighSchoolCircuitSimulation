@@ -1,11 +1,9 @@
 import { normalizeCanvasPoint, toCanvasInt } from '../../utils/CanvasCoords.js';
 
-function isOrthogonalWire(wire) {
-    if (!wire || !wire.a || !wire.b) return false;
-    const a = normalizeCanvasPoint(wire.a);
-    const b = normalizeCanvasPoint(wire.b);
-    if (!a || !b) return false;
-    return a.x === b.x || a.y === b.y;
+function resolveScaledThreshold(context, screenPx) {
+    const scale = Number(context?.scale);
+    if (!Number.isFinite(scale) || scale <= 0) return screenPx;
+    return screenPx / scale;
 }
 
 export function addWireAt(x, y) {
@@ -36,7 +34,7 @@ export function startWiringFromPoint(point, e = null, armMouseUpGuard = false) {
     this.renderer.clearTerminalHighlight();
 
     const start = this.snapPoint(point.x, point.y, {
-        allowWireSegmentSnap: false,
+        allowWireSegmentSnap: true,
         pointerType: this.resolvePointerType(e)
     });
 
@@ -60,11 +58,17 @@ export function finishWiringToPoint(point, options = {}) {
         return;
     }
 
-    const start = { x: this.wireStart.x, y: this.wireStart.y };
-    const end = this.snapPoint(point.x, point.y, {
-        allowWireSegmentSnap: false,
-        pointerType: options.pointerType
-    });
+    const start = {
+        x: toCanvasInt(this.wireStart.x),
+        y: toCanvasInt(this.wireStart.y),
+        snap: this.wireStart.snap || null
+    };
+    const end = point && point.snap
+        ? { x: toCanvasInt(point.x), y: toCanvasInt(point.y), snap: point.snap || null }
+        : this.snapPoint(point.x, point.y, {
+            allowWireSegmentSnap: true,
+            pointerType: options.pointerType
+        });
     const dist = Math.hypot(end.x - start.x, end.y - start.y);
     if (dist < 1e-6) {
         this.cancelWiring();
@@ -81,8 +85,36 @@ export function finishWiringToPoint(point, options = {}) {
                 return `${baseId}_${i}`;
             };
 
-            const startPoint = { x: start.x, y: start.y };
-            const endPoint = { x: end.x, y: end.y };
+            const splitCreatedIds = [];
+            const resolvePointAfterSegmentSplit = (snap, fallbackPoint) => {
+                const pointCandidate = {
+                    x: toCanvasInt(fallbackPoint.x),
+                    y: toCanvasInt(fallbackPoint.y)
+                };
+                if (!snap || snap.type !== 'wire-segment' || !snap.wireId) {
+                    return pointCandidate;
+                }
+
+                const splitResult = this.splitWireAtPointInternal(
+                    snap.wireId,
+                    pointCandidate.x,
+                    pointCandidate.y,
+                    { ensureUniqueWireId }
+                );
+                if (splitResult?.created && splitResult?.newWireId) {
+                    splitCreatedIds.push(splitResult.newWireId);
+                }
+                if (splitResult?.point) {
+                    return {
+                        x: toCanvasInt(splitResult.point.x),
+                        y: toCanvasInt(splitResult.point.y)
+                    };
+                }
+                return pointCandidate;
+            };
+
+            const startPoint = resolvePointAfterSegmentSplit(start.snap, start);
+            const endPoint = resolvePointAfterSegmentSplit(end.snap, end);
 
             if (Math.hypot(endPoint.x - startPoint.x, endPoint.y - startPoint.y) < 1e-6) {
                 this.cancelWiring();
@@ -137,10 +169,11 @@ export function finishWiringToPoint(point, options = {}) {
             }
 
             let selectedWireId = createdIds.length > 0 ? createdIds[createdIds.length - 1] : null;
-            if (createdIds.length > 0) {
+            const scopeWireIds = [...splitCreatedIds, ...createdIds];
+            if (scopeWireIds.length > 0) {
                 const compacted = this.compactWiresAndRefresh({
                     preferredWireId: selectedWireId,
-                    scopeWireIds: createdIds
+                    scopeWireIds
                 });
                 selectedWireId = compacted.resolvedWireId || selectedWireId;
             }
@@ -260,13 +293,15 @@ export function findNearbyWireEndpoint(
     threshold,
     excludeWireId = null,
     excludeEnd = null,
-    excludeWireEndpoints = null
+    excludeWireEndpoints = null,
+    excludeWireIds = null
 ) {
     let best = null;
     let bestDist = Infinity;
 
     for (const wire of this.circuit.getAllWires()) {
         if (!wire) continue;
+        if (excludeWireIds && excludeWireIds.has(wire.id)) continue;
         for (const end of ['a', 'b']) {
             if (excludeWireEndpoints && excludeWireEndpoints.has(`${wire.id}:${end}`)) continue;
             if (excludeWireId && wire.id === excludeWireId && excludeEnd === end) continue;
@@ -288,6 +323,7 @@ export function findNearbyWireEndpoint(
 export function findNearbyWireSegment(x, y, threshold, excludeWireId = null) {
     let best = null;
     let bestDist = Infinity;
+    const endpointProximity = resolveScaledThreshold(this, 3);
 
     for (const wire of this.circuit.getAllWires()) {
         if (!wire || !wire.a || !wire.b) continue;
@@ -304,15 +340,17 @@ export function findNearbyWireSegment(x, y, threshold, excludeWireId = null) {
 
         const tRaw = ((x - a.x) * dx + (y - a.y) * dy) / len2;
         const t = Math.max(0, Math.min(1, tRaw));
-        const projX = toCanvasInt(a.x + dx * t);
-        const projY = toCanvasInt(a.y + dy * t);
-        const dist = Math.hypot(x - projX, y - projY);
+        const projXRaw = a.x + dx * t;
+        const projYRaw = a.y + dy * t;
+        const projX = toCanvasInt(projXRaw);
+        const projY = toCanvasInt(projYRaw);
+        const dist = Math.hypot(x - projXRaw, y - projYRaw);
         if (dist >= threshold || dist >= bestDist) continue;
 
         // 贴近端点的情况交给端点吸附处理
-        const distToA = Math.hypot(projX - a.x, projY - a.y);
-        const distToB = Math.hypot(projX - b.x, projY - b.y);
-        if (distToA < 3 || distToB < 3) continue;
+        const distToA = Math.hypot(projXRaw - a.x, projYRaw - a.y);
+        const distToB = Math.hypot(projXRaw - b.x, projYRaw - b.y);
+        if (distToA < endpointProximity || distToB < endpointProximity) continue;
 
         bestDist = dist;
         best = { wireId: wire.id, x: projX, y: projY };
@@ -327,10 +365,6 @@ export function findNearbyWireSegment(x, y, threshold, excludeWireId = null) {
 export function splitWireAtPoint(wireId, x, y) {
     const wire = this.circuit.getWire(wireId);
     if (!wire || !wire.a || !wire.b) return;
-    if (!isOrthogonalWire(wire)) {
-        this.updateStatus('仅支持水平/垂直导线分割');
-        return;
-    }
 
     this.runWithHistory('分割导线', () => {
         const result = this.splitWireAtPointInternal(wireId, x, y);
@@ -346,7 +380,6 @@ export function splitWireAtPoint(wireId, x, y) {
 export function splitWireAtPointInternal(wireId, x, y, options = {}) {
     const wire = this.circuit.getWire(wireId);
     if (!wire || !wire.a || !wire.b) return null;
-    if (!isOrthogonalWire(wire)) return null;
 
     const makeId = typeof options.ensureUniqueWireId === 'function'
         ? options.ensureUniqueWireId
@@ -369,17 +402,28 @@ export function splitWireAtPointInternal(wireId, x, y, options = {}) {
     // Project click point to the segment for stable split placement.
     const tRaw = ((x - a.x) * dx + (y - a.y) * dy) / len2;
     const t = Math.max(0, Math.min(1, tRaw));
+    const splitRaw = {
+        x: a.x + dx * t,
+        y: a.y + dy * t
+    };
     const split = {
-        x: toCanvasInt(a.x + dx * t),
-        y: toCanvasInt(a.y + dy * t)
+        x: toCanvasInt(splitRaw.x),
+        y: toCanvasInt(splitRaw.y)
     };
 
-    if (a.x === b.x) split.x = a.x;
-    if (a.y === b.y) split.y = a.y;
+    if (a.x === b.x) {
+        split.x = a.x;
+        splitRaw.x = a.x;
+    }
+    if (a.y === b.y) {
+        split.y = a.y;
+        splitRaw.y = a.y;
+    }
 
+    const closeThreshold = resolveScaledThreshold(this, 5);
     const tooClose =
-        Math.hypot(split.x - a.x, split.y - a.y) < 5 ||
-        Math.hypot(split.x - b.x, split.y - b.y) < 5;
+        Math.hypot(splitRaw.x - a.x, splitRaw.y - a.y) < closeThreshold ||
+        Math.hypot(splitRaw.x - b.x, splitRaw.y - b.y) < closeThreshold;
     if (tooClose) {
         return { created: false, point: split };
     }

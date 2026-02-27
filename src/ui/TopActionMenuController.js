@@ -14,6 +14,11 @@ export class TopActionMenuController {
             event?.stopPropagation?.();
             this.toggle();
         };
+        this.boundClose = (event) => {
+            event?.preventDefault?.();
+            event?.stopPropagation?.();
+            this.setOpen(false);
+        };
         this.boundDocumentPointerDown = (event) => this.onDocumentPointerDown(event);
         this.boundDocumentKeyDown = (event) => this.onDocumentKeyDown(event);
 
@@ -31,6 +36,10 @@ export class TopActionMenuController {
                 this.setOpen(false);
             }
         });
+        const closeBtn = document.getElementById('btn-top-action-close');
+        if (closeBtn) {
+            closeBtn.addEventListener('click', this.boundClose);
+        }
         this.sync();
     }
 
@@ -73,4 +82,3 @@ export class TopActionMenuController {
         }
     }
 }
-

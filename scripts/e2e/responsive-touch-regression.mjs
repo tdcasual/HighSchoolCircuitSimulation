@@ -181,6 +181,14 @@ async function verifyDesktopLayout(browser, baseUrl) {
         assertCondition(state.mode === 'desktop', `desktop mode expected, got: ${state.bodyClassName}`);
         assertCondition(state.toolboxToggleHidden === true, 'toolbox toggle should stay hidden on desktop');
         assertCondition(state.sidePanelToggleHidden === true, 'side-panel toggle should stay hidden on desktop');
+        const quickBarVisible = await page.evaluate(() => {
+            const bar = document.getElementById('quick-action-bar');
+            if (!bar) return false;
+            const style = window.getComputedStyle(bar);
+            const rect = bar.getBoundingClientRect();
+            return bar.hidden === false && style.display !== 'none' && rect.width > 0 && rect.height > 0;
+        });
+        assertCondition(!quickBarVisible, 'quick-action bar should stay hidden in desktop idle state');
         await capture(page, 'desktop-1366x768.png');
 
         const beforeClassroom = await page.evaluate(() => {

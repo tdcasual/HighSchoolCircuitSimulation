@@ -18,6 +18,8 @@ export class ResponsiveLayoutController {
         this.sidePanel = typeof document !== 'undefined' ? document.getElementById('side-panel') : null;
         this.toolboxToggleBtn = typeof document !== 'undefined' ? document.getElementById('btn-toggle-toolbox') : null;
         this.sidePanelToggleBtn = typeof document !== 'undefined' ? document.getElementById('btn-toggle-side-panel') : null;
+        this.toolboxCloseBtn = typeof document !== 'undefined' ? document.getElementById('btn-close-toolbox') : null;
+        this.sidePanelCloseBtn = typeof document !== 'undefined' ? document.getElementById('btn-close-side-panel') : null;
         this.backdrop = typeof document !== 'undefined' ? document.getElementById('layout-backdrop') : null;
 
         this.mode = MODE_DESKTOP;
@@ -27,6 +29,7 @@ export class ResponsiveLayoutController {
         this.boundResize = () => this.updateLayoutMode();
         this.boundKeyDown = (event) => this.onKeyDown(event);
         this.boundBackdropClick = () => this.closeDrawers();
+        this.drawerSwipe = null;
         this.boundToolboxToggleClick = (event) => {
             event.preventDefault();
             this.toggleDrawer('toolbox');
@@ -35,6 +38,18 @@ export class ResponsiveLayoutController {
             event.preventDefault();
             this.toggleDrawer('side-panel');
         };
+        this.boundToolboxCloseClick = (event) => {
+            event.preventDefault();
+            this.closeDrawers();
+        };
+        this.boundSidePanelCloseClick = (event) => {
+            event.preventDefault();
+            this.closeDrawers();
+        };
+        this.boundDrawerPointerDown = (event) => this.onDrawerPointerDown(event);
+        this.boundDrawerPointerMove = (event) => this.onDrawerPointerMove(event);
+        this.boundDrawerPointerUp = (event) => this.onDrawerPointerUp(event);
+        this.boundDrawerPointerCancel = (event) => this.onDrawerPointerUp(event);
 
         this.initialize();
     }
@@ -58,9 +73,27 @@ export class ResponsiveLayoutController {
         if (this.sidePanelToggleBtn) {
             this.sidePanelToggleBtn.addEventListener('click', this.boundSidePanelToggleClick);
         }
+        if (this.toolboxCloseBtn) {
+            this.toolboxCloseBtn.addEventListener('click', this.boundToolboxCloseClick);
+        }
+        if (this.sidePanelCloseBtn) {
+            this.sidePanelCloseBtn.addEventListener('click', this.boundSidePanelCloseClick);
+        }
 
         if (this.backdrop) {
             this.backdrop.addEventListener('click', this.boundBackdropClick);
+        }
+        if (this.toolbox) {
+            this.toolbox.addEventListener('pointerdown', this.boundDrawerPointerDown);
+            this.toolbox.addEventListener('pointermove', this.boundDrawerPointerMove, { passive: false });
+            this.toolbox.addEventListener('pointerup', this.boundDrawerPointerUp);
+            this.toolbox.addEventListener('pointercancel', this.boundDrawerPointerCancel);
+        }
+        if (this.sidePanel) {
+            this.sidePanel.addEventListener('pointerdown', this.boundDrawerPointerDown);
+            this.sidePanel.addEventListener('pointermove', this.boundDrawerPointerMove, { passive: false });
+            this.sidePanel.addEventListener('pointerup', this.boundDrawerPointerUp);
+            this.sidePanel.addEventListener('pointercancel', this.boundDrawerPointerCancel);
         }
     }
 
@@ -77,6 +110,120 @@ export class ResponsiveLayoutController {
         }
         if (this.sidePanelToggleBtn) {
             this.sidePanelToggleBtn.removeEventListener('click', this.boundSidePanelToggleClick);
+        }
+        if (this.toolboxCloseBtn) {
+            this.toolboxCloseBtn.removeEventListener('click', this.boundToolboxCloseClick);
+        }
+        if (this.sidePanelCloseBtn) {
+            this.sidePanelCloseBtn.removeEventListener('click', this.boundSidePanelCloseClick);
+        }
+        if (this.toolbox) {
+            this.toolbox.removeEventListener('pointerdown', this.boundDrawerPointerDown);
+            this.toolbox.removeEventListener('pointermove', this.boundDrawerPointerMove);
+            this.toolbox.removeEventListener('pointerup', this.boundDrawerPointerUp);
+            this.toolbox.removeEventListener('pointercancel', this.boundDrawerPointerCancel);
+        }
+        if (this.sidePanel) {
+            this.sidePanel.removeEventListener('pointerdown', this.boundDrawerPointerDown);
+            this.sidePanel.removeEventListener('pointermove', this.boundDrawerPointerMove);
+            this.sidePanel.removeEventListener('pointerup', this.boundDrawerPointerUp);
+            this.sidePanel.removeEventListener('pointercancel', this.boundDrawerPointerCancel);
+        }
+    }
+
+    onDrawerPointerDown(event) {
+        if (!this.isOverlayMode()) return;
+        const pointerType = event?.pointerType || '';
+        if (pointerType !== 'touch' && pointerType !== 'pen') return;
+        const header = event.target?.closest?.(
+            event.currentTarget?.id === 'toolbox' ? '.toolbox-header' : '.side-panel-header'
+        );
+        if (!header) return;
+        const targetId = event.currentTarget?.id === 'toolbox' ? 'toolbox' : 'side-panel';
+        this.drawerSwipe = {
+            pointerId: event.pointerId,
+            startX: event.clientX,
+            startY: event.clientY,
+            target: targetId,
+            mode: this.mode,
+            drawerEl: event.currentTarget,
+            prevTransition: event.currentTarget?.style?.transition || ''
+        };
+        if (this.drawerSwipe.drawerEl?.style) {
+            this.drawerSwipe.drawerEl.style.transition = 'none';
+        }
+        if (typeof event.currentTarget?.setPointerCapture === 'function') {
+            try {
+                event.currentTarget.setPointerCapture(event.pointerId);
+            } catch (_) {}
+        }
+    }
+
+    onDrawerPointerMove(event) {
+        if (!this.drawerSwipe) return;
+        if (event.pointerId !== this.drawerSwipe.pointerId) return;
+        const dx = (event.clientX || 0) - (this.drawerSwipe.startX || 0);
+        const dy = (event.clientY || 0) - (this.drawerSwipe.startY || 0);
+        const absX = Math.abs(dx);
+        const absY = Math.abs(dy);
+        const threshold = 40;
+        const drawerEl = this.drawerSwipe.drawerEl;
+        if (drawerEl?.style) {
+            if (this.drawerSwipe.mode === MODE_PHONE) {
+                const dragY = Math.max(0, dy);
+                drawerEl.style.setProperty('--drawer-drag-y', `${dragY}px`);
+            } else if (this.drawerSwipe.target === 'toolbox') {
+                const dragX = Math.min(0, dx);
+                drawerEl.style.setProperty('--drawer-drag-x', `${dragX}px`);
+            } else if (this.drawerSwipe.target === 'side-panel') {
+                const dragX = Math.max(0, dx);
+                drawerEl.style.setProperty('--drawer-drag-x', `${dragX}px`);
+            }
+        }
+        if (event.cancelable) {
+            event.preventDefault();
+        }
+
+        if (this.drawerSwipe.mode === MODE_PHONE) {
+            if (dy > threshold && absY > absX) {
+                this.closeDrawers();
+                this.onDrawerPointerUp(event);
+            }
+            return;
+        }
+
+        if (this.drawerSwipe.target === 'toolbox') {
+            if (dx < -threshold && absX > absY) {
+                this.closeDrawers();
+                this.onDrawerPointerUp(event);
+            }
+            return;
+        }
+
+        if (this.drawerSwipe.target === 'side-panel') {
+            if (dx > threshold && absX > absY) {
+                this.closeDrawers();
+                this.onDrawerPointerUp(event);
+            }
+        }
+    }
+
+    onDrawerPointerUp(event) {
+        if (!this.drawerSwipe) return;
+        const pointerId = this.drawerSwipe.pointerId;
+        const currentTarget = event?.currentTarget;
+        const drawerEl = this.drawerSwipe.drawerEl;
+        const prevTransition = this.drawerSwipe.prevTransition;
+        this.drawerSwipe = null;
+        if (drawerEl?.style) {
+            drawerEl.style.transition = prevTransition;
+            drawerEl.style.removeProperty('--drawer-drag-x');
+            drawerEl.style.removeProperty('--drawer-drag-y');
+        }
+        if (typeof currentTarget?.releasePointerCapture === 'function') {
+            try {
+                currentTarget.releasePointerCapture(pointerId);
+            } catch (_) {}
         }
     }
 

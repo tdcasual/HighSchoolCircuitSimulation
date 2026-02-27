@@ -53,6 +53,9 @@ export function initializeInteractionState(context, app, options = {}) {
     context.pinchGesture = null; // {pointerAId,pointerBId,startScale,startDistance,startCanvasPivot}
     context.blockSinglePointerInteraction = false; // pinch 后需抬起全部手指再恢复单指交互
     context.lastPrimaryPointerType = 'mouse';
+    context.lastPointerCanvas = null;
+    context.lastPointerScreen = null;
+    context.pointerDownInfo = null;
 
     // 工具箱触屏放置（点击工具 -> 点击画布落子）
     context.pendingToolType = null;

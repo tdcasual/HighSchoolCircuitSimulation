@@ -19,6 +19,7 @@ export function showContextMenu(e, componentId) {
 
     const comp = this.circuit.getComponent(componentId);
     const menuItems = [
+        { label: '关闭菜单', action: () => this.hideContextMenu() },
         { label: '编辑属性', action: () => this.showPropertyDialog(componentId) },
         { label: '旋转 (R)', action: () => this.rotateComponent(componentId) },
         { label: '复制', action: () => this.duplicateComponent(componentId) },
@@ -120,7 +121,7 @@ export function showWireContextMenu(e, wireId) {
         });
     };
 
-    const menuItems = [];
+    const menuItems = [{ label: '关闭菜单', action: () => this.hideContextMenu() }];
     if (isOrthogonalWire(wire)) {
         menuItems.push({ label: '在此处分割', action: () => this.splitWireAtPoint(wireId, canvas.x, canvas.y) });
     }
@@ -174,6 +175,7 @@ export function showProbeContextMenu(e, probeId, wireId) {
     menu.style.top = e.clientY + 'px';
 
     const menuItems = [
+        { label: '关闭菜单', action: () => this.hideContextMenu() },
         { label: '重命名探针', action: () => this.renameObservationProbe(probeId) },
         { label: '加入观察图像', action: () => this.addProbePlot(probeId) },
         { label: '删除探针', action: () => this.deleteObservationProbe(probeId), className: 'danger' }
