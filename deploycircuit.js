@@ -10,7 +10,10 @@
             return { HSCSApplet: module.HSCSApplet };
         })
         .catch((error) => {
-            global.console?.error?.('[deploycircuit] failed to initialize HSCSApplet', error);
+            global.console?.error?.(
+                '[deploycircuit] failed to initialize HSCSApplet. Ensure module CORS is enabled for /src/embed/EmbedClient.js.',
+                error
+            );
             throw error;
         });
 })(typeof window !== 'undefined' ? window : globalThis);

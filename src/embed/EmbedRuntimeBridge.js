@@ -117,16 +117,22 @@ export function parseEmbedRuntimeOptionsFromSearch(search = '') {
         rawFeatureFlags[featureKey] = parseBooleanFlag(params.get(queryKey), undefined);
     });
 
+    const targetOrigin = params.get('targetOrigin') || '*';
+    const allowedParentOrigins = (params.get('allowedOrigins') || '')
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean);
+    if (allowedParentOrigins.length === 0 && targetOrigin !== '*') {
+        allowedParentOrigins.push(targetOrigin);
+    }
+
     return {
         enabled,
         mode,
         readOnly: mode === EMBED_MODE_READONLY || parseBooleanFlag(params.get('readonly'), false),
         classroomLevel: normalizeClassroomLevel(params.get('classroomLevel'), mode),
-        targetOrigin: params.get('targetOrigin') || '*',
-        allowedParentOrigins: (params.get('allowedOrigins') || '')
-            .split(',')
-            .map((item) => item.trim())
-            .filter(Boolean),
+        targetOrigin,
+        allowedParentOrigins,
         autoSave: enabled ? parseBooleanFlag(params.get('autosave'), false) : true,
         restoreFromStorage: enabled ? parseBooleanFlag(params.get('restore'), false) : true,
         features: normalizeFeatureFlags(mode, rawFeatureFlags)

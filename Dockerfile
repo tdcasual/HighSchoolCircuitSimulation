@@ -8,6 +8,8 @@ COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 # Copy static assets
 COPY index.html ./ 
+COPY embed.html ./
+COPY deploycircuit.js ./
 COPY css ./css
 COPY src ./src
 COPY examples ./examples

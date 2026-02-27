@@ -15,6 +15,8 @@ describe('Dockerfile', () => {
         const content = read('Dockerfile');
         expect(content).toMatch(/COPY nginx\.conf/);
         expect(content).toMatch(/COPY index\.html/);
+        expect(content).toMatch(/COPY embed\.html/);
+        expect(content).toMatch(/COPY deploycircuit\.js/);
         expect(content).toMatch(/COPY css/);
         expect(content).toMatch(/COPY src/);
     });

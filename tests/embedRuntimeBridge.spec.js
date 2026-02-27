@@ -130,6 +130,14 @@ describe('parseEmbedRuntimeOptionsFromSearch', () => {
         expect(options.autoSave).toBe(true);
         expect(options.restoreFromStorage).toBe(true);
     });
+
+    it('defaults allowed origins to targetOrigin when allowlist is omitted', () => {
+        const options = parseEmbedRuntimeOptionsFromSearch(
+            '?embed=1&targetOrigin=https%3A%2F%2Flms.example'
+        );
+        expect(options.targetOrigin).toBe('https://lms.example');
+        expect(options.allowedParentOrigins).toEqual(['https://lms.example']);
+    });
 });
 
 describe('EmbedRuntimeBridge', () => {
