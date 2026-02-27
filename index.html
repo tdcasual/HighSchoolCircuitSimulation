@@ -23,7 +23,14 @@
         <button id="btn-export" class="top-action-btn">导出JSON</button>
         <button id="btn-import" class="top-action-btn">导入JSON</button>
         <button id="btn-exercise-board" class="top-action-btn">习题板</button>
+        <button id="btn-top-action-more" class="top-action-btn top-action-btn-more" type="button" aria-haspopup="true" aria-expanded="false">更多</button>
         <input type="file" id="file-import" accept=".json" style="display:none"/>
+    </div>
+    <div id="top-action-more-menu" class="top-action-more-menu" hidden>
+        <button id="btn-mobile-clear" class="top-action-more-item top-action-more-item-danger" type="button">清空电路</button>
+        <button id="btn-mobile-export" class="top-action-more-item" type="button">导出JSON</button>
+        <button id="btn-mobile-import" class="top-action-more-item" type="button">导入JSON</button>
+        <button id="btn-mobile-exercise-board" class="top-action-more-item" type="button">习题板</button>
     </div>
     <div id="app">
         <!-- 左侧工具箱 -->
@@ -261,8 +268,10 @@
         <!-- 主画布区域 -->
         <main id="canvas-container">
             <div id="canvas-mobile-controls" aria-label="小屏面板切换">
-                <button id="btn-toggle-toolbox" class="mobile-toggle-btn" type="button" aria-expanded="false" hidden>元件</button>
-                <button id="btn-toggle-side-panel" class="mobile-toggle-btn" type="button" aria-expanded="false" hidden>面板</button>
+                <button id="btn-toggle-toolbox" class="mobile-toggle-btn" type="button" aria-expanded="false" hidden>元件库</button>
+                <button id="btn-toggle-side-panel" class="mobile-toggle-btn" type="button" aria-expanded="false" hidden>属性面板</button>
+                <button id="btn-mobile-run" class="mobile-toggle-btn mobile-run-btn" type="button">运行</button>
+                <button id="btn-mobile-stop" class="mobile-toggle-btn mobile-stop-btn" type="button" disabled>停止</button>
             </div>
             <svg id="circuit-canvas" xmlns="http://www.w3.org/2000/svg">
                 <defs>

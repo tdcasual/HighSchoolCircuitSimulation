@@ -1,29 +1,51 @@
 export function bindButtonEvents() {
+    const bindClick = (id, handler) => {
+        const element = document.getElementById(id);
+        if (!element || typeof element.addEventListener !== 'function') return;
+        element.addEventListener('click', handler);
+    };
+
     // 运行按钮
-    document.getElementById('btn-run').addEventListener('click', () => {
+    const handleRun = () => {
         this.app.startSimulation();
-    });
+    };
+    bindClick('btn-run', handleRun);
+    bindClick('btn-mobile-run', handleRun);
 
     // 停止按钮
-    document.getElementById('btn-stop').addEventListener('click', () => {
+    const handleStop = () => {
         this.app.stopSimulation();
-    });
+    };
+    bindClick('btn-stop', handleStop);
+    bindClick('btn-mobile-stop', handleStop);
 
     // 清空按钮
-    document.getElementById('btn-clear').addEventListener('click', () => {
+    const handleClear = () => {
         if (confirm('确定要清空整个电路吗？')) {
             this.app.clearCircuit();
         }
-    });
+    };
+    bindClick('btn-clear', handleClear);
+    bindClick('btn-mobile-clear', handleClear);
 
     // 导出按钮
-    document.getElementById('btn-export').addEventListener('click', () => {
+    const handleExport = () => {
         this.app.exportCircuit();
-    });
+    };
+    bindClick('btn-export', handleExport);
+    bindClick('btn-mobile-export', handleExport);
 
     // 导入按钮
-    document.getElementById('btn-import').addEventListener('click', () => {
-        document.getElementById('file-import').click();
+    const handleImport = () => {
+        const fileImport = document.getElementById('file-import');
+        fileImport?.click?.();
+    };
+    bindClick('btn-import', handleImport);
+    bindClick('btn-mobile-import', handleImport);
+
+    // 习题板（复用原按钮绑定，避免重复切换）
+    bindClick('btn-mobile-exercise-board', () => {
+        document.getElementById('btn-exercise-board')?.click?.();
     });
 
     // 文件选择
@@ -36,11 +58,11 @@ export function bindButtonEvents() {
     });
 
     // 对话框按钮
-    document.getElementById('dialog-cancel').addEventListener('click', () => {
+    bindClick('dialog-cancel', () => {
         this.hideDialog();
     });
 
-    document.getElementById('dialog-ok').addEventListener('click', () => {
+    bindClick('dialog-ok', () => {
         this.applyDialogChanges();
     });
 

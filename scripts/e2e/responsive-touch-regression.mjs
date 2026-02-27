@@ -373,6 +373,46 @@ async function verifyPhoneTouchFlow(browser, baseUrl) {
         const state = await readLayoutState(page);
         assertCondition(state.mode === 'phone', `phone mode expected, got: ${state.bodyClassName}`);
 
+        const topActionState = await page.evaluate(() => {
+            const isVisible = (id) => {
+                const node = document.getElementById(id);
+                if (!node) return false;
+                const style = window.getComputedStyle(node);
+                if (style.display === 'none' || style.visibility === 'hidden') return false;
+                const rect = node.getBoundingClientRect();
+                return rect.width > 0 && rect.height > 0;
+            };
+            return {
+                moreVisible: isVisible('btn-top-action-more'),
+                clearVisible: isVisible('btn-clear'),
+                exportVisible: isVisible('btn-export'),
+                importVisible: isVisible('btn-import'),
+                exerciseVisible: isVisible('btn-exercise-board')
+            };
+        });
+        assertCondition(topActionState.moreVisible, 'phone mode should display top more button');
+        assertCondition(!topActionState.clearVisible, 'desktop clear button should be hidden in phone mode');
+        assertCondition(!topActionState.exportVisible, 'desktop export button should be hidden in phone mode');
+        assertCondition(!topActionState.importVisible, 'desktop import button should be hidden in phone mode');
+        assertCondition(!topActionState.exerciseVisible, 'desktop exercise button should be hidden in phone mode');
+
+        await page.click('#btn-top-action-more');
+        await page.waitForFunction(() => {
+            const menu = document.getElementById('top-action-more-menu');
+            return !!menu && menu.hidden === false && menu.classList.contains('open');
+        });
+        const menuLabels = await page.$$eval('#top-action-more-menu .top-action-more-item', (items) => {
+            return items.map((item) => item.textContent?.trim() || '');
+        });
+        ['清空电路', '导出JSON', '导入JSON', '习题板'].forEach((label) => {
+            assertCondition(menuLabels.includes(label), `phone more menu missing item: ${label}`);
+        });
+        await page.click('#btn-mobile-export');
+        await page.waitForFunction(() => {
+            const menu = document.getElementById('top-action-more-menu');
+            return !!menu && menu.hidden === true;
+        });
+
         const addResult = await page.evaluate(() => {
             const result = window.app?.interaction?.addComponent?.('Resistor', 180, 220);
             return result || null;
@@ -405,6 +445,40 @@ async function verifyPhoneTouchFlow(browser, baseUrl) {
                 quickActionState.actions.includes(expectedLabel),
                 `quick-action bar missing action: ${expectedLabel}`
             );
+        });
+
+        await page.click('#btn-toggle-side-panel');
+        await page.waitForFunction(() => {
+            const sidePanel = document.getElementById('side-panel');
+            return !!sidePanel?.classList.contains('layout-open');
+        });
+        await page.waitForTimeout(260);
+        const propertyCardState = await page.evaluate(() => {
+            const content = document.getElementById('property-content');
+            const measurementCard = content?.querySelector?.('.property-card-measurement');
+            const measureIds = Array.from(measurementCard?.querySelectorAll?.('.value[id]') || []).map((el) => el.id);
+            return {
+                cardCount: content?.querySelectorAll?.('.property-card').length || 0,
+                hasSummary: !!content?.querySelector?.('.property-card-summary'),
+                hasParameters: !!content?.querySelector?.('.property-card-parameters'),
+                hasMeasurement: !!measurementCard,
+                measureIds
+            };
+        });
+        assertCondition(propertyCardState.cardCount >= 3, `property cards should render at least 3 cards, got ${propertyCardState.cardCount}`);
+        assertCondition(propertyCardState.hasSummary, 'property panel should include summary card');
+        assertCondition(propertyCardState.hasParameters, 'property panel should include parameter card');
+        assertCondition(propertyCardState.hasMeasurement, 'property panel should include measurement card');
+        ['measure-current', 'measure-voltage', 'measure-power'].forEach((id) => {
+            assertCondition(propertyCardState.measureIds.includes(id), `measurement card missing ${id}`);
+        });
+        await capture(page, 'phone-390x844-property-cards.png');
+        await page.evaluate(() => {
+            window.app?.responsiveLayout?.closeDrawers?.();
+        });
+        await page.waitForFunction(() => {
+            const sidePanel = document.getElementById('side-panel');
+            return !sidePanel?.classList.contains('layout-open');
         });
 
         const phoneBottomOverlap = await page.evaluate(() => {

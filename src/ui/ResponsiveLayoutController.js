@@ -180,6 +180,7 @@ export class ResponsiveLayoutController {
             }
         }
 
+        this.app?.topActionMenu?.sync?.();
         this.app?.interaction?.quickActionBar?.update?.();
     }
 }

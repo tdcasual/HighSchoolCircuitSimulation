@@ -15,12 +15,92 @@ function resolveIntegrationMethodLabel(method) {
     return '自动';
 }
 
+function createPropertyCard(title, className) {
+    const card = createElement('section', { className: `property-card ${className}` });
+    card.appendChild(createElement('h3', { className: 'property-card-title', textContent: title }));
+    return card;
+}
+
+function hasCardPayload(card) {
+    return !!card && card.children && card.children.length > 1;
+}
+
+function rebalancePropertyContentIntoCards(content) {
+    if (!content) return;
+    const children = Array.from(content.children || []);
+    if (children.length === 0) return;
+
+    const summaryCard = createPropertyCard('基本信息', 'property-card-summary');
+    const parameterCard = createPropertyCard('参数设置', 'property-card-parameters');
+    const measureCard = createPropertyCard('实时测量', 'property-card-measurement');
+    const guideCard = createPropertyCard('快捷提示', 'property-card-guide');
+
+    const isBaseRow = (element) => {
+        if (!element?.classList?.contains?.('prop-row')) return false;
+        const label = element.querySelector?.('.label')?.textContent?.trim();
+        return label === '类型' || label === 'ID';
+    };
+
+    const isMeasurementRow = (element) => {
+        if (!element?.classList?.contains?.('prop-row')) return false;
+        return !!element.querySelector?.('#measure-current, #measure-voltage, #measure-power');
+    };
+
+    const isGuideHint = (element, text) => {
+        if ((element?.tagName || '').toLowerCase() !== 'p') return false;
+        return text.includes('双击或右键编辑属性') || text.includes('按 R 旋转');
+    };
+
+    for (const element of children) {
+        const tag = (element?.tagName || '').toLowerCase();
+        const text = (element?.textContent || '').trim();
+        const isDisplayHeader = tag === 'h3' && text.includes('数值显示');
+        const isRealtimeHeader = tag === 'h3' && text.includes('实时测量');
+        const isDisplayChips = element?.classList?.contains?.('display-chip-row');
+        const isLabelGroup = element?.classList?.contains?.('form-group')
+            && !!element.querySelector?.('#comp-label');
+
+        if (isRealtimeHeader) {
+            continue;
+        }
+
+        if (isGuideHint(element, text)) {
+            guideCard.appendChild(element);
+            continue;
+        }
+
+        if (isMeasurementRow(element)) {
+            measureCard.appendChild(element);
+            continue;
+        }
+
+        if (isBaseRow(element) || isLabelGroup || isDisplayHeader || isDisplayChips) {
+            if (isDisplayHeader) {
+                element.classList.add('property-card-subtitle');
+            }
+            summaryCard.appendChild(element);
+            continue;
+        }
+
+        parameterCard.appendChild(element);
+    }
+
+    clearElement(content);
+    [summaryCard, parameterCard, measureCard, guideCard].forEach((card) => {
+        if (hasCardPayload(card)) {
+            content.appendChild(card);
+        }
+    });
+}
+
 /**
  * 更新属性面板（使用安全的 DOM 操作防止 XSS）
  */
 export function updatePropertyPanel(comp) {
     const content = document.getElementById('property-content');
+    if (!content) return;
     clearElement(content);
+    content.classList.add('property-content-cards');
 
     // 基础属性
     content.appendChild(createPropertyRow('类型', ComponentNames[comp.type]));
@@ -410,9 +490,18 @@ export function updatePropertyPanel(comp) {
 
     // 实时测量（不再每帧重建面板，改为更新这些读数节点）
     content.appendChild(createElement('h3', { textContent: '实时测量' }));
-    content.appendChild(createPropertyRow('电流', `${(comp.currentValue || 0).toFixed(4)} A`, { valueId: 'measure-current' }));
-    content.appendChild(createPropertyRow('电压', `${(comp.voltageValue || 0).toFixed(4)} V`, { valueId: 'measure-voltage' }));
-    content.appendChild(createPropertyRow('功率', `${(comp.powerValue || 0).toFixed(4)} W`, { valueId: 'measure-power' }));
+    content.appendChild(createPropertyRow('电流', `${(comp.currentValue || 0).toFixed(4)} A`, {
+        valueId: 'measure-current',
+        rowClass: 'measure-item measure-item-current'
+    }));
+    content.appendChild(createPropertyRow('电压', `${(comp.voltageValue || 0).toFixed(4)} V`, {
+        valueId: 'measure-voltage',
+        rowClass: 'measure-item measure-item-voltage'
+    }));
+    content.appendChild(createPropertyRow('功率', `${(comp.powerValue || 0).toFixed(4)} W`, {
+        valueId: 'measure-power',
+        rowClass: 'measure-item measure-item-power'
+    }));
 
     content.appendChild(createHintParagraph([
         '双击或右键编辑属性',
@@ -420,4 +509,6 @@ export function updatePropertyPanel(comp) {
         'Shift + 点击空白处开始画导线',
         '拖动端子可伸长/缩短元器件引脚'
     ]));
+
+    rebalancePropertyContentIntoCards(content);
 }

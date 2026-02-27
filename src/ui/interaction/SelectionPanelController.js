@@ -9,6 +9,7 @@ function renderDefaultPropertyHint() {
     const content = document.getElementById('property-content');
     if (!content) return;
     clearElement(content);
+    content.classList.remove('property-content-cards');
     const hint = createElement('p', { className: 'hint', textContent: '选择一个元器件查看和编辑属性' });
     content.appendChild(hint);
 }
@@ -86,6 +87,7 @@ export function selectWire(id) {
     const content = document.getElementById('property-content');
     if (!content) return;
     clearElement(content);
+    content.classList.remove('property-content-cards');
 
     content.appendChild(createPropertyRow('类型', '导线'));
     content.appendChild(createPropertyRow('端点 A', fmtEnd('a')));

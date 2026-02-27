@@ -16,6 +16,7 @@ export class QuickActionBarController {
         this.interaction = interaction;
         this.container = document.getElementById('canvas-container');
         this.statusBar = document.getElementById('status-bar');
+        this.mobileControls = document.getElementById('canvas-mobile-controls');
         this.toolbox = document.getElementById('toolbox');
         this.sidePanel = document.getElementById('side-panel');
         this.root = null;
@@ -81,10 +82,20 @@ export class QuickActionBarController {
         return Number.isFinite(height) && height > 0 ? height : 0;
     }
 
+    getMobileControlsHeight() {
+        if (typeof document === 'undefined') return 0;
+        const body = document.body;
+        if (!body?.classList?.contains?.('layout-mode-phone')) return 0;
+        if (this.mobileControls?.hidden) return 0;
+        const height = Number(this.mobileControls?.getBoundingClientRect?.().height);
+        return Number.isFinite(height) && height > 0 ? height : 0;
+    }
+
     applyBottomOffset() {
         if (!this.root?.style?.setProperty) return;
         const statusBarHeight = this.getStatusBarHeight();
-        const offset = Math.max(44, Math.ceil(statusBarHeight) + 8);
+        const mobileControlsHeight = this.getMobileControlsHeight();
+        const offset = Math.max(44, Math.ceil(statusBarHeight) + Math.ceil(mobileControlsHeight) + 8);
         this.root.style.setProperty('--quick-action-bottom-offset', `${offset}px`);
     }
 

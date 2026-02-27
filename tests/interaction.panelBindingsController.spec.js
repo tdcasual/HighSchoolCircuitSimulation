@@ -121,6 +121,78 @@ describe('PanelBindingsController.bindButtonEvents', () => {
         expect(context.app.importCircuit).toHaveBeenCalledWith(expect.objectContaining({ name: 'sample.json' }));
         expect(inputEvent.target.value).toBe('');
     });
+
+    it('wires mobile action buttons to existing handlers and exercise board trigger', () => {
+        const runButton = makeClickableElement();
+        const stopButton = makeClickableElement();
+        const clearButton = makeClickableElement();
+        const exportButton = makeClickableElement();
+        const importButton = makeClickableElement();
+        const mobileRunButton = makeClickableElement();
+        const mobileStopButton = makeClickableElement();
+        const mobileClearButton = makeClickableElement();
+        const mobileExportButton = makeClickableElement();
+        const mobileImportButton = makeClickableElement();
+        const mobileExerciseButton = makeClickableElement();
+        const desktopExerciseButton = {
+            click: vi.fn(),
+            addEventListener: vi.fn()
+        };
+        const fileImport = {
+            addEventListener: vi.fn(),
+            click: vi.fn()
+        };
+
+        vi.stubGlobal('document', {
+            getElementById: vi.fn((id) => ({
+                'btn-run': runButton,
+                'btn-stop': stopButton,
+                'btn-clear': clearButton,
+                'btn-export': exportButton,
+                'btn-import': importButton,
+                'btn-mobile-run': mobileRunButton,
+                'btn-mobile-stop': mobileStopButton,
+                'btn-mobile-clear': mobileClearButton,
+                'btn-mobile-export': mobileExportButton,
+                'btn-mobile-import': mobileImportButton,
+                'btn-mobile-exercise-board': mobileExerciseButton,
+                'btn-exercise-board': desktopExerciseButton,
+                'file-import': fileImport,
+                'dialog-cancel': makeClickableElement(),
+                'dialog-ok': makeClickableElement(),
+                'dialog-overlay': { addEventListener: vi.fn() }
+            }[id]))
+        });
+        vi.stubGlobal('confirm', vi.fn(() => true));
+
+        const context = {
+            app: {
+                startSimulation: vi.fn(),
+                stopSimulation: vi.fn(),
+                clearCircuit: vi.fn(),
+                exportCircuit: vi.fn(),
+                importCircuit: vi.fn()
+            },
+            hideDialog: vi.fn(),
+            applyDialogChanges: vi.fn()
+        };
+
+        PanelBindingsController.bindButtonEvents.call(context);
+
+        mobileRunButton.triggerClick();
+        mobileStopButton.triggerClick();
+        mobileClearButton.triggerClick();
+        mobileExportButton.triggerClick();
+        mobileImportButton.triggerClick();
+        mobileExerciseButton.triggerClick();
+
+        expect(context.app.startSimulation).toHaveBeenCalledTimes(1);
+        expect(context.app.stopSimulation).toHaveBeenCalledTimes(1);
+        expect(context.app.clearCircuit).toHaveBeenCalledTimes(1);
+        expect(context.app.exportCircuit).toHaveBeenCalledTimes(1);
+        expect(fileImport.click).toHaveBeenCalledTimes(1);
+        expect(desktopExerciseButton.click).toHaveBeenCalledTimes(1);
+    });
 });
 
 describe('PanelBindingsController.bindSidePanelEvents', () => {

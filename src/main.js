@@ -12,6 +12,7 @@ import { ExerciseBoard } from './ui/ExerciseBoard.js';
 import { ResponsiveLayoutController } from './ui/ResponsiveLayoutController.js';
 import { ClassroomModeController } from './ui/ClassroomModeController.js';
 import { ToolboxCategoryController } from './ui/ToolboxCategoryController.js';
+import { TopActionMenuController } from './ui/TopActionMenuController.js';
 import { EmbedRuntimeBridge, parseEmbedRuntimeOptionsFromSearch } from './embed/EmbedRuntimeBridge.js';
 import { resetIdCounter, updateIdCounterFromExisting } from './components/Component.js';
 import { createRuntimeLogger } from './utils/Logger.js';
@@ -47,6 +48,9 @@ class CircuitSimulatorApp {
 
         // 初始化响应式布局控制
         this.responsiveLayout = new ResponsiveLayoutController(this);
+
+        // 初始化手机端顶部更多菜单
+        this.topActionMenu = new TopActionMenuController(this);
 
         // 初始化工具箱分类折叠控制
         this.toolboxCategoryController = new ToolboxCategoryController(this);
@@ -207,18 +211,35 @@ class CircuitSimulatorApp {
             return;
         }
 
+        const topologyReport = this.circuit.validateSimulationTopology(0);
+        if (!topologyReport.ok) {
+            const message = topologyReport.error?.message || '电路拓扑校验失败，无法开始模拟';
+            this.observationPanel?.setRuntimeStatus?.(message);
+            this.updateStatus(message);
+            return;
+        }
+
+        const topologyWarning = Array.isArray(topologyReport.warnings) && topologyReport.warnings.length > 0
+            ? topologyReport.warnings[0]?.message || ''
+            : '';
+
         this.circuit.startSimulation();
         
         // 更新UI状态
         document.getElementById('btn-run').disabled = true;
         document.getElementById('btn-stop').disabled = false;
+        const mobileRunBtn = document.getElementById('btn-mobile-run');
+        const mobileStopBtn = document.getElementById('btn-mobile-stop');
+        if (mobileRunBtn) mobileRunBtn.disabled = true;
+        if (mobileStopBtn) mobileStopBtn.disabled = false;
         
         const statusEl = document.getElementById('simulation-status');
         statusEl.textContent = '模拟: 运行中';
         statusEl.classList.add('running');
         
         this.renderer.updateWireAnimations(true);
-        this.updateStatus('模拟运行中');
+        this.observationPanel?.setRuntimeStatus?.(topologyWarning || '');
+        this.updateStatus(topologyWarning ? `模拟运行中（${topologyWarning}）` : '模拟运行中');
     }
 
     /**
@@ -230,6 +251,10 @@ class CircuitSimulatorApp {
         // 更新UI状态
         document.getElementById('btn-run').disabled = false;
         document.getElementById('btn-stop').disabled = true;
+        const mobileRunBtn = document.getElementById('btn-mobile-run');
+        const mobileStopBtn = document.getElementById('btn-mobile-stop');
+        if (mobileRunBtn) mobileRunBtn.disabled = false;
+        if (mobileStopBtn) mobileStopBtn.disabled = true;
         
         const statusEl = document.getElementById('simulation-status');
         statusEl.textContent = '模拟: 停止';
