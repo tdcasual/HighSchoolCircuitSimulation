@@ -6,12 +6,8 @@
     <title>HSCS Embed Runtime</title>
     <script>
         (function redirectToRuntime() {
-            const target = new URL('./index.html', window.location.href);
-            const params = new URLSearchParams(window.location.search);
-            if (!params.has('embed')) {
-                params.set('embed', '1');
-            }
-            target.search = params.toString();
+            const target = new URL('./viewer.html', window.location.href);
+            target.search = window.location.search || '';
             window.location.replace(target.toString());
         })();
     </script>

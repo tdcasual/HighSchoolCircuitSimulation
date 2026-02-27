@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
+    "build:frontend": "node scripts/build-frontend.mjs",
+    "package:embed": "npm run build:frontend && node scripts/embed-packager.mjs",
+    "build:edgeone": "npm run package:embed && node scripts/build-edgeone.mjs",
     "check": "npm run lint && npm run format:check && npm test",
     "check:full": "npm run check && npm run baseline:p0 && npm run baseline:circuitjs && npm run baseline:ai",
     "lint": "eslint . --ext .js,.mjs,.cjs",

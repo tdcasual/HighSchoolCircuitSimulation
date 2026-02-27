@@ -2,5 +2,7 @@ node_modules/*
 _reference/*
 output/baselines/*
 output/e2e/*
+output/embed-package/*
+dist/*
 .DS_Store
 .worktrees/

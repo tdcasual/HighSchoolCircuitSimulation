@@ -41,6 +41,34 @@ npm run baseline:p0
 npm run baseline:circuitjs
 ```
 
+## 🔌 嵌入发布（类似 deployggb.js）
+
+```bash
+# 1) 生成前端静态构建目录 dist/
+npm run build:frontend
+
+# 2) 导出嵌入包 output/embed-package/
+#    包含 viewer.html + embed.js + assets/
+npm run package:embed
+
+# 3) 生成 EdgeOne 目录 dist/embed/
+npm run build:edgeone
+```
+
+宿主页最小接入：
+
+```html
+<script src="https://your-host/embed.js"></script>
+<div id="sim"></div>
+<script>
+  const applet = new window.HSCSApplet({
+    src: "https://your-host/viewer.html",
+    targetOrigin: window.location.origin,
+  });
+  applet.inject("#sim");
+</script>
+```
+
 ## 📚 深入阅读（技术细节）
 
 - 元器件行为与扩展流程：[`AGENTS.md`](AGENTS.md)

@@ -12,9 +12,9 @@ const DEFAULT_FEATURE_FLAGS = Object.freeze({
 
 function resolveDefaultEmbedSrc() {
     try {
-        return new URL('../../embed.html', import.meta.url).toString();
+        return new URL('../../viewer.html', import.meta.url).toString();
     } catch (_) {
-        return 'embed.html';
+        return 'viewer.html';
     }
 }
 
