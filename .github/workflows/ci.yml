@@ -3,9 +3,14 @@ name: CI
 on:
   push:
   pull_request:
+  workflow_dispatch:
+  schedule:
+    # GitHub Actions cron uses UTC; this runs at 09:00 Asia/Shanghai (UTC+8).
+    - cron: "0 1 * * *"
 
 jobs:
   quality:
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -23,3 +28,34 @@ jobs:
 
       - name: Run quality checks and regressions
         run: npm run check:full
+
+  responsive-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run responsive touch E2E
+        run: npm run test:e2e:responsive
+
+      - name: Upload responsive E2E screenshots on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: responsive-e2e-screenshots
+          path: output/e2e/responsive-touch
+          if-no-files-found: ignore
+          retention-days: 7

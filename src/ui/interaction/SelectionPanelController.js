@@ -25,6 +25,7 @@ export function clearSelection() {
     this.selectedWire = null;
 
     renderDefaultPropertyHint();
+    this.quickActionBar?.update?.();
 }
 
 export function selectComponent(id) {
@@ -41,6 +42,7 @@ export function selectComponent(id) {
     if (comp) {
         this.updatePropertyPanel(comp);
     }
+    this.quickActionBar?.update?.();
 }
 
 /**
@@ -62,6 +64,7 @@ export function selectWire(id) {
             this.renderer.setWireSelected(id, false);
             this.selectedWire = null;
             renderDefaultPropertyHint();
+            this.quickActionBar?.update?.();
         }
     }, 10000);
 
@@ -95,4 +98,5 @@ export function selectWire(id) {
         'Shift + 点击空白处可从任意位置开始画导线（允许独立导线）',
         '拖动端子可伸长/缩短元器件引脚'
     ]));
+    this.quickActionBar?.update?.();
 }

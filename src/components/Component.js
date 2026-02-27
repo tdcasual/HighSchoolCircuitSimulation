@@ -221,6 +221,17 @@ const VALUE_DISPLAY_ANCHOR_BY_TYPE = Object.freeze({
     Motor: Object.freeze({ x: 0, y: -18 }),
     ParallelPlateCapacitor: Object.freeze({ x: 0, y: -16 })
 });
+export const TOUCH_TARGET_SIZE_PX = 44;
+export const TOUCH_TARGET_RADIUS_PX = TOUCH_TARGET_SIZE_PX / 2;
+export const TERMINAL_HIT_RADIUS_PX = TOUCH_TARGET_RADIUS_PX;
+export const WIRE_ENDPOINT_HIT_RADIUS_PX = TOUCH_TARGET_RADIUS_PX;
+
+const SWITCH_TOUCH_RECT = Object.freeze({
+    x: -TOUCH_TARGET_RADIUS_PX,
+    y: -TOUCH_TARGET_RADIUS_PX,
+    width: TOUCH_TARGET_SIZE_PX,
+    height: TOUCH_TARGET_SIZE_PX
+});
 
 export function resolveValueDisplayAnchor(comp = {}) {
     if (comp?.type === 'BlackBox') {
@@ -1002,10 +1013,10 @@ export const SVGRenderer = {
         
         // 透明的触摸区域（便于点击切换）
         const touchArea = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-        touchArea.setAttribute('x', -12);
-        touchArea.setAttribute('y', -15);
-        touchArea.setAttribute('width', 24);
-        touchArea.setAttribute('height', 18);
+        touchArea.setAttribute('x', SWITCH_TOUCH_RECT.x);
+        touchArea.setAttribute('y', SWITCH_TOUCH_RECT.y);
+        touchArea.setAttribute('width', SWITCH_TOUCH_RECT.width);
+        touchArea.setAttribute('height', SWITCH_TOUCH_RECT.height);
         touchArea.setAttribute('fill', 'transparent');
         touchArea.setAttribute('class', 'switch-touch');
         touchArea.style.cursor = 'pointer';
@@ -1076,10 +1087,10 @@ export const SVGRenderer = {
 
         // 透明触摸区域（沿用 switch-touch，便于复用交互逻辑）
         const touchArea = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-        touchArea.setAttribute('x', -12);
-        touchArea.setAttribute('y', -18);
-        touchArea.setAttribute('width', 26);
-        touchArea.setAttribute('height', 36);
+        touchArea.setAttribute('x', SWITCH_TOUCH_RECT.x);
+        touchArea.setAttribute('y', SWITCH_TOUCH_RECT.y);
+        touchArea.setAttribute('width', SWITCH_TOUCH_RECT.width);
+        touchArea.setAttribute('height', SWITCH_TOUCH_RECT.height);
         touchArea.setAttribute('fill', 'transparent');
         touchArea.setAttribute('class', 'switch-touch');
         touchArea.style.cursor = 'pointer';
@@ -1302,7 +1313,7 @@ export const SVGRenderer = {
         const hitCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
         hitCircle.setAttribute('cx', x + extX);
         hitCircle.setAttribute('cy', y + extY);
-        hitCircle.setAttribute('r', 14);
+        hitCircle.setAttribute('r', TERMINAL_HIT_RADIUS_PX);
         hitCircle.setAttribute('class', 'terminal-hit-area');
         hitCircle.setAttribute('data-terminal', index);
         hitCircle.style.pointerEvents = 'all';
@@ -1763,7 +1774,7 @@ export const SVGRenderer = {
                 const hitCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
                 hitCircle.setAttribute('cx', pt.x);
                 hitCircle.setAttribute('cy', pt.y);
-                hitCircle.setAttribute('r', 15);
+                hitCircle.setAttribute('r', WIRE_ENDPOINT_HIT_RADIUS_PX);
                 hitCircle.setAttribute('class', 'wire-endpoint-hit');
                 hitCircle.setAttribute('data-end', which);
                 hitCircle.style.cursor = 'move';

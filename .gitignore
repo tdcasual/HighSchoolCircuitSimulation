@@ -1,5 +1,6 @@
 node_modules/*
 _reference/*
 output/baselines/*
+output/e2e/*
 .DS_Store
 .worktrees/

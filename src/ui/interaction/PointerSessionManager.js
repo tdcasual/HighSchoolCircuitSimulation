@@ -12,7 +12,10 @@ export function onPointerDown(e) {
         try { this.svg.setPointerCapture(e.pointerId); } catch (_) {}
     }
 
+    this.touchActionController?.onPointerDown?.(e);
+
     if (this.shouldStartPinchGesture()) {
+        this.touchActionController?.cancel?.();
         this.startPinchGesture();
         return;
     }
@@ -42,6 +45,8 @@ export function onPointerMove(e) {
         tracked.pointerType = pointerType;
     }
 
+    this.touchActionController?.onPointerMove?.(e);
+
     if (this.pinchGesture) {
         this.updatePinchGesture();
         return;
@@ -54,12 +59,26 @@ export function onPointerMove(e) {
 }
 
 export function onPointerUp(e) {
+    const consumedByTouchAction = this.touchActionController?.onPointerUp?.(e) === true;
     if (this.pinchGesture) {
         this.activePointers.delete(e.pointerId);
         this.endPinchGestureIfNeeded();
         this.releasePointerCaptureSafe(e.pointerId);
         if (this.activePointers.size === 0) {
             this.blockSinglePointerInteraction = false;
+        }
+        return;
+    }
+
+    if (consumedByTouchAction) {
+        if (this.primaryPointerId === e.pointerId) {
+            this.primaryPointerId = null;
+        }
+        this.activePointers.delete(e.pointerId);
+        this.releasePointerCaptureSafe(e.pointerId);
+        if (this.activePointers.size === 0) {
+            this.blockSinglePointerInteraction = false;
+            this.lastPrimaryPointerType = 'mouse';
         }
         return;
     }
@@ -80,6 +99,7 @@ export function onPointerUp(e) {
 }
 
 export function onPointerCancel(e) {
+    this.touchActionController?.onPointerCancel?.(e);
     if (this.pinchGesture) {
         this.activePointers.delete(e.pointerId);
         this.endPinchGestureIfNeeded();
@@ -98,6 +118,7 @@ export function onPointerCancel(e) {
 }
 
 export function onPointerLeave(e) {
+    this.touchActionController?.onPointerCancel?.(e);
     // 使用 pointer capture 时，不在离开画布瞬间终止拖动。
     if (this.pinchGesture) return;
     if ((e.buttons || 0) !== 0) return;
@@ -188,6 +209,7 @@ export function startPinchGesture() {
     const pointers = this.getGesturePointers();
     if (!pointers) return;
 
+    this.touchActionController?.cancel?.();
     this.endPrimaryInteractionForGesture();
 
     const [p1, p2] = pointers;

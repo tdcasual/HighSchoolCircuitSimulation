@@ -9,6 +9,8 @@ import { InteractionManager } from './ui/Interaction.js';
 import { AIPanel } from './ui/AIPanel.js';
 import { ObservationPanel } from './ui/ObservationPanel.js';
 import { ExerciseBoard } from './ui/ExerciseBoard.js';
+import { ResponsiveLayoutController } from './ui/ResponsiveLayoutController.js';
+import { ClassroomModeController } from './ui/ClassroomModeController.js';
 import { resetIdCounter, updateIdCounterFromExisting } from './components/Component.js';
 import { createRuntimeLogger } from './utils/Logger.js';
 
@@ -36,6 +38,12 @@ class CircuitSimulatorApp {
 
         // 初始化习题板
         this.exerciseBoard = new ExerciseBoard(this);
+
+        // 初始化响应式布局控制
+        this.responsiveLayout = new ResponsiveLayoutController(this);
+
+        // 初始化课堂模式控制（大屏演示可读性增强）
+        this.classroomMode = new ClassroomModeController(this);
         
         // 尝试从 localStorage 恢复电路
         this.loadCircuitFromStorage();

@@ -6,6 +6,8 @@
 import { initializeInteractionState } from './interaction/InteractionStateInitializer.js';
 import { installInteractionCoreDelegates } from './interaction/InteractionCoreDelegates.js';
 import { installInteractionTailDelegates } from './interaction/InteractionTailDelegates.js';
+import { TouchActionController } from './interaction/TouchActionController.js';
+import { QuickActionBarController } from './interaction/QuickActionBarController.js';
 
 export class InteractionManager {
     constructor(app) {
@@ -13,6 +15,8 @@ export class InteractionManager {
         this.hideContextMenuHandler = () => {
             this.hideContextMenu();
         };
+        this.touchActionController = new TouchActionController(this);
+        this.quickActionBar = new QuickActionBarController(this);
         this.bindEvents();
     }
 }

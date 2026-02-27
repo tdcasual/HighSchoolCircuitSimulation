@@ -261,6 +261,10 @@
 
         <!-- 主画布区域 -->
         <main id="canvas-container">
+            <div id="canvas-mobile-controls" aria-label="小屏面板切换">
+                <button id="btn-toggle-toolbox" class="mobile-toggle-btn" type="button" aria-expanded="false" hidden>元件</button>
+                <button id="btn-toggle-side-panel" class="mobile-toggle-btn" type="button" aria-expanded="false" hidden>面板</button>
+            </div>
             <svg id="circuit-canvas" xmlns="http://www.w3.org/2000/svg">
                 <defs>
                     <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
@@ -284,6 +288,7 @@
             <!-- 状态栏 -->
             <div id="status-bar">
                 <span id="status-text">就绪</span>
+                <button id="btn-classroom-mode" class="status-mode-btn" type="button" aria-pressed="false" title="开启课堂模式（优化教室投屏可读性）">课堂模式: 关</button>
                 <span id="zoom-level">100%</span>
                 <span id="simulation-status">模拟: 停止</span>
             </div>
@@ -322,6 +327,8 @@
             </div>
         </aside>
     </div>
+
+    <div id="layout-backdrop" hidden aria-hidden="true"></div>
 
     <!-- 属性编辑对话框 -->
     <div id="dialog-overlay" class="hidden">
