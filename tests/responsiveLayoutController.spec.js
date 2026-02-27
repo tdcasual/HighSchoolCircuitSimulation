@@ -160,4 +160,22 @@ describe('ResponsiveLayoutController', () => {
         expect(body.classList.contains('layout-mode-phone')).toBe(true);
         expect(toolboxToggleBtn.hidden).toBe(false);
     });
+
+    it('removes window and drawer listeners on destroy', () => {
+        const {
+            win,
+            toolboxToggleBtn,
+            sidePanelToggleBtn,
+            backdrop
+        } = setupLayoutFixture(900);
+        const controller = new ResponsiveLayoutController({});
+
+        controller.destroy();
+
+        expect(win.removeEventListener).toHaveBeenCalledWith('resize', expect.any(Function));
+        expect(win.removeEventListener).toHaveBeenCalledWith('keydown', expect.any(Function));
+        expect(toolboxToggleBtn.removeEventListener).toHaveBeenCalledWith('click', expect.any(Function));
+        expect(sidePanelToggleBtn.removeEventListener).toHaveBeenCalledWith('click', expect.any(Function));
+        expect(backdrop.removeEventListener).toHaveBeenCalledWith('click', expect.any(Function));
+    });
 });

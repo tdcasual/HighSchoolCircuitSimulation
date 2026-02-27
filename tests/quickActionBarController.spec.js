@@ -4,19 +4,54 @@ import { QuickActionBarController } from '../src/ui/interaction/QuickActionBarCo
 function createClassList(initial = []) {
     const set = new Set(initial);
     return {
-        contains: vi.fn((name) => set.has(name))
+        add: vi.fn((...classes) => classes.forEach((name) => set.add(name))),
+        remove: vi.fn((...classes) => classes.forEach((name) => set.delete(name))),
+        toggle: vi.fn((name, force) => {
+            if (force === undefined) {
+                if (set.has(name)) {
+                    set.delete(name);
+                    return false;
+                }
+                set.add(name);
+                return true;
+            }
+            if (force) {
+                set.add(name);
+            } else {
+                set.delete(name);
+            }
+            return !!force;
+        }),
+        contains: vi.fn((name) => set.has(name)),
+        _set: set
     };
 }
 
-function createMockElement(tagName = 'div') {
-    const listeners = new Map();
+function createStyleMock() {
+    const values = new Map();
     return {
+        setProperty: vi.fn((name, value) => {
+            values.set(name, String(value));
+        }),
+        getPropertyValue: vi.fn((name) => values.get(name) || '')
+    };
+}
+
+function createMockElement(tagName = 'div', options = {}) {
+    const listeners = new Map();
+    const {
+        rectHeight = 0,
+        classes = []
+    } = options;
+    const element = {
         tagName: String(tagName).toUpperCase(),
         id: '',
         className: '',
         hidden: false,
         textContent: '',
         dataset: {},
+        classList: createClassList(classes),
+        style: createStyleMock(),
         children: [],
         appendChild(child) {
             this.children.push(child);
@@ -29,18 +64,50 @@ function createMockElement(tagName = 'div') {
             const handler = listeners.get(eventName);
             if (handler) handler(event);
         },
+        getBoundingClientRect() {
+            return {
+                x: 0,
+                y: 0,
+                width: 0,
+                height: rectHeight,
+                top: 0,
+                right: 0,
+                bottom: rectHeight,
+                left: 0
+            };
+        },
         setAttribute: vi.fn(),
-        innerHTML: ''
     };
+    Object.defineProperty(element, 'innerHTML', {
+        get() {
+            return '';
+        },
+        set(value) {
+            if (value === '') {
+                this.children = [];
+            }
+        }
+    });
+    return element;
 }
 
-function setupEnvironment() {
+function setupEnvironment(options = {}) {
+    const {
+        bodyClasses = ['layout-mode-compact'],
+        statusBarHeight = 0
+    } = options;
     const container = createMockElement('main');
-    const body = { classList: createClassList(['layout-mode-compact']) };
+    const statusBar = createMockElement('div', { rectHeight: statusBarHeight });
+    const toolbox = createMockElement('aside');
+    const sidePanel = createMockElement('aside');
+    const body = { classList: createClassList(bodyClasses) };
     const doc = {
         body,
         getElementById: vi.fn((id) => {
             if (id === 'canvas-container') return container;
+            if (id === 'status-bar') return statusBar;
+            if (id === 'toolbox') return toolbox;
+            if (id === 'side-panel') return sidePanel;
             return null;
         }),
         createElement: vi.fn((tag) => createMockElement(tag))
@@ -49,7 +116,7 @@ function setupEnvironment() {
     vi.stubGlobal('window', {
         matchMedia: vi.fn(() => ({ matches: true }))
     });
-    return { container };
+    return { container, statusBar, toolbox, sidePanel };
 }
 
 afterEach(() => {
@@ -63,6 +130,11 @@ describe('QuickActionBarController', () => {
         const interaction = {
             selectedComponent: 'R1',
             selectedWire: null,
+            app: {
+                responsiveLayout: {
+                    isOverlayMode: () => false
+                }
+            },
             circuit: {
                 getComponent: vi.fn(() => ({ id: 'R1', label: '电阻R1' }))
             },
@@ -93,6 +165,11 @@ describe('QuickActionBarController', () => {
         const interaction = {
             selectedComponent: null,
             selectedWire: 'wire_1',
+            app: {
+                responsiveLayout: {
+                    isOverlayMode: () => false
+                }
+            },
             circuit: {
                 getWire: vi.fn(() => ({
                     id: 'wire_1',
@@ -114,5 +191,50 @@ describe('QuickActionBarController', () => {
         });
 
         expect(interaction.splitWireAtPoint).toHaveBeenCalledWith('wire_1', 20, 40);
+    });
+
+    it('hides quick action bar when overlay drawer is open', () => {
+        setupEnvironment();
+        const interaction = {
+            selectedComponent: 'R1',
+            selectedWire: null,
+            app: {
+                responsiveLayout: {
+                    isOverlayMode: () => true,
+                    toolboxOpen: false,
+                    sidePanelOpen: true
+                }
+            },
+            circuit: {
+                getComponent: vi.fn(() => ({ id: 'R1', label: '电阻R1' }))
+            }
+        };
+        const controller = new QuickActionBarController(interaction);
+
+        controller.update();
+
+        expect(controller.root.hidden).toBe(true);
+    });
+
+    it('applies status-bar-aware bottom offset to avoid overlap', () => {
+        setupEnvironment({ statusBarHeight: 58 });
+        const interaction = {
+            selectedComponent: 'R1',
+            selectedWire: null,
+            app: {
+                responsiveLayout: {
+                    isOverlayMode: () => false
+                }
+            },
+            circuit: {
+                getComponent: vi.fn(() => ({ id: 'R1', label: '电阻R1' }))
+            }
+        };
+        const controller = new QuickActionBarController(interaction);
+
+        controller.update();
+
+        expect(controller.root.hidden).toBe(false);
+        expect(controller.root.style.setProperty).toHaveBeenCalledWith('--quick-action-bottom-offset', '66px');
     });
 });

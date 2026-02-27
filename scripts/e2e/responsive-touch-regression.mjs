@@ -181,6 +181,7 @@ async function verifyDesktopLayout(browser, baseUrl) {
         assertCondition(state.mode === 'desktop', `desktop mode expected, got: ${state.bodyClassName}`);
         assertCondition(state.toolboxToggleHidden === true, 'toolbox toggle should stay hidden on desktop');
         assertCondition(state.sidePanelToggleHidden === true, 'side-panel toggle should stay hidden on desktop');
+        await capture(page, 'desktop-1366x768.png');
 
         const beforeClassroom = await page.evaluate(() => {
             const parsePx = (value) => {
@@ -267,7 +268,6 @@ async function verifyDesktopLayout(browser, baseUrl) {
             `enhanced level should not reduce readability (${afterClassroom.toolLabelFont} -> ${enhancedClassroom.toolLabelFont})`
         );
 
-        await capture(page, 'desktop-1366x768.png');
         await capture(page, 'desktop-1366x768-classroom-mode.png');
     } finally {
         await context.close();
@@ -309,6 +309,16 @@ async function verifyCompactDrawerBehavior(browser, baseUrl) {
         assertCondition(state.toolboxToggleHidden === false, 'toolbox toggle must be visible in compact mode');
         assertCondition(state.sidePanelToggleHidden === false, 'side-panel toggle must be visible in compact mode');
 
+        const addResult = await page.evaluate(() => {
+            const result = window.app?.interaction?.addComponent?.('Resistor', 320, 320);
+            return result || null;
+        });
+        assertCondition(addResult?.ok === true, `failed to add component in compact mode: ${JSON.stringify(addResult)}`);
+        await page.waitForFunction(() => {
+            const bar = document.getElementById('quick-action-bar');
+            return !!bar && bar.hidden === false;
+        });
+
         await page.click('#btn-toggle-toolbox');
         await page.waitForFunction(() => {
             const toolbox = document.getElementById('toolbox');
@@ -341,6 +351,8 @@ async function verifyCompactDrawerBehavior(browser, baseUrl) {
         state = await readLayoutState(page);
         assertCondition(state.sidePanelOpen === true, 'side-panel drawer should open after toggling');
         assertCondition(state.toolboxOpen === false, 'toolbox drawer should auto-close when side-panel opens');
+        const quickActionHidden = await page.evaluate(() => document.getElementById('quick-action-bar')?.hidden === true);
+        assertCondition(quickActionHidden, 'quick-action bar should hide while overlay drawers are open');
 
         await capture(page, 'compact-768x1024-drawers.png');
     } finally {
@@ -394,6 +406,19 @@ async function verifyPhoneTouchFlow(browser, baseUrl) {
                 `quick-action bar missing action: ${expectedLabel}`
             );
         });
+
+        const phoneBottomOverlap = await page.evaluate(() => {
+            const bar = document.getElementById('quick-action-bar');
+            const statusBar = document.getElementById('status-bar');
+            if (!bar || !statusBar) return Number.POSITIVE_INFINITY;
+            const b = bar.getBoundingClientRect();
+            const s = statusBar.getBoundingClientRect();
+            return Math.max(0, Math.min(b.bottom, s.bottom) - Math.max(b.top, s.top));
+        });
+        assertCondition(
+            phoneBottomOverlap <= 0,
+            `quick-action bar should not overlap status bar on phone, overlap=${phoneBottomOverlap}px`
+        );
 
         const componentSelector = `g.component[data-id="${componentId}"]`;
         await page.waitForSelector(componentSelector);
