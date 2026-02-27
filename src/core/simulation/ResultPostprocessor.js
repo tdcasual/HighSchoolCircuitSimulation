@@ -1,6 +1,7 @@
 import { computeNtcThermistorResistance, computePhotoresistorResistance } from '../../utils/Physics.js';
 import { DynamicIntegrationMethods } from './DynamicIntegrator.js';
 import { DefaultComponentRegistry } from './ComponentRegistry.js';
+import { evaluateJunctionCurrent, resolveJunctionParameters } from './JunctionModel.js';
 import { createRuntimeLogger } from '../../utils/Logger.js';
 
 export class ResultPostprocessor {
@@ -162,16 +163,12 @@ export class ResultPostprocessor {
 
             case 'Diode':
             case 'LED': {
-                const vfDefault = comp.type === 'LED' ? 2.0 : 0.7;
-                const ronDefault = comp.type === 'LED' ? 2 : 1;
-                const vf = Math.max(0, Number(comp.forwardVoltage) || vfDefault);
-                const ron = Math.max(1e-9, Number(comp.onResistance) || ronDefault);
-                const roff = Math.max(1, Number(comp.offResistance) || 1e9);
-                const conducting = state ? !!state.conducting : !!comp.conducting;
-                if (conducting) {
-                    return (dV - vf) / ron;
-                }
-                return dV / roff;
+                const params = resolveJunctionParameters(comp);
+                const initialCurrent = Number.isFinite(state?.junctionCurrent)
+                    ? state.junctionCurrent
+                    : (Number.isFinite(comp.junctionCurrent) ? comp.junctionCurrent : 0);
+                const current = evaluateJunctionCurrent(dV, params, initialCurrent);
+                return Number.isFinite(current) ? current : 0;
             }
 
             case 'Rheostat': {

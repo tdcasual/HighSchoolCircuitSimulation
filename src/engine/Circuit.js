@@ -26,6 +26,15 @@ export class Circuit {
         this.lastResults = null;
         this.simulationInterval = null;
         this.dt = 0.01;               // 10ms 时间步长
+        this.currentDt = this.dt;     // 当前实际仿真步长（可用于自适应步长）
+        this.enableAdaptiveTimeStep = false;
+        this.minAdaptiveDt = this.dt * 0.1;
+        this.maxAdaptiveDt = this.dt;
+        this.adaptiveDtShrinkFactor = 0.5;
+        this.adaptiveDtGrowFactor = 1.5;
+        this.adaptiveEaseIterationThreshold = 2;
+        this.adaptiveEaseStreakToGrow = 3;
+        this._adaptiveEaseStreak = 0;
         this.simTime = 0;             // 仿真时间（秒）
         this.minAcSamplesPerCycle = 40; // 交流仿真每周期最小采样点数（用于子步进）
         this.maxAcSubstepsPerStep = 200; // 单次 step 的最大子步数，防止高频导致卡顿
@@ -591,6 +600,342 @@ export class Circuit {
         return Math.max(1, Math.min(maxSubsteps, requiredSubsteps));
     }
 
+    getAdaptiveDtBounds() {
+        const baseDt = Number.isFinite(this.dt) && this.dt > 0 ? this.dt : 0.01;
+        const requestedMin = Number.isFinite(this.minAdaptiveDt) && this.minAdaptiveDt > 0
+            ? this.minAdaptiveDt
+            : baseDt * 0.1;
+        const requestedMax = Number.isFinite(this.maxAdaptiveDt) && this.maxAdaptiveDt > 0
+            ? this.maxAdaptiveDt
+            : baseDt;
+        const minDt = Math.min(requestedMin, requestedMax);
+        const maxDt = Math.max(requestedMin, requestedMax);
+        return { minDt, maxDt, baseDt };
+    }
+
+    resetAdaptiveTimeStepState() {
+        const { minDt, maxDt, baseDt } = this.getAdaptiveDtBounds();
+        this.currentDt = Math.max(minDt, Math.min(maxDt, baseDt));
+        this._adaptiveEaseStreak = 0;
+    }
+
+    resolveSimulationStepDt() {
+        const { minDt, maxDt, baseDt } = this.getAdaptiveDtBounds();
+        if (!this.enableAdaptiveTimeStep) {
+            this.currentDt = baseDt;
+            return baseDt;
+        }
+        const current = Number.isFinite(this.currentDt) && this.currentDt > 0
+            ? this.currentDt
+            : baseDt;
+        this.currentDt = Math.max(minDt, Math.min(maxDt, current));
+        return this.currentDt;
+    }
+
+    updateAdaptiveTimeStep(results) {
+        if (!this.enableAdaptiveTimeStep) return;
+
+        const { minDt, maxDt } = this.getAdaptiveDtBounds();
+        const shrinkFactorRaw = Number(this.adaptiveDtShrinkFactor);
+        const growFactorRaw = Number(this.adaptiveDtGrowFactor);
+        const shrinkFactor = Number.isFinite(shrinkFactorRaw) && shrinkFactorRaw > 0
+            ? shrinkFactorRaw
+            : 0.5;
+        const growFactor = Number.isFinite(growFactorRaw) && growFactorRaw > 1
+            ? growFactorRaw
+            : 1.5;
+        const easeIterationThreshold = Math.max(
+            1,
+            Math.floor(Number.isFinite(this.adaptiveEaseIterationThreshold) ? this.adaptiveEaseIterationThreshold : 2)
+        );
+        const easeStreakToGrow = Math.max(
+            1,
+            Math.floor(Number.isFinite(this.adaptiveEaseStreakToGrow) ? this.adaptiveEaseStreakToGrow : 3)
+        );
+
+        const meta = results?.meta || {};
+        const converged = !!(results?.valid && meta.converged !== false);
+        const iterations = Number.isFinite(meta.iterations) ? meta.iterations : 0;
+        const maxIterations = Number.isFinite(meta.maxIterations) ? meta.maxIterations : 0;
+        const nearIterationLimit = maxIterations > 0 && iterations >= Math.max(3, maxIterations - 1);
+        const hardSolve = !converged || nearIterationLimit;
+
+        if (hardSolve) {
+            this.currentDt = Math.max(minDt, this.currentDt * shrinkFactor);
+            this._adaptiveEaseStreak = 0;
+            return;
+        }
+
+        const easySolve = iterations > 0 && iterations <= easeIterationThreshold;
+        if (easySolve) {
+            this._adaptiveEaseStreak += 1;
+            if (this._adaptiveEaseStreak >= easeStreakToGrow) {
+                this.currentDt = Math.min(maxDt, this.currentDt * growFactor);
+                this._adaptiveEaseStreak = 0;
+            }
+        } else {
+            this._adaptiveEaseStreak = 0;
+        }
+
+        this.currentDt = Math.max(minDt, Math.min(maxDt, this.currentDt));
+    }
+
+    ensureTopologyReadyForValidation() {
+        if (this.topologyBatchDepth === 0 && (this.topologyRebuildPending || this.solverCircuitDirty)) {
+            this.rebuildNodes();
+        }
+    }
+
+    getSourceInstantVoltageAtTime(comp, simTime = this.simTime) {
+        if (!comp) return 0;
+        if (comp.type === 'ACVoltageSource') {
+            const rms = Number.isFinite(comp.rmsVoltage) ? comp.rmsVoltage : 0;
+            const frequency = Number.isFinite(comp.frequency) ? comp.frequency : 0;
+            const phaseDeg = Number.isFinite(comp.phase) ? comp.phase : 0;
+            const offset = Number.isFinite(comp.offset) ? comp.offset : 0;
+            const omega = 2 * Math.PI * frequency;
+            const phaseRad = phaseDeg * Math.PI / 180;
+            return offset + (rms * Math.sqrt(2)) * Math.sin(omega * simTime + phaseRad);
+        }
+        return Number.isFinite(comp.voltage) ? comp.voltage : 0;
+    }
+
+    isIdealVoltageSource(comp) {
+        if (!comp || (comp.type !== 'PowerSource' && comp.type !== 'ACVoltageSource')) return false;
+        const internalResistance = Number(comp.internalResistance);
+        return !Number.isFinite(internalResistance) || internalResistance <= 1e-9;
+    }
+
+    componentProvidesResistiveDamping(comp) {
+        if (!comp) return false;
+        switch (comp.type) {
+            case 'Resistor':
+            case 'Bulb':
+            case 'Thermistor':
+            case 'Photoresistor':
+            case 'Diode':
+            case 'LED':
+            case 'Motor':
+                return true;
+            case 'Rheostat':
+                return comp.connectionMode !== 'none' && comp.connectionMode !== 'slider-only';
+            case 'Switch':
+                return !!comp.closed;
+            case 'SPDTSwitch':
+                return true;
+            case 'Fuse':
+                return !comp.blown;
+            case 'Ammeter': {
+                const resistance = Number(comp.resistance);
+                return Number.isFinite(resistance) && resistance > 0 && resistance < 1e11;
+            }
+            case 'Voltmeter': {
+                const resistance = Number(comp.resistance);
+                return Number.isFinite(resistance) && resistance > 0 && resistance < 1e11;
+            }
+            case 'PowerSource':
+            case 'ACVoltageSource': {
+                const internalResistance = Number(comp.internalResistance);
+                return Number.isFinite(internalResistance) && internalResistance > 1e-9 && internalResistance < 1e11;
+            }
+            case 'Relay': {
+                const onResistance = Number(comp.contactOnResistance);
+                const offResistance = Number(comp.contactOffResistance);
+                const resistance = comp.energized ? onResistance : offResistance;
+                return Number.isFinite(resistance) && resistance > 0 && resistance < 1e11;
+            }
+            default:
+                return false;
+        }
+    }
+
+    detectConflictingIdealSources(simTime = this.simTime) {
+        const pairToSource = new Map();
+        const voltageTolerance = 1e-6;
+        const isValidNode = (nodeIdx) => Number.isInteger(nodeIdx) && nodeIdx >= 0;
+
+        for (const comp of this.components.values()) {
+            if (!this.isIdealVoltageSource(comp)) continue;
+            const nPos = comp.nodes?.[0];
+            const nNeg = comp.nodes?.[1];
+            if (!isValidNode(nPos) || !isValidNode(nNeg) || nPos === nNeg) continue;
+
+            const a = Math.min(nPos, nNeg);
+            const b = Math.max(nPos, nNeg);
+            const sourceVoltage = this.getSourceInstantVoltageAtTime(comp, simTime);
+            const canonicalVoltage = nPos === a ? sourceVoltage : -sourceVoltage;
+            const pairKey = `${a}|${b}`;
+            const existing = pairToSource.get(pairKey);
+            if (!existing) {
+                pairToSource.set(pairKey, {
+                    id: comp.id,
+                    voltage: canonicalVoltage,
+                    nodes: [a, b]
+                });
+                continue;
+            }
+
+            if (Math.abs(existing.voltage - canonicalVoltage) > voltageTolerance) {
+                return {
+                    code: 'TOPO_CONFLICTING_IDEAL_SOURCES',
+                    message: `检测到并联理想电压源冲突：${existing.id} 与 ${comp.id} 对同一节点对施加了不同电压。`,
+                    details: {
+                        sourceIds: [existing.id, comp.id],
+                        nodePair: existing.nodes,
+                        voltages: [existing.voltage, canonicalVoltage]
+                    }
+                };
+            }
+        }
+
+        return null;
+    }
+
+    detectCapacitorLoopWithoutResistance() {
+        const pairInfo = new Map();
+        const isValidNode = (nodeIdx) => Number.isInteger(nodeIdx) && nodeIdx >= 0;
+        const isCapacitor = (comp) => comp?.type === 'Capacitor' || comp?.type === 'ParallelPlateCapacitor';
+
+        for (const comp of this.components.values()) {
+            if (!comp || !Array.isArray(comp.nodes) || comp.nodes.length < 2) continue;
+            const n1 = comp.nodes[0];
+            const n2 = comp.nodes[1];
+            if (!isValidNode(n1) || !isValidNode(n2) || n1 === n2) continue;
+            const a = Math.min(n1, n2);
+            const b = Math.max(n1, n2);
+            const pairKey = `${a}|${b}`;
+
+            let info = pairInfo.get(pairKey);
+            if (!info) {
+                info = {
+                    nodePair: [a, b],
+                    capacitorIds: [],
+                    hasDamping: false
+                };
+                pairInfo.set(pairKey, info);
+            }
+
+            if (isCapacitor(comp)) {
+                info.capacitorIds.push(comp.id);
+            } else if (this.componentProvidesResistiveDamping(comp)) {
+                info.hasDamping = true;
+            }
+        }
+
+        for (const info of pairInfo.values()) {
+            if (info.capacitorIds.length >= 2 && !info.hasDamping) {
+                return {
+                    code: 'TOPO_CAPACITOR_LOOP_NO_RESISTANCE',
+                    message: `检测到纯电容并联回路（${info.capacitorIds.join(', ')}），缺少阻尼电阻，仿真可能不稳定。`,
+                    details: {
+                        capacitorIds: info.capacitorIds,
+                        nodePair: info.nodePair
+                    }
+                };
+            }
+        }
+
+        return null;
+    }
+
+    detectFloatingSubcircuitWarnings() {
+        const isValidNode = (nodeIdx) => Number.isInteger(nodeIdx) && nodeIdx >= 0;
+        const nodeToComponents = new Map();
+        const componentNodeMap = new Map();
+
+        for (const comp of this.components.values()) {
+            if (!comp || !comp.id || comp.type === 'Ground') continue;
+            const validNodes = Array.isArray(comp.nodes)
+                ? comp.nodes.filter(isValidNode)
+                : [];
+            if (validNodes.length === 0) continue;
+            componentNodeMap.set(comp.id, {
+                comp,
+                nodes: new Set(validNodes)
+            });
+            for (const node of validNodes) {
+                if (!nodeToComponents.has(node)) nodeToComponents.set(node, new Set());
+                nodeToComponents.get(node).add(comp.id);
+            }
+        }
+
+        const visited = new Set();
+        const groups = [];
+        for (const compId of componentNodeMap.keys()) {
+            if (visited.has(compId)) continue;
+            const queue = [compId];
+            visited.add(compId);
+            const componentIds = [];
+            const nodes = new Set();
+
+            while (queue.length > 0) {
+                const currentId = queue.shift();
+                componentIds.push(currentId);
+                const info = componentNodeMap.get(currentId);
+                if (!info) continue;
+                for (const node of info.nodes) {
+                    nodes.add(node);
+                    const neighbors = nodeToComponents.get(node);
+                    if (!neighbors) continue;
+                    for (const neighborId of neighbors) {
+                        if (visited.has(neighborId)) continue;
+                        visited.add(neighborId);
+                        queue.push(neighborId);
+                    }
+                }
+            }
+
+            groups.push({ componentIds, nodes });
+        }
+
+        if (groups.length <= 1) return [];
+
+        const floatingGroups = groups.filter((group) =>
+            group.componentIds.length >= 2 && !group.nodes.has(0)
+        );
+        if (floatingGroups.length === 0) return [];
+
+        return [{
+            code: 'TOPO_FLOATING_SUBCIRCUIT',
+            message: `检测到 ${floatingGroups.length} 个悬浮子电路（未连接参考地节点），仿真可继续但读数可能依赖参考选择。`,
+            details: {
+                groups: floatingGroups.map((group) => ({
+                    componentIds: group.componentIds
+                }))
+            }
+        }];
+    }
+
+    validateSimulationTopology(simTime = this.simTime) {
+        this.ensureTopologyReadyForValidation();
+
+        const warnings = [];
+        const idealSourceError = this.detectConflictingIdealSources(simTime);
+        if (idealSourceError) {
+            return {
+                ok: false,
+                error: idealSourceError,
+                warnings
+            };
+        }
+
+        const capacitorLoopError = this.detectCapacitorLoopWithoutResistance();
+        if (capacitorLoopError) {
+            return {
+                ok: false,
+                error: capacitorLoopError,
+                warnings
+            };
+        }
+
+        warnings.push(...this.detectFloatingSubcircuitWarnings());
+        return {
+            ok: true,
+            error: null,
+            warnings
+        };
+    }
+
     /**
      * 开始模拟
      */
@@ -605,6 +950,7 @@ export class Circuit {
         
         this.isRunning = true;
         this.simTime = 0;
+        this.resetAdaptiveTimeStepState();
 
         this.resetSimulationState();
 
@@ -705,8 +1051,9 @@ export class Circuit {
         this.solver.debugMode = this.debugMode;
         
         // 交流电路子步进：避免 dt 与交流周期相位锁定导致采样失真
-        const substepCount = this.getSimulationSubstepCount(this.dt);
-        const substepDt = this.dt / substepCount;
+        const stepDt = this.resolveSimulationStepDt();
+        const substepCount = this.getSimulationSubstepCount(stepDt);
+        const substepDt = stepDt / substepCount;
         let latestResults = null;
 
         for (let index = 0; index < substepCount; index++) {
@@ -719,6 +1066,7 @@ export class Circuit {
             this.syncSimulationStateToComponents();
         }
         this.lastResults = latestResults || { voltages: [], currents: new Map(), valid: false };
+        this.updateAdaptiveTimeStep(this.lastResults);
         
         // 调试输出
         if (this.debugMode) {
@@ -1493,6 +1841,9 @@ export class Circuit {
         this.observationProbes.clear();
         this.nodes = [];
         this.lastResults = null;
+        this.simTime = 0;
+        this.currentDt = this.dt;
+        this._adaptiveEaseStreak = 0;
         this.terminalConnectionMap = new Map();
         this._wireFlowCache = { version: null, map: new Map() };
         this.shortedPowerNodes = new Set();

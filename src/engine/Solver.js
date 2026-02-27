@@ -10,6 +10,7 @@ import { DynamicIntegrator, DynamicIntegrationMethods } from '../core/simulation
 import { ResultPostprocessor } from '../core/simulation/ResultPostprocessor.js';
 import { SimulationState } from '../core/simulation/SimulationState.js';
 import { DefaultComponentRegistry } from '../core/simulation/ComponentRegistry.js';
+import { limitJunctionStep, linearizeJunctionAt, resolveJunctionParameters } from '../core/simulation/JunctionModel.js';
 import { createRuntimeLogger } from '../utils/Logger.js';
 
 export class MNASolver {
@@ -262,12 +263,23 @@ export class MNASolver {
                     break;
                 case 'Diode':
                 case 'LED':
-                    keyParts.push(
-                        `vf:${this.formatMatrixKeyNumber(comp.forwardVoltage ?? (comp.type === 'LED' ? 2 : 0.7))}`,
-                        `ron:${this.formatMatrixKeyNumber(comp.onResistance ?? (comp.type === 'LED' ? 2 : 1))}`,
-                        `roff:${this.formatMatrixKeyNumber(comp.offResistance ?? 1e9)}`,
-                        `on:${comp.conducting ? 1 : 0}`
-                    );
+                    {
+                        const state = this.simulationState && comp.id ? this.simulationState.get(comp.id) : null;
+                        const junctionVoltage = Number.isFinite(state?.junctionVoltage)
+                            ? state.junctionVoltage
+                            : (Number.isFinite(comp.junctionVoltage) ? comp.junctionVoltage : 0);
+                        const junctionCurrent = Number.isFinite(state?.junctionCurrent)
+                            ? state.junctionCurrent
+                            : (Number.isFinite(comp.junctionCurrent) ? comp.junctionCurrent : 0);
+                        const params = resolveJunctionParameters(comp);
+                        keyParts.push(
+                            `n:${this.formatMatrixKeyNumber(params.idealityFactor)}`,
+                            `is:${this.formatMatrixKeyNumber(params.saturationCurrent)}`,
+                            `rs:${this.formatMatrixKeyNumber(params.seriesResistance)}`,
+                            `vj:${this.formatMatrixKeyNumber(junctionVoltage)}`,
+                            `ij:${this.formatMatrixKeyNumber(junctionCurrent)}`
+                        );
+                    }
                     break;
                 case 'Rheostat':
                     keyParts.push(
@@ -354,7 +366,16 @@ export class MNASolver {
             for (const comp of this.components) {
                 currents.set(comp.id, 0);
             }
-            return { voltages, currents, valid: true };
+            return {
+                voltages,
+                currents,
+                valid: true,
+                meta: {
+                    converged: true,
+                    iterations: 0,
+                    maxIterations: 0
+                }
+            };
         }
 
         // 矩阵大小：节点数-1（去掉地节点）+ 电压源数
@@ -366,19 +387,35 @@ export class MNASolver {
             for (const comp of this.components) {
                 currents.set(comp.id, 0);
             }
-            return { voltages, currents, valid: true };
+            return {
+                voltages,
+                currents,
+                valid: true,
+                meta: {
+                    converged: true,
+                    iterations: 0,
+                    maxIterations: 0
+                }
+            };
         }
 
         const hasJunction = this.components.some((comp) => comp?.type === 'Diode' || comp?.type === 'LED');
         const hasRelay = this.components.some((comp) => comp?.type === 'Relay');
         const hasStateful = hasJunction || hasRelay;
-        const maxIterations = hasStateful ? 6 : 1;
+        const maxIterations = hasStateful ? 40 : 1;
+        const junctionTolerance = 1e-6;
 
         let solvedVoltages = [];
         let solvedCurrents = new Map();
         let solvedValid = false;
+        let converged = !hasStateful;
+        let completedIterations = 0;
+        let invalidReason = '';
+        let maxJunctionDelta = 0;
+        let lastJunctionDelta = 0;
 
         for (let iter = 0; iter < maxIterations; iter++) {
+            completedIterations = iter + 1;
             // 创建MNA矩阵和向量
             const A = Matrix.zeros(n, n);
             const z = Matrix.zeroVector(n);
@@ -421,7 +458,9 @@ export class MNASolver {
                 if (!factorization) {
                     this.logger?.warn?.('Matrix factorization failed');
                     this.resetMatrixFactorizationCache();
-                    return { voltages: [], currents: new Map(), valid: false };
+                    invalidReason = 'factorization_failed';
+                    solvedValid = false;
+                    break;
                 }
                 this.systemFactorizationCache.key = matrixCacheKey;
                 this.systemFactorizationCache.matrixSize = n;
@@ -434,7 +473,9 @@ export class MNASolver {
             if (!x) {
                 this.logger?.warn?.('Matrix solve failed');
                 this.resetMatrixFactorizationCache();
-                return { voltages: [], currents: new Map(), valid: false };
+                invalidReason = 'solve_failed';
+                solvedValid = false;
+                break;
             }
 
             if (this.debugMode) {
@@ -466,28 +507,55 @@ export class MNASolver {
             solvedValid = true;
 
             if (!hasStateful) {
+                converged = true;
                 break;
             }
 
-            let stateChanged = false;
+            let relayStateChanged = false;
+            let junctionStateChanged = false;
             if (hasJunction) {
-                stateChanged = this.updateJunctionConductionStates(voltages, currents) || stateChanged;
+                const junctionUpdate = this.updateJunctionLinearizationState(voltages, currents);
+                junctionStateChanged = junctionUpdate.changed;
+                lastJunctionDelta = Number.isFinite(junctionUpdate.maxVoltageDelta)
+                    ? junctionUpdate.maxVoltageDelta
+                    : 0;
+                maxJunctionDelta = Math.max(maxJunctionDelta, lastJunctionDelta);
             }
             if (hasRelay) {
-                stateChanged = this.updateRelayEnergizedStates(currents) || stateChanged;
+                relayStateChanged = this.updateRelayEnergizedStates(currents);
             }
-            if (!stateChanged) {
+
+            const junctionConverged = !hasJunction || lastJunctionDelta <= junctionTolerance;
+            if (junctionConverged && !relayStateChanged) {
+                converged = true;
                 break;
+            }
+
+            if (junctionStateChanged || relayStateChanged) {
+                this.resetMatrixFactorizationCache();
             }
         }
 
         this.shortCircuitDetected = this.detectPowerSourceShortCircuits(solvedVoltages, solvedCurrents);
-        return { voltages: solvedVoltages, currents: solvedCurrents, valid: solvedValid };
+        const valid = solvedValid && (!hasStateful || converged);
+        return {
+            voltages: solvedVoltages,
+            currents: solvedCurrents,
+            valid,
+            meta: {
+                converged: !hasStateful || converged,
+                iterations: completedIterations,
+                maxIterations,
+                hasStateful,
+                maxJunctionDelta,
+                invalidReason: invalidReason || (valid ? '' : 'not_converged')
+            }
+        };
     }
 
-    updateJunctionConductionStates(voltages, currents) {
+    updateJunctionLinearizationState(voltages, currents) {
         let changed = false;
-        const holdMargin = 0.05; // 避免在阈值附近抖动
+        let maxVoltageDelta = 0;
 
         for (const comp of this.components) {
             if (!comp || (comp.type !== 'Diode' && comp.type !== 'LED')) continue;
@@ -496,27 +564,34 @@ export class MNASolver {
             const nCathode = comp.nodes?.[1];
             if (nAnode == null || nCathode == null || nAnode < 0 || nCathode < 0) continue;
 
-            const vfDefault = comp.type === 'LED' ? 2.0 : 0.7;
-            const vf = Math.max(0, Number(comp.forwardVoltage) || vfDefault);
             const vAk = (voltages[nAnode] || 0) - (voltages[nCathode] || 0);
-            const i = Number(currents?.get(comp.id)) || 0;
-            const currentOn = i > 1e-9;
-            const currentConducting = entry && typeof entry.conducting === 'boolean'
-                ? entry.conducting
-                : !!comp.conducting;
-            const keepOn = currentConducting && vAk >= (vf - holdMargin);
-            const nextConducting = vAk >= vf || currentOn || keepOn;
+            const previousLinearization = Number.isFinite(entry?.junctionVoltage)
+                ? entry.junctionVoltage
+                : (Number.isFinite(comp.junctionVoltage) ? comp.junctionVoltage : 0);
+            const params = resolveJunctionParameters(comp);
+            const nextLinearization = limitJunctionStep(vAk, previousLinearization, params);
+            const junctionCurrent = Number(currents?.get(comp.id)) || 0;
+            const displayCurrentThreshold = Math.max(1e-4, params.referenceCurrent * 0.02);
+            const nextConducting = junctionCurrent >= displayCurrentThreshold
+                || vAk >= params.forwardVoltage * 0.95;
 
-            if (entry) {
-                entry.conducting = nextConducting;
-            }
-            if (nextConducting !== !!comp.conducting) {
+            const delta = Math.abs(nextLinearization - previousLinearization);
+            maxVoltageDelta = Math.max(maxVoltageDelta, delta);
+            if (delta > 1e-9) {
                 changed = true;
             }
+
+            if (entry) {
+                entry.junctionVoltage = nextLinearization;
+                entry.junctionCurrent = junctionCurrent;
+                entry.conducting = nextConducting;
+            }
+            comp.junctionVoltage = nextLinearization;
+            comp.junctionCurrent = junctionCurrent;
             comp.conducting = nextConducting;
         }
 
-        return changed;
+        return { changed, maxVoltageDelta };
     }
 
     updateRelayEnergizedStates(currents) {
@@ -703,19 +778,25 @@ export class MNASolver {
 
             case 'Diode':
             case 'LED': {
-                const vfDefault = comp.type === 'LED' ? 2.0 : 0.7;
-                const ronDefault = comp.type === 'LED' ? 2 : 1;
-                const vf = Math.max(0, Number(comp.forwardVoltage) || vfDefault);
-                const ron = Math.max(1e-9, Number(comp.onResistance) || ronDefault);
-                const roff = Math.max(1, Number(comp.offResistance) || 1e9);
-                if (comp.conducting) {
-                    // 线性化导通模型：I = (V - Vf) / Ron
-                    // 等效为 Ron + 从阴极到阳极的恒流源 Vf/Ron
-                    this.stampResistor(A, i1, i2, ron);
-                    this.stampCurrentSource(z, i2, i1, vf / ron);
-                } else {
-                    this.stampResistor(A, i1, i2, roff);
+                const entry = this.simulationState && comp.id ? this.simulationState.ensure(comp.id) : null;
+                const params = resolveJunctionParameters(comp);
+                const linearizationVoltage = Number.isFinite(entry?.junctionVoltage)
+                    ? entry.junctionVoltage
+                    : (Number.isFinite(comp.junctionVoltage) ? comp.junctionVoltage : 0);
+                const linearizationCurrent = Number.isFinite(entry?.junctionCurrent)
+                    ? entry.junctionCurrent
+                    : (Number.isFinite(comp.junctionCurrent) ? comp.junctionCurrent : 0);
+                const linearized = linearizeJunctionAt(linearizationVoltage, params, linearizationCurrent);
+                const conductance = Math.max(1e-12, linearized.conductance);
+
+                // 小信号线性化：I ≈ G * V + Ieq
+                if (i1 >= 0) A[i1][i1] += conductance;
+                if (i2 >= 0) A[i2][i2] += conductance;
+                if (i1 >= 0 && i2 >= 0) {
+                    A[i1][i2] -= conductance;
+                    A[i2][i1] -= conductance;
                 }
+                this.stampCurrentSource(z, i1, i2, linearized.currentOffset);
                 break;
             }
                 
