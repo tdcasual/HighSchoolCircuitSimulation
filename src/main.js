@@ -11,11 +11,16 @@ import { ObservationPanel } from './ui/ObservationPanel.js';
 import { ExerciseBoard } from './ui/ExerciseBoard.js';
 import { ResponsiveLayoutController } from './ui/ResponsiveLayoutController.js';
 import { ClassroomModeController } from './ui/ClassroomModeController.js';
+import { EmbedRuntimeBridge, parseEmbedRuntimeOptionsFromSearch } from './embed/EmbedRuntimeBridge.js';
 import { resetIdCounter, updateIdCounterFromExisting } from './components/Component.js';
 import { createRuntimeLogger } from './utils/Logger.js';
 
 class CircuitSimulatorApp {
     constructor() {
+        this.runtimeOptions = parseEmbedRuntimeOptionsFromSearch(
+            typeof window !== 'undefined' ? window.location.search : ''
+        );
+
         // 获取SVG画布
         this.svg = document.getElementById('circuit-canvas');
         this.logger = createRuntimeLogger({ scope: 'app' });
@@ -46,10 +51,20 @@ class CircuitSimulatorApp {
         this.classroomMode = new ClassroomModeController(this);
         
         // 尝试从 localStorage 恢复电路
-        this.loadCircuitFromStorage();
+        if (this.runtimeOptions.restoreFromStorage) {
+            this.loadCircuitFromStorage();
+        }
         
         // 设置电路更新回调（包括自动保存）
-        this.setupAutoSave();
+        this.setupAutoSave({
+            enabled: this.runtimeOptions.autoSave
+        });
+
+        // 嵌入模式桥接（类似 deployggb.js 的 iframe API）
+        this.embedBridge = null;
+        if (this.runtimeOptions.enabled) {
+            this.embedBridge = new EmbedRuntimeBridge(this, this.runtimeOptions);
+        }
         
         // 初始化完成
         this.updateStatus('电路模拟器已就绪');
@@ -241,6 +256,43 @@ class CircuitSimulatorApp {
     }
 
     /**
+     * 程序化加载电路 JSON（供导入流程与嵌入 API 共用）
+     */
+    loadCircuitData(data, options = {}) {
+        const {
+            statusText = '',
+            silent = false
+        } = options;
+        if (!data || !Array.isArray(data.components) || !Array.isArray(data.wires)) {
+            throw new Error('无效的电路 JSON：缺少 components/wires');
+        }
+
+        this.stopSimulation();
+        this.circuit.fromJSON(data);
+        this.exerciseBoard?.fromJSON(data.meta?.exerciseBoard);
+
+        const allIds = [
+            ...data.components.map((component) => component.id),
+            ...data.wires.map((wire) => wire.id)
+        ];
+        updateIdCounterFromExisting(allIds);
+
+        this.renderer.render();
+        this.interaction.clearSelection();
+        this.observationPanel?.refreshComponentOptions();
+        this.observationPanel?.refreshDialGauges();
+        this.observationPanel?.fromJSON(data.meta?.observation);
+
+        if (!silent) {
+            this.updateStatus(statusText || `已加载电路 (${data.components.length} 个元器件)`);
+        }
+        return {
+            componentCount: data.components.length,
+            wireCount: data.wires.length
+        };
+    }
+
+    /**
      * 导出电路
      */
     exportCircuit() {
@@ -270,30 +322,9 @@ class CircuitSimulatorApp {
         reader.onload = (e) => {
             try {
                 const data = JSON.parse(e.target.result);
-                
-                // 验证格式
-                if (!data.components || !data.wires) {
-                    throw new Error('无效的电路文件格式');
-                }
-                
-                this.stopSimulation();
-                this.circuit.fromJSON(data);
-                this.exerciseBoard?.fromJSON(data.meta?.exerciseBoard);
-                
-                // 更新ID计数器以防止冲突
-                const allIds = [
-                    ...data.components.map(c => c.id),
-                    ...data.wires.map(w => w.id)
-                ];
-                updateIdCounterFromExisting(allIds);
-                
-                this.renderer.render();
-                this.interaction.clearSelection();
-                this.observationPanel?.refreshComponentOptions();
-                this.observationPanel?.refreshDialGauges();
-                this.observationPanel?.fromJSON(data.meta?.observation);
-                
-                this.updateStatus(`已导入电路: ${data.meta?.name || '未命名'}`);
+                this.loadCircuitData(data, {
+                    statusText: `已导入电路: ${data.meta?.name || '未命名'}`
+                });
             } catch (err) {
                 this.logger.error('Import error:', err);
                 this.updateStatus('导入失败: ' + err.message);
@@ -314,8 +345,12 @@ class CircuitSimulatorApp {
     /**
      * 设置自动保存
      */
-    setupAutoSave() {
+    setupAutoSave(options = {}) {
+        const {
+            enabled = true
+        } = options;
         const saveCircuit = () => {
+            if (!enabled) return;
             try {
                 const payload = this.buildSaveData();
                 localStorage.setItem('saved_circuit', JSON.stringify(payload));
@@ -327,6 +362,7 @@ class CircuitSimulatorApp {
         // 防抖，避免频繁保存（模拟运行时也不会疯狂写 localStorage）
         let saveTimeout = null;
         this.scheduleSave = (delayMs = 1000) => {
+            if (!enabled) return;
             clearTimeout(saveTimeout);
             saveTimeout = setTimeout(saveCircuit, delayMs);
         };
@@ -360,25 +396,20 @@ class CircuitSimulatorApp {
             const saved = localStorage.getItem('saved_circuit');
             if (saved) {
                 const circuitJSON = JSON.parse(saved);
-                this.circuit.fromJSON(circuitJSON);
-                this.exerciseBoard?.fromJSON(circuitJSON.meta?.exerciseBoard);
-                
-                // 更新 ID 计数器
-                const allIds = [
-                    ...circuitJSON.components.map(c => c.id),
-                    ...circuitJSON.wires.map(w => w.id)
-                ];
-                updateIdCounterFromExisting(allIds);
-                
-                this.renderer.render();
-                this.observationPanel?.refreshComponentOptions();
-                this.observationPanel?.refreshDialGauges();
-                this.observationPanel?.fromJSON(circuitJSON.meta?.observation);
-                this.updateStatus(`已从缓存恢复电路 (${circuitJSON.components.length} 个元器件)`);
+                this.loadCircuitData(circuitJSON, {
+                    statusText: `已从缓存恢复电路 (${circuitJSON.components.length} 个元器件)`
+                });
             }
         } catch (e) {
             this.logger.error('Failed to load saved circuit:', e);
         }
+    }
+
+    setClassroomModeLevel(level, options = {}) {
+        if (!this.classroomMode || typeof this.classroomMode.setPreferredLevel !== 'function') {
+            return null;
+        }
+        return this.classroomMode.setPreferredLevel(level, options);
     }
 }
 

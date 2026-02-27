@@ -19,6 +19,7 @@ module.exports = {
             { type: 'ui', mode: 'full', pattern: 'src/ui/**/*.js' },
             { type: 'app', mode: 'full', pattern: 'src/app/**/*.js' },
             { type: 'ai', mode: 'full', pattern: 'src/ai/**/*.js' },
+            { type: 'embed', mode: 'full', pattern: 'src/embed/**/*.js' },
             { type: 'engine', mode: 'full', pattern: 'src/engine/**/*.js' },
             { type: 'core', mode: 'full', pattern: 'src/core/**/*.js' },
             { type: 'components', mode: 'full', pattern: 'src/components/**/*.js' },
@@ -45,10 +46,11 @@ module.exports = {
         'boundaries/element-types': ['error', {
             default: 'disallow',
             rules: [
-                { from: 'entry', allow: ['ui', 'app', 'ai', 'engine', 'core', 'components', 'utils'] },
+                { from: 'entry', allow: ['ui', 'app', 'ai', 'embed', 'engine', 'core', 'components', 'utils'] },
                 { from: 'ui', allow: ['ui', 'app', 'ai', 'core', 'components', 'utils'] },
                 { from: 'app', allow: ['app', 'core', 'utils'] },
                 { from: 'ai', allow: ['ai', 'engine', 'components', 'utils'] },
+                { from: 'embed', allow: ['embed', 'utils'] },
                 { from: 'engine', allow: ['engine', 'core', 'utils'] },
                 { from: 'core', allow: ['core', 'components', 'utils'] },
                 { from: 'components', allow: ['components', 'utils'] },

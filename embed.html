@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HSCS Embed Runtime</title>
+    <script>
+        (function redirectToRuntime() {
+            const target = new URL('./index.html', window.location.href);
+            const params = new URLSearchParams(window.location.search);
+            if (!params.has('embed')) {
+                params.set('embed', '1');
+            }
+            target.search = params.toString();
+            window.location.replace(target.toString());
+        })();
+    </script>
+</head>
+<body></body>
+</html>

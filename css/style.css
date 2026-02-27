@@ -39,6 +39,39 @@ body {
 }
 
 /* ==========================================
+   嵌入模式（deploycircuit.js / iframe）
+   ========================================== */
+body.embed-hide-toolbox #toolbox {
+    display: none !important;
+}
+
+body.embed-hide-side-panel #side-panel {
+    display: none !important;
+}
+
+body.embed-hide-status #status-bar {
+    display: none !important;
+}
+
+body.embed-hide-ai #ai-assistant-panel,
+body.embed-hide-ai #ai-settings-dialog {
+    display: none !important;
+}
+
+body.embed-hide-exercise #exercise-board-panel {
+    display: none !important;
+}
+
+body.embed-hide-observation .panel-tab-btn[data-panel="observation"],
+body.embed-hide-observation #panel-observation {
+    display: none !important;
+}
+
+body.embed-readonly #circuit-canvas {
+    pointer-events: none;
+}
+
+/* ==========================================
    左侧工具箱
    ========================================== */
 #toolbox {

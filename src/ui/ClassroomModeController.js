@@ -168,4 +168,18 @@ export class ClassroomModeController {
         this.preferredLevel = this.resolveNextLevel();
         this.sync({ persist: true, announce: true });
     }
+
+    setPreferredLevel(level, options = {}) {
+        const {
+            persist = true,
+            announce = false
+        } = options;
+        this.preferredLevel = normalizeLevel(level);
+        this.sync({ persist, announce });
+        return {
+            preferredLevel: this.preferredLevel,
+            activeLevel: this.activeLevel,
+            supported: this.isSupported()
+        };
+    }
 }
