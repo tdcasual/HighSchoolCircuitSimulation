@@ -15,6 +15,9 @@ export class QuickActionBarController {
     constructor(interaction) {
         this.interaction = interaction;
         this.container = document.getElementById('canvas-container');
+        this.statusBar = document.getElementById('status-bar');
+        this.toolbox = document.getElementById('toolbox');
+        this.sidePanel = document.getElementById('side-panel');
         this.root = null;
         this.label = null;
         this.actions = null;
@@ -73,9 +76,38 @@ export class QuickActionBarController {
         if (this.label) this.label.textContent = '';
     }
 
+    getStatusBarHeight() {
+        const height = Number(this.statusBar?.getBoundingClientRect?.().height);
+        return Number.isFinite(height) && height > 0 ? height : 0;
+    }
+
+    applyBottomOffset() {
+        if (!this.root?.style?.setProperty) return;
+        const statusBarHeight = this.getStatusBarHeight();
+        const offset = Math.max(44, Math.ceil(statusBarHeight) + 8);
+        this.root.style.setProperty('--quick-action-bottom-offset', `${offset}px`);
+    }
+
+    isOverlayDrawerOpen() {
+        const layout = this.interaction?.app?.responsiveLayout;
+        if (!layout?.isOverlayMode?.()) return false;
+
+        if (layout.toolboxOpen || layout.sidePanelOpen) return true;
+
+        const toolboxOpen = !!this.toolbox?.classList?.contains?.('layout-open');
+        const sidePanelOpen = !!this.sidePanel?.classList?.contains?.('layout-open');
+        return toolboxOpen || sidePanelOpen;
+    }
+
     update() {
         if (!this.root) return;
+        this.applyBottomOffset();
+
         if (!this.isTouchPreferredMode()) {
+            this.hide();
+            return;
+        }
+        if (this.isOverlayDrawerOpen()) {
             this.hide();
             return;
         }

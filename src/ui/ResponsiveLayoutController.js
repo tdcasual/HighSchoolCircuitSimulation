@@ -27,6 +27,14 @@ export class ResponsiveLayoutController {
         this.boundResize = () => this.updateLayoutMode();
         this.boundKeyDown = (event) => this.onKeyDown(event);
         this.boundBackdropClick = () => this.closeDrawers();
+        this.boundToolboxToggleClick = (event) => {
+            event.preventDefault();
+            this.toggleDrawer('toolbox');
+        };
+        this.boundSidePanelToggleClick = (event) => {
+            event.preventDefault();
+            this.toggleDrawer('side-panel');
+        };
 
         this.initialize();
     }
@@ -44,17 +52,11 @@ export class ResponsiveLayoutController {
         }
 
         if (this.toolboxToggleBtn) {
-            this.toolboxToggleBtn.addEventListener('click', (event) => {
-                event.preventDefault();
-                this.toggleDrawer('toolbox');
-            });
+            this.toolboxToggleBtn.addEventListener('click', this.boundToolboxToggleClick);
         }
 
         if (this.sidePanelToggleBtn) {
-            this.sidePanelToggleBtn.addEventListener('click', (event) => {
-                event.preventDefault();
-                this.toggleDrawer('side-panel');
-            });
+            this.sidePanelToggleBtn.addEventListener('click', this.boundSidePanelToggleClick);
         }
 
         if (this.backdrop) {
@@ -69,6 +71,12 @@ export class ResponsiveLayoutController {
         }
         if (this.backdrop) {
             this.backdrop.removeEventListener('click', this.boundBackdropClick);
+        }
+        if (this.toolboxToggleBtn) {
+            this.toolboxToggleBtn.removeEventListener('click', this.boundToolboxToggleClick);
+        }
+        if (this.sidePanelToggleBtn) {
+            this.sidePanelToggleBtn.removeEventListener('click', this.boundSidePanelToggleClick);
         }
     }
 
