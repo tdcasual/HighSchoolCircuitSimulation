@@ -241,6 +241,49 @@ describe('New component models (Ground / AC source / Inductor / SPDT / Fuse / Di
         expect(results.currents.get('R1')).toBeCloseTo(expectedCurrent, 6);
     });
 
+    it('uses diode default parameters under forward bias', () => {
+        const circuit = createTestCircuit();
+        const source = addComponent(circuit, 'PowerSource', 'V1', {
+            voltage: 5,
+            internalResistance: 0
+        });
+        const diode = addComponent(circuit, 'Diode', 'D1');
+        const resistor = addComponent(circuit, 'Resistor', 'R1', { resistance: 100 });
+
+        connectWire(circuit, 'W1', source, 0, diode, 0);
+        connectWire(circuit, 'W2', diode, 1, resistor, 0);
+        connectWire(circuit, 'W3', resistor, 1, source, 1);
+
+        const results = solveCircuit(circuit, 0);
+        const expectedCurrent = (5 - 0.7) / (100 + 1);
+
+        expect(results.valid).toBe(true);
+        expect(diode.conducting).toBe(true);
+        expect(results.currents.get('D1')).toBeCloseTo(expectedCurrent, 6);
+        expect(results.currents.get('R1')).toBeCloseTo(expectedCurrent, 6);
+    });
+
+    it('keeps diode off when forward voltage is below threshold', () => {
+        const circuit = createTestCircuit();
+        const source = addComponent(circuit, 'PowerSource', 'V1', {
+            voltage: 0.5,
+            internalResistance: 0
+        });
+        const diode = addComponent(circuit, 'Diode', 'D1');
+        const resistor = addComponent(circuit, 'Resistor', 'R1', { resistance: 100 });
+
+        connectWire(circuit, 'W1', source, 0, diode, 0);
+        connectWire(circuit, 'W2', diode, 1, resistor, 0);
+        connectWire(circuit, 'W3', resistor, 1, source, 1);
+
+        const results = solveCircuit(circuit, 0);
+        const diodeCurrent = results.currents.get('D1') || 0;
+
+        expect(results.valid).toBe(true);
+        expect(diode.conducting).toBe(false);
+        expect(Math.abs(diodeCurrent)).toBeLessThan(1e-6);
+    });
+
     it('keeps diode in cutoff under reverse bias', () => {
         const circuit = createTestCircuit();
         const source = addComponent(circuit, 'PowerSource', 'V1', {
@@ -297,6 +340,40 @@ describe('New component models (Ground / AC source / Inductor / SPDT / Fuse / Di
         circuit.step();
         circuit.isRunning = false;
         expect(led.brightness).toBeCloseTo(Math.min(1, expectedCurrent / 0.02), 6);
+    });
+
+    it('caps LED brightness at 1 when current exceeds rated current', () => {
+        const circuit = createTestCircuit();
+        circuit.dt = 0.01;
+
+        const source = addComponent(circuit, 'PowerSource', 'V1', {
+            voltage: 5,
+            internalResistance: 0
+        });
+        const led = addComponent(circuit, 'LED', 'LED1', {
+            forwardVoltage: 2.0,
+            onResistance: 2,
+            offResistance: 1e9,
+            ratedCurrent: 0.02,
+            conducting: false
+        });
+        const resistor = addComponent(circuit, 'Resistor', 'R1', { resistance: 10 });
+
+        connectWire(circuit, 'W1', source, 0, led, 0);
+        connectWire(circuit, 'W2', led, 1, resistor, 0);
+        connectWire(circuit, 'W3', resistor, 1, source, 1);
+
+        const results = solveCircuit(circuit, 0);
+        const expectedCurrent = (5 - 2) / (10 + 2);
+
+        expect(results.valid).toBe(true);
+        expect(led.conducting).toBe(true);
+        expect(results.currents.get('LED1')).toBeCloseTo(expectedCurrent, 6);
+
+        circuit.isRunning = true;
+        circuit.step();
+        circuit.isRunning = false;
+        expect(led.brightness).toBeCloseTo(1, 6);
     });
 
     it('keeps LED off under reverse bias', () => {

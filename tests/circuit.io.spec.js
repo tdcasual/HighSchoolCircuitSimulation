@@ -38,4 +38,53 @@ describe('Circuit IO gateway', () => {
         expect(loaded.components.length).toBeGreaterThan(0);
         expect(loaded.wires.length).toBeGreaterThan(0);
     });
+
+    it('sanitizes malformed runtime-critical numeric properties on deserialize', () => {
+        const json = {
+            components: [
+                {
+                    id: 'V1',
+                    type: 'PowerSource',
+                    x: 0,
+                    y: 0,
+                    properties: {
+                        voltage: 6,
+                        internalResistance: 'bad'
+                    }
+                },
+                {
+                    id: 'M1',
+                    type: 'Motor',
+                    x: 100,
+                    y: 0,
+                    properties: {
+                        resistance: 0,
+                        inertia: 0
+                    }
+                },
+                {
+                    id: 'A1',
+                    type: 'Ammeter',
+                    x: 200,
+                    y: 0,
+                    properties: {
+                        resistance: 'oops'
+                    }
+                }
+            ],
+            wires: []
+        };
+
+        const loaded = CircuitDeserializer.deserialize(json);
+        const source = loaded.components.find((comp) => comp.id === 'V1');
+        const motor = loaded.components.find((comp) => comp.id === 'M1');
+        const ammeter = loaded.components.find((comp) => comp.id === 'A1');
+
+        expect(Number.isFinite(source.internalResistance)).toBe(true);
+        expect(source.internalResistance).toBeGreaterThan(0);
+        expect(motor.resistance).toBeGreaterThan(0);
+        expect(motor.inertia).toBeGreaterThan(0);
+        expect(Number.isFinite(ammeter.resistance)).toBe(true);
+        expect(ammeter.resistance).toBeGreaterThanOrEqual(0);
+    });
 });

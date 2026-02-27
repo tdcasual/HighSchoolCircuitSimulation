@@ -76,4 +76,25 @@ describe('DynamicIntegrator with SimulationState', () => {
         expect(motor.speed).toBeLessThan(1e-6);
         expect(motor.backEmf).toBeLessThan(1e-6);
     });
+
+    it('keeps motor state finite when resistance/inertia are invalid', () => {
+        const integrator = new DynamicIntegrator();
+        const motor = createComponent('Motor', 0, 0, 'M_bad');
+        motor.nodes = [0, 1];
+        motor.resistance = 0;
+        motor.torqueConstant = 0.1;
+        motor.emfConstant = 0.1;
+        motor.inertia = 0;
+        motor.loadTorque = 0.01;
+
+        const state = new SimulationState();
+        integrator.updateDynamicComponents([motor], [12, 0], null, 0.01, false, state);
+
+        expect(Number.isFinite(motor.speed)).toBe(true);
+        expect(Number.isFinite(motor.backEmf)).toBe(true);
+
+        const entry = state.get('M_bad');
+        expect(Number.isFinite(entry?.speed)).toBe(true);
+        expect(Number.isFinite(entry?.backEmf)).toBe(true);
+    });
 });

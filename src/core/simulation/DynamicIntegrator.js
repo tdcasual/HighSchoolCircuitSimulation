@@ -71,14 +71,30 @@ export class DynamicIntegrator {
                 const v1 = nodeVoltages[comp.nodes[0]] || 0;
                 const v2 = nodeVoltages[comp.nodes[1]] || 0;
                 const voltage = v1 - v2;
-                const prevBackEmf = Number.isFinite(entry?.backEmf) ? entry.backEmf : (comp.backEmf || 0);
-                const prevSpeed = Number.isFinite(entry?.speed) ? entry.speed : (comp.speed || 0);
-                const current = (voltage - prevBackEmf) / comp.resistance;
+                const resistanceRaw = Number(comp.resistance);
+                const resistance = Number.isFinite(resistanceRaw) && resistanceRaw > 0 ? resistanceRaw : 5;
+                const torqueConstantRaw = Number(comp.torqueConstant);
+                const torqueConstant = Number.isFinite(torqueConstantRaw) ? torqueConstantRaw : 0.1;
+                const emfConstantRaw = Number(comp.emfConstant);
+                const emfConstant = Number.isFinite(emfConstantRaw) ? emfConstantRaw : 0.1;
+                const inertiaRaw = Number(comp.inertia);
+                const inertia = Number.isFinite(inertiaRaw) && inertiaRaw > 0 ? inertiaRaw : 0.01;
+                const loadTorqueRaw = Number(comp.loadTorque);
+                const loadTorque = Number.isFinite(loadTorqueRaw) ? loadTorqueRaw : 0.01;
+                const prevBackEmf = Number.isFinite(entry?.backEmf)
+                    ? entry.backEmf
+                    : (Number.isFinite(comp.backEmf) ? comp.backEmf : 0);
+                const prevSpeed = Number.isFinite(entry?.speed)
+                    ? entry.speed
+                    : (Number.isFinite(comp.speed) ? comp.speed : 0);
+                const current = (voltage - prevBackEmf) / resistance;
 
-                const torque = comp.torqueConstant * current;
-                const acceleration = (torque - comp.loadTorque) / comp.inertia;
-                const nextSpeed = Math.max(0, prevSpeed + acceleration * dt);
-                const nextBackEmf = comp.emfConstant * nextSpeed;
+                const torque = torqueConstant * current;
+                const acceleration = (torque - loadTorque) / inertia;
+                const nextSpeedRaw = prevSpeed + acceleration * dt;
+                const nextSpeed = Number.isFinite(nextSpeedRaw) ? Math.max(0, nextSpeedRaw) : 0;
+                const nextBackEmfRaw = emfConstant * nextSpeed;
+                const nextBackEmf = Number.isFinite(nextBackEmfRaw) ? nextBackEmfRaw : 0;
 
                 if (entry) {
                     entry.speed = nextSpeed;

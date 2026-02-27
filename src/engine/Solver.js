@@ -97,7 +97,10 @@ export class MNASolver {
 
             if (isPowerSource) {
                 const internalResistance = Number(comp.internalResistance);
-                comp._nortonModel = Number.isFinite(internalResistance) && internalResistance > 1e-9;
+                comp.internalResistance = Number.isFinite(internalResistance) && internalResistance >= 0
+                    ? internalResistance
+                    : 0.5;
+                comp._nortonModel = comp.internalResistance > 1e-9;
             }
         }
         
@@ -126,7 +129,11 @@ export class MNASolver {
                 }
             } else if (comp.type === 'Ammeter') {
                 // 理想电流表使用电压源（V=0）来测量电流
-                if (!comp.resistance || comp.resistance <= 0) {
+                const ammeterResistance = Number(comp.resistance);
+                comp.resistance = Number.isFinite(ammeterResistance) && ammeterResistance >= 0
+                    ? ammeterResistance
+                    : 0;
+                if (comp.resistance <= 0) {
                     if (!comp._isShorted) {
                         const n1 = comp.nodes?.[0];
                         const n2 = comp.nodes?.[1];
@@ -823,10 +830,11 @@ export class MNASolver {
                 // 诺顿等效电流源 I_N = E / r，并联电阻 r
                 const sourceVoltage = this.getSourceInstantVoltage(comp);
                 
-                if (comp.internalResistance > 1e-9) {
+                const internalResistance = Number(comp.internalResistance);
+                if (comp._nortonModel && Number.isFinite(internalResistance) && internalResistance > 1e-9) {
                     // 使用诺顿等效电路：电流源 I = E/r 并联电阻 r
-                    const I_norton = sourceVoltage / comp.internalResistance;
-                    const G = 1 / comp.internalResistance;
+                    const I_norton = sourceVoltage / internalResistance;
+                    const G = 1 / internalResistance;
                     
                     // 添加并联电导
                     if (i1 >= 0) A[i1][i1] += G;
@@ -948,7 +956,7 @@ export class MNASolver {
                 
             case 'Ammeter':
                 // 电流表模型
-                if (comp.resistance > 0) {
+                if (Number.isFinite(Number(comp.resistance)) && Number(comp.resistance) > 0) {
                     // 有内阻的电流表
                     this.stampResistor(A, i1, i2, comp.resistance);
                 } else {
@@ -1015,7 +1023,15 @@ export class MNASolver {
      * @param {number} nodeCount - 节点数量
      */
     stampVoltageSource(A, z, i1, i2, V, vsIndex, nodeCount) {
+        if (!Number.isInteger(vsIndex) || vsIndex < 0) {
+            this.logger?.warn?.('Skip voltage source stamp due to invalid vsIndex');
+            return;
+        }
         const k = nodeCount - 1 + vsIndex; // 电流变量在矩阵中的位置
+        if (k < 0 || k >= A.length || !A[k]) {
+            this.logger?.warn?.('Skip voltage source stamp due to out-of-range equation row');
+            return;
+        }
         
         // 电压约束行
         if (i1 >= 0) A[k][i1] = 1;

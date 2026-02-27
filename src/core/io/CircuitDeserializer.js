@@ -17,6 +17,31 @@ function defaultNormalizeObservationProbe(probe) {
     };
 }
 
+function sanitizeRuntimeCriticalProperties(comp) {
+    if (!comp || typeof comp !== 'object') return;
+    const normalizeFinite = (value, fallback) => {
+        const parsed = Number(value);
+        return Number.isFinite(parsed) ? parsed : fallback;
+    };
+
+    if (comp.type === 'PowerSource' || comp.type === 'ACVoltageSource') {
+        const internalResistance = normalizeFinite(comp.internalResistance, 0.5);
+        comp.internalResistance = internalResistance >= 0 ? internalResistance : 0.5;
+    }
+
+    if (comp.type === 'Ammeter') {
+        const resistance = normalizeFinite(comp.resistance, 0);
+        comp.resistance = resistance >= 0 ? resistance : 0;
+    }
+
+    if (comp.type === 'Motor') {
+        const resistance = normalizeFinite(comp.resistance, 5);
+        const inertia = normalizeFinite(comp.inertia, 0.01);
+        comp.resistance = resistance > 0 ? resistance : 5;
+        comp.inertia = inertia > 0 ? inertia : 0.01;
+    }
+}
+
 export class CircuitDeserializer {
     static deserialize(json, options = {}) {
         const componentList = Array.isArray(json?.components) ? json.components : [];
@@ -42,6 +67,7 @@ export class CircuitDeserializer {
                 comp.label = compData.label;
             }
             Object.assign(comp, compData.properties);
+            sanitizeRuntimeCriticalProperties(comp);
 
             if ((comp.type === 'Capacitor' || comp.type === 'Inductor' || comp.type === 'ParallelPlateCapacitor')
                 && !compData?.properties?.integrationMethod) {
