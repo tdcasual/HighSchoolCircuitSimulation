@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { execFileSync } from 'node:child_process';
 
 describe('registry legacy fallback guard wiring', () => {
     it('exposes guard script in package scripts and check pipeline', () => {
@@ -10,5 +11,11 @@ describe('registry legacy fallback guard wiring', () => {
         expect(pkg.scripts).toBeDefined();
         expect(pkg.scripts['check:registry-guard']).toBe('node scripts/ci/assert-registry-legacy-fallback-guard.mjs');
         expect(pkg.scripts.check).toContain('npm run check:registry-guard');
+    });
+
+    it('passes on current source with whitelist guard enabled', () => {
+        const scriptPath = resolve(process.cwd(), 'scripts/ci/assert-registry-legacy-fallback-guard.mjs');
+        const output = execFileSync('node', [scriptPath], { encoding: 'utf8' });
+        expect(output).toContain('[registry-guard] ok');
     });
 });

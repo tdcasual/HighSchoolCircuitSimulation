@@ -47,6 +47,52 @@ function assertNoLegacyTypeSwitch(source, signature, fileLabel) {
     if (/switch\s*\(\s*comp\.type\s*\)/.test(body)) {
         fail(`${fileLabel} -> ${signature} reintroduced legacy "switch (comp.type)" fallback`);
     }
+    return body;
+}
+
+function collectComparedTypeLiterals(body) {
+    const typeNames = new Set();
+
+    const compTypeOnLeft = /comp\.type\s*(?:===|!==)\s*(['"])([^'"`]+)\1/g;
+    let match = compTypeOnLeft.exec(body);
+    while (match) {
+        typeNames.add(match[2]);
+        match = compTypeOnLeft.exec(body);
+    }
+
+    const compTypeOnRight = /(['"])([^'"`]+)\1\s*(?:===|!==)\s*comp\.type/g;
+    match = compTypeOnRight.exec(body);
+    while (match) {
+        typeNames.add(match[2]);
+        match = compTypeOnRight.exec(body);
+    }
+
+    const includesMatch = /\[([^\]]+)\]\.includes\(\s*comp\.type\s*\)/g;
+    match = includesMatch.exec(body);
+    while (match) {
+        const list = match[1];
+        const itemRegex = /(['"])([^'"`]+)\1/g;
+        let item = itemRegex.exec(list);
+        while (item) {
+            typeNames.add(item[2]);
+            item = itemRegex.exec(list);
+        }
+        match = includesMatch.exec(body);
+    }
+
+    return typeNames;
+}
+
+function assertTypeComparisonWhitelist(body, signature, fileLabel, allowedTypes) {
+    const comparedTypes = collectComparedTypeLiterals(body);
+    const disallowed = Array.from(comparedTypes)
+        .filter((type) => !allowedTypes.has(type))
+        .sort();
+    if (disallowed.length > 0) {
+        fail(
+            `${fileLabel} -> ${signature} contains non-whitelisted comp.type branch(es): ${disallowed.join(', ')}`
+        );
+    }
 }
 
 const solverPath = 'src/engine/Solver.js';
@@ -55,7 +101,36 @@ const resultPath = 'src/core/simulation/ResultPostprocessor.js';
 const solverSource = readText(solverPath);
 const resultSource = readText(resultPath);
 
-assertNoLegacyTypeSwitch(solverSource, 'stampComponent(comp, A, z, nodeCount)', solverPath);
-assertNoLegacyTypeSwitch(resultSource, 'calculateCurrent(comp, context = {})', resultPath);
+const solverStampBody = assertNoLegacyTypeSwitch(
+    solverSource,
+    'stampComponent(comp, A, z, nodeCount)',
+    solverPath
+);
+const resultCurrentBody = assertNoLegacyTypeSwitch(
+    resultSource,
+    'calculateCurrent(comp, context = {})',
+    resultPath
+);
+
+const structuralTypeWhitelist = new Set([
+    'Ground',
+    'PowerSource',
+    'ACVoltageSource',
+    'Rheostat',
+    'SPDTSwitch',
+    'Relay'
+]);
+assertTypeComparisonWhitelist(
+    solverStampBody,
+    'stampComponent(comp, A, z, nodeCount)',
+    solverPath,
+    structuralTypeWhitelist
+);
+assertTypeComparisonWhitelist(
+    resultCurrentBody,
+    'calculateCurrent(comp, context = {})',
+    resultPath,
+    structuralTypeWhitelist
+);
 
 console.log('[registry-guard] ok');
