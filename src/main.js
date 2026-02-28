@@ -13,6 +13,7 @@ import { ResponsiveLayoutController } from './ui/ResponsiveLayoutController.js';
 import { ClassroomModeController } from './ui/ClassroomModeController.js';
 import { ToolboxCategoryController } from './ui/ToolboxCategoryController.js';
 import { TopActionMenuController } from './ui/TopActionMenuController.js';
+import { FirstRunGuideController } from './ui/FirstRunGuideController.js';
 import { EmbedRuntimeBridge, parseEmbedRuntimeOptionsFromSearch } from './embed/EmbedRuntimeBridge.js';
 import { resetIdCounter, updateIdCounterFromExisting } from './components/Component.js';
 import { createRuntimeLogger } from './utils/Logger.js';
@@ -58,6 +59,11 @@ class CircuitSimulatorApp {
 
         // 初始化课堂模式控制（大屏演示可读性增强）
         this.classroomMode = new ClassroomModeController(this);
+
+        // 初始化首开引导（嵌入模式默认关闭）
+        this.firstRunGuide = new FirstRunGuideController(this, {
+            enabled: !this.runtimeOptions.enabled
+        });
         
         // 尝试从 localStorage 恢复电路
         if (this.runtimeOptions.restoreFromStorage) {

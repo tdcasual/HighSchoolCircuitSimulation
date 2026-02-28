@@ -1,6 +1,48 @@
+export const FIRST_RUN_GUIDE_DISMISSED_STORAGE_KEY = 'ui.first_run_guide_dismissed';
+
+function resolveStorage(storage) {
+    if (storage && typeof storage.getItem === 'function' && typeof storage.setItem === 'function') {
+        return storage;
+    }
+    if (typeof localStorage !== 'undefined') {
+        return localStorage;
+    }
+    return null;
+}
+
 export function isObservationTabActive() {
     const observationPage = document.getElementById('panel-observation');
     return !!(observationPage && observationPage.classList.contains('active'));
+}
+
+export function isFirstRunGuideDismissed(options = {}) {
+    const key = String(options.key || FIRST_RUN_GUIDE_DISMISSED_STORAGE_KEY);
+    const storage = resolveStorage(options.storage);
+    if (!storage) return false;
+    try {
+        const raw = String(storage.getItem(key) || '').trim().toLowerCase();
+        return raw === '1' || raw === 'true' || raw === 'yes';
+    } catch (_) {
+        return false;
+    }
+}
+
+export function setFirstRunGuideDismissed(dismissed, options = {}) {
+    const key = String(options.key || FIRST_RUN_GUIDE_DISMISSED_STORAGE_KEY);
+    const storage = resolveStorage(options.storage);
+    if (!storage) return false;
+    try {
+        storage.setItem(key, dismissed ? '1' : '0');
+        return true;
+    } catch (_) {
+        return false;
+    }
+}
+
+export function shouldShowFirstRunGuide(options = {}) {
+    const enabled = options.enabled !== false;
+    if (!enabled) return false;
+    return !isFirstRunGuideDismissed(options);
 }
 
 export function hideDialog() {

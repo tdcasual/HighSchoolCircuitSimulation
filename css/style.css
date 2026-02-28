@@ -1655,6 +1655,77 @@ body.layout-mode-phone .panel-close-btn {
     display: none;
 }
 
+.first-run-guide-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(15, 23, 42, 0.45);
+}
+
+.first-run-guide-overlay.hidden {
+    display: none;
+}
+
+.first-run-guide-card {
+    width: min(560px, 100%);
+    background: #ffffff;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    border-radius: 14px;
+    box-shadow: 0 18px 40px rgba(15, 23, 42, 0.2);
+    padding: 18px 18px 16px;
+}
+
+.first-run-guide-card h3 {
+    margin: 0 0 8px;
+    color: #0f172a;
+    font-size: 18px;
+}
+
+.first-run-guide-card p {
+    margin: 0 0 8px;
+    color: #334155;
+    font-size: 14px;
+}
+
+.first-run-guide-card ol {
+    margin: 0 0 12px 18px;
+    padding: 0;
+    color: #475569;
+    font-size: 13px;
+    line-height: 1.7;
+}
+
+.first-run-guide-remember {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: #475569;
+    font-size: 13px;
+}
+
+.first-run-guide-actions {
+    margin-top: 12px;
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+body.layout-mode-phone .first-run-guide-card {
+    padding: 14px;
+}
+
+body.layout-mode-phone .first-run-guide-actions {
+    justify-content: stretch;
+}
+
+body.layout-mode-phone .first-run-guide-actions .control-btn {
+    flex: 1;
+}
+
 #property-dialog {
     background: var(--panel-bg);
     border-radius: 12px;
