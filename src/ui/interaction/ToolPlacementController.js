@@ -98,8 +98,7 @@ export function syncEndpointAutoBridgeButton() {
 export function setEndpointAutoBridgeMode(mode = 'auto', options = {}) {
     const classroomActive = isClassroomModeActive(this);
     const requestedMode = normalizeEndpointAutoBridgeMode(mode);
-    const forceBypassClassroomLock = options.force === true;
-    const blockedByClassroomLock = classroomActive && requestedMode !== 'off' && !forceBypassClassroomLock;
+    const blockedByClassroomLock = classroomActive && requestedMode !== 'off';
     const normalizedMode = blockedByClassroomLock ? 'off' : requestedMode;
     this.endpointAutoBridgeMode = normalizedMode;
 
