@@ -35,6 +35,9 @@ jobs:
       - name: Check registry legacy fallback guard
         run: node scripts/ci/assert-registry-legacy-fallback-guard.mjs
 
+      - name: Check CI workflow coverage
+        run: node scripts/ci/assert-ci-workflow-coverage.mjs
+
       - name: Run reliability regression gate
         run: npm run test:reliability
 
