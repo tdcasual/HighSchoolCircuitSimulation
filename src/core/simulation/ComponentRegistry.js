@@ -211,12 +211,23 @@ const resolveMethod = (context, comp) => {
     return DynamicIntegrationMethods.BackwardEuler;
 };
 
+const resolveStateEntry = (context, comp) => {
+    const source = context?.state;
+    if (!source) {
+        return null;
+    }
+    if (typeof source.get === 'function' && comp?.id) {
+        return source.get(comp.id) || null;
+    }
+    return source;
+};
+
 DefaultComponentRegistry.register('Capacitor', {
     stamp: (comp, context, nodes) => {
         const C = Math.max(1e-18, comp.capacitance || 0);
         const dt = Number.isFinite(context?.dt) && context.dt > 0 ? context.dt : 0.001;
         const method = resolveMethod(context, comp);
-        const entry = context?.state && comp?.id ? context.state.get(comp.id) : null;
+        const entry = resolveStateEntry(context, comp);
 
         if (method === DynamicIntegrationMethods.Trapezoidal) {
             const Req = dt / (2 * C);
@@ -237,6 +248,29 @@ DefaultComponentRegistry.register('Capacitor', {
         const qPrev = Number.isFinite(entry?.prevCharge) ? entry.prevCharge : (comp.prevCharge || 0);
         const Ieq = qPrev / dt;
         context.stampCurrentSource(nodes.i2, nodes.i1, Ieq);
+    },
+    current: (comp, context, nodes) => {
+        const C = Math.max(1e-18, comp.capacitance || 0);
+        const dt = Number.isFinite(context?.dt) && context.dt > 0 ? context.dt : 0.001;
+        const method = resolveMethod(context, comp);
+        const entry = resolveStateEntry(context, comp);
+        const dV = context.voltage(nodes.n1) - context.voltage(nodes.n2);
+
+        if (method === DynamicIntegrationMethods.Trapezoidal) {
+            const Req = dt / (2 * C);
+            const prevVoltage = Number.isFinite(entry?.prevVoltage)
+                ? entry.prevVoltage
+                : (Number.isFinite(comp.prevVoltage) ? comp.prevVoltage : 0);
+            const prevCurrent = Number.isFinite(entry?.prevCurrent)
+                ? entry.prevCurrent
+                : (Number.isFinite(comp.prevCurrent) ? comp.prevCurrent : 0);
+            const Ieq = -(prevVoltage / Req + prevCurrent);
+            return dV / Req + Ieq;
+        }
+
+        const qPrev = Number.isFinite(entry?.prevCharge) ? entry.prevCharge : (comp.prevCharge || 0);
+        const qNew = C * dV;
+        return (qNew - qPrev) / dt;
     }
 });
 
@@ -247,7 +281,7 @@ DefaultComponentRegistry.register('Inductor', {
         const L = Math.max(1e-12, comp.inductance || 0);
         const dt = Number.isFinite(context?.dt) && context.dt > 0 ? context.dt : 0.001;
         const method = resolveMethod(context, comp);
-        const entry = context?.state && comp?.id ? context.state.get(comp.id) : null;
+        const entry = resolveStateEntry(context, comp);
         const prevCurrent = Number.isFinite(entry?.prevCurrent)
             ? entry.prevCurrent
             : (Number.isFinite(comp.prevCurrent)
@@ -268,5 +302,28 @@ DefaultComponentRegistry.register('Inductor', {
         const Req = L / dt;
         context.stampResistor(nodes.i1, nodes.i2, Req);
         context.stampCurrentSource(nodes.i1, nodes.i2, prevCurrent);
+    },
+    current: (comp, context, nodes) => {
+        const L = Math.max(1e-12, comp.inductance || 0);
+        const dt = Number.isFinite(context?.dt) && context.dt > 0 ? context.dt : 0.001;
+        const method = resolveMethod(context, comp);
+        const entry = resolveStateEntry(context, comp);
+        const dV = context.voltage(nodes.n1) - context.voltage(nodes.n2);
+        const prevCurrent = Number.isFinite(entry?.prevCurrent)
+            ? entry.prevCurrent
+            : (Number.isFinite(comp.prevCurrent)
+                ? comp.prevCurrent
+                : (Number.isFinite(comp.initialCurrent) ? comp.initialCurrent : 0));
+
+        if (method === DynamicIntegrationMethods.Trapezoidal) {
+            const Req = (2 * L) / dt;
+            const prevVoltage = Number.isFinite(entry?.prevVoltage)
+                ? entry.prevVoltage
+                : (Number.isFinite(comp.prevVoltage) ? comp.prevVoltage : 0);
+            const Ieq = prevCurrent + (prevVoltage / Req);
+            return dV / Req + Ieq;
+        }
+
+        return prevCurrent + (dt / L) * dV;
     }
 });

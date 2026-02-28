@@ -176,4 +176,71 @@ describe('ComponentRegistry', () => {
             nodeCount: 3
         });
     });
+
+    it('covers dynamic component current handlers for registry-first path', () => {
+        const targetTypes = ['Capacitor', 'ParallelPlateCapacitor', 'Inductor'];
+        for (const type of targetTypes) {
+            const handler = DefaultComponentRegistry.get(type);
+            expect(handler, `${type} should be registered`).toBeTruthy();
+            expect(typeof handler.stamp, `${type} should provide stamp()`).toBe('function');
+            expect(typeof handler.current, `${type} should provide current()`).toBe('function');
+        }
+    });
+
+    it('computes capacitor/inductor current in registry with backward-euler and trapezoidal methods', () => {
+        const voltage = (nodeIdx) => ({ 1: 8, 2: 0 }[nodeIdx] || 0);
+        const capacitorHandler = DefaultComponentRegistry.get('Capacitor');
+        const inductorHandler = DefaultComponentRegistry.get('Inductor');
+        const nodes = { n1: 1, n2: 2 };
+
+        const capacitorBE = capacitorHandler.current({
+            capacitance: 1,
+            prevCharge: 0.2
+        }, {
+            voltage,
+            dt: 0.1,
+            state: { prevCharge: 0.2 },
+            resolveDynamicIntegrationMethod: () => 'backward-euler'
+        }, nodes);
+        // qNew = C * dV = 8, dQ = 8 - 0.2 = 7.8, I = dQ/dt = 78
+        expect(capacitorBE).toBeCloseTo(78, 9);
+
+        const capacitorTrap = capacitorHandler.current({
+            capacitance: 1,
+            prevVoltage: 1,
+            prevCurrent: 2
+        }, {
+            voltage,
+            dt: 0.1,
+            state: { prevVoltage: 1, prevCurrent: 2 },
+            resolveDynamicIntegrationMethod: () => 'trapezoidal'
+        }, nodes);
+        // Req=0.05, Ieq=-(1/0.05+2)=-22, I=dV/Req+Ieq=160-22=138
+        expect(capacitorTrap).toBeCloseTo(138, 9);
+
+        const inductorBE = inductorHandler.current({
+            inductance: 2,
+            prevCurrent: 0.5
+        }, {
+            voltage,
+            dt: 0.1,
+            state: { prevCurrent: 0.5 },
+            resolveDynamicIntegrationMethod: () => 'backward-euler'
+        }, nodes);
+        // I = prev + (dt/L)*dV = 0.5 + 0.1/2*8 = 0.9
+        expect(inductorBE).toBeCloseTo(0.9, 9);
+
+        const inductorTrap = inductorHandler.current({
+            inductance: 2,
+            prevCurrent: 0.5,
+            prevVoltage: 4
+        }, {
+            voltage,
+            dt: 0.1,
+            state: { prevCurrent: 0.5, prevVoltage: 4 },
+            resolveDynamicIntegrationMethod: () => 'trapezoidal'
+        }, nodes);
+        // Req=40, Ieq=0.5+4/40=0.6, I=8/40+0.6=0.8
+        expect(inductorTrap).toBeCloseTo(0.8, 9);
+    });
 });
