@@ -281,6 +281,34 @@ describe('ComponentRegistry', () => {
         expect(handler.current(comp, { ...context, nodeCount: 4 }, nodes)).toBeCloseTo(-0.3, 12);
     });
 
+    it('covers day12 special target types with stamp/current handlers', () => {
+        const targetTypes = ['Ground', 'BlackBox'];
+        for (const type of targetTypes) {
+            expect(ComponentDefaults[type]).toBeTruthy();
+            const handler = DefaultComponentRegistry.get(type);
+            expect(handler, `${type} should be registered`).toBeTruthy();
+            expect(typeof handler.stamp, `${type} should provide stamp()`).toBe('function');
+            expect(typeof handler.current, `${type} should provide current()`).toBe('function');
+        }
+    });
+
+    it('uses ground and blackbox registry behaviors as no-op current=0', () => {
+        const calls = [];
+        const context = {
+            stampResistor: (i1, i2, r) => calls.push({ i1, i2, r }),
+            voltage: () => 10
+        };
+        const nodes = { i1: 0, i2: 1, n1: 1, n2: 2 };
+        const groundHandler = DefaultComponentRegistry.get('Ground');
+        const blackBoxHandler = DefaultComponentRegistry.get('BlackBox');
+
+        groundHandler.stamp({ type: 'Ground' }, context, nodes);
+        blackBoxHandler.stamp({ type: 'BlackBox' }, context, nodes);
+        expect(calls).toEqual([]);
+        expect(groundHandler.current({ type: 'Ground' }, context, nodes)).toBe(0);
+        expect(blackBoxHandler.current({ type: 'BlackBox' }, context, nodes)).toBe(0);
+    });
+
     it('covers day9 source target types with stamp/current handlers', () => {
         const targetTypes = ['PowerSource', 'ACVoltageSource'];
         for (const type of targetTypes) {

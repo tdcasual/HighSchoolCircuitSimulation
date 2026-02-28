@@ -30,6 +30,16 @@ const resolveStateEntry = (context, comp) => {
     return source;
 };
 
+DefaultComponentRegistry.register('Ground', {
+    stamp: () => {},
+    current: () => 0
+});
+
+DefaultComponentRegistry.register('BlackBox', {
+    stamp: () => {},
+    current: () => 0
+});
+
 DefaultComponentRegistry.register('Resistor', {
     stamp: (comp, context, nodes) => {
         context.stampResistor(nodes.i1, nodes.i2, comp.resistance);
