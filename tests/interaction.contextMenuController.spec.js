@@ -7,6 +7,7 @@ afterEach(() => {
 });
 
 function createFakeElement(tagName = 'div') {
+    const listeners = new Map();
     return {
         tagName,
         id: '',
@@ -14,7 +15,14 @@ function createFakeElement(tagName = 'div') {
         textContent: '',
         style: {},
         children: [],
-        addEventListener: vi.fn(),
+        addEventListener(type, handler) {
+            if (!listeners.has(type)) listeners.set(type, []);
+            listeners.get(type).push(handler);
+        },
+        trigger(type, event = {}) {
+            const handlers = listeners.get(type) || [];
+            handlers.forEach((handler) => handler(event));
+        },
         appendChild(child) {
             this.children.push(child);
         },
@@ -132,6 +140,64 @@ describe('ContextMenuController.showWireContextMenu', () => {
         expect(labels).toContain('拉直为水平');
         expect(labels).toContain('拉直为垂直');
         expect(labels).toContain('删除导线 (Del)');
+    });
+
+    it('blocks accidental quick touch tap on destructive wire delete', () => {
+        const appended = [];
+        const body = { appendChild: vi.fn((el) => appended.push(el)) };
+        vi.stubGlobal('document', {
+            getElementById: vi.fn(() => null),
+            createElement: vi.fn(() => createFakeElement()),
+            body,
+            addEventListener: vi.fn(),
+            removeEventListener: vi.fn()
+        });
+        vi.stubGlobal('setTimeout', vi.fn((fn) => fn()));
+
+        const context = {
+            hideContextMenu: vi.fn(),
+            hideContextMenuHandler: vi.fn(),
+            circuit: {
+                getWire: vi.fn(() => ({
+                    id: 'W1',
+                    a: { x: 10, y: 20 },
+                    b: { x: 120, y: 20 }
+                }))
+            },
+            screenToCanvas: vi.fn(() => ({ x: 60, y: 20 })),
+            splitWireAtPoint: vi.fn(),
+            addObservationProbeForWire: vi.fn(),
+            deleteWire: vi.fn(),
+            runWithHistory: vi.fn(),
+            renderer: { refreshWire: vi.fn() },
+            updateStatus: vi.fn()
+        };
+        const event = { clientX: 60, clientY: 20 };
+
+        ContextMenuController.showWireContextMenu.call(context, event, 'W1');
+        context.hideContextMenu.mockClear();
+
+        const menu = appended[0];
+        const deleteItem = menu.children.find((item) => item.textContent === '删除导线 (Del)');
+        expect(deleteItem).toBeTruthy();
+
+        const quickDown = { pointerType: 'touch', clientX: 61, clientY: 21, timeStamp: 10 };
+        const quickUp = { pointerType: 'touch', clientX: 62, clientY: 22, timeStamp: 70 };
+        const quickClick = {
+            pointerType: 'touch',
+            clientX: 62,
+            clientY: 22,
+            timeStamp: 70,
+            preventDefault: vi.fn(),
+            stopPropagation: vi.fn()
+        };
+        deleteItem.trigger('pointerdown', quickDown);
+        deleteItem.trigger('pointerup', quickUp);
+        deleteItem.trigger('click', quickClick);
+
+        expect(context.deleteWire).not.toHaveBeenCalled();
+        expect(context.hideContextMenu).not.toHaveBeenCalled();
+        expect(context.updateStatus).toHaveBeenCalledTimes(1);
     });
 });
 

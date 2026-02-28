@@ -90,4 +90,20 @@ describe('PointerSessionManager', () => {
         expect(context.viewOffset.y).toBeCloseTo(-40, 6);
         expect(context.updateViewTransform).toHaveBeenCalledTimes(1);
     });
+
+    it('accepts intentional touch destructive tap with hold and low drift', () => {
+        const allow = PointerSessionManager.isIntentionalDestructiveTap(
+            { pointerType: 'touch', clientX: 100, clientY: 200, timeStamp: 10 },
+            { pointerType: 'touch', clientX: 104, clientY: 206, timeStamp: 180 }
+        );
+        expect(allow).toBe(true);
+    });
+
+    it('rejects accidental touch destructive tap when press is too short', () => {
+        const allow = PointerSessionManager.isIntentionalDestructiveTap(
+            { pointerType: 'touch', clientX: 100, clientY: 200, timeStamp: 10 },
+            { pointerType: 'touch', clientX: 102, clientY: 203, timeStamp: 80 }
+        );
+        expect(allow).toBe(false);
+    });
 });

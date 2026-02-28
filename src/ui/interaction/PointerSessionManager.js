@@ -1,3 +1,38 @@
+const DESTRUCTIVE_TAP_RULES = Object.freeze({
+    touch: Object.freeze({ minPressMs: 140, maxMovePx: 14 }),
+    pen: Object.freeze({ minPressMs: 90, maxMovePx: 10 }),
+    mouse: Object.freeze({ minPressMs: 0, maxMovePx: 8 })
+});
+
+function normalizePointerSample(sample = {}) {
+    return {
+        pointerType: sample.pointerType || 'mouse',
+        clientX: Number.isFinite(sample.clientX) ? sample.clientX : 0,
+        clientY: Number.isFinite(sample.clientY) ? sample.clientY : 0,
+        timeStamp: Number.isFinite(sample.timeStamp) ? sample.timeStamp : null
+    };
+}
+
+export function isIntentionalDestructiveTap(pointerStart = null, pointerEnd = null, options = {}) {
+    const start = normalizePointerSample(pointerStart || pointerEnd || {});
+    const end = normalizePointerSample(pointerEnd || pointerStart || {});
+    const pointerType = end.pointerType || start.pointerType || 'mouse';
+    const rule = DESTRUCTIVE_TAP_RULES[pointerType] || DESTRUCTIVE_TAP_RULES.mouse;
+    const maxMovePx = Number.isFinite(options.maxMovePx) ? options.maxMovePx : rule.maxMovePx;
+    const minPressMs = Number.isFinite(options.minPressMs) ? options.minPressMs : rule.minPressMs;
+
+    const movePx = Math.hypot(end.clientX - start.clientX, end.clientY - start.clientY);
+    if (movePx > maxMovePx) return false;
+
+    if (pointerType === 'mouse') return true;
+
+    if (!Number.isFinite(start.timeStamp) || !Number.isFinite(end.timeStamp)) {
+        return false;
+    }
+    const pressMs = Math.max(0, end.timeStamp - start.timeStamp);
+    return pressMs >= minPressMs;
+}
+
 export function onPointerDown(e) {
     const pointerType = e.pointerType || 'mouse';
     if (pointerType !== 'mouse') {

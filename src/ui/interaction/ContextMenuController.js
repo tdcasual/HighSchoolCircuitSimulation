@@ -1,4 +1,5 @@
 import { normalizeCanvasPoint, toCanvasInt } from '../../utils/CanvasCoords.js';
+import { isIntentionalDestructiveTap } from './PointerSessionManager.js';
 
 function isOrthogonalWire(wire) {
     if (!wire || !wire.a || !wire.b) return false;
@@ -6,6 +7,48 @@ function isOrthogonalWire(wire) {
     const b = normalizeCanvasPoint(wire.b);
     if (!a || !b) return false;
     return a.x === b.x || a.y === b.y;
+}
+
+function toPointerSample(event = {}, fallback = null) {
+    if (!event && fallback) return fallback;
+    return {
+        pointerType: event?.pointerType || fallback?.pointerType || 'mouse',
+        clientX: Number.isFinite(event?.clientX) ? event.clientX : (fallback?.clientX ?? 0),
+        clientY: Number.isFinite(event?.clientY) ? event.clientY : (fallback?.clientY ?? 0),
+        timeStamp: Number.isFinite(event?.timeStamp) ? event.timeStamp : (fallback?.timeStamp ?? null)
+    };
+}
+
+function attachMenuAction(context, menuItem, item) {
+    let pointerDownSample = null;
+    let pointerUpSample = null;
+
+    menuItem.addEventListener('pointerdown', (event) => {
+        pointerDownSample = toPointerSample(event);
+    });
+
+    menuItem.addEventListener('pointerup', (event) => {
+        pointerUpSample = toPointerSample(event, pointerDownSample);
+    });
+
+    menuItem.addEventListener('click', (event) => {
+        if (item.requireIntentGuard) {
+            const endSample = toPointerSample(event, pointerUpSample || pointerDownSample);
+            const startSample = pointerDownSample || pointerUpSample || endSample;
+            const isIntentional = isIntentionalDestructiveTap(startSample, endSample, item.intentOptions);
+            pointerDownSample = null;
+            pointerUpSample = null;
+            if (!isIntentional) {
+                event.preventDefault?.();
+                event.stopPropagation?.();
+                context.updateStatus?.('检测到可能误触，请稍长按后再执行该操作');
+                return;
+            }
+        }
+
+        item.action();
+        context.hideContextMenu();
+    });
 }
 
 export function showContextMenu(e, componentId) {
@@ -19,11 +62,11 @@ export function showContextMenu(e, componentId) {
 
     const comp = this.circuit.getComponent(componentId);
     const menuItems = [
-        { label: '关闭菜单', action: () => this.hideContextMenu() },
+        { label: '关闭菜单', action: () => this.hideContextMenu(), requireIntentGuard: true },
         { label: '编辑属性', action: () => this.showPropertyDialog(componentId) },
         { label: '旋转 (R)', action: () => this.rotateComponent(componentId) },
         { label: '复制', action: () => this.duplicateComponent(componentId) },
-        { label: '删除 (Del)', action: () => this.deleteComponent(componentId), className: 'danger' }
+        { label: '删除 (Del)', action: () => this.deleteComponent(componentId), className: 'danger', requireIntentGuard: true }
     ];
 
     // 仪表：自主读数（右侧指针表盘）
@@ -61,10 +104,7 @@ export function showContextMenu(e, componentId) {
         const menuItem = document.createElement('div');
         menuItem.className = 'context-menu-item' + (item.className ? ' ' + item.className : '');
         menuItem.textContent = item.label;
-        menuItem.addEventListener('click', () => {
-            item.action();
-            this.hideContextMenu();
-        });
+        attachMenuAction(this, menuItem, item);
         menu.appendChild(menuItem);
     });
 
@@ -121,9 +161,13 @@ export function showWireContextMenu(e, wireId) {
         });
     };
 
-    const menuItems = [{ label: '关闭菜单', action: () => this.hideContextMenu() }];
+    const menuItems = [{ label: '关闭菜单', action: () => this.hideContextMenu(), requireIntentGuard: true }];
     if (isOrthogonalWire(wire)) {
-        menuItems.push({ label: '在此处分割', action: () => this.splitWireAtPoint(wireId, canvas.x, canvas.y) });
+        menuItems.push({
+            label: '在此处分割',
+            action: () => this.splitWireAtPoint(wireId, canvas.x, canvas.y),
+            requireIntentGuard: true
+        });
     }
     if (wire) {
         menuItems.push(
@@ -134,17 +178,14 @@ export function showWireContextMenu(e, wireId) {
     menuItems.push(
         { label: '拉直为水平', action: () => straightenWire('horizontal') },
         { label: '拉直为垂直', action: () => straightenWire('vertical') },
-        { label: '删除导线 (Del)', action: () => this.deleteWire(wireId), className: 'danger' }
+        { label: '删除导线 (Del)', action: () => this.deleteWire(wireId), className: 'danger', requireIntentGuard: true }
     );
 
     menuItems.forEach((item) => {
         const menuItem = document.createElement('div');
         menuItem.className = 'context-menu-item' + (item.className ? ' ' + item.className : '');
         menuItem.textContent = item.label;
-        menuItem.addEventListener('click', () => {
-            item.action();
-            this.hideContextMenu();
-        });
+        attachMenuAction(this, menuItem, item);
         menu.appendChild(menuItem);
     });
 
@@ -175,10 +216,10 @@ export function showProbeContextMenu(e, probeId, wireId) {
     menu.style.top = e.clientY + 'px';
 
     const menuItems = [
-        { label: '关闭菜单', action: () => this.hideContextMenu() },
+        { label: '关闭菜单', action: () => this.hideContextMenu(), requireIntentGuard: true },
         { label: '重命名探针', action: () => this.renameObservationProbe(probeId) },
         { label: '加入观察图像', action: () => this.addProbePlot(probeId) },
-        { label: '删除探针', action: () => this.deleteObservationProbe(probeId), className: 'danger' }
+        { label: '删除探针', action: () => this.deleteObservationProbe(probeId), className: 'danger', requireIntentGuard: true }
     ];
     if (wireId && wireId !== this.selectedWire) {
         menuItems.unshift({ label: '选中所属导线', action: () => this.selectWire(wireId) });
@@ -188,10 +229,7 @@ export function showProbeContextMenu(e, probeId, wireId) {
         const menuItem = document.createElement('div');
         menuItem.className = 'context-menu-item' + (item.className ? ` ${item.className}` : '');
         menuItem.textContent = item.label;
-        menuItem.addEventListener('click', () => {
-            item.action();
-            this.hideContextMenu();
-        });
+        attachMenuAction(this, menuItem, item);
         menu.appendChild(menuItem);
     });
 
