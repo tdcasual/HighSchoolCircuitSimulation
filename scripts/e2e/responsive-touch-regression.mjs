@@ -346,6 +346,7 @@ async function collectMobileTaskBaselines(page, collector) {
             tapCount: result.tapCount,
             durationMs: result.durationMs,
             success: !!result.ok,
+            destructiveCancel: !!result.destructiveCancel,
             note: result.ok ? '' : (result.error || 'unknown_error')
         });
         assertCondition(result.ok, `mobile task baseline failed for ${taskId}: ${result.error || 'unknown_error'}`);
@@ -895,6 +896,13 @@ async function main() {
 
         const metricsReport = metricsCollector.toJSON();
         const metricsSummary = summarizeMobileFlowMetrics(metricsReport);
+        assertCondition(
+            metricsSummary
+                && typeof metricsSummary === 'object'
+                && metricsSummary.synthetic
+                && metricsSummary.behavior,
+            'mobile flow summary must include synthetic and behavior KPI tiers'
+        );
         const baselinePath = path.join(outputDir, 'mobile-flow-baseline.json');
         await writeFile(
             baselinePath,

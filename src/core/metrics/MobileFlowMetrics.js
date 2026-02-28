@@ -1,3 +1,5 @@
+import { summarizeInteractionTelemetry } from './InteractionTelemetry.js';
+
 export const MobileFlowTaskIds = Object.freeze({
     SeriesBuild: 'series-build',
     ParallelBuild: 'parallel-build',
@@ -16,6 +18,7 @@ function normalizeTaskResult(taskId, result = {}) {
         tapCount: Math.max(0, Math.round(Number(result.tapCount) || 0)),
         durationMs: Math.max(0, Math.round(Number(result.durationMs) || 0)),
         success: !!result.success,
+        destructiveCancel: !!result.destructiveCancel,
         note: typeof result.note === 'string' ? result.note : ''
     };
 }
@@ -44,12 +47,19 @@ export function createMobileFlowMetricsCollector() {
 
 export function summarizeMobileFlowMetrics(report = {}) {
     const tasks = Array.isArray(report.tasks) ? report.tasks : [];
+    const emptySynthetic = {
+        averageTapCount: 0,
+        successRate: 0,
+        maxTapCount: 0,
+        totalDurationMs: 0
+    };
+
     if (tasks.length === 0) {
+        const behavior = summarizeInteractionTelemetry(tasks);
         return {
-            averageTapCount: 0,
-            successRate: 0,
-            maxTapCount: 0,
-            totalDurationMs: 0
+            synthetic: emptySynthetic,
+            behavior,
+            ...emptySynthetic
         };
     }
 
@@ -57,11 +67,16 @@ export function summarizeMobileFlowMetrics(report = {}) {
     const successCount = tasks.reduce((sum, task) => sum + (task.success ? 1 : 0), 0);
     const maxTapCount = tasks.reduce((max, task) => Math.max(max, Number(task.tapCount) || 0), 0);
     const totalDurationMs = tasks.reduce((sum, task) => sum + (Number(task.durationMs) || 0), 0);
-
-    return {
+    const synthetic = {
         averageTapCount: tasks.length > 0 ? totalTapCount / tasks.length : 0,
         successRate: tasks.length > 0 ? successCount / tasks.length : 0,
         maxTapCount,
         totalDurationMs
+    };
+    const behavior = summarizeInteractionTelemetry(tasks);
+    return {
+        synthetic,
+        behavior,
+        ...synthetic
     };
 }
