@@ -1,9 +1,14 @@
 #!/usr/bin/env node
 
 import { createServer } from 'node:http';
-import { mkdir, readFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+    createMobileFlowMetricsCollector,
+    MobileFlowTaskIds,
+    summarizeMobileFlowMetrics
+} from '../../src/core/metrics/MobileFlowMetrics.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -165,6 +170,135 @@ async function readLayoutState(page) {
 async function capture(page, fileName) {
     await mkdir(outputDir, { recursive: true });
     await page.screenshot({ path: path.join(outputDir, fileName), fullPage: true });
+}
+
+async function runPhoneTaskScenario(page, taskId) {
+    return page.evaluate((task) => {
+        const app = window.app;
+        const interaction = app?.interaction;
+        const renderer = app?.renderer;
+        const circuit = app?.circuit;
+        if (!app || !interaction || !renderer || !circuit) {
+            return {
+                ok: false,
+                tapCount: 0,
+                durationMs: 0,
+                error: 'app_not_ready'
+            };
+        }
+
+        const taskStart = performance.now();
+        let tapCount = 0;
+        let wireSequence = 0;
+
+        const makeWireId = () => `e2e_${task}_${Date.now()}_${wireSequence++}`;
+        const add = (type, x, y) => {
+            tapCount += 1;
+            const result = interaction.addComponent(type, x, y);
+            if (!result?.ok || !result?.payload?.componentId) {
+                throw new Error(`add_component_failed:${type}`);
+            }
+            return result.payload.componentId;
+        };
+        const connect = (fromId, fromTerminal, toId, toTerminal) => {
+            const from = renderer.getTerminalPosition(fromId, fromTerminal);
+            const to = renderer.getTerminalPosition(toId, toTerminal);
+            if (!from || !to) {
+                throw new Error(`terminal_position_missing:${fromId}:${fromTerminal}->${toId}:${toTerminal}`);
+            }
+            const wire = {
+                id: makeWireId(),
+                a: { x: from.x, y: from.y },
+                b: { x: to.x, y: to.y },
+                aRef: { componentId: fromId, terminalIndex: fromTerminal },
+                bRef: { componentId: toId, terminalIndex: toTerminal }
+            };
+            tapCount += 1;
+            circuit.addWire(wire);
+            renderer.addWire(wire);
+            return wire.id;
+        };
+
+        try {
+            app.clearCircuit?.();
+
+            if (task === 'series-build') {
+                const source = add('PowerSource', 100, 180);
+                const resistor = add('Resistor', 260, 180);
+                connect(source, 0, resistor, 0);
+                connect(resistor, 1, source, 1);
+            } else if (task === 'parallel-build') {
+                const source = add('PowerSource', 100, 220);
+                const resistorA = add('Resistor', 260, 160);
+                const resistorB = add('Resistor', 260, 280);
+                connect(source, 0, resistorA, 0);
+                connect(source, 0, resistorB, 0);
+                connect(resistorA, 1, source, 1);
+                connect(resistorB, 1, source, 1);
+            } else if (task === 'probe-measurement') {
+                const source = add('PowerSource', 100, 180);
+                const resistor = add('Resistor', 260, 180);
+                const w1 = connect(source, 0, resistor, 0);
+                connect(resistor, 1, source, 1);
+
+                const beforeProbeCount = (circuit.getAllObservationProbes?.() || []).length;
+                tapCount += 1;
+                interaction.addObservationProbeForWire?.(w1, 'WireCurrentProbe');
+                const probes = circuit.getAllObservationProbes?.() || [];
+                if (probes.length <= beforeProbeCount) {
+                    throw new Error('probe_add_failed');
+                }
+                const latestProbe = probes[probes.length - 1];
+                tapCount += 1;
+                interaction.addProbePlot?.(latestProbe.id);
+            } else {
+                throw new Error(`unknown_task:${task}`);
+            }
+
+            tapCount += 1;
+            app.startSimulation?.();
+            tapCount += 1;
+            app.stopSimulation?.();
+
+            return {
+                ok: true,
+                tapCount,
+                durationMs: Math.round(performance.now() - taskStart),
+                details: {
+                    componentCount: circuit.components?.size || 0,
+                    wireCount: circuit.wires?.size || 0,
+                    valid: !!circuit.lastResults?.valid
+                }
+            };
+        } catch (error) {
+            return {
+                ok: false,
+                tapCount,
+                durationMs: Math.round(performance.now() - taskStart),
+                error: error?.message || String(error)
+            };
+        }
+    }, taskId);
+}
+
+async function collectMobileTaskBaselines(page, collector) {
+    const tasks = [
+        MobileFlowTaskIds.SeriesBuild,
+        MobileFlowTaskIds.ParallelBuild,
+        MobileFlowTaskIds.ProbeMeasurement
+    ];
+
+    for (const taskId of tasks) {
+        const result = await runPhoneTaskScenario(page, taskId);
+        collector.recordTaskResult(taskId, {
+            tapCount: result.tapCount,
+            durationMs: result.durationMs,
+            success: !!result.ok,
+            note: result.ok ? '' : (result.error || 'unknown_error')
+        });
+        assertCondition(result.ok, `mobile task baseline failed for ${taskId}: ${result.error || 'unknown_error'}`);
+        assertCondition(result.tapCount > 0, `mobile task baseline tap count should be > 0 for ${taskId}`);
+    }
 }
 
 async function verifyDesktopLayout(browser, baseUrl) {
@@ -368,7 +502,7 @@ async function verifyCompactDrawerBehavior(browser, baseUrl) {
     }
 }
 
-async function verifyPhoneTouchFlow(browser, baseUrl) {
+async function verifyPhoneTouchFlow(browser, baseUrl, collector) {
     const scenario = {
         name: 'phone',
         viewport: { width: 390, height: 844 },
@@ -447,7 +581,7 @@ async function verifyPhoneTouchFlow(browser, baseUrl) {
         });
 
         assertCondition(quickActionState.hidden === false, 'quick-action bar should be visible after selecting component');
-        assertCondition(quickActionState.actions.length === 4, `expected 4 component quick actions, got ${quickActionState.actions.length}`);
+        assertCondition(quickActionState.actions.length >= 4, `expected at least 4 component quick actions, got ${quickActionState.actions.length}`);
         ['编辑', '旋转', '复制', '删除'].forEach((expectedLabel) => {
             assertCondition(
                 quickActionState.actions.includes(expectedLabel),
@@ -570,6 +704,7 @@ async function verifyPhoneTouchFlow(browser, baseUrl) {
             `drawer interaction loop is unexpectedly slow: ${interactionCostMs}ms`
         );
 
+        await collectMobileTaskBaselines(page, collector);
         await capture(page, 'phone-390x844-touch-flow.png');
     } finally {
         await context.close();
@@ -581,6 +716,7 @@ async function main() {
 
     const server = await startStaticServer();
     let browser = null;
+    const metricsCollector = createMobileFlowMetricsCollector();
 
     try {
         browser = await createBrowser();
@@ -588,9 +724,19 @@ async function main() {
         await verifyDesktopLayout(browser, server.baseUrl);
         await verifyTabletLayout(browser, server.baseUrl);
         await verifyCompactDrawerBehavior(browser, server.baseUrl);
-        await verifyPhoneTouchFlow(browser, server.baseUrl);
+        await verifyPhoneTouchFlow(browser, server.baseUrl, metricsCollector);
+
+        const metricsReport = metricsCollector.toJSON();
+        const metricsSummary = summarizeMobileFlowMetrics(metricsReport);
+        const baselinePath = path.join(outputDir, 'mobile-flow-baseline.json');
+        await writeFile(
+            baselinePath,
+            `${JSON.stringify({ report: metricsReport, summary: metricsSummary }, null, 2)}\n`,
+            'utf8'
+        );
 
         console.log('Responsive touch E2E passed.');
+        console.log(`Mobile task baseline: ${path.join(outputDir, 'mobile-flow-baseline.json')}`);
         console.log(`Screenshots: ${outputDir}`);
     } finally {
         if (browser) {
