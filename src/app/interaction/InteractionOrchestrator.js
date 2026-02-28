@@ -273,6 +273,7 @@ export function onMouseMove(e) {
         const affected = Array.isArray(drag.affected) && drag.affected.length > 0
             ? drag.affected
             : [{ wireId: drag.wireId, end: drag.end }];
+        const pointerType = this.resolvePointerType(e);
 
         const excludeWireEndpoints = new Set(affected.map((a) => `${a.wireId}:${a.end}`));
         const excludeWireIds = new Set(affected.map((a) => a.wireId));
@@ -280,7 +281,8 @@ export function onMouseMove(e) {
             excludeWireEndpoints,
             allowWireSegmentSnap: true,
             excludeWireIds,
-            pointerType: this.resolvePointerType(e)
+            pointerType,
+            snapIntent: 'wire-endpoint-drag'
         });
         drag.lastSnap = snapped.snap || null;
         drag.lastPoint = { x: snapped.x, y: snapped.y };
@@ -305,6 +307,9 @@ export function onMouseMove(e) {
         const wireSegmentSnap = snapped.snap && snapped.snap.type === 'wire-segment'
             ? { x: snapped.x, y: snapped.y }
             : null;
+        const touchHighlightOptions = pointerType === 'touch'
+            ? { pointerType, snapIntent: 'wire-endpoint-drag' }
+            : null;
 
         const changedWireIds = new Set();
         for (const a of affected) {
@@ -323,9 +328,17 @@ export function onMouseMove(e) {
         }
 
         if (terminalSnap) {
-            this.renderer.highlightTerminal(terminalSnap.componentId, terminalSnap.terminalIndex);
+            if (touchHighlightOptions) {
+                this.renderer.highlightTerminal(terminalSnap.componentId, terminalSnap.terminalIndex, touchHighlightOptions);
+            } else {
+                this.renderer.highlightTerminal(terminalSnap.componentId, terminalSnap.terminalIndex);
+            }
         } else if (wireSegmentSnap && typeof this.renderer.highlightWireNode === 'function') {
-            this.renderer.highlightWireNode(wireSegmentSnap.x, wireSegmentSnap.y);
+            if (touchHighlightOptions) {
+                this.renderer.highlightWireNode(wireSegmentSnap.x, wireSegmentSnap.y, touchHighlightOptions);
+            } else {
+                this.renderer.highlightWireNode(wireSegmentSnap.x, wireSegmentSnap.y);
+            }
         } else {
             this.renderer.clearTerminalHighlight();
         }

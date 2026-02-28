@@ -1493,9 +1493,21 @@ body.layout-mode-phone .panel-close-btn {
     animation: terminal-pulse 0.8s ease-in-out infinite;
 }
 
+.terminal-highlight.touch-snap-highlight,
+.wire-node-highlight.touch-snap-highlight {
+    stroke-width: 2.5;
+    filter: drop-shadow(0 0 6px rgba(33, 150, 243, 0.42));
+    animation: touch-snap-pulse 0.7s ease-in-out infinite;
+}
+
 @keyframes terminal-pulse {
     0%, 100% { r: 12; opacity: 0.8; }
     50% { r: 15; opacity: 1; }
+}
+
+@keyframes touch-snap-pulse {
+    0%, 100% { opacity: 0.78; }
+    50% { opacity: 1; }
 }
 
 .wire-temp {

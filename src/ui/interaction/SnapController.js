@@ -4,8 +4,10 @@ import { getComponentTerminalCount, TERMINAL_HIT_RADIUS_PX } from '../../compone
 export function getAdaptiveSnapThreshold(options = {}) {
     const baseThreshold = Number.isFinite(options.threshold) ? options.threshold : 15;
     const pointerType = options.pointerType || this.lastPrimaryPointerType || 'mouse';
+    const snapIntent = options.snapIntent || '';
+    const minTouchThreshold = snapIntent === 'wire-endpoint-drag' ? 32 : 24;
     const screenThreshold = pointerType === 'touch'
-        ? Math.max(baseThreshold, 24)
+        ? Math.max(baseThreshold, minTouchThreshold)
         : pointerType === 'pen'
             ? Math.max(baseThreshold, 18)
             : baseThreshold;

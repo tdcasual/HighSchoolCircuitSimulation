@@ -20,6 +20,17 @@ describe('SnapController', () => {
         expect(SnapController.getAdaptiveSnapThreshold.call(invalidScale, { pointerType: 'mouse', threshold: 15 })).toBe(15);
     });
 
+    it('boosts threshold for touch wire-endpoint drag intent', () => {
+        const context = { lastPrimaryPointerType: 'mouse', scale: 1 };
+        expect(
+            SnapController.getAdaptiveSnapThreshold.call(context, {
+                pointerType: 'touch',
+                snapIntent: 'wire-endpoint-drag',
+                threshold: 15
+            })
+        ).toBe(32);
+    });
+
     it('finds nearby terminal from renderer terminal positions', () => {
         const context = {
             circuit: {
@@ -124,5 +135,27 @@ describe('SnapController', () => {
             undefined,
             excludeWireIds
         );
+    });
+
+    it('uses boosted threshold for touch endpoint drag snapping', () => {
+        let capturedThreshold = 0;
+        const context = {
+            getAdaptiveSnapThreshold: SnapController.getAdaptiveSnapThreshold,
+            findNearbyTerminal: vi.fn(() => null),
+            findNearbyWireSegment: vi.fn(() => null),
+            findNearbyWireEndpoint: vi.fn((_x, _y, threshold) => {
+                capturedThreshold = threshold;
+                return threshold >= 32 ? { wireId: 'W1', end: 'a', x: 64, y: 48 } : null;
+            }),
+            lastPrimaryPointerType: 'mouse'
+        };
+
+        const out = SnapController.snapPoint.call(context, 60, 50, {
+            pointerType: 'touch',
+            snapIntent: 'wire-endpoint-drag'
+        });
+
+        expect(capturedThreshold).toBeGreaterThanOrEqual(32);
+        expect(out.snap).toEqual({ type: 'wire-endpoint', wireId: 'W1', end: 'a' });
     });
 });

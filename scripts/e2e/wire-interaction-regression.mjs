@@ -188,7 +188,8 @@ async function runWireInteractionRegression(browser, baseUrl) {
                 zoomEndpointMatrix: [],
                 defaultTerminalAction: null,
                 segmentHighlight: null,
-                endpointAutoSplit: null
+                endpointAutoSplit: null,
+                touchEndpointSnapAssist: null
             };
 
             const scales = [0.5, 1, 2, 4];
@@ -324,6 +325,37 @@ async function runWireInteractionRegression(browser, baseUrl) {
                 pass: hasPreviewHighlight && hasDragHighlight
             };
 
+            // WIR-009: touch endpoint drag should recover near-miss segment snaps and show touch affordance.
+            resetScene();
+            app.circuit.addWire({ id: 'WT_DRAG', a: { x: 60, y: 160 }, b: { x: 120, y: 160 } });
+            app.circuit.addWire({ id: 'WT_TARGET', a: { x: 180, y: 120 }, b: { x: 280, y: 120 } });
+            app.renderer.renderWires();
+            interaction.startWireEndpointDrag('WT_DRAG', 'b', {
+                shiftKey: false,
+                ...toClient(120, 160),
+                preventDefault: () => {},
+                stopPropagation: () => {}
+            });
+            interaction.onMouseMove({ ...toClient(220, 148), target: svg, pointerType: 'touch' });
+            const touchLastSnapType = interaction.wireEndpointDrag?.lastSnap?.type || null;
+            const touchLastSnapWireId = interaction.wireEndpointDrag?.lastSnap?.wireId || null;
+            const touchLastPointY = interaction.wireEndpointDrag?.lastPoint?.y ?? null;
+            const hasTouchSnapHighlight = Boolean(
+                document.querySelector('.wire-node-highlight.touch-snap-highlight[data-pointer-type="touch"]')
+            );
+            interaction.onMouseUp({ target: svg });
+
+            result.touchEndpointSnapAssist = {
+                lastSnapType: touchLastSnapType,
+                lastSnapWireId: touchLastSnapWireId,
+                lastPointY: touchLastPointY,
+                hasTouchSnapHighlight,
+                pass: touchLastSnapType === 'wire-segment'
+                    && touchLastSnapWireId === 'WT_TARGET'
+                    && pointMatches({ x: 220, y: touchLastPointY }, 220, 120)
+                    && hasTouchSnapHighlight
+            };
+
             // WIR-006 + WIR-002: endpoint drag onto diagonal segment should snap and auto-split target wire.
             resetScene();
             app.circuit.addWire({ id: 'W1', a: { x: 40, y: 300 }, b: { x: 120, y: 300 } });
@@ -357,6 +389,7 @@ async function runWireInteractionRegression(browser, baseUrl) {
                 && result.zoomEndpointMatrix.every((row) => row.pass)
                 && result.defaultTerminalAction?.pass
                 && result.segmentHighlight?.pass
+                && result.touchEndpointSnapAssist?.pass
                 && result.endpointAutoSplit?.pass;
 
             return { ok: true, allPass, result };

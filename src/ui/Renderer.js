@@ -579,33 +579,43 @@ export class Renderer {
     /**
      * 高亮端点（用于连接预览）
      */
-    highlightTerminal(componentId, terminalIndex) {
+    highlightTerminal(componentId, terminalIndex, options = {}) {
         this.clearTerminalHighlight();
         
         const pos = this.getTerminalPosition(componentId, terminalIndex);
         if (!pos) return;
+        const pointerType = options?.pointerType || 'mouse';
+        const isTouch = pointerType === 'touch';
         
         const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
         circle.setAttribute('cx', pos.x);
         circle.setAttribute('cy', pos.y);
-        circle.setAttribute('r', 12);
-        circle.setAttribute('class', 'terminal-highlight');
+        circle.setAttribute('r', isTouch ? 16 : 12);
+        circle.setAttribute('class', isTouch ? 'terminal-highlight touch-snap-highlight' : 'terminal-highlight');
         circle.setAttribute('id', 'terminal-highlight');
+        if (isTouch) {
+            circle.setAttribute('data-pointer-type', 'touch');
+        }
         this.uiLayer.appendChild(circle);
     }
 
     /**
      * 高亮导线节点（用于连接预览）
      */
-    highlightWireNode(x, y) {
+    highlightWireNode(x, y, options = {}) {
         this.clearTerminalHighlight();
+        const pointerType = options?.pointerType || 'mouse';
+        const isTouch = pointerType === 'touch';
         
         const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
         circle.setAttribute('cx', x);
         circle.setAttribute('cy', y);
-        circle.setAttribute('r', 10);
-        circle.setAttribute('class', 'wire-node-highlight');
+        circle.setAttribute('r', isTouch ? 14 : 10);
+        circle.setAttribute('class', isTouch ? 'wire-node-highlight touch-snap-highlight' : 'wire-node-highlight');
         circle.setAttribute('id', 'terminal-highlight');
+        if (isTouch) {
+            circle.setAttribute('data-pointer-type', 'touch');
+        }
         this.uiLayer.appendChild(circle);
     }
 
