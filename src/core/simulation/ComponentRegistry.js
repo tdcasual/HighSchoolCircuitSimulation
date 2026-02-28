@@ -211,6 +211,28 @@ DefaultComponentRegistry.register('Diode', {
 
 DefaultComponentRegistry.register('LED', DefaultComponentRegistry.get('Diode'));
 
+DefaultComponentRegistry.register('Motor', {
+    stamp: (comp, context, nodes) => {
+        if (typeof context.stampResistor === 'function') {
+            context.stampResistor(nodes.i1, nodes.i2, comp.resistance);
+        }
+        if (typeof context.stampVoltageSource === 'function') {
+            const backEmf = Number.isFinite(comp.backEmf) ? comp.backEmf : 0;
+            context.stampVoltageSource(nodes.i1, nodes.i2, -backEmf, comp.vsIndex, nodes.nodeCount);
+        }
+    },
+    current: (comp, context, nodes) => {
+        const vector = Array.isArray(context.solveVector) ? context.solveVector : [];
+        const nodeCount = Number.isFinite(context.nodeCount)
+            ? context.nodeCount
+            : (Number.isFinite(nodes.nodeCount) ? nodes.nodeCount : 0);
+        if (!Number.isInteger(comp.vsIndex)) {
+            return 0;
+        }
+        return -(vector[nodeCount - 1 + comp.vsIndex] || 0);
+    }
+});
+
 DefaultComponentRegistry.register('Relay', {
     stamp: (comp, context, nodes) => {
         const nCoilA = comp.nodes?.[0];

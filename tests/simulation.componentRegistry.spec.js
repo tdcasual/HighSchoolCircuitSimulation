@@ -236,6 +236,51 @@ describe('ComponentRegistry', () => {
         expect(handler.current(comp, context, nodes)).toBeCloseTo(expectedCurrent, 12);
     });
 
+    it('covers day11 motor target type with stamp/current handlers', () => {
+        const handler = DefaultComponentRegistry.get('Motor');
+        expect(ComponentDefaults.Motor).toBeTruthy();
+        expect(handler, 'Motor should be registered').toBeTruthy();
+        expect(typeof handler.stamp, 'Motor should provide stamp()').toBe('function');
+        expect(typeof handler.current, 'Motor should provide current()').toBe('function');
+    });
+
+    it('uses motor registry stamp/current behaviors equivalent to solver and postprocessor logic', () => {
+        const calls = [];
+        const handler = DefaultComponentRegistry.get('Motor');
+        const comp = {
+            type: 'Motor',
+            resistance: 5,
+            backEmf: 2.5,
+            vsIndex: 1
+        };
+        const nodes = { i1: 0, i2: 1, nodeCount: 4, n1: 1, n2: 2 };
+        const context = {
+            stampResistor: (i1, i2, r) => calls.push({ kind: 'R', i1, i2, r }),
+            stampVoltageSource: (i1, i2, voltage, vsIndex, nodeCount) => calls.push({
+                kind: 'V',
+                i1,
+                i2,
+                voltage,
+                vsIndex,
+                nodeCount
+            }),
+            solveVector: [0, 0, 0, 0, 0.3]
+        };
+
+        handler.stamp(comp, context, nodes);
+        expect(calls[0]).toEqual({ kind: 'R', i1: 0, i2: 1, r: 5 });
+        expect(calls[1]).toEqual({
+            kind: 'V',
+            i1: 0,
+            i2: 1,
+            voltage: -2.5,
+            vsIndex: 1,
+            nodeCount: 4
+        });
+
+        expect(handler.current(comp, { ...context, nodeCount: 4 }, nodes)).toBeCloseTo(-0.3, 12);
+    });
+
     it('covers day9 source target types with stamp/current handlers', () => {
         const targetTypes = ['PowerSource', 'ACVoltageSource'];
         for (const type of targetTypes) {
