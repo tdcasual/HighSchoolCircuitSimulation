@@ -14,7 +14,7 @@ describe('component interaction usage guide sync', () => {
         const guidePath = resolve(process.cwd(), 'docs/process/component-interaction-usage-guide.md');
         const content = readFileSync(guidePath, 'utf8');
 
-        expect(content).toContain('Alt + 拖动端子');
+        expect(content).toContain('Ctrl/Cmd + 拖动端子');
         expect(content).toContain('Ctrl/Cmd + 点击导线');
     });
 });

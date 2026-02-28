@@ -332,7 +332,8 @@ describe('InteractionOrchestrator.onMouseDown', () => {
         };
         const event = {
             button: 0,
-            altKey: false,
+            ctrlKey: false,
+            metaKey: false,
             clientX: 100,
             clientY: 80,
             target: {
@@ -350,7 +351,7 @@ describe('InteractionOrchestrator.onMouseDown', () => {
         expect(context.startTerminalExtend).not.toHaveBeenCalled();
     });
 
-    it('uses alt+terminal drag to extend terminal lead', () => {
+    it('uses ctrl/cmd+terminal drag to extend terminal lead', () => {
         const terminalTarget = makeTarget({ classes: ['terminal-hit-area'] });
         terminalTarget.dataset.terminal = '0';
         const componentGroup = { dataset: { id: 'R2' } };
@@ -373,7 +374,8 @@ describe('InteractionOrchestrator.onMouseDown', () => {
         };
         const event = {
             button: 0,
-            altKey: true,
+            ctrlKey: true,
+            metaKey: false,
             clientX: 100,
             clientY: 80,
             target: {

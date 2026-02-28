@@ -179,7 +179,7 @@ export function onMouseDown(e) {
         return;
     }
 
-    // 端子交互：默认用于选中元器件；Alt + 拖动用于延长/缩短引脚。
+    // 端子交互：默认用于选中元器件；Ctrl/Cmd + 拖动用于延长/缩短引脚。
     // 连线动作通过显式导线工具触发，避免选择与起线语义冲突。
     if (terminalTarget) {
         if (componentGroup) {
@@ -189,7 +189,7 @@ export function onMouseDown(e) {
                 if (this.selectedComponent !== componentId) {
                     this.selectComponent(componentId);
                 }
-                if (e.altKey) {
+                if (e.ctrlKey || e.metaKey) {
                     this.startTerminalExtend(componentId, terminalIndex, e);
                     return;
                 }
