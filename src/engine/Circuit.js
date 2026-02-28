@@ -13,6 +13,7 @@ import { ConnectivityCache } from '../core/topology/ConnectivityCache.js';
 import { CircuitSerializer } from '../core/io/CircuitSerializer.js';
 import { CircuitDeserializer } from '../core/io/CircuitDeserializer.js';
 import { SimulationState } from '../core/simulation/SimulationState.js';
+import { buildRuntimeDiagnostics } from '../core/simulation/RuntimeDiagnostics.js';
 import { createRuntimeLogger } from '../utils/Logger.js';
 
 export class Circuit {
@@ -1078,6 +1079,16 @@ export class Circuit {
         }
 
         this.refreshShortCircuitDiagnostics(this.lastResults);
+        const topologyReport = this.lastResults.valid
+            ? null
+            : this.validateSimulationTopology(this.simTime);
+        this.lastResults.runtimeDiagnostics = buildRuntimeDiagnostics({
+            topologyReport,
+            results: this.lastResults,
+            solverShortCircuitDetected: !!this.solver?.shortCircuitDetected,
+            shortedSourceIds: this.shortedSourceIds,
+            shortedWireIds: this.shortedWireIds
+        });
 
         if (this.lastResults.valid) {
             // 更新各元器件的显示值

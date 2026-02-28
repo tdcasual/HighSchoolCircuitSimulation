@@ -26,6 +26,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Run reliability regression gate
+        run: npm run test:reliability
+
       - name: Run quality checks and regressions
         run: npm run check:full
 

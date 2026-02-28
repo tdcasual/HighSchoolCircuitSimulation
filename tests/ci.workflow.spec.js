@@ -12,4 +12,12 @@ describe('CI workflow coverage', () => {
         expect(content).toContain('wire-e2e-screenshots');
         expect(content).toContain('output/e2e/wire-interaction');
     });
+
+    it('runs reliability-focused regression gate in quality job', () => {
+        const workflowPath = resolve(process.cwd(), '.github/workflows/ci.yml');
+        const content = readFileSync(workflowPath, 'utf8');
+
+        expect(content).toContain('Run reliability regression gate');
+        expect(content).toContain('npm run test:reliability');
+    });
 });
