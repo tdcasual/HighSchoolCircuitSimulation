@@ -46,6 +46,47 @@ function parseOptionalNumber(inputValue) {
     return Number.isFinite(v) ? v : null;
 }
 
+const ObservationPresetMeta = Object.freeze({
+    'voltage-time': Object.freeze({ id: 'voltage-time', label: '电压-时间', preferred: 'voltage' }),
+    'current-time': Object.freeze({ id: 'current-time', label: '电流-时间', preferred: 'current' }),
+    'power-time': Object.freeze({ id: 'power-time', label: '功率-时间', preferred: 'power' })
+});
+
+function getObservationPresetMeta(presetId) {
+    return ObservationPresetMeta[presetId] || ObservationPresetMeta['voltage-time'];
+}
+
+function resolvePresetSourceLabel(context = {}) {
+    const sourceLabel = typeof context.sourceLabel === 'string' ? context.sourceLabel.trim() : '';
+    if (sourceLabel) return sourceLabel;
+
+    const sourceId = typeof context.sourceId === 'string' ? context.sourceId.trim() : '';
+    if (!sourceId) return '';
+    if (sourceId === TIME_SOURCE_ID) return '时间';
+    if (sourceId.startsWith(PROBE_SOURCE_PREFIX)) {
+        return sourceId.slice(PROBE_SOURCE_PREFIX.length);
+    }
+    return sourceId;
+}
+
+export function buildObservationPresetHint(presetId, context = {}) {
+    const meta = getObservationPresetMeta(presetId);
+    const sourceLabel = resolvePresetSourceLabel(context);
+    if (!sourceLabel) {
+        return `快速添加${meta.label}图`;
+    }
+    return `快速添加${meta.label}图（来源：${sourceLabel}）`;
+}
+
+export function buildObservationPresetStatusText(presetId, context = {}) {
+    const meta = getObservationPresetMeta(presetId);
+    const sourceLabel = resolvePresetSourceLabel(context);
+    if (!sourceLabel) {
+        return `已添加${meta.label}图`;
+    }
+    return `已添加${meta.label}图（来源：${sourceLabel}）`;
+}
+
 export function createObservationPreset(context = {}) {
     const sourceId = typeof context.sourceId === 'string' && context.sourceId
         ? context.sourceId
@@ -91,9 +132,11 @@ export class ObservationPanel {
         this.sampleIntervalMs = DEFAULT_SAMPLE_INTERVAL_MS;
         this.ui = normalizeObservationUI();
         this.modeButtons = {};
+        this.presetButtons = {};
         this._renderRaf = 0;
         this._lastSimTime = 0;
         this._lastSampleTime = Number.NEGATIVE_INFINITY;
+        this._runtimeStatusTimer = null;
 
         if (!this.root) return;
 
@@ -188,15 +231,24 @@ export class ObservationPanel {
             { id: 'current-time', label: 'I-t' },
             { id: 'power-time', label: 'P-t' }
         ];
+        this.presetButtons = {};
         presets.forEach((preset) => {
+            const presetHint = buildObservationPresetHint(preset.id);
             const btn = createElement('button', {
                 className: 'control-btn',
                 textContent: preset.label,
-                attrs: { type: 'button', 'data-observation-preset': preset.id }
+                attrs: {
+                    type: 'button',
+                    'data-observation-preset': preset.id,
+                    'aria-label': presetHint,
+                    title: presetHint
+                }
             });
             btn.addEventListener('click', () => this.applyQuickPreset(preset.id));
+            this.presetButtons[preset.id] = btn;
             presetBar.appendChild(btn);
         });
+        this.updatePresetButtonHints();
 
         this.runtimeStatusEl = createElement('p', {
             className: 'hint observation-runtime-status',
@@ -266,6 +318,7 @@ export class ObservationPanel {
         tabBtn.addEventListener('click', () => {
             this.refreshComponentOptions();
             this.refreshDialGauges();
+            this.updatePresetButtonHints();
             this.requestRender({ onlyIfActive: false });
         });
     }
@@ -525,13 +578,45 @@ export class ObservationPanel {
                 this.applyMobileModeForPlotCard?.(plot);
             }
         }
+        this.updatePresetButtonHints?.();
         this.requestRender({ onlyIfActive: true });
+    }
+
+    resolveSourceLabel(sourceId, probeType = '') {
+        const normalizedSourceId = typeof sourceId === 'string' ? sourceId : '';
+        if (normalizedSourceId === TIME_SOURCE_ID) return '时间';
+        if (normalizedSourceId.startsWith(PROBE_SOURCE_PREFIX)) {
+            const probeId = normalizedSourceId.slice(PROBE_SOURCE_PREFIX.length);
+            if (probeType === 'WireCurrentProbe') return `${probeId}（支路电流探针）`;
+            if (probeType === 'NodeVoltageProbe') return `${probeId}（节点电压探针）`;
+            return probeId || normalizedSourceId;
+        }
+        const comp = this.circuit?.components?.get?.(normalizedSourceId);
+        if (!comp) return normalizedSourceId;
+        if (comp.label && String(comp.label).trim()) {
+            const label = String(comp.label).trim();
+            return label === comp.id ? comp.id : `${label} (${comp.id})`;
+        }
+        return comp.id || normalizedSourceId;
+    }
+
+    updatePresetButtonHints() {
+        const context = this.resolveQuickPresetContext?.() || {};
+        for (const [presetId, button] of Object.entries(this.presetButtons || {})) {
+            if (!button || typeof button.setAttribute !== 'function') continue;
+            const hint = buildObservationPresetHint(presetId, context);
+            button.setAttribute('aria-label', hint);
+            button.setAttribute('title', hint);
+        }
     }
 
     resolveQuickPresetContext() {
         const selectedComponentId = this.app?.interaction?.selectedComponent;
         if (selectedComponentId) {
-            return { sourceId: selectedComponentId };
+            return {
+                sourceId: selectedComponentId,
+                sourceLabel: this.resolveSourceLabel(selectedComponentId)
+            };
         }
 
         const selectedWireId = this.app?.interaction?.selectedWire;
@@ -543,23 +628,42 @@ export class ObservationPanel {
             if (matchedProbe?.id) {
                 return {
                     sourceId: `${PROBE_SOURCE_PREFIX}${matchedProbe.id}`,
-                    probeType: matchedProbe.type
+                    probeType: matchedProbe.type,
+                    sourceLabel: this.resolveSourceLabel(`${PROBE_SOURCE_PREFIX}${matchedProbe.id}`, matchedProbe.type)
                 };
             }
         }
 
-        return { sourceId: this.getDefaultComponentId() };
+        const fallbackId = this.getDefaultComponentId();
+        return {
+            sourceId: fallbackId,
+            sourceLabel: this.resolveSourceLabel(fallbackId)
+        };
+    }
+
+    showTransientStatus(message = '', durationMs = 1800) {
+        if (this._runtimeStatusTimer) {
+            clearTimeout(this._runtimeStatusTimer);
+            this._runtimeStatusTimer = null;
+        }
+        this.setRuntimeStatus(message);
+        if (!message) return;
+        this._runtimeStatusTimer = setTimeout(() => {
+            this._runtimeStatusTimer = null;
+            this.setRuntimeStatus('');
+        }, Math.max(400, Number(durationMs) || 1800));
     }
 
     applyQuickPreset(presetId) {
-        const preferred = presetId === 'current-time'
-            ? 'current'
-            : (presetId === 'power-time' ? 'power' : 'voltage');
+        const meta = getObservationPresetMeta(presetId);
+        const context = this.resolveQuickPresetContext();
         const preset = createObservationPreset({
-            ...this.resolveQuickPresetContext(),
-            preferred
+            ...context,
+            preferred: meta.preferred
         });
         this.addPlotForSource(preset.y.sourceId, { quantityId: preset.y.quantityId });
+        this.showTransientStatus(buildObservationPresetStatusText(meta.id, context));
+        this.updatePresetButtonHints();
         this.requestRender({ onlyIfActive: true });
         this.schedulePersist(0);
     }
@@ -1504,23 +1608,47 @@ export class ObservationPanel {
         const x = Math.max(frame.padL, Math.min(frame.padL + frame.innerW, point.x * dpr));
         const y = Math.max(frame.padT, Math.min(frame.padT + frame.innerH, point.y * dpr));
         const frozen = !!plot.chartInteraction?.isFrozen?.();
+        const overlayColor = frozen ? 'rgba(185, 28, 28, 0.92)' : 'rgba(29, 78, 216, 0.9)';
+        const overlayChipColor = frozen ? 'rgba(127, 29, 29, 0.92)' : 'rgba(30, 64, 175, 0.9)';
+        const chipText = frozen ? '已冻结' : '游标';
 
         ctx.save();
-        ctx.strokeStyle = frozen ? 'rgba(220, 38, 38, 0.85)' : 'rgba(37, 99, 235, 0.85)';
-        ctx.lineWidth = 1.5 * dpr;
+        ctx.strokeStyle = overlayColor;
+        ctx.lineWidth = frozen ? 2 * dpr : 1.5 * dpr;
+        ctx.setLineDash(frozen ? [] : [4 * dpr, 3 * dpr]);
         ctx.beginPath();
         ctx.moveTo(x, frame.padT);
         ctx.lineTo(x, frame.padT + frame.innerH);
         ctx.moveTo(frame.padL, y);
         ctx.lineTo(frame.padL + frame.innerW, y);
         ctx.stroke();
+        ctx.setLineDash([]);
 
-        const label = `${frozen ? '冻结' : '游标'} x=${formatNumberCompact((x - frame.padL) / dpr, 2)}, y=${formatNumberCompact((y - frame.padT) / dpr, 2)}`;
+        ctx.fillStyle = overlayColor;
+        ctx.beginPath();
+        ctx.arc(x, y, 3.5 * dpr, 0, Math.PI * 2);
+        ctx.fill();
+
+        const label = `${chipText} x=${formatNumberCompact((x - frame.padL) / dpr, 2)}, y=${formatNumberCompact((y - frame.padT) / dpr, 2)}`;
         ctx.font = `${11 * dpr}px sans-serif`;
-        ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
-        const textX = Math.min(frame.padL + frame.innerW - 120 * dpr, Math.max(frame.padL + 8 * dpr, x + 8 * dpr));
-        const textY = Math.max(frame.padT + 14 * dpr, y - 8 * dpr);
-        ctx.fillText(label, textX, textY);
+        const textWidth = ctx.measureText(label).width;
+        const chipPaddingX = 8 * dpr;
+        const chipHeight = 18 * dpr;
+        const chipWidth = textWidth + chipPaddingX * 2;
+        const chipX = Math.min(frame.padL + frame.innerW - chipWidth - 6 * dpr, Math.max(frame.padL + 6 * dpr, x + 10 * dpr));
+        const chipY = Math.max(frame.padT + 6 * dpr, y - chipHeight - 8 * dpr);
+
+        ctx.fillStyle = overlayChipColor;
+        if (typeof ctx.roundRect === 'function') {
+            ctx.beginPath();
+            ctx.roundRect(chipX, chipY, chipWidth, chipHeight, 6 * dpr);
+            ctx.fill();
+        } else {
+            ctx.fillRect(chipX, chipY, chipWidth, chipHeight);
+        }
+
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(label, chipX + chipPaddingX, chipY + 12 * dpr);
         ctx.restore();
     }
 }

@@ -1006,6 +1006,14 @@ body.layout-mode-phone .panel-close-btn {
     text-overflow: ellipsis;
 }
 
+.plot-controls {
+    overflow: hidden;
+    max-height: 1400px;
+    opacity: 1;
+    transform: translateY(0);
+    transition: max-height 0.24s ease, opacity 0.2s ease, transform 0.2s ease;
+}
+
 .obs-range-toggle {
     display: flex;
     align-items: center;
@@ -1026,7 +1034,16 @@ body.layout-mode-phone .panel-close-btn {
 }
 
 .observation-plot-card.observation-card-collapsed .plot-controls {
-    display: none;
+    max-height: 0;
+    opacity: 0;
+    transform: translateY(-4px);
+    pointer-events: none;
+}
+
+.observation-plot-card.observation-card-collapsed .plot-collapse-btn {
+    background: rgba(56, 189, 248, 0.16);
+    border-color: rgba(14, 116, 144, 0.35);
+    color: #0f766e;
 }
 
 .obs-range-inputs input {

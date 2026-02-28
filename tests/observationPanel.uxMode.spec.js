@@ -74,6 +74,8 @@ describe('ObservationPanel UX mode toolbar', () => {
         expect(panel).toBeTruthy();
         expect(findByAttr(root, 'data-observation-mode', 'basic')).toBeTruthy();
         expect(findByAttr(root, 'data-observation-mode', 'advanced')).toBeTruthy();
-        expect(findByAttr(root, 'data-observation-preset', 'voltage-time')).toBeTruthy();
+        const presetButton = findByAttr(root, 'data-observation-preset', 'voltage-time');
+        expect(presetButton).toBeTruthy();
+        expect(String(presetButton.attributes?.['aria-label'] || '')).toContain('快速添加电压-时间图');
     });
 });
