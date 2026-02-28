@@ -1493,30 +1493,22 @@ export class ObservationPanel {
 
     findNearestPlotSampleByX(plot, targetX) {
         if (!plot?.buffer || plot.buffer.length <= 0 || !Number.isFinite(targetX)) return null;
-        let best = null;
-        let bestDistance = Infinity;
-        const stride = plot.buffer.length > 4000
-            ? Math.ceil(plot.buffer.length / 4000)
-            : 1;
-
-        if (typeof plot.buffer.forEachSampled === 'function') {
-            plot.buffer.forEachSampled(stride, (x, y) => {
-                const distance = Math.abs(x - targetX);
-                if (distance < bestDistance) {
-                    bestDistance = distance;
-                    best = { x, y };
-                }
-            });
-        } else if (typeof plot.buffer.forEach === 'function') {
-            plot.buffer.forEach((x, y) => {
-                const distance = Math.abs(x - targetX);
-                if (distance < bestDistance) {
-                    bestDistance = distance;
-                    best = { x, y };
-                }
-            });
+        const finder = plot.chartInteraction;
+        if (finder && typeof finder.findNearestSampleByX === 'function') {
+            const found = finder.findNearestSampleByX(plot.buffer, targetX);
+            plot._lastNearestLookupStats = found?.stats || null;
+            return found?.point || null;
         }
 
+        let best = null;
+        let bestDistance = Infinity;
+        plot.buffer.forEach?.((x, y) => {
+            const distance = Math.abs(x - targetX);
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                best = { x, y };
+            }
+        });
         return best;
     }
 
