@@ -68,4 +68,45 @@ describe('Registry fallback behavior', () => {
             DefaultComponentRegistry.get = originalGet;
         }
     });
+
+    it('falls back to DefaultComponentRegistry stamp handler when custom handler lacks stamp()', () => {
+        const solver = new MNASolver();
+        solver.componentRegistry = {
+            get: (type) => (type === 'Resistor' ? { current: () => 0 } : null)
+        };
+
+        const A = [[0]];
+        const z = [0];
+        solver.stampComponent({
+            id: 'R1',
+            type: 'Resistor',
+            nodes: [1, 0],
+            resistance: 10,
+            _isShorted: false
+        }, A, z, 2);
+
+        expect(A[0][0]).toBeCloseTo(0.1, 12);
+    });
+
+    it('falls back to DefaultComponentRegistry current handler when custom handler lacks current()', () => {
+        const postprocessor = new ResultPostprocessor();
+        const customRegistry = {
+            get: (type) => (type === 'Resistor' ? { stamp: () => {} } : null)
+        };
+
+        const current = postprocessor.calculateCurrent({
+            id: 'R1',
+            type: 'Resistor',
+            nodes: [1, 0],
+            resistance: 10,
+            _isShorted: false
+        }, {
+            voltages: [0, 10],
+            x: [],
+            nodeCount: 2,
+            registry: customRegistry
+        });
+
+        expect(current).toBeCloseTo(1, 12);
+    });
 });

@@ -737,8 +737,13 @@ export class MNASolver {
         }
 
         const registry = this.componentRegistry || DefaultComponentRegistry;
-        const handler = registry.get(comp.type)
-            || (registry === DefaultComponentRegistry ? null : DefaultComponentRegistry.get(comp.type));
+        const customHandler = registry.get(comp.type);
+        const defaultHandler = registry === DefaultComponentRegistry
+            ? null
+            : DefaultComponentRegistry.get(comp.type);
+        const handler = (customHandler && typeof customHandler.stamp === 'function')
+            ? customHandler
+            : ((defaultHandler && typeof defaultHandler.stamp === 'function') ? defaultHandler : customHandler);
         if (handler && typeof handler.stamp === 'function') {
             handler.stamp(comp, {
                 stampResistor: (rI1, rI2, rValue) => this.stampResistor(A, rI1, rI2, rValue),
@@ -1023,46 +1028,6 @@ export class MNASolver {
                 const backEmf = comp.backEmf || 0;
                 this.stampVoltageSource(A, z, i1, i2, -backEmf, comp.vsIndex, nodeCount);
                 break;
-                
-            case 'Switch':
-                // 开关模型
-                if (comp.closed) {
-                    // 闭合状态：理想导线（极小电阻）
-                    this.stampResistor(A, i1, i2, 1e-9);
-                } else {
-                    // 断开状态：极大电阻（相当于开路）
-                    this.stampResistor(A, i1, i2, 1e12);
-                }
-                break;
-
-            case 'SPDTSwitch': {
-                const nCommon = comp.nodes?.[0];
-                const nA = comp.nodes?.[1];
-                const nB = comp.nodes?.[2];
-                const iCommon = isValidNode(nCommon) ? nCommon - 1 : null;
-                const iA = isValidNode(nA) ? nA - 1 : null;
-                const iB = isValidNode(nB) ? nB - 1 : null;
-                const routeToB = comp.position === 'b';
-                const onR = Math.max(1e-9, Number(comp.onResistance) || 1e-9);
-                const offR = Math.max(onR, Number(comp.offResistance) || 1e12);
-
-                if (iCommon !== null && iA !== null) {
-                    this.stampResistor(A, iCommon, iA, routeToB ? offR : onR);
-                }
-                if (iCommon !== null && iB !== null) {
-                    this.stampResistor(A, iCommon, iB, routeToB ? onR : offR);
-                }
-                break;
-            }
-
-            case 'Fuse': {
-                const blown = !!comp.blown;
-                const resistance = blown
-                    ? Math.max(1, Number(comp.blownResistance) || 1e12)
-                    : Math.max(1e-9, Number(comp.coldResistance) || 0.05);
-                this.stampResistor(A, i1, i2, resistance);
-                break;
-            }
                 
             case 'Ammeter':
                 // 电流表模型

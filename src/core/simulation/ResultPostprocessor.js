@@ -133,10 +133,13 @@ export class ResultPostprocessor {
         const dV = v1 - v2;
 
         const registryRef = context.registry || DefaultComponentRegistry;
-        const handler = registryRef
-            ? (registryRef.get(comp.type)
-                || (registryRef === DefaultComponentRegistry ? null : DefaultComponentRegistry.get(comp.type)))
-            : null;
+        const customHandler = registryRef ? registryRef.get(comp.type) : null;
+        const defaultHandler = registryRef === DefaultComponentRegistry
+            ? null
+            : DefaultComponentRegistry.get(comp.type);
+        const handler = (customHandler && typeof customHandler.current === 'function')
+            ? customHandler
+            : ((defaultHandler && typeof defaultHandler.current === 'function') ? defaultHandler : customHandler);
         if (handler && typeof handler.current === 'function') {
             return handler.current(comp, {
                 voltage: (nodeIdx) => {
@@ -289,30 +292,6 @@ export class ResultPostprocessor {
                 }
                 const dt = Number.isFinite(context.dt) && context.dt > 0 ? context.dt : 0.001;
                 return prevCurrent + (dt / L) * dV;
-            }
-
-            case 'Switch':
-                if (comp.closed) {
-                    return dV / 1e-9;
-                }
-                return 0;
-
-            case 'SPDTSwitch': {
-                const routeToB = comp.position === 'b';
-                const targetIdx = routeToB ? 2 : 1;
-                const commonNode = comp.nodes?.[0];
-                const targetNode = comp.nodes?.[targetIdx];
-                const vCommon = commonNode !== undefined && commonNode >= 0 ? (voltages[commonNode] || 0) : 0;
-                const vTarget = targetNode !== undefined && targetNode >= 0 ? (voltages[targetNode] || 0) : 0;
-                const onR = Math.max(1e-9, Number(comp.onResistance) || 1e-9);
-                return (vCommon - vTarget) / onR;
-            }
-
-            case 'Fuse': {
-                const resistance = comp.blown
-                    ? Math.max(1, Number(comp.blownResistance) || 1e12)
-                    : Math.max(1e-9, Number(comp.coldResistance) || 0.05);
-                return dV / resistance;
             }
 
             case 'Ammeter':
