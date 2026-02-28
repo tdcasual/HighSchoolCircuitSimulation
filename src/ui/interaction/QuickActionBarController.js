@@ -491,10 +491,18 @@ export class QuickActionBarController {
                 if (wireId) this.straightenWire(wireId, 'vertical');
                 break;
             case 'wire-probe-voltage':
-                if (wireId) this.interaction.addObservationProbeForWire?.(wireId, 'NodeVoltageProbe');
+                if (wireId) this.interaction.addObservationProbeForWire?.(
+                    wireId,
+                    'NodeVoltageProbe',
+                    { autoAddPlot: true }
+                );
                 break;
             case 'wire-probe-current':
-                if (wireId) this.interaction.addObservationProbeForWire?.(wireId, 'WireCurrentProbe');
+                if (wireId) this.interaction.addObservationProbeForWire?.(
+                    wireId,
+                    'WireCurrentProbe',
+                    { autoAddPlot: true }
+                );
                 break;
             case 'wire-delete':
                 if (wireId) this.interaction.deleteWire?.(wireId);

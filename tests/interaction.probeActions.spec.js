@@ -124,4 +124,39 @@ describe('ProbeActions.addObservationProbeForWire', () => {
         expect(context.app.observationPanel.requestRender).toHaveBeenCalledWith({ onlyIfActive: false });
         expect(context.updateStatus).toHaveBeenCalledWith('已添加节点电压探针');
     });
+
+    it('optionally auto-adds probe plot to reduce mobile operation steps', () => {
+        const context = {
+            circuit: {
+                getWire: vi.fn(() => ({ id: 'W1' })),
+                getAllObservationProbes: vi.fn(() => []),
+                ensureUniqueObservationProbeId: vi.fn(() => 'probe_1'),
+                addObservationProbe: vi.fn((probe) => probe),
+                getObservationProbe: vi.fn((probeId) => (probeId === 'probe_1' ? { id: 'probe_1' } : null))
+            },
+            runWithHistory: vi.fn((_, action) => action()),
+            renderer: { renderWires: vi.fn() },
+            activateSidePanelTab: vi.fn(),
+            isObservationTabActive: vi.fn(() => false),
+            app: {
+                observationPanel: {
+                    addPlotForSource: vi.fn(),
+                    refreshComponentOptions: vi.fn(),
+                    requestRender: vi.fn()
+                }
+            },
+            updateStatus: vi.fn()
+        };
+
+        const result = ProbeActions.addObservationProbeForWire.call(
+            context,
+            'W1',
+            'WireCurrentProbe',
+            { autoAddPlot: true }
+        );
+
+        expect(result).toBe('probe_1');
+        expect(context.app.observationPanel.addPlotForSource).toHaveBeenCalledWith('probe_1');
+        expect(context.updateStatus).toHaveBeenCalledWith('已添加支路电流探针并加入观察图像');
+    });
 });

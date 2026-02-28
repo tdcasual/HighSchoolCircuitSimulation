@@ -14,8 +14,8 @@ export function installInteractionTailProbeDelegates(InteractionManagerClass) {
             return ProbeActions.addProbePlot.call(this, probeId);
         },
 
-        addObservationProbeForWire(wireId, probeType) {
-            return ProbeActions.addObservationProbeForWire.call(this, wireId, probeType);
+        addObservationProbeForWire(wireId, probeType, options = {}) {
+            return ProbeActions.addObservationProbeForWire.call(this, wireId, probeType, options);
         }
     });
 }

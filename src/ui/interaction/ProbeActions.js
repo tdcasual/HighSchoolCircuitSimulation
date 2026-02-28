@@ -52,12 +52,14 @@ export function addProbePlot(probeId) {
     return true;
 }
 
-export function addObservationProbeForWire(wireId, probeType) {
+export function addObservationProbeForWire(wireId, probeType, options = {}) {
     const wire = this.circuit.getWire(wireId);
-    if (!wire) return;
+    if (!wire) return null;
 
     const labelPrefix = probeType === 'NodeVoltageProbe' ? '节点电压' : '支路电流';
     const typeLabel = probeType === 'NodeVoltageProbe' ? '节点电压探针' : '支路电流探针';
+    const autoAddPlot = !!options?.autoAddPlot;
+    let createdProbeId = null;
 
     this.runWithHistory(`添加${typeLabel}`, () => {
         const sameTypeCount = this.circuit.getAllObservationProbes()
@@ -74,13 +76,22 @@ export function addObservationProbeForWire(wireId, probeType) {
             this.updateStatus('添加探针失败');
             return;
         }
+        createdProbeId = probe.id;
 
         this.renderer.renderWires();
-        this.app.observationPanel?.refreshComponentOptions();
+        const panel = this.app.observationPanel;
+        panel?.refreshComponentOptions();
         if (typeof this.activateSidePanelTab === 'function' && !this.isObservationTabActive()) {
             this.activateSidePanelTab('observation');
         }
-        this.app.observationPanel?.requestRender?.({ onlyIfActive: false });
-        this.updateStatus(`已添加${typeLabel}`);
+        if (autoAddPlot && typeof panel?.addPlotForSource === 'function') {
+            panel.addPlotForSource(probe.id);
+            this.updateStatus(`已添加${typeLabel}并加入观察图像`);
+        } else {
+            this.updateStatus(`已添加${typeLabel}`);
+        }
+        panel?.requestRender?.({ onlyIfActive: false });
     });
+
+    return createdProbeId;
 }

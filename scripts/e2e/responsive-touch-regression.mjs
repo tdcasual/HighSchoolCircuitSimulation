@@ -133,6 +133,7 @@ async function openScenarioPage(browser, baseUrl, scenario) {
     await context.addInitScript(() => {
         try {
             localStorage.clear();
+            localStorage.setItem('ui.first_run_guide_dismissed', '1');
         } catch (_) {
             // ignore storage bootstrap errors
         }
@@ -291,15 +292,17 @@ async function runPhoneTaskScenario(page, taskId) {
                 connect(resistor, 1, source, 1);
 
                 const beforeProbeCount = (circuit.getAllObservationProbes?.() || []).length;
+                const beforePlotCount = Array.isArray(app.observationPanel?.plots) ? app.observationPanel.plots.length : 0;
                 tapCount += 1;
-                interaction.addObservationProbeForWire?.(w1, 'WireCurrentProbe');
+                interaction.addObservationProbeForWire?.(w1, 'WireCurrentProbe', { autoAddPlot: true });
                 const probes = circuit.getAllObservationProbes?.() || [];
                 if (probes.length <= beforeProbeCount) {
                     throw new Error('probe_add_failed');
                 }
-                const latestProbe = probes[probes.length - 1];
-                tapCount += 1;
-                interaction.addProbePlot?.(latestProbe.id);
+                const afterPlotCount = Array.isArray(app.observationPanel?.plots) ? app.observationPanel.plots.length : 0;
+                if (afterPlotCount <= beforePlotCount) {
+                    throw new Error('probe_plot_auto_add_failed');
+                }
             } else {
                 throw new Error(`unknown_task:${task}`);
             }

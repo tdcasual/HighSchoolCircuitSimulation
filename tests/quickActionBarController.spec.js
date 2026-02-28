@@ -193,6 +193,41 @@ describe('QuickActionBarController', () => {
         expect(interaction.splitWireAtPoint).toHaveBeenCalledWith('wire_1', 20, 40);
     });
 
+    it('adds wire current probe with auto-plot in one quick action tap', () => {
+        setupEnvironment();
+        const interaction = {
+            selectedComponent: null,
+            selectedWire: 'wire_1',
+            app: {
+                responsiveLayout: {
+                    isOverlayMode: () => false
+                }
+            },
+            circuit: {
+                getWire: vi.fn(() => ({
+                    id: 'wire_1',
+                    a: { x: 10, y: 20 },
+                    b: { x: 30, y: 60 }
+                }))
+            },
+            addObservationProbeForWire: vi.fn()
+        };
+        const controller = new QuickActionBarController(interaction);
+
+        controller.update();
+        controller.onActionClick({
+            target: {
+                closest: () => ({ dataset: { action: 'wire-probe-current' } })
+            }
+        });
+
+        expect(interaction.addObservationProbeForWire).toHaveBeenCalledWith(
+            'wire_1',
+            'WireCurrentProbe',
+            { autoAddPlot: true }
+        );
+    });
+
     it('hides quick action bar when overlay drawer is open', () => {
         setupEnvironment();
         const interaction = {
