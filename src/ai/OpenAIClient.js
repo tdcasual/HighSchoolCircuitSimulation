@@ -29,6 +29,8 @@ export class OpenAIClient {
         const defaultConfig = {
             apiEndpoint: 'https://api.openai.com/v1/chat/completions',
             apiKey: '',
+            requestMode: 'direct',
+            proxyEndpoint: '',
             textModel: 'gpt-4o-mini',
             knowledgeSource: 'local',
             knowledgeMcpEndpoint: '',
@@ -59,7 +61,12 @@ export class OpenAIClient {
             if (!Number.isFinite(parsedTimeout) || parsedTimeout <= 0 || parsedTimeout === 20000) {
                 merged.requestTimeout = DEFAULT_REQUEST_TIMEOUT_MS;
             }
-            return { ...merged, apiKey: sessionKey };
+            return {
+                ...merged,
+                requestMode: this.normalizeRequestMode(merged.requestMode),
+                proxyEndpoint: this.normalizeProxyEndpoint(merged.proxyEndpoint),
+                apiKey: sessionKey
+            };
         } catch (e) {
             this.logEvent('warn', 'load_config_failed', {
                 error: e?.message || String(e)
@@ -75,8 +82,17 @@ export class OpenAIClient {
      */
     saveConfig(config) {
         const { apiKey, ...rest } = config;
-        const normalizedEndpoint = this.normalizeEndpoint(rest.apiEndpoint);
-        this.config = { ...this.config, ...rest, apiEndpoint: normalizedEndpoint, apiKey: apiKey ?? this.config.apiKey };
+        const normalizedEndpoint = this.normalizeEndpoint(rest.apiEndpoint ?? this.config.apiEndpoint);
+        const requestMode = this.normalizeRequestMode(rest.requestMode ?? this.config.requestMode);
+        const proxyEndpoint = this.normalizeProxyEndpoint(rest.proxyEndpoint ?? this.config.proxyEndpoint);
+        this.config = {
+            ...this.config,
+            ...rest,
+            apiEndpoint: normalizedEndpoint,
+            requestMode,
+            proxyEndpoint,
+            apiKey: apiKey ?? this.config.apiKey
+        };
 
         const safeSet = (setter) => {
             try { setter(); } catch (_) { /* ignore in non-browser */ }
@@ -84,6 +100,8 @@ export class OpenAIClient {
 
         safeSet(() => localStorage.setItem(this.PUBLIC_CONFIG_KEY, JSON.stringify({
             apiEndpoint: this.config.apiEndpoint,
+            requestMode: this.config.requestMode,
+            proxyEndpoint: this.config.proxyEndpoint,
             textModel: this.config.textModel,
             knowledgeSource: this.config.knowledgeSource,
             knowledgeMcpEndpoint: this.config.knowledgeMcpEndpoint,
@@ -121,7 +139,7 @@ export class OpenAIClient {
      * 测试 API 连接
      */
     async testConnection() {
-        if (!this.config.apiKey) {
+        if (!this.isProxyMode() && !this.config.apiKey) {
             throw new Error('请先设置 API 密钥');
         }
 
@@ -142,7 +160,7 @@ export class OpenAIClient {
      * 物理问题解释
      */
     async explainCircuit(question, circuitState) {
-        if (!this.config.apiKey) {
+        if (!this.isProxyMode() && !this.config.apiKey) {
             throw new Error('请先在设置中配置 API 密钥');
         }
 
@@ -187,21 +205,11 @@ ${circuitState}`;
      * 获取可用模型列表
      */
     async listModels() {
-        if (!this.config.apiKey) {
+        if (!this.isProxyMode() && !this.config.apiKey) {
             throw new Error('请先在设置中配置 API 密钥');
         }
 
-        const apiEndpoint = this.normalizeEndpoint(this.config.apiEndpoint);
-        let base;
-        if (/\/v1\/[^/]+$/.test(apiEndpoint)) {
-            base = apiEndpoint.replace(/\/v1\/[^/]+$/, '/v1/models');
-        } else if (apiEndpoint.endsWith('/v1')) {
-            base = `${apiEndpoint}/models`;
-        } else if (/\/v1\//.test(apiEndpoint)) {
-            base = apiEndpoint.split('/v1/')[0] + '/v1/models';
-        } else {
-            base = apiEndpoint.endsWith('/') ? `${apiEndpoint}v1/models` : `${apiEndpoint}/v1/models`;
-        }
+        const base = this.resolveModelsEndpoint();
 
         const timeoutMs = this.getTimeoutMs();
         const requestStartTime = Date.now();
@@ -217,9 +225,7 @@ ${circuitState}`;
         try {
             const response = await fetch(base, {
                 method: 'GET',
-                headers: {
-                    'Authorization': `Bearer ${this.config.apiKey}`
-                },
+                headers: this.buildRequestHeaders(false),
                 signal: controller.signal
             });
             clearTimeout(timer);
@@ -265,7 +271,7 @@ ${circuitState}`;
      */
     async callAPI(messages, model, maxTokens = null, context = {}) {
         const apiKey = this.config.apiKey;
-        if (!apiKey) {
+        if (!this.isProxyMode() && !apiKey) {
             throw new Error('请先在设置中配置 API 密钥');
         }
 
@@ -310,10 +316,7 @@ ${circuitState}`;
             try {
                 const response = await fetch(apiUrl, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${apiKey}`
-                    },
+                    headers: this.buildRequestHeaders(true),
                     body: JSON.stringify(requestBody),
                     signal: controller.signal
                 });
@@ -520,6 +523,10 @@ ${circuitState}`;
      * 根据模型类型选择合适的端点
      */
     resolveApiEndpoint(useResponsesApi) {
+        if (this.isProxyMode()) {
+            return this.getProxyEndpointOrThrow();
+        }
+
         const endpoint = this.normalizeEndpoint(this.config.apiEndpoint);
         const target = useResponsesApi ? 'responses' : 'chat/completions';
 
@@ -542,6 +549,24 @@ ${circuitState}`;
         // 其余情况按 OpenAI 风格补全
         const normalized = endpoint.endsWith('/') ? endpoint.slice(0, -1) : endpoint;
         return `${normalized}/v1/${target}`;
+    }
+
+    resolveModelsEndpoint() {
+        if (this.isProxyMode()) {
+            return this.getProxyEndpointOrThrow();
+        }
+
+        const apiEndpoint = this.normalizeEndpoint(this.config.apiEndpoint);
+        if (/\/v1\/[^/]+$/.test(apiEndpoint)) {
+            return apiEndpoint.replace(/\/v1\/[^/]+$/, '/v1/models');
+        }
+        if (apiEndpoint.endsWith('/v1')) {
+            return `${apiEndpoint}/models`;
+        }
+        if (/\/v1\//.test(apiEndpoint)) {
+            return apiEndpoint.split('/v1/')[0] + '/v1/models';
+        }
+        return apiEndpoint.endsWith('/') ? `${apiEndpoint}v1/models` : `${apiEndpoint}/v1/models`;
     }
 
     /**
@@ -627,6 +652,51 @@ ${circuitState}`;
         } catch (_) {
             return 'https://api.openai.com/v1/chat/completions';
         }
+    }
+
+    normalizeProxyEndpoint(endpoint) {
+        const raw = String(endpoint || '').trim();
+        if (!raw) return '';
+
+        try {
+            return new URL(raw).toString().replace(/\/+$/, '');
+        } catch (_) {
+            // continue to normalize shorthand host/path
+        }
+
+        const normalized = raw.startsWith('/') ? `https://api.openai.com${raw}` : `https://${raw}`;
+        try {
+            return new URL(normalized).toString().replace(/\/+$/, '');
+        } catch (_) {
+            return '';
+        }
+    }
+
+    normalizeRequestMode(mode) {
+        return String(mode || '').trim().toLowerCase() === 'proxy' ? 'proxy' : 'direct';
+    }
+
+    isProxyMode() {
+        return this.normalizeRequestMode(this.config?.requestMode) === 'proxy';
+    }
+
+    getProxyEndpointOrThrow() {
+        const endpoint = this.normalizeProxyEndpoint(this.config?.proxyEndpoint);
+        if (!endpoint) {
+            throw new Error('请先在设置中配置代理端点');
+        }
+        return endpoint;
+    }
+
+    buildRequestHeaders(includeJson = false) {
+        const headers = {};
+        if (includeJson) {
+            headers['Content-Type'] = 'application/json';
+        }
+        if (!this.isProxyMode() && this.config.apiKey) {
+            headers.Authorization = `Bearer ${this.config.apiKey}`;
+        }
+        return headers;
     }
 
     /**

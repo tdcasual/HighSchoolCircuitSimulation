@@ -89,6 +89,7 @@ function initializeSettingsDialogImpl() {
     const textInput = document.getElementById('text-model');
     const knowledgeSourceSelect = document.getElementById('knowledge-source');
     const knowledgeMcpModeSelect = document.getElementById('knowledge-mcp-mode');
+    const requestModeSelect = document.getElementById('request-mode');
 
     this.bindModelSelector(textSelect, textInput);
     if (knowledgeSourceSelect) {
@@ -106,6 +107,12 @@ function initializeSettingsDialogImpl() {
                 knowledgeMcpModeSelect.value
             );
         });
+    }
+    if (requestModeSelect) {
+        requestModeSelect.addEventListener('change', () => {
+            syncRequestModeVisibility(requestModeSelect.value);
+        });
+        syncRequestModeVisibility(requestModeSelect.value);
     }
 
     cancelBtn.addEventListener('click', () => {
@@ -188,6 +195,8 @@ function openSettingsImpl() {
     const knowledgeMcpMode = document.getElementById('knowledge-mcp-mode');
     const knowledgeMcpMethod = document.getElementById('knowledge-mcp-method');
     const knowledgeMcpResource = document.getElementById('knowledge-mcp-resource');
+    const requestMode = document.getElementById('request-mode');
+    const proxyEndpoint = document.getElementById('proxy-endpoint');
     if (knowledgeSource) {
         knowledgeSource.value = config.knowledgeSource || 'local';
     }
@@ -206,6 +215,13 @@ function openSettingsImpl() {
     if (knowledgeMcpResource) {
         knowledgeMcpResource.value = config.knowledgeMcpResource || 'knowledge://circuit/high-school';
     }
+    if (requestMode) {
+        requestMode.value = config.requestMode || 'direct';
+    }
+    if (proxyEndpoint) {
+        proxyEndpoint.value = config.proxyEndpoint || '';
+    }
+    syncRequestModeVisibility(requestMode?.value || config.requestMode || 'direct');
     this.syncKnowledgeSettingsVisibility(
         knowledgeSource?.value || config.knowledgeSource || 'local',
         knowledgeMcpMode?.value || config.knowledgeMcpMode || 'method'
@@ -224,10 +240,14 @@ function saveSettingsImpl() {
     const knowledgeMcpMode = document.getElementById('knowledge-mcp-mode');
     const knowledgeMcpMethod = document.getElementById('knowledge-mcp-method');
     const knowledgeMcpResource = document.getElementById('knowledge-mcp-resource');
+    const requestMode = document.getElementById('request-mode');
+    const proxyEndpoint = document.getElementById('proxy-endpoint');
     const config = {
         apiEndpoint: document.getElementById('api-endpoint').value.trim(),
         apiKey: document.getElementById('api-key').value.trim(),
         textModel: document.getElementById('text-model').value.trim(),
+        requestMode: requestMode?.value || 'direct',
+        proxyEndpoint: proxyEndpoint?.value?.trim?.() || '',
         knowledgeSource: knowledgeSource?.value || 'local',
         knowledgeMcpEndpoint: knowledgeMcpEndpoint?.value?.trim?.() || '',
         knowledgeMcpServer: knowledgeMcpServer?.value?.trim?.() || 'circuit-knowledge',
@@ -250,6 +270,13 @@ function saveSettingsImpl() {
     });
     this.updateLogSummaryDisplay?.();
     this.app.updateStatus(`AI 设置已保存${keyMsg}，规则库来源：${sourceText}`);
+}
+
+function syncRequestModeVisibility(mode) {
+    const proxyRow = document.getElementById('proxy-endpoint-row');
+    if (!proxyRow) return;
+    const normalized = String(mode || '').trim().toLowerCase() === 'proxy' ? 'proxy' : 'direct';
+    proxyRow.style.display = normalized === 'proxy' ? '' : 'none';
 }
 
 function loadSettingsImpl() {

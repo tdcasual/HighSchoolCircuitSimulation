@@ -474,6 +474,17 @@
                 <input type="password" id="api-key" placeholder="sk-..." />
             </div>
             <div class="form-group">
+                <label>请求模式</label>
+                <select id="request-mode">
+                    <option value="direct">直连 OpenAI 端点（需要 API 密钥）</option>
+                    <option value="proxy">代理转发模式（服务端代管密钥）</option>
+                </select>
+            </div>
+            <div class="form-group" id="proxy-endpoint-row">
+                <label>代理端点</label>
+                <input type="text" id="proxy-endpoint" placeholder="https://your-server/openai" />
+            </div>
+            <div class="form-group">
                 <label>文本模型 (物理解释)</label>
                 <div class="model-input-row">
                     <select id="text-model-select">

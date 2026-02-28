@@ -149,7 +149,7 @@ describe('QuickActionBarController', () => {
 
         expect(controller.root.hidden).toBe(false);
         expect(controller.label.textContent).toContain('电阻R1');
-        expect(controller.actions.children).toHaveLength(4);
+        expect(controller.actions.children).toHaveLength(5);
 
         controller.onActionClick({
             target: {
@@ -186,7 +186,7 @@ describe('QuickActionBarController', () => {
         controller.update();
         controller.onActionClick({
             target: {
-                closest: () => ({ dataset: { action: 'wire-split-mid' } })
+                closest: () => ({ dataset: { action: 'wire-split-point' } })
             }
         });
 

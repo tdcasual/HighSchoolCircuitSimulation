@@ -16,15 +16,27 @@
 
 | 类型 | 中文名称 | 终端数 | 主要作用 |
 |------|----------|--------|----------|
+| Ground | 接地 | 1 | 参考地节点，定义电势零点 |
 | PowerSource | 电源 | 2 | 提供电动势和内阻 |
+| ACVoltageSource | 交流电源 | 2 | 提供正弦交流电压源 |
 | Resistor | 定值电阻 | 2 | 提供固定电阻 |
+| Diode | 二极管 | 2 | 单向导通的非线性器件 |
+| LED | 发光二极管 | 2 | 单向导通并按电流发光 |
+| Thermistor | 热敏电阻 | 2 | 电阻随温度变化 |
+| Photoresistor | 光敏电阻 | 2 | 电阻随光照强度变化 |
+| Relay | 继电器 | 4 | 线圈驱动触点切换通断 |
 | Rheostat | 滑动变阻器 | 3 | 可变电阻，模拟滑动触点 |
 | Bulb | 灯泡 | 2 | 非线性电阻，模拟灯丝特性 |
 | Capacitor | 电容 | 2 | 储能元件，处理瞬态响应 |
+| Inductor | 电感 | 2 | 储磁元件，抑制电流突变 |
+| ParallelPlateCapacitor | 平行板电容 | 2 | 可调几何参数的教学电容模型 |
 | Motor | 电动机 | 2 | 动态元件，包含反电动势 |
 | Switch | 开关 | 2 | 控制电路通断 |
+| SPDTSwitch | 单刀双掷开关 | 3 | 在两条支路间切换连接 |
+| Fuse | 保险丝 | 2 | 过流熔断保护元件 |
 | Ammeter | 电流表 | 2 | 测量电流（理想或有内阻） |
 | Voltmeter | 电压表 | 2 | 测量电压（理想或有内阻） |
+| BlackBox | 黑箱 | 2 | 组合容器/遮挡观察用途 |
 
 ## 详细代理档案
 
@@ -231,5 +243,4 @@
 4. 在 `Solver.js` 的 `stampComponent` 中添加印记逻辑
 5. 更新 `Circuit.js` 的节点重建逻辑（如三端器件）
 
-此文档为开发者和教育者提供代理行为的完整参考。</content>
-<parameter name="filePath">/home/lvxiaoer/workSpace/HighSchoolCircuitSimulation/AGENTS.md
+此文档为开发者和教育者提供代理行为的完整参考。

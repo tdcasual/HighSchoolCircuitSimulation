@@ -131,3 +131,55 @@ describe('OpenAIClient source-specific request strategy', () => {
         expect(Object.prototype.hasOwnProperty.call(requestBody, 'temperature')).toBe(false);
     });
 });
+
+describe('OpenAIClient proxy request mode', () => {
+    let client;
+
+    beforeEach(() => {
+        client = new OpenAIClient();
+        client.config.requestMode = 'proxy';
+        client.config.proxyEndpoint = 'https://proxy.example.com/openai';
+        client.config.apiKey = '';
+        client.config.textModel = 'gpt-4o-mini';
+        client.config.retryAttempts = 1;
+        client.config.requestTimeout = 50;
+    });
+
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
+
+    it('callAPI does not require apiKey in proxy mode and skips Authorization header', async () => {
+        global.fetch = vi.fn().mockResolvedValue({
+            ok: true,
+            status: 200,
+            text: vi.fn().mockResolvedValue(JSON.stringify({
+                choices: [{ message: { content: 'proxy answer' } }]
+            }))
+        });
+
+        const answer = await client.callAPI([{ role: 'user', content: 'hello' }], client.config.textModel, 32);
+
+        expect(answer).toBe('proxy answer');
+        expect(global.fetch).toHaveBeenCalledTimes(1);
+        expect(global.fetch.mock.calls[0][0]).toBe('https://proxy.example.com/openai');
+        expect(global.fetch.mock.calls[0][1].headers.Authorization).toBeUndefined();
+    });
+
+    it('listModels uses proxy endpoint in proxy mode', async () => {
+        global.fetch = vi.fn().mockResolvedValue({
+            ok: true,
+            status: 200,
+            text: vi.fn().mockResolvedValue(JSON.stringify({
+                data: [{ id: 'proxy-model-1' }]
+            }))
+        });
+
+        const models = await client.listModels();
+
+        expect(models).toEqual(['proxy-model-1']);
+        expect(global.fetch).toHaveBeenCalledTimes(1);
+        expect(global.fetch.mock.calls[0][0]).toBe('https://proxy.example.com/openai');
+        expect(global.fetch.mock.calls[0][1].headers.Authorization).toBeUndefined();
+    });
+});

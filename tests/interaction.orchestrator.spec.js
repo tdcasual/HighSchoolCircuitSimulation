@@ -34,6 +34,7 @@ describe('InteractionOrchestrator.onMouseDown', () => {
             resolveTerminalTarget: vi.fn(() => null),
             pendingToolType: null,
             isWiring: false,
+            screenToCanvas: vi.fn(() => ({ x: 0, y: 0 })),
             startPanning: vi.fn(),
             startWiringFromPoint: vi.fn(),
             clearSelection: vi.fn(),
@@ -116,7 +117,8 @@ describe('InteractionOrchestrator.onMouseDown', () => {
         InteractionOrchestrator.onMouseDown.call(context, event);
 
         expect(context.startWiringFromPoint).toHaveBeenCalledWith({ x: 210, y: 310 }, event, true);
-        expect(context.screenToCanvas).not.toHaveBeenCalled();
+        expect(context.screenToCanvas).toHaveBeenCalledTimes(1);
+        expect(context.screenToCanvas).toHaveBeenCalledWith(100, 70);
     });
 
     it('finishes pending-wire wiring to targeted terminal position', () => {
@@ -157,7 +159,8 @@ describe('InteractionOrchestrator.onMouseDown', () => {
 
         expect(context.finishWiringToPoint).toHaveBeenCalledWith({ x: 420, y: 180 }, { pointerType: 'mouse' });
         expect(context.clearPendingToolType).toHaveBeenCalledWith({ silent: true });
-        expect(context.screenToCanvas).not.toHaveBeenCalled();
+        expect(context.screenToCanvas).toHaveBeenCalledTimes(1);
+        expect(context.screenToCanvas).toHaveBeenCalledWith(200, 120);
     });
 
     it('splits wire on ctrl-click', () => {
@@ -213,6 +216,7 @@ describe('InteractionOrchestrator.onMouseDown', () => {
                 getTerminalPosition: vi.fn(() => ({ x: 210, y: 140 }))
             },
             isWireEndpointTarget: vi.fn(() => false),
+            screenToCanvas: vi.fn(() => ({ x: 0, y: 0 })),
             clearSelection: vi.fn()
         };
         const event = {
@@ -253,6 +257,7 @@ describe('InteractionOrchestrator.onMouseDown', () => {
                 getTerminalPosition: vi.fn(() => ({ x: 12, y: 34 }))
             },
             isWireEndpointTarget: vi.fn(() => false),
+            screenToCanvas: vi.fn(() => ({ x: 0, y: 0 })),
             clearSelection: vi.fn()
         };
         const event = {

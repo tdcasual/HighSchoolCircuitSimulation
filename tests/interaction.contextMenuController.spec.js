@@ -86,7 +86,7 @@ describe('ContextMenuController.showContextMenu', () => {
         expect(context.hideContextMenu).toHaveBeenCalledTimes(1);
         expect(appended).toHaveLength(1);
         const labels = appended[0].children.map((item) => item.textContent);
-        expect(labels).toEqual(['编辑属性', '旋转 (R)', '复制', '删除 (Del)']);
+        expect(labels).toEqual(['关闭菜单', '编辑属性', '旋转 (R)', '复制', '删除 (Del)']);
     });
 });
 
