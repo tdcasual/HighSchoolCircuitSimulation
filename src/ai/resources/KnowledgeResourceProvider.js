@@ -126,13 +126,42 @@ function normalizeRuntimeDiagnostics(raw = null) {
     }
 
     const ordered = DIAGNOSTIC_CATEGORY_PRIORITY.filter((item) => categories.includes(item));
-    const extras = categories.filter((item) => !DIAGNOSTIC_CATEGORY_PRIORITY.includes(item));
+    const extras = categories
+        .filter((item) => !DIAGNOSTIC_CATEGORY_PRIORITY.includes(item))
+        .sort();
 
     return {
         code: code || ordered[0] || '',
         categories: [...ordered, ...extras],
         summary: String(raw.summary || '').trim(),
         hints: uniqueStrings(Array.isArray(raw.hints) ? raw.hints : []).slice(0, 4)
+    };
+}
+
+function buildGenericDiagnosticLessonEntry(runtimeDiagnostics = {}) {
+    const codeSignal = normalizeDiagnosticCode(runtimeDiagnostics.code);
+    const categorySignal = normalizeDiagnosticCode(runtimeDiagnostics.categories?.[0]);
+    const summary = String(runtimeDiagnostics.summary || '').trim();
+    const hints = uniqueStrings(Array.isArray(runtimeDiagnostics.hints) ? runtimeDiagnostics.hints : []);
+    const hasSignals = Boolean(codeSignal || categorySignal || summary || hints.length > 0);
+    if (!hasSignals) return null;
+    const primaryCode = codeSignal || categorySignal || 'RUNTIME_DIAGNOSTIC';
+
+    const what = summary || `检测到 ${primaryCode}，当前电路存在需要进一步定位的异常。`;
+    const why = '当前诊断上下文不完整，但可确定电路约束、拓扑连接或元件参数存在不一致。';
+    const fixHints = hints.slice(0, 2);
+    const fix = fixHints.length > 0
+        ? `${fixHints.join('；')}。`
+        : '按“电源-负载-回路-参考地”顺序逐项排查，并在每次改动后重新仿真确认。';
+    const normalizedIdSuffix = primaryCode.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+
+    return {
+        id: `diag-generic-${normalizedIdSuffix || 'runtime'}`,
+        title: '故障学习提示：运行时诊断',
+        category: 'topology',
+        keywords: uniqueStrings([primaryCode, '运行时诊断', '故障排查']),
+        appliesTo: [],
+        content: `发生了什么：${what}\n为什么会这样：${why}\n如何修复：${fix}`
     };
 }
 
@@ -157,6 +186,13 @@ function buildDiagnosticLessonEntries(runtimeDiagnostics, limit = 3) {
         });
         selectedIds.add(template.id);
         if (selected.length >= safeLimit) break;
+    }
+
+    if (selected.length === 0) {
+        const generic = buildGenericDiagnosticLessonEntry(runtimeDiagnostics);
+        if (generic) {
+            selected.push(generic);
+        }
     }
 
     return selected;

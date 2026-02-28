@@ -184,15 +184,22 @@ export class CircuitAIAgent {
         if (code && !categories.includes(code)) {
             categories.unshift(code);
         }
-        if (!code && categories.length === 0) return null;
+        const summary = String(raw.summary || '').trim();
+        const hints = Array.isArray(raw.hints)
+            ? raw.hints.map((hint) => String(hint || '').trim()).filter(Boolean).slice(0, 4)
+            : [];
+        const hasSignal = !!code
+            || categories.length > 0
+            || !!summary
+            || hints.length > 0
+            || !!raw.fatal;
+        if (!hasSignal) return null;
 
         return {
             code: code || categories[0] || '',
             categories,
-            summary: String(raw.summary || '').trim(),
-            hints: Array.isArray(raw.hints)
-                ? raw.hints.map((hint) => String(hint || '').trim()).filter(Boolean).slice(0, 4)
-                : [],
+            summary,
+            hints,
             fatal: !!raw.fatal
         };
     }
@@ -331,6 +338,32 @@ export class CircuitAIAgent {
             .map((item, index) => `${index + 1}. ${item.title}：${item.content}`);
         if (lines.length === 0) return '';
         return `\n\n教学参考要点（用于校正推理，不要逐字复述）：\n${lines.join('\n')}`;
+    }
+
+    buildRuntimeDiagnosticFallbackKnowledge(runtimeDiagnostics = null) {
+        if (!runtimeDiagnostics || typeof runtimeDiagnostics !== 'object') return [];
+        const code = String(runtimeDiagnostics.code || runtimeDiagnostics.categories?.[0] || '').trim().toUpperCase();
+        const summary = String(runtimeDiagnostics.summary || '').trim();
+        const hints = Array.isArray(runtimeDiagnostics.hints)
+            ? runtimeDiagnostics.hints.map((hint) => String(hint || '').trim()).filter(Boolean).slice(0, 2)
+            : [];
+        if (!code && !summary && hints.length === 0) return [];
+
+        const what = summary || `检测到 ${code || 'RUNTIME_DIAGNOSTIC'}，电路当前处于异常状态。`;
+        const why = '当前诊断信息不完整，但可以确定约束、连线或参数中至少有一项与求解条件不一致。';
+        const fix = hints.length > 0
+            ? `${hints.join('；')}。`
+            : '按“电源-负载-回路-参考地”顺序逐项排查，并在每次修正后重新仿真确认。';
+        const idSuffix = (code || 'runtime').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+
+        return [{
+            id: `agent-diag-fallback-${idSuffix}`,
+            title: '故障学习提示（保底）',
+            content: `发生了什么：${what}\n为什么会这样：${why}\n如何修复：${fix}`,
+            category: 'topology',
+            keywords: code ? [code, '运行时诊断'] : ['运行时诊断'],
+            appliesTo: []
+        }];
     }
 
     collectRelevantComponents(question = '', limit = 6) {
@@ -503,13 +536,20 @@ ${evidence}
             circuit: this.circuit,
             runtimeDiagnostics
         });
+        let effectiveKnowledgeItems = Array.isArray(knowledgeItems)
+            ? knowledgeItems
+            : [];
+        if (effectiveKnowledgeItems.length === 0) {
+            effectiveKnowledgeItems = this.buildRuntimeDiagnosticFallbackKnowledge(runtimeDiagnostics);
+        }
         this.logEvent('info', 'knowledge_items_ready', {
-            count: Array.isArray(knowledgeItems) ? knowledgeItems.length : 0,
+            count: effectiveKnowledgeItems.length,
+            diagnosticFallback: effectiveKnowledgeItems.length > 0 && (!Array.isArray(knowledgeItems) || knowledgeItems.length === 0),
             durationMs: Date.now() - knowledgeStart
         }, traceId);
 
         const messages = [
-            { role: 'system', content: this.buildTutorSystemPrompt(circuitState, knowledgeItems, plan, evidenceSection) },
+            { role: 'system', content: this.buildTutorSystemPrompt(circuitState, effectiveKnowledgeItems, plan, evidenceSection) },
             ...this.getConversationContext(history),
             { role: 'user', content: normalizedQuestion }
         ];
@@ -537,7 +577,7 @@ ${evidence}
                 plan,
                 refreshResult,
                 evidenceSection,
-                knowledgeItems,
+                knowledgeItems: effectiveKnowledgeItems,
                 error
             });
             this.logEvent('warn', 'fallback_answer_returned', {
