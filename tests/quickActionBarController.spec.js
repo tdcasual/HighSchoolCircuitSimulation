@@ -125,6 +125,27 @@ afterEach(() => {
 });
 
 describe('QuickActionBarController', () => {
+    it('configures long-press hint as non-interactive overlay', () => {
+        setupEnvironment();
+        const interaction = {
+            selectedComponent: null,
+            selectedWire: null,
+            app: {
+                responsiveLayout: {
+                    isOverlayMode: () => false
+                }
+            },
+            circuit: {
+                getComponent: vi.fn(() => null),
+                getWire: vi.fn(() => null)
+            }
+        };
+        const controller = new QuickActionBarController(interaction);
+
+        expect(controller.hint).toBeTruthy();
+        expect(controller.hint.style.pointerEvents).toBe('none');
+    });
+
     it('renders component quick actions and dispatches rotate action', () => {
         setupEnvironment();
         const interaction = {

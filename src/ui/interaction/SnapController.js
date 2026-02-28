@@ -1,6 +1,30 @@
 import { GRID_SIZE, normalizeCanvasPoint, snapToGrid } from '../../utils/CanvasCoords.js';
 import { getComponentTerminalCount, TERMINAL_HIT_RADIUS_PX } from '../../components/Component.js';
 
+const TOUCH_ENDPOINT_SLOW_DRAG_SPEED_MAX = 0.45;
+const PEN_ENDPOINT_SLOW_DRAG_SPEED_MAX = 0.35;
+const TOUCH_ENDPOINT_SLOW_DRAG_ASSIST_MAX_PX = 10;
+const PEN_ENDPOINT_SLOW_DRAG_ASSIST_MAX_PX = 6;
+
+function resolveEndpointSlowDragAssistPx(pointerType, snapIntent, dragSpeedPxPerMs) {
+    if (snapIntent !== 'wire-endpoint-drag') return 0;
+    if (!Number.isFinite(dragSpeedPxPerMs) || dragSpeedPxPerMs < 0) return 0;
+
+    if (pointerType === 'touch') {
+        const speed = Math.min(Math.max(0, dragSpeedPxPerMs), TOUCH_ENDPOINT_SLOW_DRAG_SPEED_MAX);
+        const ratio = 1 - (speed / TOUCH_ENDPOINT_SLOW_DRAG_SPEED_MAX);
+        return TOUCH_ENDPOINT_SLOW_DRAG_ASSIST_MAX_PX * ratio;
+    }
+
+    if (pointerType === 'pen') {
+        const speed = Math.min(Math.max(0, dragSpeedPxPerMs), PEN_ENDPOINT_SLOW_DRAG_SPEED_MAX);
+        const ratio = 1 - (speed / PEN_ENDPOINT_SLOW_DRAG_SPEED_MAX);
+        return PEN_ENDPOINT_SLOW_DRAG_ASSIST_MAX_PX * ratio;
+    }
+
+    return 0;
+}
+
 export function getAdaptiveSnapThreshold(options = {}) {
     const baseThreshold = Number.isFinite(options.threshold) ? options.threshold : 15;
     const pointerType = options.pointerType || this.lastPrimaryPointerType || 'mouse';
@@ -11,8 +35,13 @@ export function getAdaptiveSnapThreshold(options = {}) {
         : pointerType === 'pen'
             ? Math.max(baseThreshold, 18)
             : baseThreshold;
+    const slowDragAssist = resolveEndpointSlowDragAssistPx(
+        pointerType,
+        snapIntent,
+        options.dragSpeedPxPerMs
+    );
     const scale = Number.isFinite(this.scale) && this.scale > 0 ? this.scale : 1;
-    return screenThreshold / scale;
+    return (screenThreshold + slowDragAssist) / scale;
 }
 
 /**
@@ -22,7 +51,7 @@ export function snapPoint(x, y, options = {}) {
     const threshold = this.getAdaptiveSnapThreshold(options);
     const terminalThreshold = Math.max(threshold, TERMINAL_HIT_RADIUS_PX);
 
-    const nearbyTerminal = this.findNearbyTerminal(x, y, terminalThreshold);
+    const nearbyTerminal = this.findNearbyTerminal(x, y, terminalThreshold, options.excludeTerminalKeys);
     if (nearbyTerminal) {
         const pos = this.renderer.getTerminalPosition(nearbyTerminal.componentId, nearbyTerminal.terminalIndex);
         const normalizedPos = normalizeCanvasPoint(pos);
@@ -89,7 +118,7 @@ export function snapPoint(x, y, options = {}) {
  * @param {number} threshold - 距离阈值
  * @returns {Object|null} 端点信息 {componentId, terminalIndex} 或 null
  */
-export function findNearbyTerminal(x, y, threshold) {
+export function findNearbyTerminal(x, y, threshold, excludeTerminalKeys = null) {
     let best = null;
     let bestDist = Infinity;
 
@@ -97,6 +126,7 @@ export function findNearbyTerminal(x, y, threshold) {
         // 检查每个端点
         const terminalCount = getComponentTerminalCount(comp.type);
         for (let ti = 0; ti < terminalCount; ti += 1) {
+            if (excludeTerminalKeys && excludeTerminalKeys.has(`${id}:${ti}`)) continue;
             const pos = this.renderer.getTerminalPosition(id, ti);
             if (pos) {
                 const dist = Math.sqrt((x - pos.x) ** 2 + (y - pos.y) ** 2);

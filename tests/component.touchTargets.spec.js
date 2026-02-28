@@ -113,7 +113,8 @@ describe('SVGRenderer touch targets', () => {
             return null;
         });
         g.querySelectorAll = vi.fn((selector) => {
-            if (selector === '.wire-endpoint, .wire-endpoint-hit') {
+            if (selector === '.wire-endpoint, .wire-endpoint-hit'
+                || selector === '.wire-endpoint, .wire-endpoint-hit, .wire-endpoint-hint') {
                 return [staleEndpoint, staleEndpointHit];
             }
             return [];

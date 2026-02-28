@@ -3,6 +3,28 @@ import { ErrorCodes } from '../../core/errors/ErrorCodes.js';
 import { AppError } from '../../core/errors/AppError.js';
 import { createTraceId, logActionFailure } from '../../utils/Logger.js';
 
+function normalizeEndpointAutoBridgeMode(rawMode) {
+    if (rawMode === 'on' || rawMode === 'off' || rawMode === 'auto') {
+        return rawMode;
+    }
+    return 'auto';
+}
+
+function isPhoneLikeLayout() {
+    if (typeof document === 'undefined') return false;
+    const bodyClassList = document.body?.classList;
+    if (!bodyClassList || typeof bodyClassList.contains !== 'function') return false;
+    return bodyClassList.contains('layout-mode-phone') || bodyClassList.contains('layout-mode-compact');
+}
+
+function shouldCreateEndpointBridge(context, pointerType) {
+    if (pointerType !== 'touch') return false;
+    const mode = normalizeEndpointAutoBridgeMode(context?.endpointAutoBridgeMode);
+    if (mode === 'on') return true;
+    if (mode === 'off') return false;
+    return isPhoneLikeLayout();
+}
+
 function consumeActionResult(context, result) {
     if (!result || result.ok !== false) {
         return result;
@@ -93,8 +115,41 @@ export function onMouseDown(e) {
             const wireToolPoint = resolveWireToolPoint();
             const pointerType = this.resolvePointerType(e);
             if (this.isWiring) {
-                this.finishWiringToPoint(wireToolPoint, { pointerType });
-                this.clearPendingToolType({ silent: true });
+                let finishPoint = wireToolPoint;
+                const terminalOrEndpointTarget = Boolean(
+                    terminalTarget
+                    || (typeof this.isWireEndpointTarget === 'function' && this.isWireEndpointTarget(target))
+                );
+                if (!terminalOrEndpointTarget && wireToolPoint) {
+                    const snapped = this.snapPoint(wireToolPoint.x, wireToolPoint.y, {
+                        allowWireSegmentSnap: true,
+                        pointerType
+                    });
+                    if (snapped?.snap?.type && snapped.snap.type !== 'grid') {
+                        finishPoint = snapped;
+                    } else {
+                        finishPoint = null;
+                    }
+                }
+
+                if (finishPoint) {
+                    this.finishWiringToPoint(finishPoint, { pointerType });
+                } else {
+                    this.cancelWiring();
+                    if (typeof this.updateStatus === 'function') {
+                        this.updateStatus('未连接到端子/端点，已取消连线');
+                    }
+                }
+                if (this.stickyWireTool) {
+                    this.pendingToolType = 'Wire';
+                    this.pendingToolItem = null;
+                    this.mobileInteractionMode = 'wire';
+                    if (typeof this.syncMobileModeButtons === 'function') {
+                        this.syncMobileModeButtons();
+                    }
+                } else {
+                    this.clearPendingToolType({ silent: true });
+                }
             } else {
                 this.startWiringFromPoint(wireToolPoint, e, true);
                 this.updateStatus('导线模式：选择终点');
@@ -124,7 +179,8 @@ export function onMouseDown(e) {
         return;
     }
 
-    // 端子交互：默认从端子起线；按住 Alt 再拖动用于延长/缩短引脚
+    // 端子交互：默认用于选中元器件；Alt + 拖动用于延长/缩短引脚。
+    // 连线动作通过显式导线工具触发，避免选择与起线语义冲突。
     if (terminalTarget) {
         if (componentGroup) {
             const componentId = componentGroup.dataset.id;
@@ -136,15 +192,6 @@ export function onMouseDown(e) {
                 if (e.altKey) {
                     this.startTerminalExtend(componentId, terminalIndex, e);
                     return;
-                }
-                const terminalPos = this.renderer.getTerminalPosition(componentId, terminalIndex);
-                if (terminalPos) {
-                    this.startWiringFromPoint(terminalPos, e, true);
-                    if (typeof this.updateStatus === 'function') {
-                        this.updateStatus('导线模式：选择终点');
-                    }
-                } else {
-                    this.startTerminalExtend(componentId, terminalIndex, e);
                 }
             }
             return;
@@ -223,6 +270,29 @@ export function onMouseDown(e) {
             return;
         }
 
+        const pointerType = this.resolvePointerType(e);
+        if ((pointerType === 'touch' || pointerType === 'pen') && wireId) {
+            const wire = this.circuit?.getWire?.(wireId);
+            if (wire?.a && wire?.b) {
+                const canvasCoords = this.screenToCanvas(e.clientX, e.clientY);
+                const threshold = typeof this.getAdaptiveSnapThreshold === 'function'
+                    ? this.getAdaptiveSnapThreshold({
+                        pointerType,
+                        snapIntent: 'wire-endpoint-drag',
+                        threshold: 18
+                    })
+                    : 24;
+                const distA = Math.hypot(canvasCoords.x - wire.a.x, canvasCoords.y - wire.a.y);
+                const distB = Math.hypot(canvasCoords.x - wire.b.x, canvasCoords.y - wire.b.y);
+                const nearA = distA <= threshold;
+                const nearB = distB <= threshold;
+                if (nearA || nearB) {
+                    this.startWireEndpointDrag(wireId, nearA && (!nearB || distA <= distB) ? 'a' : 'b', e);
+                    return;
+                }
+            }
+        }
+
         this.startWireDrag(wireId, e);
         return;
     }
@@ -250,6 +320,9 @@ export function onMouseMove(e) {
         );
         if (moved > threshold) {
             this.pointerDownInfo.moved = true;
+            if ((pointerType === 'touch' || pointerType === 'pen') && this.touchActionController?.cancel) {
+                this.touchActionController.cancel();
+            }
         }
     }
     // 画布平移（使用屏幕坐标）
@@ -275,21 +348,105 @@ export function onMouseMove(e) {
             : [{ wireId: drag.wireId, end: drag.end }];
         const pointerType = this.resolvePointerType(e);
 
+        const eventClientX = Number.isFinite(e?.clientX) ? Number(e.clientX) : 0;
+        const eventClientY = Number.isFinite(e?.clientY) ? Number(e.clientY) : 0;
+        const eventTimeStamp = Number.isFinite(e?.timeStamp) ? Number(e.timeStamp) : null;
+        const previousClient = drag.lastClient
+            && Number.isFinite(drag.lastClient.x)
+            && Number.isFinite(drag.lastClient.y)
+            ? drag.lastClient
+            : null;
+        const previousTimeStamp = Number.isFinite(drag.lastMoveTimeStamp)
+            ? Number(drag.lastMoveTimeStamp)
+            : null;
+        if (previousClient && previousTimeStamp !== null && eventTimeStamp !== null && eventTimeStamp > previousTimeStamp) {
+            const dt = eventTimeStamp - previousTimeStamp;
+            const movePx = Math.hypot(eventClientX - previousClient.x, eventClientY - previousClient.y);
+            drag.lastDragSpeedPxPerMs = movePx / dt;
+        }
+        drag.lastClient = { x: eventClientX, y: eventClientY };
+        if (eventTimeStamp !== null) {
+            drag.lastMoveTimeStamp = eventTimeStamp;
+        }
+
+        let lockedCanvasX = canvasX;
+        let lockedCanvasY = canvasY;
+        const startClient = drag.startClient
+            && Number.isFinite(drag.startClient.x)
+            && Number.isFinite(drag.startClient.y)
+            ? drag.startClient
+            : null;
+        const movedFromStartPx = startClient
+            ? Math.hypot(eventClientX - startClient.x, eventClientY - startClient.y)
+            : 0;
+        if ((pointerType === 'touch' || pointerType === 'pen') && drag.axisLock !== 'none') {
+            const lockStartTime = Number.isFinite(drag.axisLockStartTime)
+                ? Number(drag.axisLockStartTime)
+                : null;
+            const lockWindowMs = Number.isFinite(drag.axisLockWindowMs)
+                ? Math.max(0, Number(drag.axisLockWindowMs))
+                : 80;
+            if (!drag.axisLock && startClient && Number.isFinite(startClient.x) && Number.isFinite(startClient.y)) {
+                const dx = eventClientX - startClient.x;
+                const dy = eventClientY - startClient.y;
+                const absDx = Math.abs(dx);
+                const absDy = Math.abs(dy);
+                const movedPx = Math.hypot(dx, dy);
+                const withinWindow = lockStartTime === null || eventTimeStamp === null
+                    ? movedPx <= 24
+                    : (eventTimeStamp - lockStartTime) <= lockWindowMs;
+
+                if (withinWindow && movedPx >= 4) {
+                    const dominanceRatio = 1.35;
+                    if (absDx >= absDy * dominanceRatio) {
+                        drag.axisLock = 'x';
+                    } else if (absDy >= absDx * dominanceRatio) {
+                        drag.axisLock = 'y';
+                    }
+                } else if (!withinWindow) {
+                    drag.axisLock = 'none';
+                }
+            }
+            if (drag.axisLock === 'x' && Number.isFinite(drag.origin?.y)) {
+                lockedCanvasY = drag.origin.y;
+            } else if (drag.axisLock === 'y' && Number.isFinite(drag.origin?.x)) {
+                lockedCanvasX = drag.origin.x;
+            }
+        }
+
+        if (!drag.excludeOriginTerminals && drag.originTerminalKeys instanceof Set && drag.originTerminalKeys.size > 0) {
+            const releaseThresholdPx = pointerType === 'touch' ? 12 : pointerType === 'pen' ? 10 : 6;
+            if (movedFromStartPx >= releaseThresholdPx) {
+                drag.excludeOriginTerminals = true;
+            }
+        }
+
         const excludeWireEndpoints = new Set(affected.map((a) => `${a.wireId}:${a.end}`));
         const excludeWireIds = new Set(affected.map((a) => a.wireId));
-        const snapped = this.snapPoint(canvasX, canvasY, {
+        const snapOptions = {
             excludeWireEndpoints,
             allowWireSegmentSnap: true,
             excludeWireIds,
             pointerType,
             snapIntent: 'wire-endpoint-drag'
-        });
+        };
+        if (drag.excludeOriginTerminals && drag.originTerminalKeys instanceof Set && drag.originTerminalKeys.size > 0) {
+            snapOptions.excludeTerminalKeys = drag.originTerminalKeys;
+        }
+        if (Number.isFinite(drag.lastDragSpeedPxPerMs)) {
+            snapOptions.dragSpeedPxPerMs = drag.lastDragSpeedPxPerMs;
+        }
+        const snapped = this.snapPoint(lockedCanvasX, lockedCanvasY, snapOptions);
         drag.lastSnap = snapped.snap || null;
         drag.lastPoint = { x: snapped.x, y: snapped.y };
 
         const originX = Number(drag.origin?.x) || 0;
         const originY = Number(drag.origin?.y) || 0;
         const moved = Math.hypot(snapped.x - originX, snapped.y - originY) > 1e-6;
+        if (moved && (pointerType === 'touch' || pointerType === 'pen') && !drag.longPressCancelled) {
+            this.touchActionController?.cancel?.();
+            drag.longPressCancelled = true;
+        }
         if (moved && !drag.detached) {
             // Once movement starts, detach any terminal bindings so the junction can move freely.
             for (const a of affected) {
@@ -353,11 +510,16 @@ export function onMouseMove(e) {
         const drag = this.wireDrag;
         const wire = this.circuit.getWire(drag.wireId);
         if (!wire || !wire.a || !wire.b) return;
+        const pointerType = this.resolvePointerType(e);
 
         const dxScreen = e.clientX - (drag.startClient?.x || 0);
         const dyScreen = e.clientY - (drag.startClient?.y || 0);
         const movedScreen = Math.hypot(dxScreen, dyScreen);
         const moveThreshold = 3; // px
+        if (movedScreen >= moveThreshold && (pointerType === 'touch' || pointerType === 'pen') && !drag.longPressCancelled) {
+            this.touchActionController?.cancel?.();
+            drag.longPressCancelled = true;
+        }
 
         const rawDx = canvasX - (drag.startCanvas?.x || 0);
         const rawDy = canvasY - (drag.startCanvas?.y || 0);
@@ -498,6 +660,9 @@ export function onMouseUp(e) {
     // 结束导线端点拖动
     if (this.isDraggingWireEndpoint) {
         const drag = this.wireEndpointDrag;
+        const pointerType = typeof this.resolvePointerType === 'function'
+            ? this.resolvePointerType(e)
+            : (this.lastPrimaryPointerType || 'mouse');
         this.isDraggingWireEndpoint = false;
         this.wireEndpointDrag = null;
         this.renderer.clearTerminalHighlight();
@@ -506,6 +671,54 @@ export function onMouseUp(e) {
             ? drag.affected.map((item) => item?.wireId).filter(Boolean)
             : [];
         const scopeWireIds = [drag?.wireId, ...affectedIds].filter(Boolean);
+
+        const shouldAutoCreateEndpointBridge = shouldCreateEndpointBridge(this, pointerType)
+            && drag?.lastSnap?.type === 'wire-endpoint'
+            && drag?.lastSnap?.wireId
+            && drag?.lastPoint
+            && drag?.origin
+            && Array.isArray(drag?.affected)
+            && drag.affected.length === 1
+            && !(drag.lastSnap.wireId === drag.wireId && drag.lastSnap.end === drag.end);
+        if (shouldAutoCreateEndpointBridge && typeof this.circuit?.addWire === 'function') {
+            const originPoint = {
+                x: toCanvasInt(drag.origin.x),
+                y: toCanvasInt(drag.origin.y)
+            };
+            const targetPoint = {
+                x: toCanvasInt(drag.lastPoint.x),
+                y: toCanvasInt(drag.lastPoint.y)
+            };
+            const bridgeDist = Math.hypot(targetPoint.x - originPoint.x, targetPoint.y - originPoint.y);
+            if (bridgeDist > 1e-6) {
+                const ensureUniqueWireId = (baseId = `wire_${Date.now()}`) => {
+                    if (!this.circuit.getWire(baseId)) return baseId;
+                    let i = 1;
+                    while (this.circuit.getWire(`${baseId}_${i}`)) i += 1;
+                    return `${baseId}_${i}`;
+                };
+                const bridgeWire = {
+                    id: ensureUniqueWireId(),
+                    a: originPoint,
+                    b: targetPoint
+                };
+                const originRef = drag.primaryOriginRef;
+                const originTerminalIndex = Number(originRef?.terminalIndex);
+                if (originRef && typeof originRef.componentId === 'string'
+                    && Number.isInteger(originTerminalIndex)
+                    && originTerminalIndex >= 0) {
+                    bridgeWire.aRef = {
+                        componentId: originRef.componentId,
+                        terminalIndex: originTerminalIndex
+                    };
+                }
+                this.circuit.addWire(bridgeWire);
+                this.renderer.addWire?.(bridgeWire);
+                scopeWireIds.push(bridgeWire.id);
+                scopeWireIds.push(drag.lastSnap.wireId);
+            }
+        }
+
         const shouldSplitTargetWire = drag?.lastSnap?.type === 'wire-segment'
             && drag?.lastSnap?.wireId
             && drag?.lastPoint
@@ -588,6 +801,7 @@ export function onMouseUp(e) {
             return;
         }
         const target = e.target;
+        const pointerType = this.resolvePointerType(e);
         const terminalTarget = this.resolveTerminalTarget(target);
         if (terminalTarget) {
             const componentG = target.closest('.component');
@@ -596,7 +810,7 @@ export function onMouseUp(e) {
                 const terminalIndex = parseInt(terminalTarget.dataset.terminal);
                 const pos = this.renderer.getTerminalPosition(componentId, terminalIndex);
                 if (pos) {
-                    this.finishWiringToPoint(pos, { pointerType: this.resolvePointerType(e) });
+                    this.finishWiringToPoint(pos, { pointerType });
                 } else {
                     this.cancelWiring();
                 }
@@ -610,19 +824,27 @@ export function onMouseUp(e) {
                 const wire = this.circuit.getWire(wireId);
                 const pos = wire && (end === 'a' || end === 'b') ? wire[end] : null;
                 if (pos) {
-                    this.finishWiringToPoint(pos, { pointerType: this.resolvePointerType(e) });
+                    this.finishWiringToPoint(pos, { pointerType });
                     return;
                 }
             }
-        } else {
-            const canvasCoords = this.screenToCanvas(e.clientX, e.clientY);
-            const snapped = this.snapPoint(canvasCoords.x, canvasCoords.y, {
-                allowWireSegmentSnap: true,
-                pointerType: this.resolvePointerType(e)
-            });
-            this.finishWiringToPoint(snapped, { pointerType: this.resolvePointerType(e) });
+        }
+
+        const canvasCoords = this.screenToCanvas(e.clientX, e.clientY);
+        const snapped = this.snapPoint(canvasCoords.x, canvasCoords.y, {
+            allowWireSegmentSnap: true,
+            pointerType
+        });
+        if (snapped?.snap?.type && snapped.snap.type !== 'grid') {
+            this.finishWiringToPoint(snapped, { pointerType });
             return;
         }
+
+        this.cancelWiring();
+        if (typeof this.updateStatus === 'function') {
+            this.updateStatus('未连接到端子/端点，已取消连线');
+        }
+        return;
     }
 
     this.pointerDownInfo = null;

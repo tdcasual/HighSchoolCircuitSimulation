@@ -198,4 +198,56 @@ describe('ClassroomModeController', () => {
         expect(storage.setItem).toHaveBeenCalledWith('ui.classroom_mode_enabled', '0');
         expect(updateStatus).toHaveBeenLastCalledWith('已关闭课堂模式');
     });
+
+    it('forces endpoint auto-bridge off while classroom mode is active and restores previous mode when disabled', () => {
+        const { button } = setupFixture({ width: 1366, storedLevel: 'off' });
+        const interaction = {
+            endpointAutoBridgeMode: 'auto',
+            setEndpointAutoBridgeMode: vi.fn((mode) => {
+                interaction.endpointAutoBridgeMode = mode;
+                return mode;
+            })
+        };
+        new ClassroomModeController({
+            responsiveLayout: { isOverlayMode: () => false },
+            updateStatus: vi.fn(),
+            interaction
+        });
+
+        button.trigger('click');
+        expect(interaction.endpointAutoBridgeMode).toBe('off');
+        expect(interaction.setEndpointAutoBridgeMode).toHaveBeenCalledWith('off', {
+            persist: false,
+            silentStatus: true
+        });
+
+        button.trigger('click');
+        expect(interaction.endpointAutoBridgeMode).toBe('off');
+
+        button.trigger('click');
+        expect(interaction.endpointAutoBridgeMode).toBe('auto');
+        expect(interaction.setEndpointAutoBridgeMode).toHaveBeenLastCalledWith('auto', {
+            persist: false,
+            silentStatus: true
+        });
+    });
+
+    it('restores endpoint auto-bridge from interaction storage when classroom mode remains off', () => {
+        setupFixture({ width: 1366, storedLevel: 'off' });
+        const interaction = {
+            endpointAutoBridgeMode: 'off',
+            restoreEndpointAutoBridgeMode: vi.fn(() => {
+                interaction.endpointAutoBridgeMode = 'on';
+                return 'on';
+            })
+        };
+        new ClassroomModeController({
+            responsiveLayout: { isOverlayMode: () => false },
+            updateStatus: vi.fn(),
+            interaction
+        });
+
+        expect(interaction.restoreEndpointAutoBridgeMode).toHaveBeenCalledWith({ silentStatus: true });
+        expect(interaction.endpointAutoBridgeMode).toBe('on');
+    });
 });

@@ -6,6 +6,9 @@ const MODE_PHONE = 'phone';
 const PHONE_MAX_WIDTH = 680;
 const COMPACT_MAX_WIDTH = 900;
 const TABLET_MAX_WIDTH = 1200;
+const DRAWER_SWIPE_SLOP_PX = 8;
+const DRAWER_SWIPE_AXIS_DOMINANCE = 1.2;
+const DRAWER_SWIPE_CLOSE_THRESHOLD_PX = 40;
 
 const MODE_CLASS_PREFIX = 'layout-mode-';
 
@@ -50,14 +53,20 @@ export class ResponsiveLayoutController {
         this.boundDrawerPointerMove = (event) => this.onDrawerPointerMove(event);
         this.boundDrawerPointerUp = (event) => this.onDrawerPointerUp(event);
         this.boundDrawerPointerCancel = (event) => this.onDrawerPointerUp(event);
+        this.layoutReadyRafId = null;
+        this.layoutReadyPostRafId = null;
 
         this.initialize();
     }
 
     initialize() {
         if (typeof window === 'undefined') return;
+        if (this.body?.classList) {
+            this.body.classList.remove('layout-ready');
+        }
         this.bindEvents();
         this.updateLayoutMode({ force: true });
+        this.scheduleLayoutReady();
     }
 
     bindEvents() {
@@ -98,6 +107,7 @@ export class ResponsiveLayoutController {
     }
 
     destroy() {
+        this.clearLayoutReadySchedule();
         if (typeof window !== 'undefined') {
             window.removeEventListener('resize', this.boundResize);
             window.removeEventListener('keydown', this.boundKeyDown);
@@ -131,6 +141,39 @@ export class ResponsiveLayoutController {
         }
     }
 
+    clearLayoutReadySchedule() {
+        if (typeof window === 'undefined') return;
+        if (this.layoutReadyRafId !== null && typeof window.cancelAnimationFrame === 'function') {
+            window.cancelAnimationFrame(this.layoutReadyRafId);
+        }
+        if (this.layoutReadyPostRafId !== null && typeof window.cancelAnimationFrame === 'function') {
+            window.cancelAnimationFrame(this.layoutReadyPostRafId);
+        }
+        this.layoutReadyRafId = null;
+        this.layoutReadyPostRafId = null;
+    }
+
+    markLayoutReady() {
+        if (!this.body?.classList) return;
+        this.body.classList.add('layout-ready');
+    }
+
+    scheduleLayoutReady() {
+        this.clearLayoutReadySchedule();
+        if (typeof window === 'undefined') return;
+        if (typeof window.requestAnimationFrame !== 'function') {
+            this.markLayoutReady();
+            return;
+        }
+        this.layoutReadyRafId = window.requestAnimationFrame(() => {
+            this.layoutReadyRafId = null;
+            this.layoutReadyPostRafId = window.requestAnimationFrame(() => {
+                this.layoutReadyPostRafId = null;
+                this.markLayoutReady();
+            });
+        });
+    }
+
     onDrawerPointerDown(event) {
         if (!this.isOverlayMode()) return;
         const pointerType = event?.pointerType || '';
@@ -149,7 +192,8 @@ export class ResponsiveLayoutController {
             target: targetId,
             mode: this.mode,
             drawerEl: event.currentTarget,
-            prevTransition: event.currentTarget?.style?.transition || ''
+            prevTransition: event.currentTarget?.style?.transition || '',
+            axisLock: null
         };
         if (this.drawerSwipe.drawerEl?.style) {
             this.drawerSwipe.drawerEl.style.transition = 'none';
@@ -168,10 +212,33 @@ export class ResponsiveLayoutController {
         const dy = (event.clientY || 0) - (this.drawerSwipe.startY || 0);
         const absX = Math.abs(dx);
         const absY = Math.abs(dy);
-        const threshold = 40;
+        const isPhoneModeSwipe = this.drawerSwipe.mode === MODE_PHONE;
+        if (!this.drawerSwipe.axisLock) {
+            if (absX < DRAWER_SWIPE_SLOP_PX && absY < DRAWER_SWIPE_SLOP_PX) {
+                return;
+            }
+            const dominantX = absX >= absY * DRAWER_SWIPE_AXIS_DOMINANCE;
+            const dominantY = absY >= absX * DRAWER_SWIPE_AXIS_DOMINANCE;
+            if (isPhoneModeSwipe && dominantY) {
+                this.drawerSwipe.axisLock = 'y';
+            } else if (!isPhoneModeSwipe && dominantX) {
+                this.drawerSwipe.axisLock = 'x';
+            } else {
+                return;
+            }
+        }
+
+        if (isPhoneModeSwipe && this.drawerSwipe.axisLock !== 'y') {
+            return;
+        }
+        if (!isPhoneModeSwipe && this.drawerSwipe.axisLock !== 'x') {
+            return;
+        }
+
+        const threshold = DRAWER_SWIPE_CLOSE_THRESHOLD_PX;
         const drawerEl = this.drawerSwipe.drawerEl;
         if (drawerEl?.style) {
-            if (this.drawerSwipe.mode === MODE_PHONE) {
+            if (isPhoneModeSwipe) {
                 const dragY = Math.max(0, dy);
                 drawerEl.style.setProperty('--drawer-drag-y', `${dragY}px`);
             } else if (this.drawerSwipe.target === 'toolbox') {
@@ -248,6 +315,7 @@ export class ResponsiveLayoutController {
         if (!force && !changed) {
             this.syncLayoutUI();
             this.app?.observationPanel?.onLayoutModeChanged?.(this.mode);
+            this.app?.aiPanel?.constrainPanelToViewport?.();
             return;
         }
 
@@ -264,6 +332,7 @@ export class ResponsiveLayoutController {
 
         this.syncLayoutUI();
         this.app?.observationPanel?.onLayoutModeChanged?.(nextMode);
+        this.app?.aiPanel?.constrainPanelToViewport?.();
     }
 
     applyBodyModeClass(mode) {
@@ -332,6 +401,7 @@ export class ResponsiveLayoutController {
         }
 
         this.app?.topActionMenu?.sync?.();
+        this.app?.interaction?.syncMobileModeButtons?.();
         this.app?.interaction?.quickActionBar?.update?.();
     }
 }

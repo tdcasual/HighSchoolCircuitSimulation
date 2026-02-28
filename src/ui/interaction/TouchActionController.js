@@ -1,5 +1,6 @@
 const LONG_PRESS_DELAY_MS = 420;
 const MOVE_TOLERANCE_PX = 12;
+const DRAG_MOVE_TOLERANCE_PX = 3;
 
 function distanceSquared(aX, aY, bX, bY) {
     const dx = (aX || 0) - (bX || 0);
@@ -44,7 +45,28 @@ export class TouchActionController {
                 : MOVE_TOLERANCE_PX,
             2
         );
+        this.dragMoveToleranceSq = Math.pow(
+            Number.isFinite(options.dragMoveTolerancePx)
+                ? Math.max(1, options.dragMoveTolerancePx)
+                : DRAG_MOVE_TOLERANCE_PX,
+            2
+        );
         this.session = null;
+    }
+
+    resolveActiveMoveToleranceSq(target = null) {
+        const interaction = this.interaction;
+        if (!interaction) return this.moveToleranceSq;
+        if (target?.type === 'probe') return this.moveToleranceSq;
+
+        const dragActive = !!(
+            interaction.isDragging
+            || interaction.isDraggingWire
+            || interaction.isDraggingWireEndpoint
+        );
+        if (!dragActive) return this.moveToleranceSq;
+
+        return Math.min(this.moveToleranceSq, this.dragMoveToleranceSq);
     }
 
     shouldTrackPointer(event) {
@@ -98,7 +120,7 @@ export class TouchActionController {
         this.session.lastY = nextY;
 
         const movedSq = distanceSquared(nextX, nextY, this.session.startX, this.session.startY);
-        if (movedSq > this.moveToleranceSq) {
+        if (movedSq > this.resolveActiveMoveToleranceSq(this.session.target)) {
             this.cancel();
         }
     }

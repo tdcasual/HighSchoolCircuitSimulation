@@ -2,14 +2,23 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as PanelBindingsController from '../src/ui/interaction/PanelBindingsController.js';
 
 function makeClickableElement() {
-    let clickHandler = null;
+    const handlers = new Map();
     return {
+        classList: {
+            add: vi.fn(),
+            remove: vi.fn()
+        },
         addEventListener: vi.fn((eventName, handler) => {
-            if (eventName === 'click') {
-                clickHandler = handler;
-            }
+            handlers.set(eventName, handler);
         }),
+        setPointerCapture: vi.fn(),
+        releasePointerCapture: vi.fn(),
+        trigger: (eventName, event = {}) => {
+            const handler = handlers.get(eventName);
+            if (handler) handler(event);
+        },
         triggerClick: () => {
+            const clickHandler = handlers.get('click');
             if (clickHandler) clickHandler();
         }
     };
@@ -133,6 +142,9 @@ describe('PanelBindingsController.bindButtonEvents', () => {
         const mobileClearButton = makeClickableElement();
         const mobileExportButton = makeClickableElement();
         const mobileImportButton = makeClickableElement();
+        const mobileModeSelectButton = makeClickableElement();
+        const mobileModeWireButton = makeClickableElement();
+        const endpointBridgeModeButton = makeClickableElement();
         const mobileExerciseButton = makeClickableElement();
         const desktopExerciseButton = {
             click: vi.fn(),
@@ -155,6 +167,9 @@ describe('PanelBindingsController.bindButtonEvents', () => {
                 'btn-mobile-clear': mobileClearButton,
                 'btn-mobile-export': mobileExportButton,
                 'btn-mobile-import': mobileImportButton,
+                'btn-mobile-mode-select': mobileModeSelectButton,
+                'btn-mobile-mode-wire': mobileModeWireButton,
+                'btn-mobile-endpoint-bridge-mode': endpointBridgeModeButton,
                 'btn-mobile-exercise-board': mobileExerciseButton,
                 'btn-exercise-board': desktopExerciseButton,
                 'file-import': fileImport,
@@ -173,6 +188,9 @@ describe('PanelBindingsController.bindButtonEvents', () => {
                 exportCircuit: vi.fn(),
                 importCircuit: vi.fn()
             },
+            setMobileInteractionMode: vi.fn(),
+            cycleEndpointAutoBridgeMode: vi.fn(),
+            restoreEndpointAutoBridgeMode: vi.fn(),
             hideDialog: vi.fn(),
             applyDialogChanges: vi.fn()
         };
@@ -184,6 +202,9 @@ describe('PanelBindingsController.bindButtonEvents', () => {
         mobileClearButton.triggerClick();
         mobileExportButton.triggerClick();
         mobileImportButton.triggerClick();
+        mobileModeSelectButton.triggerClick();
+        mobileModeWireButton.triggerClick();
+        endpointBridgeModeButton.triggerClick();
         mobileExerciseButton.triggerClick();
 
         expect(context.app.startSimulation).toHaveBeenCalledTimes(1);
@@ -191,7 +212,88 @@ describe('PanelBindingsController.bindButtonEvents', () => {
         expect(context.app.clearCircuit).toHaveBeenCalledTimes(1);
         expect(context.app.exportCircuit).toHaveBeenCalledTimes(1);
         expect(fileImport.click).toHaveBeenCalledTimes(1);
+        expect(context.setMobileInteractionMode).toHaveBeenNthCalledWith(1, 'select');
+        expect(context.setMobileInteractionMode).toHaveBeenNthCalledWith(2, 'wire');
+        expect(context.cycleEndpointAutoBridgeMode).toHaveBeenCalledTimes(1);
+        expect(context.restoreEndpointAutoBridgeMode).toHaveBeenCalledWith({ silentStatus: true });
         expect(desktopExerciseButton.click).toHaveBeenCalledTimes(1);
+    });
+
+    it('requires long press for touch clear action and suppresses accidental tap', () => {
+        const clearButton = makeClickableElement();
+        const fileImport = {
+            addEventListener: vi.fn(),
+            click: vi.fn()
+        };
+
+        vi.useFakeTimers();
+        vi.stubGlobal('document', {
+            getElementById: vi.fn((id) => ({
+                'btn-run': makeClickableElement(),
+                'btn-stop': makeClickableElement(),
+                'btn-clear': clearButton,
+                'btn-export': makeClickableElement(),
+                'btn-import': makeClickableElement(),
+                'file-import': fileImport,
+                'dialog-cancel': makeClickableElement(),
+                'dialog-ok': makeClickableElement(),
+                'dialog-overlay': { addEventListener: vi.fn() }
+            }[id]))
+        });
+        const confirmMock = vi.fn(() => true);
+        vi.stubGlobal('confirm', confirmMock);
+
+        const context = {
+            app: {
+                startSimulation: vi.fn(),
+                stopSimulation: vi.fn(),
+                clearCircuit: vi.fn(),
+                exportCircuit: vi.fn(),
+                importCircuit: vi.fn()
+            },
+            updateStatus: vi.fn(),
+            hideDialog: vi.fn(),
+            applyDialogChanges: vi.fn()
+        };
+
+        PanelBindingsController.bindButtonEvents.call(context);
+
+        clearButton.trigger('pointerdown', {
+            pointerType: 'touch',
+            pointerId: 11,
+            clientX: 24,
+            clientY: 30
+        });
+        vi.advanceTimersByTime(120);
+        clearButton.trigger('pointerup', {
+            pointerType: 'touch',
+            pointerId: 11,
+            clientX: 24,
+            clientY: 30
+        });
+        clearButton.trigger('click', { preventDefault: vi.fn() });
+
+        expect(context.app.clearCircuit).not.toHaveBeenCalled();
+        expect(confirmMock).not.toHaveBeenCalled();
+        expect(context.updateStatus).toHaveBeenCalledWith(expect.stringContaining('长按'));
+
+        clearButton.trigger('pointerdown', {
+            pointerType: 'touch',
+            pointerId: 12,
+            clientX: 24,
+            clientY: 30
+        });
+        vi.advanceTimersByTime(380);
+        expect(context.app.clearCircuit).toHaveBeenCalledTimes(1);
+        clearButton.trigger('pointerup', {
+            pointerType: 'touch',
+            pointerId: 12,
+            clientX: 24,
+            clientY: 30
+        });
+        clearButton.trigger('click', { preventDefault: vi.fn() });
+        expect(context.app.clearCircuit).toHaveBeenCalledTimes(1);
+        expect(confirmMock).not.toHaveBeenCalled();
     });
 });
 

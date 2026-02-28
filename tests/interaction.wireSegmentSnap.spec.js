@@ -362,6 +362,9 @@ describe('Interaction wire segment snap/split helpers', () => {
 
         const event = {
             shiftKey: false,
+            clientX: 140,
+            clientY: 160,
+            timeStamp: 12,
             preventDefault: vi.fn(),
             stopPropagation: vi.fn()
         };
@@ -371,6 +374,10 @@ describe('Interaction wire segment snap/split helpers', () => {
         expect(beginHistoryTransaction).toHaveBeenCalledWith('移动导线端点');
         expect(ctx.isDraggingWireEndpoint).toBe(true);
         expect(ctx.wireEndpointDrag.affected).toEqual([{ wireId: 'W1', end: 'a' }]);
+        expect(ctx.wireEndpointDrag.axisLock).toBe(null);
+        expect(ctx.wireEndpointDrag.axisLockWindowMs).toBe(80);
+        expect(ctx.wireEndpointDrag.startClient).toEqual({ x: 140, y: 160 });
+        expect(ctx.wireEndpointDrag.lastMoveTimeStamp).toBe(12);
         expect(event.preventDefault).toHaveBeenCalledTimes(1);
         expect(event.stopPropagation).toHaveBeenCalledTimes(1);
         expect(selectWire).toHaveBeenCalledWith('W1');
@@ -447,9 +454,10 @@ describe('Interaction wire segment snap/split helpers', () => {
         expect(showPropertyDialog).not.toHaveBeenCalled();
     });
 
-    it('finishes wiring without segment snapping', () => {
+    it('cancels wiring when mouseup lands on blank area', () => {
         const snapPoint = vi.fn(() => ({ x: 16, y: 32, snap: { type: 'grid' } }));
         const finishWiringToPoint = vi.fn();
+        const cancelWiring = vi.fn();
         const screenToCanvas = vi.fn(() => ({ x: 15, y: 31 }));
         const ctx = {
             isPanning: false,
@@ -463,7 +471,9 @@ describe('Interaction wire segment snap/split helpers', () => {
             screenToCanvas,
             snapPoint,
             finishWiringToPoint,
-            resolvePointerType: () => 'mouse'
+            cancelWiring,
+            resolvePointerType: () => 'mouse',
+            updateStatus: vi.fn()
         };
 
         InteractionManager.prototype.onMouseUp.call(ctx, {
@@ -472,14 +482,14 @@ describe('Interaction wire segment snap/split helpers', () => {
             clientY: 50
         });
 
+        expect(screenToCanvas).toHaveBeenCalledWith(100, 50);
         expect(snapPoint).toHaveBeenCalledWith(15, 31, {
             allowWireSegmentSnap: true,
             pointerType: 'mouse'
         });
-        expect(finishWiringToPoint).toHaveBeenCalledWith(
-            { x: 16, y: 32, snap: { type: 'grid' } },
-            { pointerType: 'mouse' }
-        );
+        expect(finishWiringToPoint).not.toHaveBeenCalled();
+        expect(cancelWiring).toHaveBeenCalledTimes(1);
+        expect(ctx.updateStatus).toHaveBeenCalledWith('未连接到端子/端点，已取消连线');
     });
 
     it('splits wire segments snapped by wiring start/end before creating new wire', () => {

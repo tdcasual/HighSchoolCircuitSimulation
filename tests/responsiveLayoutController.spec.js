@@ -57,6 +57,7 @@ function createElementMock() {
 
 function createWindowMock(width = 1366) {
     const listeners = new Map();
+    let rafId = 0;
     return {
         innerWidth: width,
         addEventListener: vi.fn((eventName, handler) => {
@@ -69,7 +70,13 @@ function createWindowMock(width = 1366) {
         trigger(eventName, event = {}) {
             const handler = listeners.get(eventName);
             if (handler) handler(event);
-        }
+        },
+        requestAnimationFrame: vi.fn((cb) => {
+            rafId += 1;
+            if (typeof cb === 'function') cb(0);
+            return rafId;
+        }),
+        cancelAnimationFrame: vi.fn()
     };
 }
 
@@ -161,6 +168,14 @@ describe('ResponsiveLayoutController', () => {
         expect(toolboxToggleBtn.hidden).toBe(false);
     });
 
+    it('marks layout as ready after initial mode sync', () => {
+        const { body } = setupLayoutFixture(640);
+        new ResponsiveLayoutController({});
+
+        expect(body.classList.contains('layout-mode-phone')).toBe(true);
+        expect(body.classList.contains('layout-ready')).toBe(true);
+    });
+
     it('ignores drawer swipe gesture when header interaction starts on a button-like element', () => {
         setupLayoutFixture(640);
         const controller = new ResponsiveLayoutController({});
@@ -189,6 +204,73 @@ describe('ResponsiveLayoutController', () => {
 
         expect(controller.drawerSwipe).toBe(null);
         expect(setPointerCapture).not.toHaveBeenCalled();
+    });
+
+    it('requires swipe slop and axis lock before closing phone drawer', () => {
+        setupLayoutFixture(640);
+        const controller = new ResponsiveLayoutController({});
+        const closeDrawers = vi.spyOn(controller, 'closeDrawers');
+        const setProperty = vi.fn();
+        const removeProperty = vi.fn();
+        const currentTarget = {
+            id: 'toolbox',
+            style: { transition: '', setProperty, removeProperty },
+            setPointerCapture: vi.fn(),
+            releasePointerCapture: vi.fn()
+        };
+        const target = {
+            closest: vi.fn((selector) => {
+                if (selector === '.toolbox-header') return {};
+                if (selector === 'button, [role="button"], input, select, textarea, a') return null;
+                return null;
+            })
+        };
+
+        controller.onDrawerPointerDown({
+            pointerType: 'touch',
+            pointerId: 17,
+            clientX: 80,
+            clientY: 100,
+            currentTarget,
+            target
+        });
+
+        const preventDefaultMinor = vi.fn();
+        controller.onDrawerPointerMove({
+            pointerId: 17,
+            clientX: 83,
+            clientY: 104,
+            currentTarget,
+            cancelable: true,
+            preventDefault: preventDefaultMinor
+        });
+        expect(preventDefaultMinor).not.toHaveBeenCalled();
+        expect(setProperty).not.toHaveBeenCalled();
+        expect(closeDrawers).not.toHaveBeenCalled();
+
+        const preventDefaultCrossAxis = vi.fn();
+        controller.onDrawerPointerMove({
+            pointerId: 17,
+            clientX: 132,
+            clientY: 106,
+            currentTarget,
+            cancelable: true,
+            preventDefault: preventDefaultCrossAxis
+        });
+        expect(preventDefaultCrossAxis).not.toHaveBeenCalled();
+        expect(closeDrawers).not.toHaveBeenCalled();
+
+        const preventDefaultVertical = vi.fn();
+        controller.onDrawerPointerMove({
+            pointerId: 17,
+            clientX: 82,
+            clientY: 152,
+            currentTarget,
+            cancelable: true,
+            preventDefault: preventDefaultVertical
+        });
+        expect(preventDefaultVertical).toHaveBeenCalled();
+        expect(closeDrawers).toHaveBeenCalledTimes(1);
     });
 
     it('removes window and drawer listeners on destroy', () => {

@@ -1766,7 +1766,22 @@ export const SVGRenderer = {
         }
         
         // 移除旧的端点与命中圈，避免重绘叠加导致残留交互层。
-        g.querySelectorAll('.wire-endpoint, .wire-endpoint-hit').forEach(el => el.remove());
+        g.querySelectorAll('.wire-endpoint, .wire-endpoint-hit, .wire-endpoint-hint').forEach(el => el.remove());
+
+        const shouldShowEndpointHints = (() => {
+            const body = typeof document !== 'undefined' ? document.body : null;
+            if (body?.classList?.contains('layout-mode-phone') || body?.classList?.contains('layout-mode-compact')) {
+                return true;
+            }
+            if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
+                try {
+                    return window.matchMedia('(pointer: coarse)').matches;
+                } catch (_) {
+                    return false;
+                }
+            }
+            return false;
+        })();
         
         // 如果导线被选中，显示端点（可拖动）
         if (g.classList.contains('selected')) {
@@ -1791,6 +1806,17 @@ export const SVGRenderer = {
             };
             makeEndpoint(a, 'a');
             makeEndpoint(b, 'b');
+        } else if (shouldShowEndpointHints) {
+            const makeHint = (pt) => {
+                const hint = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                hint.setAttribute('cx', pt.x);
+                hint.setAttribute('cy', pt.y);
+                hint.setAttribute('r', 3.5);
+                hint.setAttribute('class', 'wire-endpoint-hint');
+                g.appendChild(hint);
+            };
+            makeHint(a);
+            makeHint(b);
         }
     }
 };

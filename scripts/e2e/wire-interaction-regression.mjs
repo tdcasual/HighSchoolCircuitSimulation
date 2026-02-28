@@ -187,9 +187,13 @@ async function runWireInteractionRegression(browser, baseUrl) {
                 terminalSnapMatrix: [],
                 zoomEndpointMatrix: [],
                 defaultTerminalAction: null,
+                mobileModeToggle: null,
+                classroomBridgeLock: null,
+                touchSlowDragLongPressGuard: null,
                 segmentHighlight: null,
                 endpointAutoSplit: null,
-                touchEndpointSnapAssist: null
+                touchEndpointSnapAssist: null,
+                endpointEndpointAutoBridge: null
             };
 
             const scales = [0.5, 1, 2, 4];
@@ -240,7 +244,8 @@ async function runWireInteractionRegression(browser, baseUrl) {
                 });
             }
 
-            // WIR-004: default terminal action should start wiring; Alt+terminal should extend lead.
+            // WIR-004: default terminal action should select component;
+            // wire tool mode should start wiring; Alt+terminal should extend lead.
             resetScene();
             const addRes2 = interaction.addComponent('Resistor', 260, 260);
             if (!addRes2?.ok || !addRes2.payload?.componentId) {
@@ -271,12 +276,18 @@ async function runWireInteractionRegression(browser, baseUrl) {
                 stopPropagation: () => {}
             };
 
+            interaction.clearSelection();
             interaction.onMouseDown({ ...baseEvent, altKey: false });
-            const defaultStartsWiring = interaction.isWiring
+            const defaultSelectsComponent = interaction.selectedComponent === compId && !interaction.isWiring;
+
+            interaction.pendingToolType = 'Wire';
+            interaction.onMouseDown({ ...baseEvent, altKey: false });
+            const wireToolStartsWiring = interaction.isWiring
                 && interaction.wireStart?.snap?.type === 'terminal'
                 && interaction.wireStart?.snap?.componentId === compId
                 && interaction.wireStart?.snap?.terminalIndex === 0;
             interaction.cancelWiring();
+            interaction.pendingToolType = null;
 
             const originalStartTerminalExtend = interaction.startTerminalExtend;
             let extendCallCount = 0;
@@ -288,9 +299,160 @@ async function runWireInteractionRegression(browser, baseUrl) {
             interaction.startTerminalExtend = originalStartTerminalExtend;
 
             result.defaultTerminalAction = {
-                defaultStartsWiring,
+                defaultSelectsComponent,
+                wireToolStartsWiring,
                 altExtendsLead: extendCallCount === 1,
-                pass: defaultStartsWiring && extendCallCount === 1
+                pass: defaultSelectsComponent && wireToolStartsWiring && extendCallCount === 1
+            };
+
+            // MOB-001: mobile mode buttons should switch between select/wire semantics.
+            const mobileModeSelectButton = document.getElementById('btn-mobile-mode-select');
+            const mobileModeWireButton = document.getElementById('btn-mobile-mode-wire');
+            if (!mobileModeSelectButton || !mobileModeWireButton) {
+                return { ok: false, error: 'mobile mode buttons not found' };
+            }
+            interaction.setMobileInteractionMode?.('select', { silentStatus: true });
+            mobileModeWireButton.click();
+            const wireModeArmed = interaction.mobileInteractionMode === 'wire'
+                && interaction.pendingToolType === 'Wire'
+                && interaction.stickyWireTool === true
+                && mobileModeWireButton.getAttribute('aria-pressed') === 'true'
+                && mobileModeSelectButton.getAttribute('aria-pressed') === 'false';
+            mobileModeSelectButton.click();
+            const selectModeArmed = interaction.mobileInteractionMode === 'select'
+                && interaction.pendingToolType === null
+                && interaction.stickyWireTool === false
+                && mobileModeSelectButton.getAttribute('aria-pressed') === 'true'
+                && mobileModeWireButton.getAttribute('aria-pressed') === 'false';
+
+            result.mobileModeToggle = {
+                wireModeArmed,
+                selectModeArmed,
+                pass: wireModeArmed && selectModeArmed
+            };
+
+            // MOB-003: classroom mode should lock endpoint auto-bridge controls on phone entry points.
+            const endpointBridgeModeButton = document.getElementById('btn-mobile-endpoint-bridge-mode');
+            const endpointBridgeModeNote = document.getElementById('mobile-endpoint-bridge-note');
+            const classroomModeButton = document.getElementById('btn-classroom-mode');
+            if (!endpointBridgeModeButton || !endpointBridgeModeNote || !classroomModeButton) {
+                return { ok: false, error: 'required classroom/bridge buttons not found' };
+            }
+
+            interaction.setEndpointAutoBridgeMode?.('on', { silentStatus: true });
+            app.classroomMode?.setPreferredLevel?.('standard', { persist: false, announce: false });
+            const bridgeModeBeforeBlockedClick = interaction.endpointAutoBridgeMode;
+            endpointBridgeModeButton.click();
+            const bridgeModeAfterBlockedClick = interaction.endpointAutoBridgeMode;
+            const classroomLockedText = String(endpointBridgeModeButton.textContent || '').trim();
+            const classroomLockedNoteText = String(endpointBridgeModeNote.textContent || '').trim();
+            const classroomLockedNoteVisible = endpointBridgeModeNote.hidden === false;
+            const classroomButtonState = classroomModeButton.getAttribute('data-classroom-level');
+            const classroomBodyClassApplied = document.body.classList.contains('classroom-mode');
+            const buttonDisabledAtClassroomOn = endpointBridgeModeButton.disabled === true;
+
+            app.classroomMode?.setPreferredLevel?.('off', { persist: false, announce: false });
+            const bridgeModeAfterClassroomOff = interaction.endpointAutoBridgeMode;
+            const buttonEnabledAfterClassroomOff = endpointBridgeModeButton.disabled === false;
+            const unlockedLabelAfterClassroomOff = String(endpointBridgeModeButton.textContent || '').trim();
+            const classroomLockNoteHiddenAfterOff = endpointBridgeModeNote.hidden === true;
+            const classroomBodyClassRemoved = !document.body.classList.contains('classroom-mode');
+
+            result.classroomBridgeLock = {
+                bridgeModeBeforeBlockedClick,
+                bridgeModeAfterBlockedClick,
+                bridgeModeAfterClassroomOff,
+                classroomLockedText,
+                classroomLockedNoteText,
+                classroomLockedNoteVisible,
+                classroomButtonState,
+                classroomBodyClassApplied,
+                buttonDisabled: buttonDisabledAtClassroomOn,
+                buttonEnabledAfterClassroomOff,
+                unlockedLabelAfterClassroomOff,
+                classroomLockNoteHiddenAfterOff,
+                classroomBodyClassRemoved,
+                pass: bridgeModeBeforeBlockedClick === 'off'
+                    && bridgeModeAfterBlockedClick === 'off'
+                    && classroomLockedText === '端点补线: 课堂锁定'
+                    && classroomLockedNoteText === '课堂模式已锁定端点补线为关闭'
+                    && classroomLockedNoteVisible
+                    && classroomButtonState === 'standard'
+                    && classroomBodyClassApplied
+                    && buttonDisabledAtClassroomOn
+                    && bridgeModeAfterClassroomOff === 'on'
+                    && buttonEnabledAfterClassroomOff
+                    && unlockedLabelAfterClassroomOff === '端点补线: 总是开启'
+                    && classroomLockNoteHiddenAfterOff
+                    && classroomBodyClassRemoved
+            };
+
+            // MOB-002: slow touch drag should not trigger long-press menu once dragging has started.
+            resetScene();
+            const addRes3 = interaction.addComponent('Resistor', 340, 260);
+            if (!addRes3?.ok || !addRes3.payload?.componentId) {
+                return { ok: false, error: 'failed to create resistor for long-press drag guard check' };
+            }
+            const guardCompId = addRes3.payload.componentId;
+            const guardComponentGroup = document.querySelector(`g.component[data-id="${guardCompId}"]`);
+            if (!guardComponentGroup) {
+                return { ok: false, error: 'failed to resolve component group for long-press drag guard check' };
+            }
+            const guardClient = toClient(340, 260);
+            const pointerId = 907;
+            let contextMenuCallCount = 0;
+            const originalShowContextMenu = interaction.showContextMenu;
+            interaction.showContextMenu = (...args) => {
+                contextMenuCallCount += 1;
+                if (typeof originalShowContextMenu === 'function') {
+                    return originalShowContextMenu.apply(interaction, args);
+                }
+                return undefined;
+            };
+
+            interaction.onPointerDown({
+                pointerType: 'touch',
+                pointerId,
+                button: 0,
+                clientX: guardClient.clientX,
+                clientY: guardClient.clientY,
+                timeStamp: 0,
+                target: guardComponentGroup,
+                preventDefault: () => {},
+                stopPropagation: () => {}
+            });
+            await new Promise((resolve) => setTimeout(resolve, 60));
+            interaction.onPointerMove({
+                pointerType: 'touch',
+                pointerId,
+                clientX: guardClient.clientX + 4,
+                clientY: guardClient.clientY + 1,
+                timeStamp: 60,
+                target: guardComponentGroup,
+                preventDefault: () => {},
+                stopPropagation: () => {}
+            });
+            await new Promise((resolve) => setTimeout(resolve, 460));
+            const sessionStillArmed = Boolean(interaction.touchActionController?.session);
+            interaction.onPointerUp({
+                pointerType: 'touch',
+                pointerId,
+                button: 0,
+                clientX: guardClient.clientX + 4,
+                clientY: guardClient.clientY + 1,
+                timeStamp: 540,
+                target: guardComponentGroup,
+                preventDefault: () => {},
+                stopPropagation: () => {}
+            });
+            interaction.showContextMenu = originalShowContextMenu;
+            interaction.touchActionController?.cancel?.();
+            interaction.endPrimaryInteractionForGesture?.();
+
+            result.touchSlowDragLongPressGuard = {
+                contextMenuCallCount,
+                sessionStillArmed,
+                pass: contextMenuCallCount === 0 && !sessionStillArmed
             };
 
             // WIR-005: wire-segment snaps should render node highlight during preview and endpoint drag.
@@ -356,6 +518,41 @@ async function runWireInteractionRegression(browser, baseUrl) {
                     && hasTouchSnapHighlight
             };
 
+            // WIR-010: touch endpoint drag snapped to another endpoint should auto-create a bridge wire.
+            resetScene();
+            interaction.endpointAutoBridgeMode = 'on';
+            app.circuit.addWire({ id: 'WB_SRC', a: { x: 60, y: 200 }, b: { x: 120, y: 200 } });
+            app.circuit.addWire({ id: 'WB_TARGET', a: { x: 220, y: 260 }, b: { x: 300, y: 260 } });
+            app.renderer.renderWires();
+            interaction.startWireEndpointDrag('WB_SRC', 'b', {
+                shiftKey: false,
+                ...toClient(120, 200),
+                preventDefault: () => {},
+                stopPropagation: () => {}
+            });
+            interaction.onMouseMove({ ...toClient(220, 260), target: svg, pointerType: 'touch' });
+            const endpointBridgeLastSnapType = interaction.wireEndpointDrag?.lastSnap?.type || null;
+            const endpointBridgeLastSnapWireId = interaction.wireEndpointDrag?.lastSnap?.wireId || null;
+            interaction.onMouseUp({ ...toClient(220, 260), target: svg, pointerType: 'touch' });
+            const wiresAfterEndpointBridge = snapshotWireEndpoints();
+            const bridgeWire = wiresAfterEndpointBridge.find((wire) => wire.id !== 'WB_SRC' && wire.id !== 'WB_TARGET');
+            const hasBridgeWire = Boolean(
+                bridgeWire
+                && pointMatches(bridgeWire.a, 120, 200)
+                && pointMatches(bridgeWire.b, 220, 260)
+            );
+            result.endpointEndpointAutoBridge = {
+                lastSnapType: endpointBridgeLastSnapType,
+                lastSnapWireId: endpointBridgeLastSnapWireId,
+                wireCount: wiresAfterEndpointBridge.length,
+                hasBridgeWire,
+                pass: endpointBridgeLastSnapType === 'wire-endpoint'
+                    && endpointBridgeLastSnapWireId === 'WB_TARGET'
+                    && hasBridgeWire
+                    && wiresAfterEndpointBridge.length >= 3
+            };
+            interaction.endpointAutoBridgeMode = 'auto';
+
             // WIR-006 + WIR-002: endpoint drag onto diagonal segment should snap and auto-split target wire.
             resetScene();
             app.circuit.addWire({ id: 'W1', a: { x: 40, y: 300 }, b: { x: 120, y: 300 } });
@@ -388,8 +585,12 @@ async function runWireInteractionRegression(browser, baseUrl) {
             const allPass = result.terminalSnapMatrix.every((row) => row.pass)
                 && result.zoomEndpointMatrix.every((row) => row.pass)
                 && result.defaultTerminalAction?.pass
+                && result.mobileModeToggle?.pass
+                && result.classroomBridgeLock?.pass
+                && result.touchSlowDragLongPressGuard?.pass
                 && result.segmentHighlight?.pass
                 && result.touchEndpointSnapAssist?.pass
+                && result.endpointEndpointAutoBridge?.pass
                 && result.endpointAutoSplit?.pass;
 
             return { ok: true, allPass, result };

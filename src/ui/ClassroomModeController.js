@@ -61,6 +61,7 @@ export class ClassroomModeController {
         this.button = typeof document !== 'undefined' ? document.getElementById('btn-classroom-mode') : null;
         this.preferredLevel = CLASSROOM_LEVEL_OFF;
         this.activeLevel = CLASSROOM_LEVEL_OFF;
+        this.savedEndpointAutoBridgeMode = null;
         this.boundToggle = () => this.toggle();
         this.boundResize = () => this.sync({ persist: false, announce: false });
 
@@ -130,6 +131,45 @@ export class ClassroomModeController {
         );
     }
 
+    syncInteractionBridgeMode() {
+        const interaction = this.app?.interaction;
+        if (!interaction) return;
+        const setMode = typeof interaction.setEndpointAutoBridgeMode === 'function'
+            ? interaction.setEndpointAutoBridgeMode.bind(interaction)
+            : null;
+        const restoreMode = typeof interaction.restoreEndpointAutoBridgeMode === 'function'
+            ? interaction.restoreEndpointAutoBridgeMode.bind(interaction)
+            : null;
+
+        if (this.activeLevel !== CLASSROOM_LEVEL_OFF) {
+            if (this.savedEndpointAutoBridgeMode === null) {
+                const currentMode = String(interaction.endpointAutoBridgeMode || '').trim().toLowerCase();
+                this.savedEndpointAutoBridgeMode = currentMode || 'auto';
+            }
+            if (setMode) {
+                setMode('off', { persist: false, silentStatus: true });
+            } else {
+                interaction.endpointAutoBridgeMode = 'off';
+            }
+            return;
+        }
+
+        if (this.savedEndpointAutoBridgeMode !== null) {
+            const restoreValue = this.savedEndpointAutoBridgeMode;
+            this.savedEndpointAutoBridgeMode = null;
+            if (setMode) {
+                setMode(restoreValue, { persist: false, silentStatus: true });
+            } else {
+                interaction.endpointAutoBridgeMode = restoreValue;
+            }
+            return;
+        }
+
+        if (restoreMode) {
+            restoreMode({ silentStatus: true });
+        }
+    }
+
     resolveNextLevel() {
         const currentIndex = CLASSROOM_LEVELS.indexOf(this.preferredLevel);
         if (currentIndex < 0) return CLASSROOM_LEVEL_STANDARD;
@@ -141,6 +181,7 @@ export class ClassroomModeController {
         const supported = this.isSupported();
         this.activeLevel = supported ? this.preferredLevel : CLASSROOM_LEVEL_OFF;
         this.applyBodyClass();
+        this.syncInteractionBridgeMode();
         this.updateButton();
 
         if (persist) {

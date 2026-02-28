@@ -115,6 +115,8 @@ export class QuickActionBarController {
         hint.id = 'mobile-hint';
         hint.className = 'mobile-hint';
         hint.hidden = true;
+        // Hint should never block quick action taps beneath it.
+        hint.style.pointerEvents = 'none';
         this.container.appendChild(hint);
         this.hint = hint;
     }

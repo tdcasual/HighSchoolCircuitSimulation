@@ -244,13 +244,45 @@ export function startWireEndpointDrag(wireId, end, e) {
         affected.push({ wireId, end });
     }
 
+    const originTerminalKeys = new Set();
+    let primaryOriginRef = null;
+    for (const item of affected) {
+        const sourceWire = item.wireId === wireId ? wire : this.circuit.getWire(item.wireId);
+        if (!sourceWire) continue;
+        const ref = item.end === 'a' ? sourceWire.aRef : sourceWire.bRef;
+        if (!primaryOriginRef && item.wireId === wireId && item.end === end && ref) {
+            primaryOriginRef = {
+                componentId: ref.componentId,
+                terminalIndex: ref.terminalIndex
+            };
+        }
+        if (!ref || typeof ref.componentId !== 'string') continue;
+        const terminalIndex = Number(ref.terminalIndex);
+        if (!Number.isInteger(terminalIndex) || terminalIndex < 0) continue;
+        originTerminalKeys.add(`${ref.componentId}:${terminalIndex}`);
+    }
+
+    const startClientX = Number.isFinite(e?.clientX) ? Number(e.clientX) : 0;
+    const startClientY = Number.isFinite(e?.clientY) ? Number(e.clientY) : 0;
+    const startTimeStamp = Number.isFinite(e?.timeStamp) ? Number(e.timeStamp) : null;
+
     this.isDraggingWireEndpoint = true;
     this.wireEndpointDrag = {
         wireId,
         end,
         origin: { x: origin.x, y: origin.y },
+        primaryOriginRef,
         affected,
-        detached: false
+        originTerminalKeys,
+        excludeOriginTerminals: false,
+        detached: false,
+        axisLock: null,
+        axisLockStartTime: startTimeStamp,
+        axisLockWindowMs: 80,
+        startClient: { x: startClientX, y: startClientY },
+        lastClient: { x: startClientX, y: startClientY },
+        lastMoveTimeStamp: startTimeStamp,
+        lastDragSpeedPxPerMs: null
     };
     this.selectWire(wireId);
     e.preventDefault();

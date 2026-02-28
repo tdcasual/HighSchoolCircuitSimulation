@@ -247,7 +247,9 @@ describe('ComponentActions.deleteComponent', () => {
                     refreshDialGauges: vi.fn()
                 }
             },
-            updateStatus: vi.fn()
+            updateStatus: vi.fn(),
+            showStatusAction: vi.fn(),
+            undo: vi.fn()
         };
 
         const result = ComponentActions.deleteComponent.call(context, 'R1');
@@ -266,6 +268,15 @@ describe('ComponentActions.deleteComponent', () => {
         expect(context.app.observationPanel.refreshComponentOptions).toHaveBeenCalledTimes(1);
         expect(context.app.observationPanel.refreshDialGauges).toHaveBeenCalledTimes(1);
         expect(context.updateStatus).toHaveBeenCalledWith('已删除元器件');
+        expect(context.showStatusAction).toHaveBeenCalledWith(expect.objectContaining({
+            label: '撤销',
+            ariaLabel: '撤销删除元器件',
+            durationMs: 2000,
+            onAction: expect.any(Function)
+        }));
+        const componentUndoAction = context.showStatusAction.mock.calls[0][0].onAction;
+        componentUndoAction();
+        expect(context.undo).toHaveBeenCalledTimes(1);
     });
 });
 
@@ -281,7 +292,9 @@ describe('ComponentActions.deleteWire', () => {
                     refreshComponentOptions: vi.fn()
                 }
             },
-            updateStatus: vi.fn()
+            updateStatus: vi.fn(),
+            showStatusAction: vi.fn(),
+            undo: vi.fn()
         };
 
         const result = ComponentActions.deleteWire.call(context, 'W1');
@@ -298,6 +311,15 @@ describe('ComponentActions.deleteWire', () => {
         expect(context.clearSelection).toHaveBeenCalledTimes(1);
         expect(context.app.observationPanel.refreshComponentOptions).toHaveBeenCalledTimes(1);
         expect(context.updateStatus).toHaveBeenCalledWith('已删除导线');
+        expect(context.showStatusAction).toHaveBeenCalledWith(expect.objectContaining({
+            label: '撤销',
+            ariaLabel: '撤销删除导线',
+            durationMs: 2000,
+            onAction: expect.any(Function)
+        }));
+        const wireUndoAction = context.showStatusAction.mock.calls[0][0].onAction;
+        wireUndoAction();
+        expect(context.undo).toHaveBeenCalledTimes(1);
     });
 });
 

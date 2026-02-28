@@ -13,6 +13,14 @@ export function installInteractionTailHistoryNavigationDelegates(InteractionMana
 
         updateStatus(text) {
             return UIStateController.updateStatus.call(this, text);
+        },
+
+        showStatusAction(options = {}) {
+            return UIStateController.showStatusAction.call(this, options);
+        },
+
+        clearStatusAction() {
+            return UIStateController.clearStatusAction.call(this);
         }
     });
 }

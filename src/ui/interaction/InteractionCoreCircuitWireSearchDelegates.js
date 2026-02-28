@@ -2,7 +2,15 @@ import * as WireInteractions from './WireInteractions.js';
 
 export function installInteractionCoreCircuitWireSearchDelegates(InteractionManagerClass) {
     Object.assign(InteractionManagerClass.prototype, {
-        findNearbyWireEndpoint(x, y, threshold, excludeWireId = null, excludeEnd = null, excludeWireEndpoints = null) {
+        findNearbyWireEndpoint(
+            x,
+            y,
+            threshold,
+            excludeWireId = null,
+            excludeEnd = null,
+            excludeWireEndpoints = null,
+            excludeWireIds = null
+        ) {
             return WireInteractions.findNearbyWireEndpoint.call(
                 this,
                 x,
@@ -10,7 +18,8 @@ export function installInteractionCoreCircuitWireSearchDelegates(InteractionMana
                 threshold,
                 excludeWireId,
                 excludeEnd,
-                excludeWireEndpoints
+                excludeWireEndpoints,
+                excludeWireIds
             );
         },
 

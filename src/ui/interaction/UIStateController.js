@@ -88,5 +88,81 @@ export function getBlackBoxContainedComponentIds(boxComp, options = {}) {
 }
 
 export function updateStatus(text) {
-    document.getElementById('status-text').textContent = text;
+    const options = arguments.length > 1 && arguments[1] ? arguments[1] : {};
+    if (!options.keepAction) {
+        clearStatusAction.call(this);
+    }
+
+    const statusNode = document.getElementById('status-text');
+    if (statusNode) {
+        statusNode.textContent = text;
+    }
+}
+
+export function clearStatusAction() {
+    if (this && this.statusActionTimer) {
+        clearTimeout(this.statusActionTimer);
+        this.statusActionTimer = null;
+    }
+    if (this) {
+        this.statusActionToken = null;
+    }
+
+    const actionButton = document.getElementById('status-action-btn');
+    if (!actionButton) return;
+    actionButton.hidden = true;
+    actionButton.textContent = '';
+    actionButton.onclick = null;
+    actionButton.setAttribute?.('aria-hidden', 'true');
+}
+
+export function showStatusAction(options = {}) {
+    const actionButton = document.getElementById('status-action-btn');
+    if (!actionButton) return false;
+
+    const onAction = typeof options.onAction === 'function'
+        ? options.onAction
+        : (typeof options.action === 'function' ? options.action : null);
+    if (!onAction) return false;
+
+    const label = String(options.label || '操作');
+    const durationMs = Number.isFinite(options.durationMs)
+        ? Math.max(0, Math.floor(options.durationMs))
+        : 2000;
+    if (options.statusText) {
+        updateStatus.call(this, options.statusText, { keepAction: true });
+    }
+
+    clearStatusAction.call(this);
+    const token = Symbol('status-action');
+    if (this) {
+        this.statusActionToken = token;
+    }
+
+    actionButton.textContent = label;
+    actionButton.hidden = false;
+    actionButton.setAttribute?.('aria-hidden', 'false');
+    if (options.ariaLabel) {
+        actionButton.setAttribute?.('aria-label', String(options.ariaLabel));
+    } else {
+        actionButton.removeAttribute?.('aria-label');
+    }
+    actionButton.onclick = (event) => {
+        event?.preventDefault?.();
+        if (this && this.statusActionToken !== token) return;
+        clearStatusAction.call(this);
+        onAction();
+    };
+
+    if (durationMs > 0) {
+        const timeoutId = setTimeout(() => {
+            if (this && this.statusActionToken !== token) return;
+            clearStatusAction.call(this);
+        }, durationMs);
+        if (this) {
+            this.statusActionTimer = timeoutId;
+        }
+    }
+
+    return true;
 }

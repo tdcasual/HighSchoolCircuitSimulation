@@ -31,6 +31,25 @@ describe('SnapController', () => {
         ).toBe(32);
     });
 
+    it('adds extra endpoint snap assist for slow touch drag speed', () => {
+        const context = { lastPrimaryPointerType: 'mouse', scale: 1 };
+        const slow = SnapController.getAdaptiveSnapThreshold.call(context, {
+            pointerType: 'touch',
+            snapIntent: 'wire-endpoint-drag',
+            threshold: 15,
+            dragSpeedPxPerMs: 0.05
+        });
+        const fast = SnapController.getAdaptiveSnapThreshold.call(context, {
+            pointerType: 'touch',
+            snapIntent: 'wire-endpoint-drag',
+            threshold: 15,
+            dragSpeedPxPerMs: 0.8
+        });
+
+        expect(slow).toBeGreaterThan(32);
+        expect(fast).toBe(32);
+    });
+
     it('finds nearby terminal from renderer terminal positions', () => {
         const context = {
             circuit: {
@@ -87,7 +106,8 @@ describe('SnapController', () => {
         expect(context.findNearbyTerminal).toHaveBeenCalledWith(
             100,
             100,
-            TERMINAL_HIT_RADIUS_PX
+            TERMINAL_HIT_RADIUS_PX,
+            undefined
         );
     });
 
@@ -134,6 +154,26 @@ describe('SnapController', () => {
             undefined,
             undefined,
             excludeWireIds
+        );
+    });
+
+    it('passes excludeTerminalKeys to terminal finder', () => {
+        const context = {
+            getAdaptiveSnapThreshold: vi.fn(() => 15),
+            findNearbyTerminal: vi.fn(() => null),
+            findNearbyWireEndpoint: vi.fn(() => null),
+            findNearbyWireSegment: vi.fn(() => null)
+        };
+        const excludeTerminalKeys = new Set(['R1:0']);
+
+        const out = SnapController.snapPoint.call(context, 10, 20, { excludeTerminalKeys, pointerType: 'touch' });
+
+        expect(out.snap?.type).toBe('grid');
+        expect(context.findNearbyTerminal).toHaveBeenCalledWith(
+            10,
+            20,
+            TERMINAL_HIT_RADIUS_PX,
+            excludeTerminalKeys
         );
     });
 

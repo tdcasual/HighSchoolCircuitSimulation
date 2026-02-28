@@ -138,3 +138,191 @@ describe('ToolPlacementController.placePendingToolAt', () => {
         expect(context.clearPendingToolType).toHaveBeenCalledWith({ silent: true });
     });
 });
+
+describe('ToolPlacementController.setMobileInteractionMode', () => {
+    it('enables sticky wire mode and arms pending wire tool', () => {
+        vi.stubGlobal('document', {
+            getElementById: vi.fn(() => null),
+            querySelectorAll: vi.fn(() => [])
+        });
+
+        const context = {
+            mobileInteractionMode: 'select',
+            stickyWireTool: false,
+            setPendingToolType: vi.fn(),
+            clearPendingToolType: vi.fn(),
+            cancelWiring: vi.fn(),
+            updateStatus: vi.fn(),
+            quickActionBar: { update: vi.fn() }
+        };
+
+        ToolPlacementController.setMobileInteractionMode.call(context, 'wire');
+
+        expect(context.mobileInteractionMode).toBe('wire');
+        expect(context.stickyWireTool).toBe(true);
+        expect(context.setPendingToolType).toHaveBeenCalledWith('Wire', null, expect.objectContaining({
+            allowToggleOff: false,
+            silentStatus: true
+        }));
+    });
+
+    it('switches back to select mode and clears pending wire state', () => {
+        vi.stubGlobal('document', {
+            getElementById: vi.fn(() => null),
+            querySelectorAll: vi.fn(() => [])
+        });
+
+        const context = {
+            pendingToolType: 'Wire',
+            isWiring: true,
+            mobileInteractionMode: 'wire',
+            stickyWireTool: true,
+            setPendingToolType: vi.fn(),
+            clearPendingToolType: vi.fn(),
+            cancelWiring: vi.fn(),
+            updateStatus: vi.fn(),
+            quickActionBar: { update: vi.fn() }
+        };
+
+        ToolPlacementController.setMobileInteractionMode.call(context, 'select');
+
+        expect(context.mobileInteractionMode).toBe('select');
+        expect(context.stickyWireTool).toBe(false);
+        expect(context.cancelWiring).toHaveBeenCalledTimes(1);
+        expect(context.clearPendingToolType).toHaveBeenCalledWith(expect.objectContaining({
+            silent: true,
+            preserveMobileMode: true
+        }));
+    });
+});
+
+describe('ToolPlacementController endpoint auto-bridge mode controls', () => {
+    it('cycles endpoint auto-bridge mode and persists it', () => {
+        const setItem = vi.fn();
+        vi.stubGlobal('localStorage', {
+            setItem,
+            getItem: vi.fn(() => null)
+        });
+
+        const context = {
+            endpointAutoBridgeMode: 'auto',
+            updateStatus: vi.fn()
+        };
+
+        const first = ToolPlacementController.cycleEndpointAutoBridgeMode.call(context);
+        const second = ToolPlacementController.cycleEndpointAutoBridgeMode.call(context);
+        const third = ToolPlacementController.cycleEndpointAutoBridgeMode.call(context);
+
+        expect(first).toBe('on');
+        expect(second).toBe('off');
+        expect(third).toBe('auto');
+        expect(setItem).toHaveBeenNthCalledWith(1, 'interaction.endpoint_auto_bridge_mode', 'on');
+        expect(setItem).toHaveBeenNthCalledWith(2, 'interaction.endpoint_auto_bridge_mode', 'off');
+        expect(setItem).toHaveBeenNthCalledWith(3, 'interaction.endpoint_auto_bridge_mode', 'auto');
+        expect(context.updateStatus).toHaveBeenCalledTimes(3);
+    });
+
+    it('restores endpoint auto-bridge mode from storage without writing back', () => {
+        const getItem = vi.fn(() => 'on');
+        const setItem = vi.fn();
+        const modeButton = { textContent: '', dataset: {} };
+        vi.stubGlobal('localStorage', { getItem, setItem });
+        vi.stubGlobal('document', {
+            getElementById: vi.fn((id) => (id === 'btn-mobile-endpoint-bridge-mode' ? modeButton : null))
+        });
+
+        const context = {
+            endpointAutoBridgeMode: 'auto',
+            updateStatus: vi.fn()
+        };
+
+        const restored = ToolPlacementController.restoreEndpointAutoBridgeMode.call(context, { silentStatus: true });
+
+        expect(restored).toBe('on');
+        expect(context.endpointAutoBridgeMode).toBe('on');
+        expect(modeButton.textContent).toBe('端点补线: 总是开启');
+        expect(setItem).not.toHaveBeenCalled();
+        expect(context.updateStatus).not.toHaveBeenCalled();
+    });
+
+    it('locks endpoint auto-bridge mode to off during classroom mode without overriding storage preference', () => {
+        const setItem = vi.fn();
+        vi.stubGlobal('localStorage', {
+            setItem,
+            getItem: vi.fn(() => null)
+        });
+
+        const context = {
+            endpointAutoBridgeMode: 'off',
+            updateStatus: vi.fn(),
+            app: {
+                classroomMode: {
+                    activeLevel: 'standard'
+                }
+            }
+        };
+
+        const nextMode = ToolPlacementController.setEndpointAutoBridgeMode.call(context, 'on');
+
+        expect(nextMode).toBe('off');
+        expect(context.endpointAutoBridgeMode).toBe('off');
+        expect(setItem).not.toHaveBeenCalled();
+        expect(context.updateStatus).toHaveBeenCalledWith('课堂模式下端点补线已锁定关闭');
+    });
+
+    it('disables endpoint auto-bridge button while classroom mode is active', () => {
+        const modeButton = { textContent: '', dataset: {}, disabled: false, title: '' };
+        const modeNote = { textContent: '', hidden: true };
+        vi.stubGlobal('document', {
+            getElementById: vi.fn((id) => {
+                if (id === 'btn-mobile-endpoint-bridge-mode') return modeButton;
+                if (id === 'mobile-endpoint-bridge-note') return modeNote;
+                return null;
+            })
+        });
+
+        const context = {
+            endpointAutoBridgeMode: 'off',
+            app: {
+                classroomMode: {
+                    activeLevel: 'enhanced'
+                }
+            }
+        };
+
+        ToolPlacementController.syncEndpointAutoBridgeButton.call(context);
+
+        expect(modeButton.textContent).toBe('端点补线: 课堂锁定');
+        expect(modeButton.disabled).toBe(true);
+        expect(modeButton.title).toContain('课堂模式');
+        expect(modeNote.hidden).toBe(false);
+        expect(modeNote.textContent).toBe('课堂模式已锁定端点补线为关闭');
+    });
+
+    it('hides classroom lock note when classroom mode is inactive', () => {
+        const modeButton = { textContent: '', dataset: {}, disabled: true, title: '' };
+        const modeNote = { textContent: '', hidden: false };
+        vi.stubGlobal('document', {
+            getElementById: vi.fn((id) => {
+                if (id === 'btn-mobile-endpoint-bridge-mode') return modeButton;
+                if (id === 'mobile-endpoint-bridge-note') return modeNote;
+                return null;
+            })
+        });
+
+        const context = {
+            endpointAutoBridgeMode: 'auto',
+            app: {
+                classroomMode: {
+                    activeLevel: 'off'
+                }
+            }
+        };
+
+        ToolPlacementController.syncEndpointAutoBridgeButton.call(context);
+
+        expect(modeButton.textContent).toBe('端点补线: 手机自动');
+        expect(modeButton.disabled).toBe(false);
+        expect(modeNote.hidden).toBe(true);
+    });
+});

@@ -1,6 +1,13 @@
 import { HistoryManager } from './HistoryManager.js';
 import { createRuntimeLogger } from '../../utils/Logger.js';
 
+function normalizeEndpointAutoBridgeMode(rawMode) {
+    if (rawMode === 'on' || rawMode === 'off' || rawMode === 'auto') {
+        return rawMode;
+    }
+    return 'auto';
+}
+
 /**
  * 初始化 InteractionManager 的运行时状态。
  */
@@ -60,6 +67,11 @@ export function initializeInteractionState(context, app, options = {}) {
     // 工具箱触屏放置（点击工具 -> 点击画布落子）
     context.pendingToolType = null;
     context.pendingToolItem = null;
+    context.mobileInteractionMode = 'select';
+    context.stickyWireTool = false;
+    context.endpointAutoBridgeMode = normalizeEndpointAutoBridgeMode(options.endpointAutoBridgeMode);
+    context.statusActionTimer = null;
+    context.statusActionToken = null;
 
     // 对齐辅助线
     context.alignmentGuides = null;

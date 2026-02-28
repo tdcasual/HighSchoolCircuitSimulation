@@ -79,4 +79,42 @@ describe('TouchActionController', () => {
         expect(interaction.showContextMenu).not.toHaveBeenCalled();
         expect(controller.onPointerUp({ pointerId: 9 })).toBe(false);
     });
+
+    it('cancels long press on minor drift once drag state becomes active', () => {
+        vi.useFakeTimers();
+        const interaction = {
+            blockSinglePointerInteraction: false,
+            pendingToolType: null,
+            isWiring: false,
+            isDragging: false,
+            resolveProbeMarkerTarget: vi.fn(() => null),
+            endPrimaryInteractionForGesture: vi.fn(),
+            selectComponent: vi.fn(),
+            showContextMenu: vi.fn()
+        };
+        const controller = new TouchActionController(interaction, {
+            longPressDelayMs: 420,
+            moveTolerancePx: 12,
+            dragMoveTolerancePx: 3
+        });
+        const event = {
+            pointerType: 'touch',
+            pointerId: 12,
+            clientX: 80,
+            clientY: 90,
+            target: makeTargetWithComponent('R3')
+        };
+
+        controller.onPointerDown(event);
+        interaction.isDragging = true;
+        controller.onPointerMove({
+            pointerId: 12,
+            clientX: 84,
+            clientY: 90
+        });
+        vi.advanceTimersByTime(500);
+
+        expect(interaction.showContextMenu).not.toHaveBeenCalled();
+        expect(controller.onPointerUp({ pointerId: 12 })).toBe(false);
+    });
 });

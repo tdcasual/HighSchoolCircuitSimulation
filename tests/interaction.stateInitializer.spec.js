@@ -58,7 +58,26 @@ describe('InteractionStateInitializer.initializeInteractionState', () => {
 
         expect(ctx.pendingToolType).toBe(null);
         expect(ctx.pendingToolItem).toBe(null);
+        expect(ctx.endpointAutoBridgeMode).toBe('auto');
+        expect(ctx.statusActionTimer).toBe(null);
+        expect(ctx.statusActionToken).toBe(null);
         expect(ctx.alignmentGuides).toBe(null);
         expect(ctx.snapThreshold).toBe(10);
+    });
+
+    it('normalizes endpoint auto-bridge mode option', () => {
+        const app = {
+            circuit: { id: 'c' },
+            renderer: { id: 'r' },
+            svg: { id: 's' }
+        };
+        const ctx1 = {};
+        const ctx2 = {};
+
+        initializeInteractionState(ctx1, app, { HistoryManagerClass: FakeHistoryManager, endpointAutoBridgeMode: 'on' });
+        initializeInteractionState(ctx2, app, { HistoryManagerClass: FakeHistoryManager, endpointAutoBridgeMode: 'bad-mode' });
+
+        expect(ctx1.endpointAutoBridgeMode).toBe('on');
+        expect(ctx2.endpointAutoBridgeMode).toBe('auto');
     });
 });

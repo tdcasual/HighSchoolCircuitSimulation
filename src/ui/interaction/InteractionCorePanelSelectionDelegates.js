@@ -11,8 +11,8 @@ export function installInteractionCorePanelSelectionDelegates(InteractionManager
             return SelectionPanelController.selectWire.call(this, id);
         },
 
-        findNearbyTerminal(x, y, threshold) {
-            return SnapController.findNearbyTerminal.call(this, x, y, threshold);
+        findNearbyTerminal(x, y, threshold, excludeTerminalKeys = null) {
+            return SnapController.findNearbyTerminal.call(this, x, y, threshold, excludeTerminalKeys);
         },
 
         clearSelection() {

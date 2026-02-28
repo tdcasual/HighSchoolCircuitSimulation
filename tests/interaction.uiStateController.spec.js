@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as UIStateController from '../src/ui/interaction/UIStateController.js';
 
 afterEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
 });
@@ -80,13 +81,94 @@ describe('UIStateController.getBlackBoxContainedComponentIds', () => {
 describe('UIStateController.updateStatus', () => {
     it('writes status text', () => {
         const statusNode = { textContent: '' };
+        const actionButton = {
+            hidden: false,
+            textContent: '撤销',
+            onclick: vi.fn(),
+            setAttribute: vi.fn()
+        };
         vi.stubGlobal('document', {
-            getElementById: vi.fn(() => statusNode)
+            getElementById: vi.fn((id) => {
+                if (id === 'status-text') return statusNode;
+                if (id === 'status-action-btn') return actionButton;
+                return null;
+            })
         });
 
         UIStateController.updateStatus('done');
 
         expect(statusNode.textContent).toBe('done');
+        expect(actionButton.hidden).toBe(true);
+    });
+});
+
+describe('UIStateController status action', () => {
+    it('shows status action and invokes callback on click', () => {
+        const statusNode = { textContent: '' };
+        const actionButton = {
+            hidden: true,
+            textContent: '',
+            onclick: null,
+            setAttribute: vi.fn(),
+            removeAttribute: vi.fn()
+        };
+        vi.stubGlobal('document', {
+            getElementById: vi.fn((id) => {
+                if (id === 'status-text') return statusNode;
+                if (id === 'status-action-btn') return actionButton;
+                return null;
+            })
+        });
+        const ctx = {};
+        const onAction = vi.fn();
+
+        const shown = UIStateController.showStatusAction.call(ctx, {
+            label: '撤销',
+            statusText: '已删除导线',
+            durationMs: 2000,
+            onAction
+        });
+
+        expect(shown).toBe(true);
+        expect(statusNode.textContent).toBe('已删除导线');
+        expect(actionButton.hidden).toBe(false);
+        expect(actionButton.textContent).toBe('撤销');
+        expect(typeof actionButton.onclick).toBe('function');
+
+        actionButton.onclick({ preventDefault: vi.fn() });
+        expect(onAction).toHaveBeenCalledTimes(1);
+        expect(actionButton.hidden).toBe(true);
+    });
+
+    it('auto-hides status action after duration', () => {
+        vi.useFakeTimers();
+        const actionButton = {
+            hidden: true,
+            textContent: '',
+            onclick: null,
+            setAttribute: vi.fn(),
+            removeAttribute: vi.fn()
+        };
+        vi.stubGlobal('document', {
+            getElementById: vi.fn((id) => {
+                if (id === 'status-text') return { textContent: '' };
+                if (id === 'status-action-btn') return actionButton;
+                return null;
+            })
+        });
+        const ctx = {};
+        const onAction = vi.fn();
+
+        UIStateController.showStatusAction.call(ctx, {
+            label: '撤销',
+            durationMs: 2000,
+            onAction
+        });
+
+        expect(actionButton.hidden).toBe(false);
+        vi.advanceTimersByTime(2000);
+        expect(actionButton.hidden).toBe(true);
+        expect(onAction).not.toHaveBeenCalled();
     });
 });
 

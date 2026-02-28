@@ -89,6 +89,12 @@ export function deleteComponent(id) {
             this.app.observationPanel?.refreshComponentOptions();
             this.app.observationPanel?.refreshDialGauges();
             this.updateStatus('已删除元器件');
+            this.showStatusAction?.({
+                label: '撤销',
+                ariaLabel: '撤销删除元器件',
+                durationMs: 2000,
+                onAction: () => this.undo?.()
+            });
         });
         return createSuccessResult('component.deleted', { componentId: id }, '已删除元器件');
     } catch (error) {
@@ -106,6 +112,12 @@ export function deleteWire(id) {
             this.clearSelection();
             this.app.observationPanel?.refreshComponentOptions();
             this.updateStatus('已删除导线');
+            this.showStatusAction?.({
+                label: '撤销',
+                ariaLabel: '撤销删除导线',
+                durationMs: 2000,
+                onAction: () => this.undo?.()
+            });
         });
         return createSuccessResult('wire.deleted', { wireId: id }, '已删除导线');
     } catch (error) {

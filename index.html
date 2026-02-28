@@ -32,6 +32,8 @@
         <button id="btn-mobile-export" class="top-action-more-item" type="button">导出JSON</button>
         <button id="btn-mobile-import" class="top-action-more-item" type="button">导入JSON</button>
         <button id="btn-mobile-exercise-board" class="top-action-more-item" type="button">习题板</button>
+        <button id="btn-mobile-endpoint-bridge-mode" class="top-action-more-item" type="button">端点补线: 手机自动</button>
+        <p id="mobile-endpoint-bridge-note" class="top-action-more-note" hidden>课堂模式已锁定端点补线为关闭</p>
     </div>
     <div id="app">
         <!-- 左侧工具箱 -->
@@ -274,6 +276,8 @@
             <div id="canvas-mobile-controls" aria-label="小屏面板切换">
                 <button id="btn-toggle-toolbox" class="mobile-toggle-btn" type="button" aria-expanded="false" hidden>元件库</button>
                 <button id="btn-toggle-side-panel" class="mobile-toggle-btn" type="button" aria-expanded="false" hidden>属性面板</button>
+                <button id="btn-mobile-mode-select" class="mobile-toggle-btn mobile-mode-btn" type="button" aria-pressed="true">选择</button>
+                <button id="btn-mobile-mode-wire" class="mobile-toggle-btn mobile-mode-btn" type="button" aria-pressed="false">布线</button>
                 <button id="btn-mobile-run" class="mobile-toggle-btn mobile-run-btn" type="button">运行</button>
                 <button id="btn-mobile-stop" class="mobile-toggle-btn mobile-stop-btn" type="button" disabled>停止</button>
             </div>
@@ -301,6 +305,7 @@
             <!-- 状态栏 -->
             <div id="status-bar">
                 <span id="status-text">就绪</span>
+                <button id="status-action-btn" class="status-action-btn" type="button" hidden aria-hidden="true">撤销</button>
                 <button id="btn-classroom-mode" class="status-mode-btn" type="button" aria-pressed="false" title="开启课堂模式（优化教室投屏可读性）">课堂模式: 关</button>
                 <span id="zoom-level">100%</span>
                 <span id="simulation-status">模拟: 停止</span>
@@ -443,6 +448,7 @@
                     </select>
                     <span id="knowledge-version-badge" title="规则库版本">规则库版本: --</span>
                 </div>
+                <div id="chat-new-confirm-hint" role="status" aria-live="polite" aria-atomic="true" hidden></div>
                 <div id="quick-questions">
                     <button class="quick-question-btn">为什么R1的电流增大了?</button>
                     <button class="quick-question-btn">滑动变阻器如何影响电路?</button>
