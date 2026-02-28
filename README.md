@@ -24,6 +24,22 @@
 - 状态迁移：`observation` 配置向后兼容，旧存档自动归一化到 v2 schema
 - 渲染稳定性：观察面板采用 RAF 去重调度，减少批量更新抖动
 
+## 📦 v0.9 RC 更新（2026-03）
+
+- 移动端交互：误触防护、单手快捷操作、吸附容差与触控编辑流程优化
+- 观察链路：模板保存/加载、联动准星、自动量程稳定、图像导出
+- 教学场景：内置 6 个课堂预设（串联/并联/分压/RC/电机/测量）
+- 首次引导：支持跳过与“记住选择”，减少回访用户干扰
+- AI 教学：运行时故障诊断可映射为“发生了什么/为什么/如何修复”教学提示
+- 质量门禁：`check:full` + P0/CircuitJS/AI 三组 baseline 回归通过
+
+## 🔄 迁移说明（v0.9 RC）
+
+- Observation 配置可直接沿用旧存档，加载时会自动归一化到 v2 schema。
+- 场景包导入路径更新为：
+  - `src/engine/scenarios/ClassroomScenarioPack.js`
+- 嵌入打包脚本对 `examples/` 目录改为可选；缺失时不会阻塞 `build:frontend / package:embed`。
+
 ## 🚀 快速开始
 
 1. 安装依赖
@@ -85,6 +101,8 @@ npm run build:edgeone
 - 测试目录：[`tests/`](tests)
 - 基线脚本：[`scripts/benchmark/`](scripts/benchmark)
 - 部署配置：[`Dockerfile`](Dockerfile) / [`vercel.json`](vercel.json)
+- v0.9 发布说明：[`docs/releases/v0.9-rc1-release-notes.md`](docs/releases/v0.9-rc1-release-notes.md)
+- v0.9 QA 清单：[`docs/releases/v0.9-qa-checklist.md`](docs/releases/v0.9-qa-checklist.md)
 
 ## 🤝 参与贡献
 
