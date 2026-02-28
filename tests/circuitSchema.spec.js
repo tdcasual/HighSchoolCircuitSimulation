@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { validateCircuitJSON } from '../src/engine/CircuitSchema.js';
+import { getClassroomScenarioPack } from '../src/core/scenarios/ClassroomScenarioPack.js';
 
 const base = {
     meta: { version: '1.0' },
@@ -95,5 +96,24 @@ describe('validateCircuitJSON', () => {
             components: [{ id: 'R1', type: 'Resistor', properties: { resistance: 10 } }]
         };
         expect(() => validateCircuitJSON(bad)).toThrow(/至少需要一个电源元件/);
+    });
+
+    it('accepts all classroom scenario preset fixtures', () => {
+        const scenarios = getClassroomScenarioPack();
+        expect(scenarios).toHaveLength(6);
+
+        const ids = scenarios.map((scenario) => scenario.id).sort();
+        expect(ids).toEqual([
+            'classroom-divider',
+            'classroom-motor-feedback',
+            'classroom-parallel',
+            'classroom-probe-measurement',
+            'classroom-rc-charge-discharge',
+            'classroom-series'
+        ]);
+
+        for (const scenario of scenarios) {
+            expect(() => validateCircuitJSON(scenario.circuit)).not.toThrow();
+        }
     });
 });

@@ -4,6 +4,7 @@ import { createComponent } from '../src/components/Component.js';
 import { CircuitSerializer } from '../src/core/io/CircuitSerializer.js';
 import { CircuitDeserializer } from '../src/core/io/CircuitDeserializer.js';
 import { CircuitSchemaGateway } from '../src/core/io/CircuitSchemaGateway.js';
+import { getClassroomScenarioPack } from '../src/core/scenarios/ClassroomScenarioPack.js';
 
 describe('Circuit IO gateway', () => {
     it('serializes and deserializes circuit with stable schema', () => {
@@ -86,5 +87,38 @@ describe('Circuit IO gateway', () => {
         expect(motor.inertia).toBeGreaterThan(0);
         expect(Number.isFinite(ammeter.resistance)).toBe(true);
         expect(ammeter.resistance).toBeGreaterThanOrEqual(0);
+    });
+
+    it('loads and runs all classroom scenario presets', () => {
+        const scenarios = getClassroomScenarioPack();
+        expect(scenarios).toHaveLength(6);
+
+        for (const scenario of scenarios) {
+            expect(() => CircuitSchemaGateway.validate(scenario.circuit)).not.toThrow();
+
+            const loaded = CircuitDeserializer.deserialize(scenario.circuit);
+            expect(loaded.components.length).toBeGreaterThan(0);
+            expect(loaded.wires.length).toBeGreaterThan(0);
+
+            const runtimeCircuit = new Circuit();
+            runtimeCircuit.fromJSON(scenario.circuit);
+            runtimeCircuit.dt = Number.isFinite(Number(scenario?.simulation?.dt))
+                ? Number(scenario.simulation.dt)
+                : 0.01;
+            runtimeCircuit.simTime = 0;
+            runtimeCircuit.isRunning = true;
+
+            const steps = Number.isFinite(Number(scenario?.simulation?.steps))
+                ? Math.max(1, Math.floor(Number(scenario.simulation.steps)))
+                : 1;
+            for (let i = 0; i < steps; i += 1) {
+                runtimeCircuit.step();
+                expect(runtimeCircuit.lastResults?.valid).toBe(
+                    true,
+                    `scenario ${scenario.id} became invalid at step ${i}`
+                );
+            }
+            runtimeCircuit.isRunning = false;
+        }
     });
 });
