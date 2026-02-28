@@ -142,6 +142,7 @@ export class ObservationPanel {
         this.ui = normalizeObservationUI();
         this.templates = [];
         this.templateControls = {};
+        this.linkedCursorSnapshot = null;
         this.modeButtons = {};
         this.presetButtons = {};
         this._renderRaf = 0;
@@ -532,6 +533,7 @@ export class ObservationPanel {
             plot.elements.card?.remove();
         }
         this.plots = [];
+        this.linkedCursorSnapshot = null;
     }
 
     normalizeTemplateCollection(rawTemplates) {
@@ -949,6 +951,9 @@ export class ObservationPanel {
         const idx = this.plots.findIndex((p) => p.id === plotId);
         if (idx < 0) return;
         const plot = this.plots[idx];
+        if (this.linkedCursorSnapshot?.sourcePlotId === plot.id) {
+            this.linkedCursorSnapshot = null;
+        }
         plot.cardController?.dispose?.();
         plot.elements.card?.remove();
         this.plots.splice(idx, 1);
@@ -1175,6 +1180,7 @@ export class ObservationPanel {
             const point = getPoint(event);
             if (!point) return;
             plot.chartInteraction?.onPointerDown(point);
+            this.syncLinkedCursorSnapshot(plot);
             plot._needsRedraw = true;
             this.requestRender({ onlyIfActive: true });
         });
@@ -1182,19 +1188,141 @@ export class ObservationPanel {
             const point = getPoint(event);
             if (!point) return;
             plot.chartInteraction?.onPointerMove(point);
+            this.syncLinkedCursorSnapshot(plot);
             plot._needsRedraw = true;
             this.requestRender({ onlyIfActive: true });
         });
         canvas.addEventListener('pointerup', () => {
             plot.chartInteraction?.onPointerUp();
+            this.syncLinkedCursorSnapshot(plot);
             plot._needsRedraw = true;
             this.requestRender({ onlyIfActive: true });
         });
         canvas.addEventListener('pointerleave', () => {
             plot.chartInteraction?.onPointerLeave();
+            this.syncLinkedCursorSnapshot(plot);
             plot._needsRedraw = true;
             this.requestRender({ onlyIfActive: true });
         });
+    }
+
+    syncLinkedCursorSnapshot(plot) {
+        if (!plot?.chartInteraction || !plot.id) return;
+
+        const dpr = window.devicePixelRatio || 1;
+        const readout = plot.chartInteraction.getReadout?.();
+        if (!readout) {
+            if (this.linkedCursorSnapshot?.sourcePlotId === plot.id && !plot.chartInteraction.isFrozen?.()) {
+                this.linkedCursorSnapshot = null;
+            }
+            return;
+        }
+
+        const frame = plot._lastFrame;
+        const canvasWidth = Math.max(1, Number(plot.elements?.canvas?.getBoundingClientRect?.().width) || 1);
+        const canvasHeight = Math.max(1, Number(plot.elements?.canvas?.getBoundingClientRect?.().height) || 1);
+        const width = Number.isFinite(frame?.innerW) && frame.innerW > 0
+            ? frame.innerW / dpr
+            : canvasWidth;
+        const height = Number.isFinite(frame?.innerH) && frame.innerH > 0
+            ? frame.innerH / dpr
+            : canvasHeight;
+        const padLeft = Number.isFinite(frame?.padL) ? frame.padL / dpr : 0;
+        const padTop = Number.isFinite(frame?.padT) ? frame.padT / dpr : 0;
+        const xRatio = Math.max(0, Math.min(1, (Number(readout.x || 0) - padLeft) / Math.max(width, 1e-9)));
+        const yRatio = Math.max(0, Math.min(1, (Number(readout.y || 0) - padTop) / Math.max(height, 1e-9)));
+
+        const snapshot = plot.chartInteraction.toLinkedSnapshot?.({
+            width: canvasWidth,
+            height: canvasHeight
+        }) || {};
+        this.linkedCursorSnapshot = {
+            sourcePlotId: plot.id,
+            xRatio: Number.isFinite(xRatio) ? xRatio : snapshot.xRatio,
+            yRatio: Number.isFinite(yRatio) ? yRatio : snapshot.yRatio,
+            frozen: !!snapshot.frozen
+        };
+    }
+
+    resolveLinkedOverlayPoint(plot, frame, dpr) {
+        const interaction = plot?.chartInteraction;
+        if (!interaction || !frame) return null;
+
+        const localPoint = interaction.getReadout?.();
+        if (localPoint) {
+            const x = Math.max(frame.padL, Math.min(frame.padL + frame.innerW, Number(localPoint.x || 0) * dpr));
+            const y = Math.max(frame.padT, Math.min(frame.padT + frame.innerH, Number(localPoint.y || 0) * dpr));
+            const xRatio = frame.innerW > 0 ? (x - frame.padL) / frame.innerW : 0;
+            const yRatio = frame.innerH > 0 ? (y - frame.padT) / frame.innerH : 0;
+            const xValue = frame.xMin + xRatio * (frame.xMax - frame.xMin);
+            const yValue = frame.yMax - yRatio * (frame.yMax - frame.yMin);
+            return {
+                x,
+                y,
+                xValue,
+                yValue,
+                linked: false,
+                frozen: !!interaction.isFrozen?.()
+            };
+        }
+
+        const snapshot = this.linkedCursorSnapshot;
+        if (!snapshot || snapshot.sourcePlotId === plot.id) return null;
+
+        const xRatioRaw = Number(snapshot.xRatio);
+        const yRatioRaw = Number(snapshot.yRatio);
+        const xRatio = Number.isFinite(xRatioRaw) ? Math.max(0, Math.min(1, xRatioRaw)) : 0;
+        const yRatio = Number.isFinite(yRatioRaw) ? Math.max(0, Math.min(1, yRatioRaw)) : 0;
+        const targetXValue = frame.xMin + xRatio * (frame.xMax - frame.xMin);
+        const nearest = this.findNearestPlotSampleByX(plot, targetXValue);
+        const x = frame.padL + xRatio * frame.innerW;
+        let y = frame.padT + yRatio * frame.innerH;
+        let yValue = frame.yMax - yRatio * (frame.yMax - frame.yMin);
+        if (nearest) {
+            yValue = nearest.y;
+            const ySpan = frame.yMax - frame.yMin;
+            const normalizedY = Math.abs(ySpan) < 1e-12 ? 0.5 : (nearest.y - frame.yMin) / ySpan;
+            y = frame.padT + (1 - normalizedY) * frame.innerH;
+        }
+        y = Math.max(frame.padT, Math.min(frame.padT + frame.innerH, y));
+
+        return {
+            x,
+            y,
+            xValue: Number.isFinite(nearest?.x) ? nearest.x : targetXValue,
+            yValue,
+            linked: true,
+            frozen: !!snapshot.frozen
+        };
+    }
+
+    findNearestPlotSampleByX(plot, targetX) {
+        if (!plot?.buffer || plot.buffer.length <= 0 || !Number.isFinite(targetX)) return null;
+        let best = null;
+        let bestDistance = Infinity;
+        const stride = plot.buffer.length > 4000
+            ? Math.ceil(plot.buffer.length / 4000)
+            : 1;
+
+        if (typeof plot.buffer.forEachSampled === 'function') {
+            plot.buffer.forEachSampled(stride, (x, y) => {
+                const distance = Math.abs(x - targetX);
+                if (distance < bestDistance) {
+                    bestDistance = distance;
+                    best = { x, y };
+                }
+            });
+        } else if (typeof plot.buffer.forEach === 'function') {
+            plot.buffer.forEach((x, y) => {
+                const distance = Math.abs(x - targetX);
+                if (distance < bestDistance) {
+                    bestDistance = distance;
+                    best = { x, y };
+                }
+            });
+        }
+
+        return best;
     }
 
     createRangeControls(plot, axisKey, labelText) {
@@ -1832,8 +1960,10 @@ export class ObservationPanel {
             ctx.fillStyle = '#667085';
             ctx.font = `${12 * dpr}px sans-serif`;
             ctx.fillText('暂无数据：运行模拟后开始绘制', 46 * dpr, 30 * dpr);
+            plot._lastFrame = null;
             return;
         }
+        plot._lastFrame = frame;
 
         const staticLayer = this.ensurePlotStaticLayer(plot, frame);
         if (staticLayer) {
@@ -1880,14 +2010,25 @@ export class ObservationPanel {
     }
 
     renderPlotInteractionOverlay(plot, ctx, frame, dpr) {
-        const point = plot?.chartInteraction?.getReadout?.();
-        if (!point) return;
-        const x = Math.max(frame.padL, Math.min(frame.padL + frame.innerW, point.x * dpr));
-        const y = Math.max(frame.padT, Math.min(frame.padT + frame.innerH, point.y * dpr));
-        const frozen = !!plot.chartInteraction?.isFrozen?.();
-        const overlayColor = frozen ? 'rgba(185, 28, 28, 0.92)' : 'rgba(29, 78, 216, 0.9)';
-        const overlayChipColor = frozen ? 'rgba(127, 29, 29, 0.92)' : 'rgba(30, 64, 175, 0.9)';
-        const chipText = frozen ? '已冻结' : '游标';
+        const overlay = this.resolveLinkedOverlayPoint(plot, frame, dpr);
+        if (!overlay) return;
+        const x = overlay.x;
+        const y = overlay.y;
+        const frozen = !!overlay.frozen;
+        const linked = !!overlay.linked;
+        const overlayColor = frozen
+            ? 'rgba(185, 28, 28, 0.92)'
+            : linked
+                ? 'rgba(2, 132, 199, 0.9)'
+                : 'rgba(29, 78, 216, 0.9)';
+        const overlayChipColor = frozen
+            ? 'rgba(127, 29, 29, 0.92)'
+            : linked
+                ? 'rgba(3, 105, 161, 0.9)'
+                : 'rgba(30, 64, 175, 0.9)';
+        const chipText = frozen
+            ? (linked ? '联动冻结' : '已冻结')
+            : (linked ? '联动游标' : '游标');
 
         ctx.save();
         ctx.strokeStyle = overlayColor;
@@ -1906,7 +2047,13 @@ export class ObservationPanel {
         ctx.arc(x, y, 3.5 * dpr, 0, Math.PI * 2);
         ctx.fill();
 
-        const label = `${chipText} x=${formatNumberCompact((x - frame.padL) / dpr, 2)}, y=${formatNumberCompact((y - frame.padT) / dpr, 2)}`;
+        const labelX = Number.isFinite(overlay.xValue)
+            ? overlay.xValue
+            : frame.xMin + ((x - frame.padL) / Math.max(frame.innerW, 1e-9)) * (frame.xMax - frame.xMin);
+        const labelY = Number.isFinite(overlay.yValue)
+            ? overlay.yValue
+            : frame.yMax - ((y - frame.padT) / Math.max(frame.innerH, 1e-9)) * (frame.yMax - frame.yMin);
+        const label = `${chipText} x=${formatNumberCompact(labelX, 3)}, y=${formatNumberCompact(labelY, 3)}`;
         ctx.font = `${11 * dpr}px sans-serif`;
         const textWidth = ctx.measureText(label).width;
         const chipPaddingX = 8 * dpr;

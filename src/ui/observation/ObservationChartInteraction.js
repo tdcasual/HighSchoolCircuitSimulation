@@ -3,6 +3,13 @@ function toFiniteNumber(value, fallback = 0) {
     return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function clamp01(value) {
+    if (!Number.isFinite(value)) return 0;
+    if (value <= 0) return 0;
+    if (value >= 1) return 1;
+    return value;
+}
+
 export class ObservationChartInteraction {
     constructor({ holdMs = 350 } = {}) {
         this.holdMs = Math.max(0, toFiniteNumber(holdMs, 350));
@@ -66,5 +73,29 @@ export class ObservationChartInteraction {
 
     getReadout() {
         return this.readout ? { ...this.readout } : null;
+    }
+
+    toLinkedSnapshot(bounds = {}) {
+        if (!this.readout) return null;
+        const width = Math.max(1e-9, toFiniteNumber(bounds.width, 1));
+        const height = Math.max(1e-9, toFiniteNumber(bounds.height, 1));
+        return {
+            xRatio: clamp01(this.readout.x / width),
+            yRatio: clamp01(this.readout.y / height),
+            frozen: this.isFrozen()
+        };
+    }
+
+    resolvePointFromLinkedSnapshot(snapshot, bounds = {}) {
+        if (!snapshot || typeof snapshot !== 'object') return null;
+        const width = Math.max(1, toFiniteNumber(bounds.width, 1));
+        const height = Math.max(1, toFiniteNumber(bounds.height, 1));
+        const xRatio = clamp01(toFiniteNumber(snapshot.xRatio, 0));
+        const yRatio = clamp01(toFiniteNumber(snapshot.yRatio, 0));
+        return {
+            x: xRatio * width,
+            y: yRatio * height,
+            frozen: !!snapshot.frozen
+        };
     }
 }
