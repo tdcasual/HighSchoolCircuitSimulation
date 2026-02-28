@@ -49,4 +49,31 @@ describe('runtime diagnostics payload', () => {
         expect(diagnostics.componentIds).toEqual([]);
         expect(diagnostics.wireIds).toEqual([]);
     });
+
+    it('prioritizes primary category hints and limits the hint count', () => {
+        const diagnostics = buildRuntimeDiagnostics({
+            topologyReport: {
+                ok: false,
+                error: { code: 'TOPO_CONFLICTING_IDEAL_SOURCES' },
+                warnings: [{ code: 'TOPO_FLOATING_SUBCIRCUIT' }]
+            },
+            solverShortCircuitDetected: true
+        });
+
+        expect(diagnostics.code).toBe(FailureCategories.ConflictingSources);
+        expect(diagnostics.hints[0]).toContain('并联理想电压源');
+        expect(diagnostics.hints.length).toBeLessThanOrEqual(4);
+    });
+
+    it('uses actionable hint verbs for singular matrix diagnostics', () => {
+        const diagnostics = buildRuntimeDiagnostics({
+            results: {
+                valid: false,
+                meta: { invalidReason: 'factorization_failed' }
+            }
+        });
+
+        expect(diagnostics.code).toBe(FailureCategories.SingularMatrix);
+        expect(diagnostics.hints.every((hint) => /^(检查|确认|恢复|沿|可为|为)/.test(hint))).toBe(true);
+    });
 });

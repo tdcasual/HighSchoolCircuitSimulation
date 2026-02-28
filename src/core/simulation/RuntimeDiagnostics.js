@@ -98,12 +98,32 @@ function collectWireIds(signals, categories) {
 }
 
 function collectHints(categories) {
+    const list = Array.isArray(categories) ? categories : [];
+    if (list.length === 0) return [];
+
     const hints = [];
-    categories.forEach((category) => {
+    const seen = new Set();
+    const pushHint = (hint) => {
+        if (typeof hint !== 'string' || !hint) return;
+        if (seen.has(hint)) return;
+        seen.add(hint);
+        hints.push(hint);
+    };
+
+    const primary = list[0];
+    const primaryHints = CategoryHints[primary] || [];
+    primaryHints.slice(0, 2).forEach(pushHint);
+
+    for (let index = 1; index < list.length; index++) {
+        const category = list[index];
         const categoryHints = CategoryHints[category] || [];
-        categoryHints.forEach((hint) => hints.push(hint));
-    });
-    return hints;
+        if (categoryHints.length > 0) {
+            pushHint(categoryHints[0]);
+        }
+        if (hints.length >= 4) break;
+    }
+
+    return hints.slice(0, 4);
 }
 
 export function buildRuntimeDiagnostics(signals = {}) {
