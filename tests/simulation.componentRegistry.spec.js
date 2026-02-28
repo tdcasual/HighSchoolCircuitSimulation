@@ -122,6 +122,60 @@ describe('ComponentRegistry', () => {
         expect(handler.current(comp, context, nodes)).toBeCloseTo(4, 9);
     });
 
+    it('covers day9 relay/rheostat target types with stamp/current handlers', () => {
+        const targetTypes = ['Relay', 'Rheostat'];
+        for (const type of targetTypes) {
+            expect(ComponentDefaults[type]).toBeTruthy();
+            const handler = DefaultComponentRegistry.get(type);
+            expect(handler, `${type} should be registered`).toBeTruthy();
+            expect(typeof handler.stamp, `${type} should provide stamp()`).toBe('function');
+            expect(typeof handler.current, `${type} should provide current()`).toBe('function');
+        }
+    });
+
+    it('uses relay and rheostat registry stamp/current behaviors equivalent to solver logic', () => {
+        const calls = [];
+        const context = {
+            stampResistor: (i1, i2, r) => calls.push({ i1, i2, r }),
+            voltage: (nodeIdx) => ({ 1: 12, 2: 2, 3: 9, 4: 1, 5: 8 }[nodeIdx] || 0)
+        };
+        const relayHandler = DefaultComponentRegistry.get('Relay');
+        relayHandler.stamp({
+            nodes: [1, 2, 3, 4],
+            coilResistance: 200,
+            contactOnResistance: 0.001,
+            contactOffResistance: 1e12,
+            energized: true
+        }, context, {
+            isValidNode: (nodeIdx) => nodeIdx !== undefined && nodeIdx !== null && nodeIdx >= 0
+        });
+        expect(calls[0]).toEqual({ i1: 0, i2: 1, r: 200 });
+        expect(calls[1]).toEqual({ i1: 2, i2: 3, r: 0.001 });
+        expect(relayHandler.current({
+            nodes: [1, 2],
+            coilResistance: 200
+        }, context, { n1: 1, n2: 2 })).toBeCloseTo(0.05, 9);
+
+        const rheostatHandler = DefaultComponentRegistry.get('Rheostat');
+        rheostatHandler.stamp({
+            nodes: [1, 2, 5],
+            minResistance: 0,
+            maxResistance: 100,
+            position: 0.25,
+            connectionMode: 'left-slider'
+        }, context, {
+            isValidNode: (nodeIdx) => nodeIdx !== undefined && nodeIdx !== null && nodeIdx >= 0
+        });
+        expect(calls[2]).toEqual({ i1: 0, i2: 4, r: 25 });
+        expect(rheostatHandler.current({
+            nodes: [1, 2, 5],
+            minResistance: 0,
+            maxResistance: 100,
+            position: 0.25,
+            connectionMode: 'left-slider'
+        }, context)).toBeCloseTo(0.16, 9);
+    });
+
     it('covers day9 source target types with stamp/current handlers', () => {
         const targetTypes = ['PowerSource', 'ACVoltageSource'];
         for (const type of targetTypes) {

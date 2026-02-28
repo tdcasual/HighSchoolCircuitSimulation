@@ -162,6 +162,171 @@ DefaultComponentRegistry.register('Fuse', {
     }
 });
 
+DefaultComponentRegistry.register('Relay', {
+    stamp: (comp, context, nodes) => {
+        const nCoilA = comp.nodes?.[0];
+        const nCoilB = comp.nodes?.[1];
+        const nContactA = comp.nodes?.[2];
+        const nContactB = comp.nodes?.[3];
+        const isValidNode = typeof nodes.isValidNode === 'function'
+            ? nodes.isValidNode
+            : (nodeIdx) => nodeIdx !== undefined && nodeIdx !== null && nodeIdx >= 0;
+        const toMatrixIndex = (nodeIdx) => (isValidNode(nodeIdx) ? nodeIdx - 1 : null);
+        const iCoilA = toMatrixIndex(nCoilA);
+        const iCoilB = toMatrixIndex(nCoilB);
+        const iContactA = toMatrixIndex(nContactA);
+        const iContactB = toMatrixIndex(nContactB);
+
+        const coilR = Math.max(1e-9, Number(comp.coilResistance) || 200);
+        const onR = Math.max(1e-9, Number(comp.contactOnResistance) || 1e-3);
+        const offR = Math.max(1, Number(comp.contactOffResistance) || 1e12);
+
+        if (iCoilA !== null && iCoilB !== null) {
+            context.stampResistor(iCoilA, iCoilB, coilR);
+        }
+        if (iContactA !== null && iContactB !== null) {
+            context.stampResistor(iContactA, iContactB, comp.energized ? onR : offR);
+        }
+    },
+    current: (comp, context, nodes) => {
+        const dV = context.voltage(nodes.n1) - context.voltage(nodes.n2);
+        const coilR = Math.max(1e-9, Number(comp.coilResistance) || 200);
+        return dV / coilR;
+    }
+});
+
+DefaultComponentRegistry.register('Rheostat', {
+    stamp: (comp, context, nodes) => {
+        const minR = comp.minResistance ?? 0;
+        const maxR = comp.maxResistance ?? 100;
+        const position = comp.position == null ? 0.5 : Math.min(Math.max(comp.position, 0), 1);
+        const range = Math.max(0, maxR - minR);
+        const R1 = Math.max(1e-9, minR + range * position);
+        const R2 = Math.max(1e-9, maxR - range * position);
+
+        const nLeft = comp.nodes?.[0];
+        const nRight = comp.nodes?.[1];
+        const nSlider = comp.nodes?.[2];
+        const isValidNode = typeof nodes.isValidNode === 'function'
+            ? nodes.isValidNode
+            : (nodeIdx) => nodeIdx !== undefined && nodeIdx !== null && nodeIdx >= 0;
+        const toMatrixIndex = (nodeIdx) => (isValidNode(nodeIdx) ? nodeIdx - 1 : null);
+        const iLeft = toMatrixIndex(nLeft);
+        const iRight = toMatrixIndex(nRight);
+        const iSlider = toMatrixIndex(nSlider);
+
+        switch (comp.connectionMode) {
+            case 'left-slider':
+                if (iLeft !== null && iSlider !== null) {
+                    context.stampResistor(iLeft, iSlider, R1);
+                }
+                break;
+            case 'right-slider':
+                if (iSlider !== null && iRight !== null) {
+                    context.stampResistor(iSlider, iRight, R2);
+                }
+                break;
+            case 'left-right':
+                if (iLeft !== null && iRight !== null) {
+                    context.stampResistor(iLeft, iRight, Math.max(1e-9, maxR));
+                }
+                break;
+            case 'all': {
+                const leftEqSlider = (nLeft === nSlider);
+                const rightEqSlider = (nRight === nSlider);
+                const leftEqRight = (nLeft === nRight);
+
+                if (leftEqSlider && rightEqSlider) {
+                    return;
+                }
+                if (leftEqSlider) {
+                    if (iSlider !== null && iRight !== null) {
+                        context.stampResistor(iSlider, iRight, R2);
+                    }
+                    return;
+                }
+                if (rightEqSlider) {
+                    if (iLeft !== null && iSlider !== null) {
+                        context.stampResistor(iLeft, iSlider, R1);
+                    }
+                    return;
+                }
+                if (leftEqRight) {
+                    if (iLeft !== null && iSlider !== null) {
+                        const parallelR = (R1 * R2) / (R1 + R2);
+                        context.stampResistor(iLeft, iSlider, parallelR);
+                    }
+                    return;
+                }
+
+                if (iLeft !== null && iSlider !== null) {
+                    context.stampResistor(iLeft, iSlider, R1);
+                }
+                if (iSlider !== null && iRight !== null) {
+                    context.stampResistor(iSlider, iRight, R2);
+                }
+                break;
+            }
+            default:
+                break;
+        }
+    },
+    current: (comp, context) => {
+        const getVoltage = (nodeIdx) => {
+            if (nodeIdx === undefined || nodeIdx === null || nodeIdx < 0) return 0;
+            return context.voltage(nodeIdx);
+        };
+        const vLeft = getVoltage(comp.nodes?.[0]);
+        const vRight = getVoltage(comp.nodes?.[1]);
+        const vSlider = getVoltage(comp.nodes?.[2]);
+
+        const minR = comp.minResistance ?? 0;
+        const maxR = comp.maxResistance ?? 100;
+        const position = comp.position == null ? 0.5 : Math.min(Math.max(comp.position, 0), 1);
+        const range = Math.max(0, maxR - minR);
+        const R1 = Math.max(1e-9, minR + range * position);
+        const R2 = Math.max(1e-9, maxR - range * position);
+
+        switch (comp.connectionMode) {
+            case 'left-slider':
+                return (vLeft - vSlider) / R1;
+            case 'right-slider':
+                return (vSlider - vRight) / R2;
+            case 'left-right':
+                return (vLeft - vRight) / Math.max(1e-9, maxR);
+            case 'all': {
+                const nLeft = comp.nodes?.[0];
+                const nRight = comp.nodes?.[1];
+                const nSlider = comp.nodes?.[2];
+
+                const leftEqSlider = (nLeft === nSlider);
+                const rightEqSlider = (nRight === nSlider);
+                const leftEqRight = (nLeft === nRight);
+
+                if (leftEqSlider && rightEqSlider) {
+                    return 0;
+                }
+                if (leftEqSlider) {
+                    return (vSlider - vRight) / R2;
+                }
+                if (rightEqSlider) {
+                    return (vLeft - vSlider) / R1;
+                }
+                if (leftEqRight) {
+                    const parallelR = (R1 * R2) / (R1 + R2);
+                    return (vLeft - vSlider) / parallelR;
+                }
+
+                const i1 = (vLeft - vSlider) / R1;
+                const i2 = (vSlider - vRight) / R2;
+                return Math.abs(i1) > Math.abs(i2) ? i1 : i2;
+            }
+            default:
+                return 0;
+        }
+    }
+});
+
 const stampSourceViaMNA = (comp, context, nodes) => {
     const sourceVoltage = typeof context.getSourceInstantVoltage === 'function'
         ? context.getSourceInstantVoltage(comp)
