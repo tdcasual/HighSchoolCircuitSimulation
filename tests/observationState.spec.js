@@ -1,5 +1,16 @@
 import { describe, it, expect } from 'vitest';
-import { createDefaultPlotState, DEFAULT_SAMPLE_INTERVAL_MS, normalizeObservationState, normalizePlotState, normalizeSampleIntervalMs, ObservationDisplayModes, shouldSampleAtTime } from '../src/ui/observation/ObservationState.js';
+import {
+    createDefaultPlotState,
+    DEFAULT_SAMPLE_INTERVAL_MS,
+    normalizeObservationState,
+    normalizeObservationTemplate,
+    normalizeObservationTemplateBindings,
+    normalizePlotState,
+    normalizeSampleIntervalMs,
+    ObservationDisplayModes,
+    OBSERVATION_TEMPLATE_SCHEMA_VERSION,
+    shouldSampleAtTime
+} from '../src/ui/observation/ObservationState.js';
 import { TransformIds } from '../src/ui/observation/ObservationMath.js';
 import { QuantityIds, TIME_SOURCE_ID } from '../src/ui/observation/ObservationSources.js';
 
@@ -111,5 +122,76 @@ describe('ObservationState', () => {
         expect(shouldSampleAtTime(0.051, 0, 50)).toBe(true);
         expect(shouldSampleAtTime(0.001, 0, 0)).toBe(true);
         expect(shouldSampleAtTime(NaN, 0, 50)).toBe(false);
+    });
+
+    it('normalizes template bindings and migrates legacy binding field names', () => {
+        const bindings = normalizeObservationTemplateBindings([
+            { plotIndex: '2', axis: 'Y', sourceId: '  R1 ', quantityId: 'current' },
+            { plot: 1, target: 'x', source: TIME_SOURCE_ID, quantity: QuantityIds.Time },
+            { plotIndex: -1, axis: 'z', sourceId: '' }
+        ]);
+
+        expect(bindings).toEqual([
+            { plotIndex: 2, axis: 'y', sourceId: 'R1', quantityId: 'current' },
+            { plotIndex: 1, axis: 'x', sourceId: TIME_SOURCE_ID, quantityId: QuantityIds.Time }
+        ]);
+    });
+
+    it('normalizes observation template schema fields', () => {
+        const template = normalizeObservationTemplate({
+            name: '  电压模板 ',
+            plots: [
+                {
+                    name: '图A',
+                    maxPoints: 2500,
+                    y: {
+                        sourceId: 'R1',
+                        quantityId: QuantityIds.Voltage,
+                        transformId: TransformIds.Identity,
+                        autoRange: true
+                    }
+                }
+            ],
+            ui: {
+                mode: 'advanced',
+                collapsedCards: ['plot_1', '', null],
+                showGaugeSection: false
+            },
+            bindings: [
+                { plotIndex: 0, axis: 'y', sourceId: 'R1', quantityId: QuantityIds.Voltage }
+            ]
+        });
+
+        expect(template.schemaVersion).toBe(OBSERVATION_TEMPLATE_SCHEMA_VERSION);
+        expect(template.name).toBe('电压模板');
+        expect(template.plots).toHaveLength(1);
+        expect(template.ui.mode).toBe('advanced');
+        expect(template.ui.collapsedCards).toEqual(['plot_1']);
+        expect(template.ui.showGaugeSection).toBe(false);
+        expect(template.bindings).toEqual([
+            { plotIndex: 0, axis: 'y', sourceId: 'R1', quantityId: QuantityIds.Voltage }
+        ]);
+    });
+
+    it('migrates legacy template fields into schema', () => {
+        const template = normalizeObservationTemplate({
+            templateName: '  老模板 ',
+            mode: 'advanced',
+            collapsedCards: ['plot_legacy'],
+            showGaugeSection: false,
+            plots: [],
+            plotBindings: [
+                { plot: 0, target: 'y', source: 'R2', quantity: QuantityIds.Current }
+            ]
+        });
+
+        expect(template.name).toBe('老模板');
+        expect(template.plots).toEqual([]);
+        expect(template.ui.mode).toBe('advanced');
+        expect(template.ui.collapsedCards).toEqual(['plot_legacy']);
+        expect(template.ui.showGaugeSection).toBe(false);
+        expect(template.bindings).toEqual([
+            { plotIndex: 0, axis: 'y', sourceId: 'R2', quantityId: QuantityIds.Current }
+        ]);
     });
 });

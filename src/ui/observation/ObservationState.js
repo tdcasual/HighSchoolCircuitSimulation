@@ -8,6 +8,8 @@ export const MAX_SAMPLE_INTERVAL_MS = 5000;
 export const DEFAULT_MAX_POINTS = 3000;
 export const MIN_MAX_POINTS = 100;
 export const MAX_MAX_POINTS = 200000;
+export const OBSERVATION_TEMPLATE_SCHEMA_VERSION = 1;
+export const DEFAULT_OBSERVATION_TEMPLATE_NAME = '未命名模板';
 
 const VALID_TRANSFORM_IDS = new Set(Object.values(TransformIds));
 export const ObservationDisplayModes = /** @type {const} */ ({
@@ -20,6 +22,29 @@ function toFiniteOrNull(value) {
     if (value == null) return null;
     const n = Number(value);
     return Number.isFinite(n) ? n : null;
+}
+
+function normalizeTemplateName(rawName, fallbackName = DEFAULT_OBSERVATION_TEMPLATE_NAME) {
+    const candidate = typeof rawName === 'string' ? rawName.trim() : '';
+    const fallback = typeof fallbackName === 'string' && fallbackName.trim()
+        ? fallbackName.trim()
+        : DEFAULT_OBSERVATION_TEMPLATE_NAME;
+    return candidate || fallback;
+}
+
+function resolveTemplateName(rawTemplate = {}, fallbackName = DEFAULT_OBSERVATION_TEMPLATE_NAME) {
+    const candidates = [
+        rawTemplate?.name,
+        rawTemplate?.templateName,
+        rawTemplate?.title,
+        rawTemplate?.presetName
+    ];
+    for (const candidate of candidates) {
+        if (typeof candidate === 'string' && candidate.trim()) {
+            return normalizeTemplateName(candidate, fallbackName);
+        }
+    }
+    return normalizeTemplateName('', fallbackName);
 }
 
 export function normalizeSampleIntervalMs(value, fallback = DEFAULT_SAMPLE_INTERVAL_MS) {
@@ -142,6 +167,80 @@ export function normalizeObservationState(rawState, options = {}) {
         sampleIntervalMs,
         plots,
         ui: normalizeObservationUI(rawState?.ui)
+    };
+}
+
+export function normalizeObservationTemplateBindings(rawBindings) {
+    if (!Array.isArray(rawBindings)) return [];
+    const normalized = [];
+
+    for (const item of rawBindings) {
+        if (!item || typeof item !== 'object') continue;
+        const indexRaw = Number(item.plotIndex ?? item.plot ?? item.plotId);
+        const plotIndex = Number.isFinite(indexRaw) ? Math.floor(indexRaw) : -1;
+        if (plotIndex < 0) continue;
+
+        const axisRaw = String(item.axis ?? item.target ?? '').trim().toLowerCase();
+        const axis = axisRaw === 'x' ? 'x' : axisRaw === 'y' ? 'y' : '';
+        if (!axis) continue;
+
+        const sourceIdRaw = typeof item.sourceId === 'string'
+            ? item.sourceId
+            : typeof item.source === 'string'
+                ? item.source
+                : '';
+        const sourceId = sourceIdRaw.trim();
+        if (!sourceId) continue;
+
+        const quantityRaw = typeof item.quantityId === 'string'
+            ? item.quantityId
+            : typeof item.quantity === 'string'
+                ? item.quantity
+                : '';
+        const quantityId = quantityRaw.trim();
+
+        normalized.push({
+            plotIndex,
+            axis,
+            sourceId,
+            ...(quantityId ? { quantityId } : {})
+        });
+    }
+
+    return normalized;
+}
+
+export function normalizeObservationTemplate(rawTemplate, options = {}) {
+    const template = rawTemplate && typeof rawTemplate === 'object' ? rawTemplate : {};
+    const fallbackName = options.defaultName || DEFAULT_OBSERVATION_TEMPLATE_NAME;
+    const legacyUi = {
+        mode: template?.mode,
+        collapsedCards: template?.collapsedCards,
+        showGaugeSection: template?.showGaugeSection
+    };
+    const defaultYSourceId = options.defaultYSourceId ?? TIME_SOURCE_ID;
+    const defaultPlotCountRaw = Number(options.defaultPlotCount);
+    const defaultPlotCount = Number.isFinite(defaultPlotCountRaw) ? Math.max(1, Math.floor(defaultPlotCountRaw)) : 1;
+    const allowEmptyPlots = options.allowEmptyPlots !== false;
+
+    const normalizedState = normalizeObservationState({
+        sampleIntervalMs: template?.sampleIntervalMs,
+        plots: template?.plots,
+        ui: template?.ui ?? legacyUi
+    }, {
+        defaultYSourceId,
+        defaultPlotCount,
+        allowEmptyPlots
+    });
+
+    const bindingsRaw = template?.bindings ?? template?.plotBindings ?? template?.bindingMap;
+
+    return {
+        schemaVersion: OBSERVATION_TEMPLATE_SCHEMA_VERSION,
+        name: resolveTemplateName(template, fallbackName),
+        plots: normalizedState.plots,
+        ui: normalizedState.ui,
+        bindings: normalizeObservationTemplateBindings(bindingsRaw)
     };
 }
 
