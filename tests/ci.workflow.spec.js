@@ -68,7 +68,22 @@ describe('CI workflow coverage', () => {
         });
 
         expect(output.ok).toBe(false);
-        expect(output.output).toContain('missing required snippet');
+        expect(output.output).toContain('missing required step in quality');
         expect(output.output).toContain('Check registry legacy fallback guard');
+    });
+
+    it('fails CI workflow coverage script when required step run command drifts', () => {
+        const output = runScriptInTempWorkspace({
+            scriptRelPath: 'scripts/ci/assert-ci-workflow-coverage.mjs',
+            sourceFiles: ['.github/workflows/ci.yml'],
+            mutateByFile: {
+                '.github/workflows/ci.yml': (content) =>
+                    content.replace('        run: npm run test:reliability', '        run: npm run test:all')
+            }
+        });
+
+        expect(output.ok).toBe(false);
+        expect(output.output).toContain('missing run command');
+        expect(output.output).toContain('npm run test:reliability');
     });
 });
