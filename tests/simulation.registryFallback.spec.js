@@ -109,4 +109,38 @@ describe('Registry fallback behavior', () => {
 
         expect(current).toBeCloseTo(1, 12);
     });
+
+    it('treats unknown component type as no-op during stamping', () => {
+        const solver = new MNASolver();
+        const A = [[0]];
+        const z = [0];
+
+        solver.stampComponent({
+            id: 'X1',
+            type: 'UnknownType',
+            nodes: [1, 0],
+            _isShorted: false
+        }, A, z, 2);
+
+        expect(A[0][0]).toBe(0);
+        expect(z[0]).toBe(0);
+    });
+
+    it('returns 0A for unknown component type without current handler', () => {
+        const postprocessor = new ResultPostprocessor();
+        const current = postprocessor.calculateCurrent({
+            id: 'X1',
+            type: 'UnknownType',
+            nodes: [1, 0]
+        }, {
+            voltages: [0, 10],
+            x: [],
+            nodeCount: 2,
+            registry: {
+                get: () => null
+            }
+        });
+
+        expect(current).toBe(0);
+    });
 });

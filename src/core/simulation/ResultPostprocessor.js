@@ -1,6 +1,5 @@
 import { DynamicIntegrationMethods } from './DynamicIntegrator.js';
 import { DefaultComponentRegistry } from './ComponentRegistry.js';
-import { evaluateJunctionCurrent, resolveJunctionParameters } from './JunctionModel.js';
 import { createRuntimeLogger } from '../../utils/Logger.js';
 
 export class ResultPostprocessor {
@@ -127,10 +126,6 @@ export class ResultPostprocessor {
             }
         }
 
-        const v1 = voltages[comp.nodes[0]] || 0;
-        const v2 = voltages[comp.nodes[1]] || 0;
-        const dV = v1 - v2;
-
         const registryRef = context.registry || DefaultComponentRegistry;
         const customHandler = registryRef ? registryRef.get(comp.type) : null;
         const defaultHandler = registryRef === DefaultComponentRegistry
@@ -157,136 +152,7 @@ export class ResultPostprocessor {
                 nodeCount
             });
         }
-
-        switch (comp.type) {
-            case 'Relay': {
-                const coilR = Math.max(1e-9, Number(comp.coilResistance) || 200);
-                return dV / coilR;
-            }
-
-            case 'Diode':
-            case 'LED': {
-                const params = resolveJunctionParameters(comp);
-                const initialCurrent = Number.isFinite(state?.junctionCurrent)
-                    ? state.junctionCurrent
-                    : (Number.isFinite(comp.junctionCurrent) ? comp.junctionCurrent : 0);
-                const current = evaluateJunctionCurrent(dV, params, initialCurrent);
-                return Number.isFinite(current) ? current : 0;
-            }
-
-            case 'Rheostat': {
-                const getVoltage = (nodeIdx) => {
-                    if (nodeIdx === undefined || nodeIdx < 0) return 0;
-                    return voltages[nodeIdx] || 0;
-                };
-
-                const vLeft = getVoltage(comp.nodes[0]);
-                const vRight = getVoltage(comp.nodes[1]);
-                const vSlider = getVoltage(comp.nodes[2]);
-
-                const minR = comp.minResistance ?? 0;
-                const maxR = comp.maxResistance ?? 100;
-                const position = comp.position == null ? 0.5 : Math.min(Math.max(comp.position, 0), 1);
-                const range = Math.max(0, maxR - minR);
-                const R1 = Math.max(1e-9, minR + range * position);
-                const R2 = Math.max(1e-9, maxR - range * position);
-
-                switch (comp.connectionMode) {
-                    case 'left-slider':
-                        return (vLeft - vSlider) / R1;
-                    case 'right-slider':
-                        return (vSlider - vRight) / R2;
-                    case 'left-right':
-                        return (vLeft - vRight) / Math.max(1e-9, maxR);
-                    case 'all': {
-                        const nLeft = comp.nodes[0];
-                        const nRight = comp.nodes[1];
-                        const nSlider = comp.nodes[2];
-
-                        const leftEqSlider = (nLeft === nSlider);
-                        const rightEqSlider = (nRight === nSlider);
-                        const leftEqRight = (nLeft === nRight);
-
-                        if (leftEqSlider && rightEqSlider) {
-                            return 0;
-                        } else if (leftEqSlider) {
-                            return (vSlider - vRight) / R2;
-                        } else if (rightEqSlider) {
-                            return (vLeft - vSlider) / R1;
-                        } else if (leftEqRight) {
-                            const RParallel = (R1 * R2) / (R1 + R2);
-                            return (vLeft - vSlider) / RParallel;
-                        }
-
-                        const I1 = (vLeft - vSlider) / R1;
-                        const I2 = (vSlider - vRight) / R2;
-                        return Math.abs(I1) > Math.abs(I2) ? I1 : I2;
-                    }
-                    default:
-                        return 0;
-                }
-            }
-
-            case 'PowerSource':
-            case 'ACVoltageSource':
-                if (comp._nortonModel) {
-                    const terminalVoltage = v1 - v2;
-                    const sourceVoltage = this.getSourceInstantVoltage(comp, context);
-                    return (sourceVoltage - terminalVoltage) / comp.internalResistance;
-                }
-                if (!Number.isInteger(comp.vsIndex)) {
-                    return 0;
-                }
-                return -(x[nodeCount - 1 + comp.vsIndex] || 0);
-
-            case 'Motor': {
-                const motorCurrent = x[nodeCount - 1 + comp.vsIndex] || 0;
-                return -motorCurrent;
-            }
-
-            case 'Capacitor':
-            case 'ParallelPlateCapacitor': {
-                const C = comp.capacitance || 0;
-                const method = this.resolveDynamicIntegrationMethod(comp, context);
-                if (method === DynamicIntegrationMethods.Trapezoidal) {
-                    const Req = context.dt / (2 * Math.max(1e-18, C));
-                    const prevVoltage = Number.isFinite(state?.prevVoltage) ? state.prevVoltage
-                        : (Number.isFinite(comp.prevVoltage) ? comp.prevVoltage : 0);
-                    const prevCurrent = Number.isFinite(state?.prevCurrent) ? state.prevCurrent
-                        : (Number.isFinite(comp.prevCurrent) ? comp.prevCurrent : 0);
-                    const Ieq = -(prevVoltage / Req + prevCurrent);
-                    return dV / Req + Ieq;
-                }
-
-                const qPrev = Number.isFinite(state?.prevCharge) ? state.prevCharge : (comp.prevCharge || 0);
-                const qNew = C * dV;
-                const dQ = qNew - qPrev;
-                const dt = Number.isFinite(context.dt) && context.dt > 0 ? context.dt : 0.001;
-                return dQ / dt;
-            }
-
-            case 'Inductor': {
-                const L = Math.max(1e-12, comp.inductance || 0);
-                const method = this.resolveDynamicIntegrationMethod(comp, context);
-                const prevCurrent = Number.isFinite(state?.prevCurrent)
-                    ? state.prevCurrent
-                    : (Number.isFinite(comp.prevCurrent)
-                        ? comp.prevCurrent
-                        : (Number.isFinite(comp.initialCurrent) ? comp.initialCurrent : 0));
-                if (method === DynamicIntegrationMethods.Trapezoidal) {
-                    const dt = Number.isFinite(context.dt) && context.dt > 0 ? context.dt : 0.001;
-                    const Req = (2 * L) / dt;
-                    const prevVoltage = Number.isFinite(state?.prevVoltage) ? state.prevVoltage
-                        : (Number.isFinite(comp.prevVoltage) ? comp.prevVoltage : 0);
-                    const Ieq = prevCurrent + (prevVoltage / Req);
-                    return dV / Req + Ieq;
-                }
-                const dt = Number.isFinite(context.dt) && context.dt > 0 ? context.dt : 0.001;
-                return prevCurrent + (dt / L) * dV;
-            }
-
-            default:
-                return 0;
-        }
+        // Unknown component types without registry current handlers are treated as 0A.
+        return 0;
     }
 }
