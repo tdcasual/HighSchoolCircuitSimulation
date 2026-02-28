@@ -24,7 +24,8 @@
     "test:reliability": "vitest run tests/failureDiagnostics.spec.js tests/runtimeDiagnostics.spec.js tests/circuit.runtimeDiagnostics.spec.js tests/solver.commonCases.spec.js tests/wireShortCircuit.spec.js tests/solver.inputHardening.spec.js tests/solver.dynamicIntegration.spec.js",
     "test:e2e:responsive": "node scripts/e2e/responsive-touch-regression.mjs",
     "test:e2e:wire": "node scripts/e2e/wire-interaction-regression.mjs",
-    "test:e2e:observation": "node scripts/e2e/observation-touch-regression.mjs"
+    "test:e2e:observation": "node scripts/e2e/observation-touch-regression.mjs",
+    "test:e2e:ai-mobile": "node scripts/e2e/ai-mobile-layout-regression.mjs"
   },
   "devDependencies": {
     "eslint": "^8.57.1",

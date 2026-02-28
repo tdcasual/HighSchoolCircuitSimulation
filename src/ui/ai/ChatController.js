@@ -57,9 +57,91 @@ export class ChatController {
     }
 }
 
+const NEW_CHAT_CONFIRM_WINDOW_MS = 1800;
+const NEW_CHAT_CONFIRM_LABEL = '再点清空';
+const NEW_CHAT_CONFIRM_HINT = '再次点击“新对话”将清空当前会话';
+const NEW_CHAT_HOLD_HINT = '继续按住可清空当前会话';
+const NEW_CHAT_HOLD_MS = 350;
+const NEW_CHAT_HOLD_MOVE_TOLERANCE_SQ = 64;
+
+function getBodyClassList() {
+    if (typeof document === 'undefined') return null;
+    return document.body?.classList || null;
+}
+
+function isPhoneLayoutMode() {
+    const classList = getBodyClassList();
+    return !!classList?.contains?.('layout-mode-phone');
+}
+
+function isTouchPreferredEnvironment() {
+    if (isPhoneLayoutMode()) return true;
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false;
+    try {
+        return window.matchMedia('(pointer: coarse)').matches || window.matchMedia('(hover: none)').matches;
+    } catch (_) {
+        return false;
+    }
+}
+
+function hasConversationHistory(panel) {
+    if (!Array.isArray(panel?.messageHistory)) return false;
+    return panel.messageHistory.some((message) => message
+        && (message.role === 'user' || message.role === 'assistant')
+        && typeof message.content === 'string'
+        && message.content.trim());
+}
+
+function setBodyFlag(flag, active) {
+    const classList = getBodyClassList();
+    if (!classList || typeof classList.toggle !== 'function') return;
+    classList.toggle(flag, !!active);
+}
+
+function isVirtualKeyboardOpen() {
+    if (typeof window === 'undefined' || !window.visualViewport) return false;
+    const viewportHeight = Number(window.visualViewport.height);
+    const innerHeight = Number(window.innerHeight);
+    if (!Number.isFinite(viewportHeight) || !Number.isFinite(innerHeight) || innerHeight <= 0) return false;
+    return innerHeight - viewportHeight > 120;
+}
+
+function syncMobileTypingState(panel) {
+    if (!isPhoneLayoutMode()) {
+        setBodyFlag('ai-input-active', false);
+        setBodyFlag('ai-keyboard-open', false);
+        return;
+    }
+    const keyboardOpen = !!panel.chatKeyboardOpen;
+    const inputFocused = !!panel.chatInputFocused;
+    setBodyFlag('ai-keyboard-open', keyboardOpen);
+    setBodyFlag('ai-input-active', keyboardOpen || inputFocused);
+}
+
+export function classifyChatMessageDensity({ role = '', content = '', isPhoneMode = false } = {}) {
+    if (!isPhoneMode) return 'normal';
+    if (role !== 'assistant') return 'normal';
+    const text = String(content || '');
+    const trimmed = text.trim();
+    if (!trimmed) return 'normal';
+
+    const lineBreaks = (trimmed.match(/\n/g) || []).length;
+    const hasStructuredBlocks = /```|^\s*[-*]\s+|^\s*\d+\.\s+|\$\$|^\s*>\s+/m.test(trimmed);
+    const charCount = trimmed.length;
+
+    if (charCount <= 120 && lineBreaks <= 1 && !hasStructuredBlocks) {
+        return 'compact';
+    }
+    if (charCount >= 420 || lineBreaks >= 5 || hasStructuredBlocks) {
+        return 'relaxed';
+    }
+    return 'normal';
+}
+
 function initializeChatImpl() {
     const input = document.getElementById('chat-input');
     const sendBtn = document.getElementById('chat-send-btn');
+    const inputArea = document.getElementById('chat-input-area');
     const followups = document.querySelectorAll('.followup-btn');
     const advancedToggleBtn = document.getElementById('chat-advanced-toggle-btn');
     const insertButtons = document.querySelectorAll('.chat-insert-btn');
@@ -69,9 +151,54 @@ function initializeChatImpl() {
     const undoBtn = document.getElementById('chat-undo-btn');
     const newChatBtn = document.getElementById('chat-new-btn');
     const historySelect = document.getElementById('chat-history-select');
+    const newChatHint = document.getElementById('chat-new-confirm-hint');
     if (!input || !sendBtn) return;
     this.chatAdvancedExpanded = false;
+    this.chatInputFocused = false;
+    this.chatKeyboardOpen = false;
     this.syncChatInputHeight(input);
+    syncMobileTypingState(this);
+
+    const setInputFocusActive = (active) => {
+        this.chatInputFocused = !!active;
+        if (this.chatInputFocused) {
+            this.app?.responsiveLayout?.closeDrawers?.();
+        }
+        syncMobileTypingState(this);
+        this.constrainPanelToViewport?.();
+    };
+
+    input.addEventListener('focus', () => {
+        if (this.chatInputBlurTimer) {
+            clearTimeout(this.chatInputBlurTimer);
+            this.chatInputBlurTimer = null;
+        }
+        setInputFocusActive(true);
+    });
+    input.addEventListener('blur', () => {
+        if (this.chatInputBlurTimer) {
+            clearTimeout(this.chatInputBlurTimer);
+        }
+        this.chatInputBlurTimer = setTimeout(() => {
+            this.chatInputBlurTimer = null;
+            setInputFocusActive(false);
+        }, 120);
+    });
+
+    const updateKeyboardState = () => {
+        this.chatKeyboardOpen = isVirtualKeyboardOpen();
+        if (this.chatKeyboardOpen) {
+            this.app?.responsiveLayout?.closeDrawers?.();
+        }
+        syncMobileTypingState(this);
+        this.constrainPanelToViewport?.();
+    };
+
+    if (typeof window !== 'undefined' && window.visualViewport) {
+        window.visualViewport.addEventListener('resize', updateKeyboardState);
+        window.visualViewport.addEventListener('scroll', updateKeyboardState);
+    }
+    updateKeyboardState();
 
     const runAskQuestionSafely = async (question) => {
         try {
@@ -93,12 +220,17 @@ function initializeChatImpl() {
         }
     };
 
+    let sendInFlight = false;
     const sendMessage = async () => {
         const question = input.value.trim();
-        if (question && !this.isProcessing) {
+        if (!question || this.isProcessing || sendInFlight) return;
+        sendInFlight = true;
+        try {
             await runAskQuestionSafely(question);
             input.value = '';
             this.syncChatInputHeight(input);
+        } finally {
+            sendInFlight = false;
         }
     };
 
@@ -114,6 +246,23 @@ function initializeChatImpl() {
     input.addEventListener('input', () => {
         this.syncChatInputHeight(input);
     });
+    if (inputArea) {
+        inputArea.addEventListener('click', (event) => {
+            if (!isTouchPreferredEnvironment()) return;
+            const target = event?.target;
+            const hitInteractive = typeof target?.closest === 'function'
+                ? target.closest('button,select,textarea,a,label,input')
+                : null;
+            if (hitInteractive) return;
+            if (typeof input.focus === 'function') {
+                input.focus();
+            }
+            const textLength = String(input.value || '').length;
+            if (typeof input.setSelectionRange === 'function') {
+                input.setSelectionRange(textLength, textLength);
+            }
+        });
+    }
 
     const quickBtns = document.querySelectorAll('.quick-question-btn');
     quickBtns.forEach((btn) => {
@@ -159,7 +308,141 @@ function initializeChatImpl() {
     }
 
     if (newChatBtn) {
-        newChatBtn.addEventListener('click', () => this.startNewConversation());
+        const hideNewChatConfirmHint = () => {
+            if (!newChatHint) return;
+            newChatHint.hidden = true;
+            newChatHint.textContent = '';
+            if (typeof newChatHint.classList?.remove === 'function') {
+                newChatHint.classList.remove('visible');
+            }
+        };
+        const showNewChatConfirmHint = (message = NEW_CHAT_CONFIRM_HINT) => {
+            if (!newChatHint) return;
+            newChatHint.textContent = String(message || '');
+            newChatHint.hidden = false;
+            if (typeof newChatHint.classList?.add === 'function') {
+                newChatHint.classList.add('visible');
+            }
+        };
+        const defaultNewChatLabel = String(newChatBtn.textContent || '').trim() || '新对话';
+        const defaultNewChatTitle = String(newChatBtn.title || '').trim() || defaultNewChatLabel;
+        const resetNewChatConfirm = () => {
+            if (this.pendingNewChatConfirmTimer) {
+                clearTimeout(this.pendingNewChatConfirmTimer);
+                this.pendingNewChatConfirmTimer = null;
+            }
+            this.pendingNewChatConfirm = false;
+            newChatBtn.textContent = defaultNewChatLabel;
+            newChatBtn.title = defaultNewChatTitle;
+            if (typeof newChatBtn.setAttribute === 'function') {
+                newChatBtn.setAttribute('aria-label', defaultNewChatLabel);
+            }
+            hideNewChatConfirmHint();
+        };
+        const armNewChatConfirm = () => {
+            this.pendingNewChatConfirm = true;
+            newChatBtn.textContent = NEW_CHAT_CONFIRM_LABEL;
+            newChatBtn.title = '再次点击后清空当前对话';
+            if (typeof newChatBtn.setAttribute === 'function') {
+                newChatBtn.setAttribute('aria-label', NEW_CHAT_CONFIRM_LABEL);
+            }
+            showNewChatConfirmHint();
+            this.pendingNewChatConfirmTimer = setTimeout(() => {
+                resetNewChatConfirm();
+            }, NEW_CHAT_CONFIRM_WINDOW_MS);
+        };
+
+        const isTouchPointer = (pointerType) => pointerType === 'touch' || pointerType === 'pen';
+        let holdTimer = null;
+        let holdPointerId = null;
+        let holdStartX = 0;
+        let holdStartY = 0;
+        let suppressNextClick = false;
+
+        const clearHoldTimer = () => {
+            if (holdTimer) {
+                clearTimeout(holdTimer);
+                holdTimer = null;
+            }
+        };
+
+        const clearHoldState = () => {
+            clearHoldTimer();
+            holdPointerId = null;
+            holdStartX = 0;
+            holdStartY = 0;
+        };
+
+        const matchesHoldPointer = (event) => {
+            if (!Number.isFinite(holdPointerId)) return true;
+            if (!Number.isFinite(event?.pointerId)) return true;
+            return Number(event.pointerId) === holdPointerId;
+        };
+
+        const tryStartTouchHold = (event) => {
+            if (!isTouchPointer(event?.pointerType)) return;
+            const requiresTouchConfirmation = hasConversationHistory(this);
+            if (!requiresTouchConfirmation) return;
+            if (Number.isFinite(event?.button) && event.button !== 0) return;
+
+            clearHoldState();
+            holdPointerId = Number.isFinite(event?.pointerId) ? Number(event.pointerId) : null;
+            holdStartX = Number(event?.clientX) || 0;
+            holdStartY = Number(event?.clientY) || 0;
+            this.pendingNewChatConfirm = false;
+            showNewChatConfirmHint(NEW_CHAT_HOLD_HINT);
+            newChatBtn.title = '继续按住后清空当前对话';
+            holdTimer = setTimeout(() => {
+                holdTimer = null;
+                suppressNextClick = true;
+                clearHoldState();
+                resetNewChatConfirm();
+                this.startNewConversation();
+            }, NEW_CHAT_HOLD_MS);
+        };
+
+        const cancelTouchHold = () => {
+            if (!holdTimer) return;
+            clearHoldState();
+            resetNewChatConfirm();
+        };
+
+        newChatBtn.addEventListener('pointerdown', (event) => {
+            if (!isTouchPreferredEnvironment()) return;
+            tryStartTouchHold(event);
+        });
+        newChatBtn.addEventListener('pointermove', (event) => {
+            if (!matchesHoldPointer(event)) return;
+            if (!holdTimer) return;
+            const dx = (Number(event?.clientX) || 0) - holdStartX;
+            const dy = (Number(event?.clientY) || 0) - holdStartY;
+            if (dx * dx + dy * dy > NEW_CHAT_HOLD_MOVE_TOLERANCE_SQ) {
+                cancelTouchHold();
+            }
+        });
+        const endTouchHold = (event) => {
+            if (!matchesHoldPointer(event)) return;
+            cancelTouchHold();
+        };
+        newChatBtn.addEventListener('pointerup', endTouchHold);
+        newChatBtn.addEventListener('pointercancel', endTouchHold);
+
+        hideNewChatConfirmHint();
+
+        newChatBtn.addEventListener('click', (event) => {
+            if (suppressNextClick) {
+                suppressNextClick = false;
+                event?.preventDefault?.();
+                return;
+            }
+            const requiresTouchConfirmation = isTouchPreferredEnvironment() && hasConversationHistory(this);
+            if (requiresTouchConfirmation && !this.pendingNewChatConfirm) {
+                armNewChatConfirm();
+                return;
+            }
+            resetNewChatConfirm();
+            this.startNewConversation();
+        });
     }
 
     if (historySelect) {
@@ -323,6 +606,16 @@ function addChatMessageImpl(role, content, options = {}) {
         : markdown ? this.renderMarkdown(content)
             : this.escapeHtml(content);
     messageEl.innerHTML = `<div class="chat-message-content">${rendered}</div>`;
+    const isPhoneMode = isPhoneLayoutMode();
+    const density = classifyChatMessageDensity({
+        role,
+        content,
+        isPhoneMode
+    });
+    const contentEl = messageEl.querySelector('.chat-message-content');
+    if (contentEl && density) {
+        contentEl.classList.add(`chat-density-${density}`);
+    }
 
     messagesDiv.appendChild(messageEl);
     messagesDiv.scrollTop = messagesDiv.scrollHeight;

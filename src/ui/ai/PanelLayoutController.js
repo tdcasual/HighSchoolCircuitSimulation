@@ -117,11 +117,107 @@ export class PanelLayoutController {
     }
 }
 
+function getBodyClassList() {
+    if (typeof document === 'undefined') return null;
+    return document.body?.classList || null;
+}
+
+function isPhoneLayout(panel) {
+    const classList = getBodyClassList();
+    return !!classList?.contains?.('layout-mode-phone');
+}
+
+function getViewportMetrics() {
+    const hasWindow = typeof window !== 'undefined';
+    const fallbackWidth = hasWindow ? (Number(window.innerWidth) || 0) : 0;
+    const fallbackHeight = hasWindow ? (Number(window.innerHeight) || 0) : 0;
+    const viewport = hasWindow ? window.visualViewport : null;
+    const left = Number(viewport?.offsetLeft) || 0;
+    const top = Number(viewport?.offsetTop) || 0;
+    const width = Number(viewport?.width) || fallbackWidth;
+    const height = Number(viewport?.height) || fallbackHeight;
+    return {
+        left,
+        top,
+        right: left + width,
+        bottom: top + height,
+        width,
+        height
+    };
+}
+
+function getElementHeightById(id) {
+    if (typeof document === 'undefined') return 0;
+    const element = document.getElementById(id);
+    if (!element || element.hidden) return 0;
+    const rect = element.getBoundingClientRect?.();
+    const height = Number(rect?.height);
+    return Number.isFinite(height) && height > 0 ? height : 0;
+}
+
+function getPhoneBottomReservedSpace() {
+    const statusBarHeight = getElementHeightById('status-bar');
+    const mobileControlsHeight = getElementHeightById('canvas-mobile-controls');
+    return Math.ceil(statusBarHeight) + Math.ceil(mobileControlsHeight) + 8;
+}
+
+function resolvePhoneExpandedHeight(panel, bounds, fallbackHeight) {
+    const availableHeight = Math.max(0, bounds.maxY - bounds.minY);
+    const hasWindow = typeof window !== 'undefined';
+    const viewportHeight = hasWindow
+        ? (Number(window.visualViewport?.height) || Number(window.innerHeight) || 0)
+        : 0;
+    const viewportWidth = hasWindow
+        ? (Number(window.visualViewport?.width) || Number(window.innerWidth) || 0)
+        : 0;
+    const isLandscapeCompactHeight = viewportWidth > viewportHeight && viewportHeight > 0 && viewportHeight <= 420;
+    const desiredHeight = Math.round((viewportHeight || availableHeight) * 0.56);
+    const storedHeight = Number.isFinite(panel.expandedPanelHeight) ? panel.expandedPanelHeight : fallbackHeight;
+    const preferredHeight = isLandscapeCompactHeight ? desiredHeight : Math.max(desiredHeight, storedHeight);
+    const phoneMinHeight = isLandscapeCompactHeight ? 220 : panel.minPanelHeight;
+    const minHeight = availableHeight > 0 ? Math.min(phoneMinHeight, availableHeight) : phoneMinHeight;
+    const maxHeight = availableHeight > 0 ? availableHeight : panel.minPanelHeight;
+    return panel.clamp(preferredHeight, minHeight, maxHeight);
+}
+
+function applyPhonePanelLayout(panel, bounds, baseExpandedHeight, shouldCollapse) {
+    const availableWidth = Math.max(0, bounds.maxX - bounds.minX);
+    const collapsedWidth = panel.getCollapsedPanelWidth();
+    const collapsedHeight = panel.getCollapsedPanelHeight();
+    const expandedWidth = availableWidth > 0
+        ? panel.clamp(
+            availableWidth,
+            Math.min(panel.minPanelWidth, availableWidth),
+            availableWidth
+        )
+        : panel.minPanelWidth;
+    const expandedHeight = resolvePhoneExpandedHeight(panel, bounds, baseExpandedHeight);
+
+    panel.expandedPanelWidth = expandedWidth;
+    panel.expandedPanelHeight = expandedHeight;
+
+    const effectiveWidth = shouldCollapse ? collapsedWidth : expandedWidth;
+    const effectiveHeight = shouldCollapse ? collapsedHeight : expandedHeight;
+    const maxLeft = Math.max(bounds.minX, bounds.maxX - effectiveWidth);
+    const maxTop = Math.max(bounds.minY, bounds.maxY - effectiveHeight);
+    const left = shouldCollapse
+        ? panel.clamp(maxLeft, bounds.minX, maxLeft)
+        : panel.clamp(bounds.minX, bounds.minX, maxLeft);
+    const top = panel.clamp(bounds.maxY - effectiveHeight, bounds.minY, maxTop);
+
+    panel.panel.classList.toggle('collapsed', shouldCollapse);
+    panel.panel.style.width = `${effectiveWidth}px`;
+    panel.panel.style.height = `${effectiveHeight}px`;
+    panel.setPanelAbsolutePosition(left, top);
+    panel.syncPanelCollapsedUI();
+}
+
 function initializePanelLayoutControlsImpl() {
     if (!this.panel) return;
 
     this.boundPanelPointerMove = (event) => this.handlePanelPointerMove(event);
     this.boundPanelPointerUp = (event) => this.handlePanelPointerUp(event);
+    this.boundViewportConstrain = () => this.constrainPanelToViewport();
 
     this.restorePanelLayout();
 
@@ -137,12 +233,18 @@ function initializePanelLayoutControlsImpl() {
         this.resizeHandle.addEventListener('pointerdown', (e) => this.tryStartPanelResize(e));
     }
 
-    window.addEventListener('resize', () => this.constrainPanelToViewport());
+    window.addEventListener('resize', this.boundViewportConstrain);
+    if (typeof window !== 'undefined' && window.visualViewport) {
+        window.visualViewport.addEventListener('resize', this.boundViewportConstrain);
+        window.visualViewport.addEventListener('scroll', this.boundViewportConstrain);
+    }
     this.initializeIdleBehavior();
+    this.constrainPanelToViewport();
 }
 
 function tryStartPanelDragImpl(event) {
     if (!this.panel) return;
+    if (isPhoneLayout(this)) return;
     if (event.pointerType === 'mouse' && event.button !== 0) return;
     if (event.target.closest('#ai-panel-actions')) return;
 
@@ -152,6 +254,7 @@ function tryStartPanelDragImpl(event) {
 
 function tryStartCollapsedPanelDragImpl(event) {
     if (!this.panel || !this.isPanelCollapsed()) return;
+    if (isPhoneLayout(this)) return;
     if (event.pointerType === 'mouse' && event.button !== 0) return;
     if (!event.target.closest('#ai-fab-btn')) return;
     event.preventDefault();
@@ -161,6 +264,7 @@ function tryStartCollapsedPanelDragImpl(event) {
 
 function tryStartPanelResizeImpl(event) {
     if (!this.panel || this.panel.classList.contains('collapsed')) return;
+    if (isPhoneLayout(this)) return;
     if (event.pointerType === 'mouse' && event.button !== 0) return;
 
     event.preventDefault();
@@ -275,6 +379,16 @@ function setPanelAbsolutePositionImpl(left, top) {
 }
 
 function getPanelBoundsImpl() {
+    if (isPhoneLayout(this)) {
+        const metrics = getViewportMetrics();
+        const reservedBottom = getPhoneBottomReservedSpace();
+        const minX = metrics.left + this.viewportPadding;
+        const minY = metrics.top + this.viewportPadding;
+        const maxX = Math.max(minX, metrics.right - this.viewportPadding);
+        const maxY = Math.max(minY, metrics.bottom - this.viewportPadding - reservedBottom);
+        return { minX, minY, maxX, maxY };
+    }
+
     const sidePanel = document.getElementById('side-panel');
     let reservedRight = 0;
     if (sidePanel) {
@@ -347,6 +461,10 @@ function rememberExpandedPanelSizeImpl() {
 
 function syncPanelCollapsedUIImpl() {
     const collapsed = this.isPanelCollapsed();
+    const bodyClassList = getBodyClassList();
+    if (typeof bodyClassList?.toggle === 'function') {
+        bodyClassList.toggle('ai-panel-open', isPhoneLayout(this) && !collapsed);
+    }
     if (this.toggleBtn) {
         this.toggleBtn.textContent = collapsed ? '展开' : '最小化';
         this.toggleBtn.title = collapsed ? '展开面板' : '最小化面板';
@@ -421,6 +539,11 @@ function applyPanelLayoutImpl(layout) {
     const baseExpandedHeight = Math.max(this.minPanelHeight, this.panel.offsetHeight || 420);
     const currentCollapsed = this.isPanelCollapsed();
     const shouldCollapse = typeof layout.collapsed === 'boolean' ? layout.collapsed : currentCollapsed;
+
+    if (isPhoneLayout(this)) {
+        applyPhonePanelLayout(this, bounds, baseExpandedHeight, shouldCollapse);
+        return;
+    }
 
     const expandedWidth = this.clamp(
         typeof layout.expandedWidth === 'number'
@@ -514,6 +637,7 @@ function savePanelLayoutImpl() {
 }
 
 function getDefaultPanelLayoutImpl() {
+    const bounds = this.getPanelBounds();
     const measuredWidth = this.panel?.offsetWidth || 420;
     const measuredHeight = this.panel?.offsetHeight || 420;
     const width = Number.isFinite(this.expandedPanelWidth)
@@ -525,16 +649,8 @@ function getDefaultPanelLayoutImpl() {
         : (isCollapsed ? 420 : measuredHeight);
     const widthForPosition = isCollapsed ? this.getCollapsedPanelWidth() : width;
     const heightForPosition = isCollapsed ? this.getCollapsedPanelHeight() : expandedHeight;
-    let reservedRight = 0;
-    const sidePanel = document.getElementById('side-panel');
-    if (sidePanel) {
-        const rect = sidePanel.getBoundingClientRect();
-        if (rect.width > 0) {
-            reservedRight = rect.width + 12;
-        }
-    }
-    const left = Math.max(this.viewportPadding, window.innerWidth - widthForPosition - this.defaultRightOffset - reservedRight);
-    const top = Math.max(this.viewportPadding, window.innerHeight - heightForPosition - this.defaultBottomOffset);
+    const left = Math.max(bounds.minX, bounds.maxX - widthForPosition - this.defaultRightOffset);
+    const top = Math.max(bounds.minY, bounds.maxY - heightForPosition - this.defaultBottomOffset);
     return { left, top, width, height: expandedHeight, expandedWidth: width, expandedHeight, collapsed: isCollapsed };
 }
 

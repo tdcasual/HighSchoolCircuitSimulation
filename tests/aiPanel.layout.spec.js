@@ -213,4 +213,93 @@ describe('AIPanel layout collapse behavior', () => {
 
         expect(ctx.startPanelGesture).toHaveBeenCalledWith('drag', event);
     });
+
+    it('reserves phone bottom bars and ignores side panel width when computing bounds', () => {
+        const body = {
+            classList: {
+                contains: (name) => name === 'layout-mode-phone'
+            }
+        };
+        const sidePanel = {
+            getBoundingClientRect: () => ({ width: 220, height: 500 })
+        };
+        const statusBar = {
+            hidden: false,
+            getBoundingClientRect: () => ({ width: 390, height: 34 })
+        };
+        const mobileControls = {
+            hidden: false,
+            getBoundingClientRect: () => ({ width: 374, height: 66 })
+        };
+        vi.stubGlobal('window', {
+            innerWidth: 390,
+            innerHeight: 844
+        });
+        vi.stubGlobal('document', {
+            body,
+            getElementById: vi.fn((id) => ({
+                'side-panel': sidePanel,
+                'status-bar': statusBar,
+                'canvas-mobile-controls': mobileControls
+            }[id] || null))
+        });
+
+        const ctx = {
+            app: { logger: { warn: vi.fn() } },
+            circuit: {},
+            viewportPadding: 12,
+            defaultRightOffset: 20,
+            defaultBottomOffset: 16
+        };
+
+        const bounds = AIPanel.prototype.getPanelBounds.call(ctx);
+
+        expect(bounds.maxX).toBe(378);
+        expect(bounds.maxY).toBe(724);
+    });
+
+    it('does not start resize gesture in phone layout', () => {
+        const { ctx } = createContext({ collapsed: false, width: 420, height: 420 });
+        const toggle = vi.fn();
+        vi.stubGlobal('document', {
+            body: {
+                classList: {
+                    contains: (name) => name === 'layout-mode-phone',
+                    toggle
+                }
+            }
+        });
+        ctx.startPanelGesture = vi.fn();
+        const event = {
+            pointerType: 'mouse',
+            button: 0,
+            preventDefault: vi.fn(),
+            stopPropagation: vi.fn()
+        };
+
+        AIPanel.prototype.tryStartPanelResize.call(ctx, event);
+
+        expect(ctx.startPanelGesture).not.toHaveBeenCalled();
+        expect(event.preventDefault).not.toHaveBeenCalled();
+    });
+
+    it('toggles ai-panel-open class while expanded in phone layout', () => {
+        const { ctx, panel } = createContext({ collapsed: false, width: 420, height: 420 });
+        const toggle = vi.fn();
+        vi.stubGlobal('document', {
+            body: {
+                classList: {
+                    contains: (name) => name === 'layout-mode-phone',
+                    toggle
+                }
+            }
+        });
+
+        AIPanel.prototype.syncPanelCollapsedUI.call(ctx);
+        panel.classList.add('collapsed');
+        AIPanel.prototype.syncPanelCollapsedUI.call(ctx);
+
+        expect(toggle).toHaveBeenCalledWith('ai-panel-open', true);
+        expect(toggle).toHaveBeenCalledWith('ai-panel-open', false);
+    });
 });

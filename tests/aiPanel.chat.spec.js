@@ -28,6 +28,7 @@ async function flushMicrotasks() {
 
 describe('AIPanel chat behavior', () => {
     afterEach(() => {
+        vi.useRealTimers();
         vi.restoreAllMocks();
         vi.unstubAllGlobals();
     });
@@ -516,5 +517,432 @@ describe('AIPanel chat behavior', () => {
         input.selectionEnd = input.value.length;
         AIPanel.prototype.insertChatTemplateByMode.call(ctx, input, 'block-math');
         expect(input.value.endsWith('\n$$\n公式\n$$')).toBe(true);
+    });
+
+    it('requires double tap for new chat in touch phone mode when history exists', async () => {
+        const input = createEventTarget({ value: '' });
+        const sendBtn = createEventTarget({ textContent: '发送', disabled: false });
+        const followupActions = { classList: { add: vi.fn(), remove: vi.fn(), toggle: vi.fn() } };
+        const chatControls = { classList: { add: vi.fn(), remove: vi.fn(), toggle: vi.fn() } };
+        const quickQuestions = { classList: { add: vi.fn(), remove: vi.fn(), toggle: vi.fn() } };
+        const undoBtn = createEventTarget({});
+        const newBtn = createEventTarget({ textContent: '新对话', title: '新对话' });
+        const newChatHint = {
+            hidden: true,
+            textContent: '',
+            classList: {
+                add: vi.fn(),
+                remove: vi.fn()
+            }
+        };
+        const historySelect = createEventTarget({ value: '' });
+        const bodyClassList = {
+            contains: (name) => name === 'layout-mode-phone',
+            toggle: vi.fn()
+        };
+
+        vi.useFakeTimers();
+        vi.stubGlobal('window', {
+            matchMedia: vi.fn().mockReturnValue({ matches: true })
+        });
+        vi.stubGlobal('document', {
+            body: { classList: bodyClassList },
+            getElementById: vi.fn((id) => ({
+                'chat-input': input,
+                'chat-send-btn': sendBtn,
+                'followup-actions': followupActions,
+                'chat-controls': chatControls,
+                'quick-questions': quickQuestions,
+                'chat-undo-btn': undoBtn,
+                'chat-new-btn': newBtn,
+                'chat-new-confirm-hint': newChatHint,
+                'chat-history-select': historySelect
+            }[id] || null)),
+            querySelectorAll: vi.fn((selector) => {
+                if (selector === '.followup-btn') return [];
+                if (selector === '.quick-question-btn') return [];
+                if (selector === '.chat-insert-btn') return [];
+                return [];
+            })
+        });
+
+        const ctx = {
+            isProcessing: false,
+            askQuestion: vi.fn().mockResolvedValue(undefined),
+            triggerFollowup: vi.fn(),
+            undoLastExchange: vi.fn(),
+            startNewConversation: vi.fn(),
+            loadConversationFromHistory: vi.fn(),
+            refreshHistorySelect: vi.fn(),
+            addChatMessage: vi.fn(),
+            messageHistory: [{ role: 'user', content: '已有对话' }],
+            syncChatInputHeight: vi.fn(),
+            updateChatActionVisibility: AIPanel.prototype.updateChatActionVisibility
+        };
+
+        AIPanel.prototype.initializeChat.call(ctx);
+
+        newBtn.dispatch('click');
+        expect(ctx.startNewConversation).not.toHaveBeenCalled();
+        expect(String(newBtn.textContent)).toContain('再点');
+        expect(newChatHint.hidden).toBe(false);
+        expect(String(newChatHint.textContent)).toContain('再次点击');
+        expect(newChatHint.classList.add).toHaveBeenCalledWith('visible');
+
+        newBtn.dispatch('click');
+        expect(ctx.startNewConversation).toHaveBeenCalledTimes(1);
+        expect(newChatHint.hidden).toBe(true);
+        expect(newChatHint.textContent).toBe('');
+        expect(newChatHint.classList.remove).toHaveBeenCalledWith('visible');
+    });
+
+    it('resets new chat confirm hint after timeout in touch phone mode', async () => {
+        const input = createEventTarget({ value: '' });
+        const sendBtn = createEventTarget({ textContent: '发送', disabled: false });
+        const followupActions = { classList: { add: vi.fn(), remove: vi.fn(), toggle: vi.fn() } };
+        const chatControls = { classList: { add: vi.fn(), remove: vi.fn(), toggle: vi.fn() } };
+        const quickQuestions = { classList: { add: vi.fn(), remove: vi.fn(), toggle: vi.fn() } };
+        const undoBtn = createEventTarget({});
+        const newBtn = createEventTarget({ textContent: '新对话', title: '新对话' });
+        const newChatHint = {
+            hidden: true,
+            textContent: '',
+            classList: {
+                add: vi.fn(),
+                remove: vi.fn()
+            }
+        };
+        const historySelect = createEventTarget({ value: '' });
+        const bodyClassList = {
+            contains: (name) => name === 'layout-mode-phone',
+            toggle: vi.fn()
+        };
+
+        vi.useFakeTimers();
+        vi.stubGlobal('window', {
+            matchMedia: vi.fn().mockReturnValue({ matches: true })
+        });
+        vi.stubGlobal('document', {
+            body: { classList: bodyClassList },
+            getElementById: vi.fn((id) => ({
+                'chat-input': input,
+                'chat-send-btn': sendBtn,
+                'followup-actions': followupActions,
+                'chat-controls': chatControls,
+                'quick-questions': quickQuestions,
+                'chat-undo-btn': undoBtn,
+                'chat-new-btn': newBtn,
+                'chat-new-confirm-hint': newChatHint,
+                'chat-history-select': historySelect
+            }[id] || null)),
+            querySelectorAll: vi.fn((selector) => {
+                if (selector === '.followup-btn') return [];
+                if (selector === '.quick-question-btn') return [];
+                if (selector === '.chat-insert-btn') return [];
+                return [];
+            })
+        });
+
+        const ctx = {
+            isProcessing: false,
+            askQuestion: vi.fn().mockResolvedValue(undefined),
+            triggerFollowup: vi.fn(),
+            undoLastExchange: vi.fn(),
+            startNewConversation: vi.fn(),
+            loadConversationFromHistory: vi.fn(),
+            refreshHistorySelect: vi.fn(),
+            addChatMessage: vi.fn(),
+            messageHistory: [{ role: 'assistant', content: '历史回答' }],
+            syncChatInputHeight: vi.fn(),
+            updateChatActionVisibility: AIPanel.prototype.updateChatActionVisibility
+        };
+
+        AIPanel.prototype.initializeChat.call(ctx);
+
+        newBtn.dispatch('click');
+        expect(String(newBtn.textContent)).toContain('再点');
+        expect(newChatHint.hidden).toBe(false);
+
+        vi.advanceTimersByTime(1900);
+        expect(newBtn.textContent).toBe('新对话');
+        expect(newChatHint.hidden).toBe(true);
+        expect(newChatHint.textContent).toBe('');
+        expect(ctx.startNewConversation).not.toHaveBeenCalled();
+    });
+
+    it('supports touch long press on new chat to clear without second tap', async () => {
+        const input = createEventTarget({ value: '' });
+        const sendBtn = createEventTarget({ textContent: '发送', disabled: false });
+        const followupActions = { classList: { add: vi.fn(), remove: vi.fn(), toggle: vi.fn() } };
+        const chatControls = { classList: { add: vi.fn(), remove: vi.fn(), toggle: vi.fn() } };
+        const quickQuestions = { classList: { add: vi.fn(), remove: vi.fn(), toggle: vi.fn() } };
+        const undoBtn = createEventTarget({});
+        const newBtn = createEventTarget({ textContent: '新对话', title: '新对话' });
+        const newChatHint = {
+            hidden: true,
+            textContent: '',
+            classList: {
+                add: vi.fn(),
+                remove: vi.fn()
+            }
+        };
+        const historySelect = createEventTarget({ value: '' });
+        const bodyClassList = {
+            contains: (name) => name === 'layout-mode-phone',
+            toggle: vi.fn()
+        };
+
+        vi.useFakeTimers();
+        vi.stubGlobal('window', {
+            matchMedia: vi.fn().mockReturnValue({ matches: true })
+        });
+        vi.stubGlobal('document', {
+            body: { classList: bodyClassList },
+            getElementById: vi.fn((id) => ({
+                'chat-input': input,
+                'chat-send-btn': sendBtn,
+                'followup-actions': followupActions,
+                'chat-controls': chatControls,
+                'quick-questions': quickQuestions,
+                'chat-undo-btn': undoBtn,
+                'chat-new-btn': newBtn,
+                'chat-new-confirm-hint': newChatHint,
+                'chat-history-select': historySelect
+            }[id] || null)),
+            querySelectorAll: vi.fn((selector) => {
+                if (selector === '.followup-btn') return [];
+                if (selector === '.quick-question-btn') return [];
+                if (selector === '.chat-insert-btn') return [];
+                return [];
+            })
+        });
+
+        const ctx = {
+            isProcessing: false,
+            askQuestion: vi.fn().mockResolvedValue(undefined),
+            triggerFollowup: vi.fn(),
+            undoLastExchange: vi.fn(),
+            startNewConversation: vi.fn(),
+            loadConversationFromHistory: vi.fn(),
+            refreshHistorySelect: vi.fn(),
+            addChatMessage: vi.fn(),
+            messageHistory: [{ role: 'user', content: '历史消息' }],
+            syncChatInputHeight: vi.fn(),
+            updateChatActionVisibility: AIPanel.prototype.updateChatActionVisibility
+        };
+
+        AIPanel.prototype.initializeChat.call(ctx);
+
+        newBtn.dispatch('pointerdown', {
+            pointerType: 'touch',
+            pointerId: 5,
+            clientX: 18,
+            clientY: 12
+        });
+        vi.advanceTimersByTime(420);
+        expect(ctx.startNewConversation).toHaveBeenCalledTimes(1);
+
+        newBtn.dispatch('pointerup', {
+            pointerType: 'touch',
+            pointerId: 5,
+            clientX: 18,
+            clientY: 12
+        });
+        newBtn.dispatch('click', { preventDefault: vi.fn() });
+        expect(ctx.startNewConversation).toHaveBeenCalledTimes(1);
+    });
+
+    it('toggles ai-input-active class on focus and blur in phone mode', async () => {
+        const input = createEventTarget({ value: '' });
+        const sendBtn = createEventTarget({ textContent: '发送', disabled: false });
+        const followupActions = { classList: { add: vi.fn(), remove: vi.fn(), toggle: vi.fn() } };
+        const chatControls = { classList: { add: vi.fn(), remove: vi.fn(), toggle: vi.fn() } };
+        const quickQuestions = { classList: { add: vi.fn(), remove: vi.fn(), toggle: vi.fn() } };
+        const undoBtn = createEventTarget({});
+        const newBtn = createEventTarget({ textContent: '新对话', title: '新对话' });
+        const historySelect = createEventTarget({ value: '' });
+        const toggle = vi.fn();
+        const bodyClassList = {
+            contains: (name) => name === 'layout-mode-phone',
+            toggle
+        };
+        const closeDrawers = vi.fn();
+        const constrainPanelToViewport = vi.fn();
+
+        vi.useFakeTimers();
+        vi.stubGlobal('window', {
+            matchMedia: vi.fn().mockReturnValue({ matches: true })
+        });
+        vi.stubGlobal('document', {
+            body: { classList: bodyClassList },
+            getElementById: vi.fn((id) => ({
+                'chat-input': input,
+                'chat-send-btn': sendBtn,
+                'followup-actions': followupActions,
+                'chat-controls': chatControls,
+                'quick-questions': quickQuestions,
+                'chat-undo-btn': undoBtn,
+                'chat-new-btn': newBtn,
+                'chat-history-select': historySelect
+            }[id] || null)),
+            querySelectorAll: vi.fn((selector) => {
+                if (selector === '.followup-btn') return [];
+                if (selector === '.quick-question-btn') return [];
+                if (selector === '.chat-insert-btn') return [];
+                return [];
+            })
+        });
+
+        const ctx = {
+            isProcessing: false,
+            askQuestion: vi.fn().mockResolvedValue(undefined),
+            triggerFollowup: vi.fn(),
+            undoLastExchange: vi.fn(),
+            startNewConversation: vi.fn(),
+            loadConversationFromHistory: vi.fn(),
+            refreshHistorySelect: vi.fn(),
+            addChatMessage: vi.fn(),
+            messageHistory: [],
+            syncChatInputHeight: vi.fn(),
+            updateChatActionVisibility: AIPanel.prototype.updateChatActionVisibility,
+            constrainPanelToViewport,
+            app: {
+                responsiveLayout: {
+                    closeDrawers
+                }
+            }
+        };
+
+        AIPanel.prototype.initializeChat.call(ctx);
+
+        input.dispatch('focus');
+        expect(toggle).toHaveBeenCalledWith('ai-input-active', true);
+        expect(closeDrawers).toHaveBeenCalledTimes(1);
+        expect(constrainPanelToViewport).toHaveBeenCalled();
+
+        input.dispatch('blur');
+        vi.advanceTimersByTime(140);
+        expect(toggle).toHaveBeenCalledWith('ai-input-active', false);
+    });
+
+    it('prevents duplicate sends on rapid double tap', async () => {
+        const input = createEventTarget({ value: '重复发送防抖' });
+        const sendBtn = createEventTarget({ textContent: '发送', disabled: false });
+        const inputArea = createEventTarget({});
+        const followupActions = { classList: { add: vi.fn(), remove: vi.fn(), toggle: vi.fn() } };
+        const chatControls = { classList: { add: vi.fn(), remove: vi.fn(), toggle: vi.fn() } };
+        const quickQuestions = { classList: { add: vi.fn(), remove: vi.fn(), toggle: vi.fn() } };
+        const undoBtn = createEventTarget({});
+        const newBtn = createEventTarget({ textContent: '新对话', title: '新对话' });
+        const historySelect = createEventTarget({ value: '' });
+        let resolveAsk = null;
+        const askPromise = new Promise((resolve) => {
+            resolveAsk = resolve;
+        });
+
+        vi.stubGlobal('document', {
+            body: { classList: { contains: () => false, toggle: vi.fn() } },
+            getElementById: vi.fn((id) => ({
+                'chat-input': input,
+                'chat-send-btn': sendBtn,
+                'chat-input-area': inputArea,
+                'followup-actions': followupActions,
+                'chat-controls': chatControls,
+                'quick-questions': quickQuestions,
+                'chat-undo-btn': undoBtn,
+                'chat-new-btn': newBtn,
+                'chat-history-select': historySelect
+            }[id] || null)),
+            querySelectorAll: vi.fn((selector) => {
+                if (selector === '.followup-btn') return [];
+                if (selector === '.quick-question-btn') return [];
+                if (selector === '.chat-insert-btn') return [];
+                return [];
+            })
+        });
+
+        const ctx = {
+            isProcessing: false,
+            askQuestion: vi.fn().mockReturnValue(askPromise),
+            triggerFollowup: vi.fn(),
+            undoLastExchange: vi.fn(),
+            startNewConversation: vi.fn(),
+            loadConversationFromHistory: vi.fn(),
+            refreshHistorySelect: vi.fn(),
+            addChatMessage: vi.fn(),
+            messageHistory: [],
+            syncChatInputHeight: vi.fn(),
+            updateChatActionVisibility: AIPanel.prototype.updateChatActionVisibility
+        };
+
+        AIPanel.prototype.initializeChat.call(ctx);
+
+        sendBtn.dispatch('click');
+        sendBtn.dispatch('click');
+
+        expect(ctx.askQuestion).toHaveBeenCalledTimes(1);
+        resolveAsk?.();
+        await flushMicrotasks();
+    });
+
+    it('focuses chat input when tapping empty input-area space on mobile', async () => {
+        const input = createEventTarget({
+            value: '',
+            focus: vi.fn(),
+            selectionStart: 0,
+            selectionEnd: 0,
+            setSelectionRange: vi.fn()
+        });
+        const sendBtn = createEventTarget({ textContent: '发送', disabled: false });
+        const inputArea = createEventTarget({});
+        const followupActions = { classList: { add: vi.fn(), remove: vi.fn(), toggle: vi.fn() } };
+        const chatControls = { classList: { add: vi.fn(), remove: vi.fn(), toggle: vi.fn() } };
+        const quickQuestions = { classList: { add: vi.fn(), remove: vi.fn(), toggle: vi.fn() } };
+        const undoBtn = createEventTarget({});
+        const newBtn = createEventTarget({ textContent: '新对话', title: '新对话' });
+        const historySelect = createEventTarget({ value: '' });
+
+        vi.stubGlobal('document', {
+            body: { classList: { contains: (name) => name === 'layout-mode-phone', toggle: vi.fn() } },
+            getElementById: vi.fn((id) => ({
+                'chat-input': input,
+                'chat-send-btn': sendBtn,
+                'chat-input-area': inputArea,
+                'followup-actions': followupActions,
+                'chat-controls': chatControls,
+                'quick-questions': quickQuestions,
+                'chat-undo-btn': undoBtn,
+                'chat-new-btn': newBtn,
+                'chat-history-select': historySelect
+            }[id] || null)),
+            querySelectorAll: vi.fn((selector) => {
+                if (selector === '.followup-btn') return [];
+                if (selector === '.quick-question-btn') return [];
+                if (selector === '.chat-insert-btn') return [];
+                return [];
+            })
+        });
+
+        const ctx = {
+            isProcessing: false,
+            askQuestion: vi.fn().mockResolvedValue(undefined),
+            triggerFollowup: vi.fn(),
+            undoLastExchange: vi.fn(),
+            startNewConversation: vi.fn(),
+            loadConversationFromHistory: vi.fn(),
+            refreshHistorySelect: vi.fn(),
+            addChatMessage: vi.fn(),
+            messageHistory: [],
+            syncChatInputHeight: vi.fn(),
+            updateChatActionVisibility: AIPanel.prototype.updateChatActionVisibility
+        };
+
+        AIPanel.prototype.initializeChat.call(ctx);
+
+        inputArea.dispatch('click', { target: { closest: () => null } });
+        expect(input.focus).toHaveBeenCalledTimes(1);
+
+        inputArea.dispatch('click', { target: { closest: () => true } });
+        expect(input.focus).toHaveBeenCalledTimes(1);
     });
 });
