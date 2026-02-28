@@ -137,4 +137,20 @@ describe('TopActionMenuController', () => {
         expect(controller.isOpen).toBe(false);
         expect(menu.hidden).toBe(true);
     });
+
+    it('closes menu when selection mode switches to focused quick actions', () => {
+        const { button, menu } = setupFixture();
+        const controller = new TopActionMenuController({});
+
+        button.trigger('click', { preventDefault: vi.fn(), stopPropagation: vi.fn() });
+        expect(controller.isOpen).toBe(true);
+
+        controller.setSelectionMode('component');
+        expect(controller.selectionMode).toBe('component');
+        expect(controller.isOpen).toBe(false);
+        expect(menu.hidden).toBe(true);
+
+        controller.setSelectionMode('wire');
+        expect(controller.selectionMode).toBe('wire');
+    });
 });

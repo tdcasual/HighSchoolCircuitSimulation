@@ -8,6 +8,7 @@ export class TopActionMenuController {
             ? document.getElementById('top-action-more-menu')
             : null;
         this.isOpen = false;
+        this.selectionMode = 'none';
 
         this.boundToggle = (event) => {
             event?.preventDefault?.();
@@ -40,6 +41,7 @@ export class TopActionMenuController {
         if (closeBtn) {
             closeBtn.addEventListener('click', this.boundClose);
         }
+        this.setSelectionMode('none');
         this.sync();
     }
 
@@ -78,6 +80,17 @@ export class TopActionMenuController {
 
     sync() {
         if (!this.isPhoneMode()) {
+            this.setOpen(false);
+        }
+    }
+
+    setSelectionMode(mode = 'none') {
+        const normalizedMode = mode === 'component' || mode === 'wire' ? mode : 'none';
+        this.selectionMode = normalizedMode;
+        if (this.button?.setAttribute) {
+            this.button.setAttribute('data-selection-mode', normalizedMode);
+        }
+        if (normalizedMode !== 'none' && this.isOpen) {
             this.setOpen(false);
         }
     }

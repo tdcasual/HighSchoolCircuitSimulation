@@ -237,4 +237,105 @@ describe('QuickActionBarController', () => {
         expect(controller.root.hidden).toBe(false);
         expect(controller.root.style.setProperty).toHaveBeenCalledWith('--quick-action-bottom-offset', '66px');
     });
+
+    it('prioritizes high-frequency wire actions for one-handed mobile use', () => {
+        setupEnvironment();
+        const interaction = {
+            selectedComponent: null,
+            selectedWire: 'wire_1',
+            app: {
+                responsiveLayout: {
+                    isOverlayMode: () => false
+                },
+                topActionMenu: {
+                    setSelectionMode: vi.fn()
+                }
+            },
+            circuit: {
+                getWire: vi.fn(() => ({
+                    id: 'wire_1',
+                    a: { x: 10, y: 20 },
+                    b: { x: 30, y: 60 }
+                }))
+            }
+        };
+        const controller = new QuickActionBarController(interaction);
+
+        controller.update();
+
+        const labels = controller.actions.children.map((node) => node.textContent);
+        expect(labels).toEqual([
+            '电压探针',
+            '电流探针',
+            '分割',
+            '水平拉直',
+            '垂直拉直',
+            '取消选择',
+            '删除'
+        ]);
+    });
+
+    it('ignores wire actions when current selection mode is component', () => {
+        setupEnvironment();
+        const interaction = {
+            selectedComponent: 'R1',
+            selectedWire: 'wire_1',
+            app: {
+                responsiveLayout: {
+                    isOverlayMode: () => false
+                }
+            },
+            circuit: {
+                getComponent: vi.fn(() => ({ id: 'R1', label: '电阻R1' })),
+                getWire: vi.fn(() => ({
+                    id: 'wire_1',
+                    a: { x: 10, y: 20 },
+                    b: { x: 30, y: 60 }
+                }))
+            },
+            deleteWire: vi.fn(),
+            deleteComponent: vi.fn()
+        };
+        const controller = new QuickActionBarController(interaction);
+        controller.update();
+
+        controller.onActionClick({
+            target: {
+                closest: () => ({ dataset: { action: 'wire-delete' } })
+            }
+        });
+
+        expect(interaction.deleteWire).not.toHaveBeenCalled();
+        expect(interaction.deleteComponent).not.toHaveBeenCalled();
+    });
+
+    it('syncs current selection mode to top action menu', () => {
+        setupEnvironment();
+        const setSelectionMode = vi.fn();
+        const interaction = {
+            selectedComponent: 'R1',
+            selectedWire: null,
+            app: {
+                responsiveLayout: {
+                    isOverlayMode: () => false
+                },
+                topActionMenu: {
+                    setSelectionMode
+                }
+            },
+            circuit: {
+                getComponent: vi.fn(() => ({ id: 'R1', label: '电阻R1' }))
+            }
+        };
+        const controller = new QuickActionBarController(interaction);
+
+        controller.update();
+        expect(setSelectionMode).toHaveBeenCalledWith('component');
+
+        interaction.selectedComponent = null;
+        interaction.selectedWire = 'W1';
+        interaction.circuit.getWire = vi.fn(() => ({ id: 'W1', a: { x: 0, y: 0 }, b: { x: 20, y: 0 } }));
+        controller.update();
+        expect(setSelectionMode).toHaveBeenCalledWith('wire');
+    });
 });

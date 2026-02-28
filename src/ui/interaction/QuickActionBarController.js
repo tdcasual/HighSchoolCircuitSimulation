@@ -1,5 +1,23 @@
 import { normalizeCanvasPoint, toCanvasInt } from '../../utils/CanvasCoords.js';
 
+const COMPONENT_ACTIONS = Object.freeze([
+    Object.freeze({ label: '编辑', id: 'component-edit' }),
+    Object.freeze({ label: '复制', id: 'component-duplicate' }),
+    Object.freeze({ label: '旋转', id: 'component-rotate' }),
+    Object.freeze({ label: '取消选择', id: 'selection-clear' }),
+    Object.freeze({ label: '删除', id: 'component-delete' })
+]);
+
+const WIRE_ACTIONS = Object.freeze([
+    Object.freeze({ label: '电压探针', id: 'wire-probe-voltage' }),
+    Object.freeze({ label: '电流探针', id: 'wire-probe-current' }),
+    Object.freeze({ label: '分割', id: 'wire-split-point' }),
+    Object.freeze({ label: '水平拉直', id: 'wire-straighten-horizontal' }),
+    Object.freeze({ label: '垂直拉直', id: 'wire-straighten-vertical' }),
+    Object.freeze({ label: '取消选择', id: 'selection-clear' }),
+    Object.freeze({ label: '删除', id: 'wire-delete' })
+]);
+
 function createButton(label, actionId) {
     const button = document.createElement('button');
     button.type = 'button';
@@ -67,6 +85,7 @@ export class QuickActionBarController {
         this.idleTimer = null;
         this.idleHidden = false;
         this.idleHideMs = 8000;
+        this.currentSelectionMode = 'none';
 
         this.initialize();
     }
@@ -250,6 +269,37 @@ export class QuickActionBarController {
         return toolboxOpen || sidePanelOpen;
     }
 
+    resolveSelectionState() {
+        const componentId = this.interaction?.selectedComponent || null;
+        const wireId = this.interaction?.selectedWire || null;
+        const hasComponent = componentId
+            ? this.interaction?.circuit?.getComponent?.(componentId)
+            : null;
+        const hasWire = wireId
+            ? this.interaction?.circuit?.getWire?.(wireId)
+            : null;
+
+        if (componentId && !hasComponent) {
+            this.interaction.selectedComponent = null;
+        }
+        if (wireId && !hasWire) {
+            this.interaction.selectedWire = null;
+        }
+
+        if (hasComponent) {
+            return { mode: 'component', componentId };
+        }
+        if (hasWire) {
+            return { mode: 'wire', wireId };
+        }
+        return { mode: 'none', componentId: null, wireId: null };
+    }
+
+    syncSelectionMode(mode) {
+        this.currentSelectionMode = mode;
+        this.interaction?.app?.topActionMenu?.setSelectionMode?.(mode);
+    }
+
     update() {
         if (!this.root) return;
         this.applyBottomOffset();
@@ -257,37 +307,42 @@ export class QuickActionBarController {
         if (!this.isTouchPreferredMode()) {
             this.resetIdleState();
             this.setMobileControlsCondensed(false);
+            this.syncSelectionMode('none');
             this.hide();
             return;
         }
         if (this.isOverlayDrawerOpen()) {
             this.resetIdleState();
             this.setMobileControlsCondensed(false);
+            this.syncSelectionMode('none');
             this.hide();
             return;
         }
 
-        const componentId = this.interaction.selectedComponent;
-        const wireId = this.interaction.selectedWire;
+        const selection = this.resolveSelectionState();
         if (this.idleHidden) {
             this.setMobileControlsCondensed(false);
+            this.syncSelectionMode('none');
             this.hide();
             return;
         }
-        if (componentId) {
-            this.renderComponentActions(componentId);
+        if (selection.mode === 'component' && selection.componentId) {
+            this.syncSelectionMode('component');
+            this.renderComponentActions(selection.componentId);
             this.setMobileControlsCondensed(true);
             this.scheduleIdleHide();
             return;
         }
-        if (wireId) {
-            this.renderWireActions(wireId);
+        if (selection.mode === 'wire' && selection.wireId) {
+            this.syncSelectionMode('wire');
+            this.renderWireActions(selection.wireId);
             this.setMobileControlsCondensed(true);
             this.scheduleIdleHide();
             return;
         }
         this.resetIdleState();
         this.setMobileControlsCondensed(false);
+        this.syncSelectionMode('none');
         this.hide();
     }
 
@@ -302,11 +357,9 @@ export class QuickActionBarController {
             this.label.textContent = `元件 ${comp.label || componentId}`;
         }
         this.clearActions();
-        this.actions.appendChild(createButton('编辑', 'component-edit'));
-        this.actions.appendChild(createButton('旋转', 'component-rotate'));
-        this.actions.appendChild(createButton('复制', 'component-duplicate'));
-        this.actions.appendChild(createButton('删除', 'component-delete'));
-        this.actions.appendChild(createButton('取消选择', 'selection-clear'));
+        COMPONENT_ACTIONS.forEach((action) => {
+            this.actions.appendChild(createButton(action.label, action.id));
+        });
     }
 
     renderWireActions(wireId) {
@@ -321,13 +374,9 @@ export class QuickActionBarController {
             this.label.textContent = `导线 ${wireId}`;
         }
         this.clearActions();
-        this.actions.appendChild(createButton('分割', 'wire-split-point'));
-        this.actions.appendChild(createButton('水平拉直', 'wire-straighten-horizontal'));
-        this.actions.appendChild(createButton('垂直拉直', 'wire-straighten-vertical'));
-        this.actions.appendChild(createButton('电压探针', 'wire-probe-voltage'));
-        this.actions.appendChild(createButton('电流探针', 'wire-probe-current'));
-        this.actions.appendChild(createButton('删除', 'wire-delete'));
-        this.actions.appendChild(createButton('取消选择', 'selection-clear'));
+        WIRE_ACTIONS.forEach((action) => {
+            this.actions.appendChild(createButton(action.label, action.id));
+        });
     }
 
     setMobileControlsCondensed(active) {
@@ -411,8 +460,13 @@ export class QuickActionBarController {
         const button = event?.target?.closest?.('button[data-action]');
         if (!button) return;
         const actionId = button.dataset.action;
-        const componentId = this.interaction.selectedComponent;
-        const wireId = this.interaction.selectedWire;
+        const selection = this.resolveSelectionState();
+        const mode = selection.mode;
+        const componentId = selection.componentId;
+        const wireId = selection.wireId;
+
+        if (actionId.startsWith('component-') && mode !== 'component') return;
+        if (actionId.startsWith('wire-') && mode !== 'wire') return;
 
         switch (actionId) {
             case 'component-edit':
