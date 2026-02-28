@@ -1,47 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
-
-function toText(value) {
-    if (!value) return '';
-    return typeof value === 'string' ? value : value.toString('utf8');
-}
-
-function runGuardInTempWorkspace({ mutateSolver, mutatePostprocessor } = {}) {
-    const tempRoot = mkdtempSync(join(tmpdir(), 'registry-guard-'));
-    const solverDir = resolve(tempRoot, 'src/engine');
-    const postprocessorDir = resolve(tempRoot, 'src/core/simulation');
-    mkdirSync(solverDir, { recursive: true });
-    mkdirSync(postprocessorDir, { recursive: true });
-
-    const solverSourcePath = resolve(process.cwd(), 'src/engine/Solver.js');
-    const postprocessorSourcePath = resolve(process.cwd(), 'src/core/simulation/ResultPostprocessor.js');
-    const scriptPath = resolve(process.cwd(), 'scripts/ci/assert-registry-legacy-fallback-guard.mjs');
-
-    const originalSolver = readFileSync(solverSourcePath, 'utf8');
-    const originalPostprocessor = readFileSync(postprocessorSourcePath, 'utf8');
-    const nextSolver = typeof mutateSolver === 'function' ? mutateSolver(originalSolver) : originalSolver;
-    const nextPostprocessor = typeof mutatePostprocessor === 'function'
-        ? mutatePostprocessor(originalPostprocessor)
-        : originalPostprocessor;
-
-    writeFileSync(resolve(solverDir, 'Solver.js'), nextSolver, 'utf8');
-    writeFileSync(resolve(postprocessorDir, 'ResultPostprocessor.js'), nextPostprocessor, 'utf8');
-
-    try {
-        const output = execFileSync('node', [scriptPath], { cwd: tempRoot, encoding: 'utf8' });
-        return { ok: true, output };
-    } catch (error) {
-        return {
-            ok: false,
-            output: `${toText(error.stdout)}${toText(error.stderr)}`.trim()
-        };
-    } finally {
-        rmSync(tempRoot, { recursive: true, force: true });
-    }
-}
+import { runScriptInTempWorkspace } from './helpers/scriptGuardTestUtils.js';
 
 describe('registry legacy fallback guard wiring', () => {
     it('exposes guard script in package scripts and check pipeline', () => {
@@ -80,17 +41,24 @@ describe('registry legacy fallback guard wiring', () => {
     });
 
     it('fails when legacy switch fallback is reintroduced in stampComponent', () => {
-        const result = runGuardInTempWorkspace({
-            mutateSolver: (source) => source.replace(
-                /if\s*\(\s*handledByDispatcher\s*\)\s*\{\s*return;\s*\}/,
-                `if (handledByDispatcher) {
+        const result = runScriptInTempWorkspace({
+            scriptRelPath: 'scripts/ci/assert-registry-legacy-fallback-guard.mjs',
+            sourceFiles: [
+                'src/engine/Solver.js',
+                'src/core/simulation/ResultPostprocessor.js'
+            ],
+            mutateByFile: {
+                'src/engine/Solver.js': (source) => source.replace(
+                    /if\s*\(\s*handledByDispatcher\s*\)\s*\{\s*return;\s*\}/,
+                    `if (handledByDispatcher) {
             return;
         }
         switch (comp.type) {
             default:
                 break;
         }`
-            )
+                )
+            }
         });
 
         expect(result.ok).toBe(false);
@@ -98,8 +66,15 @@ describe('registry legacy fallback guard wiring', () => {
     });
 
     it('fails when registry-first lookup is removed from stampComponent', () => {
-        const result = runGuardInTempWorkspace({
-            mutateSolver: (source) => source.replace('registry.get(comp.type)', 'registry.get(comp.kind)')
+        const result = runScriptInTempWorkspace({
+            scriptRelPath: 'scripts/ci/assert-registry-legacy-fallback-guard.mjs',
+            sourceFiles: [
+                'src/engine/Solver.js',
+                'src/core/simulation/ResultPostprocessor.js'
+            ],
+            mutateByFile: {
+                'src/engine/Solver.js': (source) => source.replace('registry.get(comp.type)', 'registry.get(comp.kind)')
+            }
         });
 
         expect(result.ok).toBe(false);
@@ -107,11 +82,18 @@ describe('registry legacy fallback guard wiring', () => {
     });
 
     it('fails when cache-key builder mutates solver state', () => {
-        const result = runGuardInTempWorkspace({
-            mutateSolver: (source) => source.replace(
-                "return keyParts.join('|');",
-                "this.gmin = 1e-12;\n        return keyParts.join('|');"
-            )
+        const result = runScriptInTempWorkspace({
+            scriptRelPath: 'scripts/ci/assert-registry-legacy-fallback-guard.mjs',
+            sourceFiles: [
+                'src/engine/Solver.js',
+                'src/core/simulation/ResultPostprocessor.js'
+            ],
+            mutateByFile: {
+                'src/engine/Solver.js': (source) => source.replace(
+                    "return keyParts.join('|');",
+                    "this.gmin = 1e-12;\n        return keyParts.join('|');"
+                )
+            }
         });
 
         expect(result.ok).toBe(false);

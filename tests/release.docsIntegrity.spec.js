@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { runScriptInTempWorkspace } from './helpers/scriptGuardTestUtils.js';
 
 describe('release docs integrity', () => {
     it('has release-doc integrity script wired in package scripts', () => {
@@ -54,5 +55,39 @@ describe('release docs integrity', () => {
         expect(guide).toContain('Revision: `interaction-guide-r2-2026-04-06`');
         expect(closure).toContain('docs/process/component-interaction-usage-guide.md');
         expect(closure).toContain('interaction-guide-r2-2026-04-06');
+    });
+
+    it('executes docs-integrity script on current release references', () => {
+        const output = runScriptInTempWorkspace({
+            scriptRelPath: 'scripts/ci/assert-release-doc-integrity.mjs',
+            sourceFiles: [
+                'docs/audits/mobile/2026-03-29-day28-release-readiness-review.md',
+                'docs/releases/v0.9-qa-checklist.md',
+                'docs/releases/v0.9-rc1-release-notes.md',
+                'docs/releases/v0.9-rollback-plan.md'
+            ]
+        });
+
+        expect(output.ok).toBe(true);
+        expect(output.output).toContain('[docs-integrity] ok');
+    });
+
+    it('fails docs-integrity script when required release doc reference is removed', () => {
+        const output = runScriptInTempWorkspace({
+            scriptRelPath: 'scripts/ci/assert-release-doc-integrity.mjs',
+            sourceFiles: [
+                'docs/audits/mobile/2026-03-29-day28-release-readiness-review.md',
+                'docs/releases/v0.9-qa-checklist.md',
+                'docs/releases/v0.9-rc1-release-notes.md',
+                'docs/releases/v0.9-rollback-plan.md'
+            ],
+            mutateByFile: {
+                'docs/audits/mobile/2026-03-29-day28-release-readiness-review.md': (content) =>
+                    content.split('docs/releases/v0.9-rc1-release-notes.md').join('docs/releases/v0.9-rc1-notes.md')
+            }
+        });
+
+        expect(output.ok).toBe(false);
+        expect(output.output).toContain('missing reference');
     });
 });
