@@ -18,4 +18,13 @@ describe('registry legacy fallback guard wiring', () => {
         const output = execFileSync('node', [scriptPath], { encoding: 'utf8' });
         expect(output).toContain('[registry-guard] ok');
     });
+
+    it('guards buildSystemMatrixCacheKey against behavioral side effects', () => {
+        const scriptPath = resolve(process.cwd(), 'scripts/ci/assert-registry-legacy-fallback-guard.mjs');
+        const content = readFileSync(scriptPath, 'utf8');
+
+        expect(content).toContain('buildSystemMatrixCacheKey(nodeCount)');
+        expect(content).toContain('must not invoke stamping APIs');
+        expect(content).toContain('must not mutate component state while building cache key');
+    });
 });

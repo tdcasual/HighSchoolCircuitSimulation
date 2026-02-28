@@ -95,6 +95,14 @@ function assertTypeComparisonWhitelist(body, signature, fileLabel, allowedTypes)
     }
 }
 
+function assertMethodBodyDoesNotMatch(body, signature, fileLabel, checks = []) {
+    for (const check of checks) {
+        if (check.regex.test(body)) {
+            fail(`${fileLabel} -> ${signature} ${check.message}`);
+        }
+    }
+}
+
 const solverPath = 'src/engine/Solver.js';
 const resultPath = 'src/core/simulation/ResultPostprocessor.js';
 
@@ -110,6 +118,11 @@ const resultCurrentBody = assertNoLegacyTypeSwitch(
     resultSource,
     'calculateCurrent(comp, context = {})',
     resultPath
+);
+const cacheKeyBody = extractMethodBody(
+    solverSource,
+    'buildSystemMatrixCacheKey(nodeCount)',
+    solverPath
 );
 
 const structuralTypeWhitelist = new Set([
@@ -132,5 +145,33 @@ assertTypeComparisonWhitelist(
     resultPath,
     structuralTypeWhitelist
 );
+
+assertMethodBodyDoesNotMatch(
+    cacheKeyBody,
+    'buildSystemMatrixCacheKey(nodeCount)',
+    solverPath,
+    [
+        {
+            regex: /\bthis\.stamp[A-Za-z0-9_]*\s*\(/,
+            message: 'must not invoke stamping APIs'
+        },
+        {
+            regex: /\bthis\.stampDispatcher\.stamp\s*\(/,
+            message: 'must not dispatch stamping from cache-key builder'
+        },
+        {
+            regex: /\bcomp\.[A-Za-z0-9_]+\s*=[^=]/,
+            message: 'must not mutate component state while building cache key'
+        },
+        {
+            regex: /\bthis\.[A-Za-z0-9_]+\s*=[^=]/,
+            message: 'must not mutate solver state while building cache key'
+        }
+    ]
+);
+
+if (!/return\s+keyParts\.join\(['"]\|['"]\)\s*;/.test(cacheKeyBody)) {
+    fail(`${solverPath} -> buildSystemMatrixCacheKey(nodeCount) must return a keyParts join result`);
+}
 
 console.log('[registry-guard] ok');
