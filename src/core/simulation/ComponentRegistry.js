@@ -94,6 +94,74 @@ DefaultComponentRegistry.register('Voltmeter', {
     }
 });
 
+DefaultComponentRegistry.register('Switch', {
+    stamp: (comp, context, nodes) => {
+        if (comp.closed) {
+            context.stampResistor(nodes.i1, nodes.i2, 1e-9);
+            return;
+        }
+        context.stampResistor(nodes.i1, nodes.i2, 1e12);
+    },
+    current: (comp, context, nodes) => {
+        const dV = context.voltage(nodes.n1) - context.voltage(nodes.n2);
+        if (comp.closed) {
+            return dV / 1e-9;
+        }
+        return 0;
+    }
+});
+
+DefaultComponentRegistry.register('SPDTSwitch', {
+    stamp: (comp, context, nodes) => {
+        const nCommon = comp.nodes?.[0];
+        const nA = comp.nodes?.[1];
+        const nB = comp.nodes?.[2];
+        const isValidNode = typeof nodes.isValidNode === 'function'
+            ? nodes.isValidNode
+            : (nodeIdx) => nodeIdx !== undefined && nodeIdx !== null && nodeIdx >= 0;
+        const toMatrixIndex = (nodeIdx) => (isValidNode(nodeIdx) ? nodeIdx - 1 : null);
+        const iCommon = toMatrixIndex(nCommon);
+        const iA = toMatrixIndex(nA);
+        const iB = toMatrixIndex(nB);
+        const routeToB = comp.position === 'b';
+        const onR = Math.max(1e-9, Number(comp.onResistance) || 1e-9);
+        const offR = Math.max(onR, Number(comp.offResistance) || 1e12);
+
+        if (iCommon !== null && iA !== null) {
+            context.stampResistor(iCommon, iA, routeToB ? offR : onR);
+        }
+        if (iCommon !== null && iB !== null) {
+            context.stampResistor(iCommon, iB, routeToB ? onR : offR);
+        }
+    },
+    current: (comp, context) => {
+        const routeToB = comp.position === 'b';
+        const targetIdx = routeToB ? 2 : 1;
+        const commonNode = comp.nodes?.[0];
+        const targetNode = comp.nodes?.[targetIdx];
+        const vCommon = commonNode !== undefined && commonNode >= 0 ? context.voltage(commonNode) : 0;
+        const vTarget = targetNode !== undefined && targetNode >= 0 ? context.voltage(targetNode) : 0;
+        const onR = Math.max(1e-9, Number(comp.onResistance) || 1e-9);
+        return (vCommon - vTarget) / onR;
+    }
+});
+
+DefaultComponentRegistry.register('Fuse', {
+    stamp: (comp, context, nodes) => {
+        const resistance = comp.blown
+            ? Math.max(1, Number(comp.blownResistance) || 1e12)
+            : Math.max(1e-9, Number(comp.coldResistance) || 0.05);
+        context.stampResistor(nodes.i1, nodes.i2, resistance);
+    },
+    current: (comp, context, nodes) => {
+        const dV = context.voltage(nodes.n1) - context.voltage(nodes.n2);
+        const resistance = comp.blown
+            ? Math.max(1, Number(comp.blownResistance) || 1e12)
+            : Math.max(1e-9, Number(comp.coldResistance) || 0.05);
+        return dV / resistance;
+    }
+});
+
 const resolveMethod = (context, comp) => {
     if (context && typeof context.resolveDynamicIntegrationMethod === 'function') {
         return context.resolveDynamicIntegrationMethod(comp);
