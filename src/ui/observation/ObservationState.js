@@ -1,5 +1,6 @@
 import { TransformIds } from './ObservationMath.js';
 import { QuantityIds, TIME_SOURCE_ID } from './ObservationSources.js';
+import { normalizeObservationUI } from './ObservationPreferences.js';
 
 export const DEFAULT_SAMPLE_INTERVAL_MS = 50;
 export const MIN_SAMPLE_INTERVAL_MS = 0;
@@ -139,7 +140,8 @@ export function normalizeObservationState(rawState, options = {}) {
 
     return {
         sampleIntervalMs,
-        plots
+        plots,
+        ui: normalizeObservationUI(rawState?.ui)
     };
 }
 

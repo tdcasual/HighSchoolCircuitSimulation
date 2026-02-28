@@ -245,6 +245,7 @@ export class ResponsiveLayoutController {
         const changed = nextMode !== this.mode;
         if (!force && !changed) {
             this.syncLayoutUI();
+            this.app?.observationPanel?.onLayoutModeChanged?.(this.mode);
             return;
         }
 
@@ -260,6 +261,7 @@ export class ResponsiveLayoutController {
         }
 
         this.syncLayoutUI();
+        this.app?.observationPanel?.onLayoutModeChanged?.(nextMode);
     }
 
     applyBodyModeClass(mode) {

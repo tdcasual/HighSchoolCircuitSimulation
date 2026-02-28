@@ -86,6 +86,25 @@ describe('ObservationState', () => {
         expect(state.plots).toHaveLength(0);
     });
 
+    it('normalizes ui preferences with backward compatibility defaults', () => {
+        const state = normalizeObservationState({
+            sampleIntervalMs: 40,
+            plots: [],
+            ui: {
+                mode: 'basic',
+                collapsedCards: ['plot_1', '', null],
+                showGaugeSection: true
+            }
+        }, {
+            defaultYSourceId: 'R1',
+            defaultPlotCount: 1
+        });
+
+        expect(state.ui.mode).toBe('basic');
+        expect(state.ui.showGaugeSection).toBe(true);
+        expect(state.ui.collapsedCards).toEqual(['plot_1']);
+    });
+
     it('decides sampling by simulated time and configured interval', () => {
         expect(shouldSampleAtTime(0, Number.NEGATIVE_INFINITY, 50)).toBe(true);
         expect(shouldSampleAtTime(0.02, 0, 50)).toBe(false);

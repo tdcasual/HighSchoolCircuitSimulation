@@ -5,8 +5,11 @@
 
 import { createElement, clearElement } from '../utils/SafeDOM.js';
 import { applyTransform, computeNiceTicks, computeRangeFromBuffer, formatNumberCompact, RingBuffer2D, TransformOptions } from './observation/ObservationMath.js';
-import { evaluateSourceQuantity, getQuantitiesForSource, getSourceOptions, PROBE_SOURCE_PREFIX, TIME_SOURCE_ID } from './observation/ObservationSources.js';
+import { evaluateSourceQuantity, getQuantitiesForSource, getSourceOptions, PROBE_SOURCE_PREFIX, QuantityIds, TIME_SOURCE_ID } from './observation/ObservationSources.js';
 import { createDefaultPlotState, DEFAULT_SAMPLE_INTERVAL_MS, normalizeObservationState, normalizeSampleIntervalMs, ObservationDisplayModes, shouldSampleAtTime } from './observation/ObservationState.js';
+import { ObservationUIModes, normalizeObservationUI } from './observation/ObservationPreferences.js';
+import { ObservationPlotCardController } from './observation/ObservationPlotCardController.js';
+import { ObservationChartInteraction } from './observation/ObservationChartInteraction.js';
 
 function setSelectOptions(selectEl, options, selectedId) {
     if (!selectEl) return null;
@@ -43,6 +46,40 @@ function parseOptionalNumber(inputValue) {
     return Number.isFinite(v) ? v : null;
 }
 
+export function createObservationPreset(context = {}) {
+    const sourceId = typeof context.sourceId === 'string' && context.sourceId
+        ? context.sourceId
+        : TIME_SOURCE_ID;
+    const probeType = String(context.probeType || '').trim();
+    const preferred = String(context.preferred || '').trim().toLowerCase();
+
+    let yQuantityId = QuantityIds.Voltage;
+    if (probeType === 'WireCurrentProbe') {
+        yQuantityId = QuantityIds.Current;
+    } else if (probeType === 'NodeVoltageProbe') {
+        yQuantityId = QuantityIds.Voltage;
+    } else if (sourceId === TIME_SOURCE_ID) {
+        yQuantityId = QuantityIds.Time;
+    } else if (preferred === 'current') {
+        yQuantityId = QuantityIds.Current;
+    } else if (preferred === 'power') {
+        yQuantityId = QuantityIds.Power;
+    } else {
+        yQuantityId = QuantityIds.Voltage;
+    }
+
+    return {
+        x: {
+            sourceId: TIME_SOURCE_ID,
+            quantityId: QuantityIds.Time
+        },
+        y: {
+            sourceId,
+            quantityId: yQuantityId
+        }
+    };
+}
+
 export class ObservationPanel {
     constructor(app) {
         this.app = app;
@@ -52,6 +89,8 @@ export class ObservationPanel {
         this.gauges = new Map(); // componentId -> gauge state
         this.nextPlotIndex = 1;
         this.sampleIntervalMs = DEFAULT_SAMPLE_INTERVAL_MS;
+        this.ui = normalizeObservationUI();
+        this.modeButtons = {};
         this._renderRaf = 0;
         this._lastSimTime = 0;
         this._lastSampleTime = Number.NEGATIVE_INFINITY;
@@ -122,6 +161,43 @@ export class ObservationPanel {
             textContent: '运行模拟后将持续采样并绘制：y(x) 为参数曲线；也可将 X 设为时间 t 绘制波形。'
         }));
 
+        const modeBar = createElement('div', { className: 'observation-mode-bar' });
+        const basicModeBtn = createElement('button', {
+            className: 'control-btn',
+            textContent: '基础模式',
+            attrs: { type: 'button', 'data-observation-mode': ObservationUIModes.Basic }
+        });
+        const advancedModeBtn = createElement('button', {
+            className: 'control-btn',
+            textContent: '高级模式',
+            attrs: { type: 'button', 'data-observation-mode': ObservationUIModes.Advanced }
+        });
+        modeBar.appendChild(basicModeBtn);
+        modeBar.appendChild(advancedModeBtn);
+        this.modeButtons = {
+            [ObservationUIModes.Basic]: basicModeBtn,
+            [ObservationUIModes.Advanced]: advancedModeBtn
+        };
+        basicModeBtn.addEventListener('click', () => this.setUIMode(ObservationUIModes.Basic));
+        advancedModeBtn.addEventListener('click', () => this.setUIMode(ObservationUIModes.Advanced));
+        this.updateModeToggleUI();
+
+        const presetBar = createElement('div', { className: 'observation-preset-bar' });
+        const presets = [
+            { id: 'voltage-time', label: 'U-t' },
+            { id: 'current-time', label: 'I-t' },
+            { id: 'power-time', label: 'P-t' }
+        ];
+        presets.forEach((preset) => {
+            const btn = createElement('button', {
+                className: 'control-btn',
+                textContent: preset.label,
+                attrs: { type: 'button', 'data-observation-preset': preset.id }
+            });
+            btn.addEventListener('click', () => this.applyQuickPreset(preset.id));
+            presetBar.appendChild(btn);
+        });
+
         this.runtimeStatusEl = createElement('p', {
             className: 'hint observation-runtime-status',
             textContent: ''
@@ -145,7 +221,11 @@ export class ObservationPanel {
             className: 'hint',
             textContent: '0 表示每个仿真步都采样；建议 20~100ms。'
         }));
-        this.root.appendChild(sampleGroup);
+        const stickyControls = createElement('div', { className: 'observation-sticky-controls' });
+        stickyControls.appendChild(modeBar);
+        stickyControls.appendChild(presetBar);
+        stickyControls.appendChild(sampleGroup);
+        this.root.appendChild(stickyControls);
         this.sampleIntervalInput = sampleInput;
         sampleInput.addEventListener('change', () => {
             const normalized = normalizeSampleIntervalMs(sampleInput.value, this.sampleIntervalMs);
@@ -279,11 +359,14 @@ export class ObservationPanel {
             elements: {},
             _needsRedraw: true,
             _latestText: '最新: —',
-            _staticLayer: null
+            _staticLayer: null,
+            controlsOverride: null,
+            chartInteraction: new ObservationChartInteraction()
         };
 
         const card = this.createPlotCard(plot);
         this.plotListEl.appendChild(card);
+        this.applyMobileModeForPlotCard(plot);
         this.plots.push(plot);
 
         if (!options.skipRefresh) {
@@ -313,6 +396,7 @@ export class ObservationPanel {
 
     clearPlotCards() {
         for (const plot of this.plots) {
+            plot.cardController?.dispose?.();
             plot.elements.card?.remove();
         }
         this.plots = [];
@@ -321,6 +405,7 @@ export class ObservationPanel {
     toJSON() {
         return {
             sampleIntervalMs: normalizeSampleIntervalMs(this.sampleIntervalMs, DEFAULT_SAMPLE_INTERVAL_MS),
+            ui: normalizeObservationUI(this.ui),
             plots: this.plots.map((plot) => ({
                 name: plot.name,
                 maxPoints: plot.maxPoints,
@@ -354,6 +439,7 @@ export class ObservationPanel {
         });
 
         this.sampleIntervalMs = normalized.sampleIntervalMs;
+        this.ui = normalizeObservationUI(normalized.ui);
         if (this.sampleIntervalInput) {
             this.sampleIntervalInput.value = String(this.sampleIntervalMs);
         }
@@ -367,18 +453,156 @@ export class ObservationPanel {
         }
 
         this.refreshComponentOptions();
+        this.updateModeToggleUI();
+        this.applyLayoutModeToAllPlotCards();
+        this.requestRender({ onlyIfActive: true });
+    }
+
+    setUIMode(mode) {
+        const normalizedMode = mode === ObservationUIModes.Advanced
+            ? ObservationUIModes.Advanced
+            : ObservationUIModes.Basic;
+        if (this.ui.mode === normalizedMode) return;
+        this.ui = {
+            ...this.ui,
+            mode: normalizedMode
+        };
+        this.updateModeToggleUI();
+        this.applyLayoutModeToAllPlotCards();
+        this.requestRender({ onlyIfActive: true });
+        this.schedulePersist(0);
+    }
+
+    updateModeToggleUI() {
+        const mode = this.ui?.mode === ObservationUIModes.Advanced
+            ? ObservationUIModes.Advanced
+            : ObservationUIModes.Basic;
+        Object.entries(this.modeButtons || {}).forEach(([key, button]) => {
+            if (!button) return;
+            button.classList?.toggle?.('active', key === mode);
+        });
+    }
+
+    isPhoneLayout() {
+        if (typeof document !== 'undefined' && document.body?.classList?.contains('layout-mode-phone')) {
+            return true;
+        }
+        return this.app?.responsiveLayout?.mode === 'phone';
+    }
+
+    applyMobileModeForPlotCard(plot) {
+        const card = plot?.elements?.card;
+        if (!card?.classList) return;
+
+        const autoCollapse = this.ui?.mode !== ObservationUIModes.Advanced && this.isPhoneLayout();
+        const forcedExpanded = plot?.controlsOverride === 'expanded';
+        const forcedCollapsed = plot?.controlsOverride === 'collapsed';
+        const shouldCollapse = forcedCollapsed || (!forcedExpanded && autoCollapse);
+
+        card.classList.toggle('observation-card-collapsed', shouldCollapse);
+        plot.elements.controls?.classList?.toggle?.('observation-controls-collapsed', shouldCollapse);
+
+        const collapseBtn = plot?.elements?.collapseBtn;
+        if (collapseBtn) {
+            collapseBtn.textContent = shouldCollapse ? '展开设置' : '收起设置';
+            collapseBtn.setAttribute?.('aria-expanded', shouldCollapse ? 'false' : 'true');
+            collapseBtn.setAttribute?.('title', shouldCollapse ? '展开参数设置' : '收起参数设置');
+        }
+    }
+
+    applyLayoutModeToAllPlotCards() {
         for (const plot of this.plots) {
+            this.applyMobileModeForPlotCard(plot);
             plot._needsRedraw = true;
         }
+    }
+
+    onLayoutModeChanged() {
+        if (typeof this.applyLayoutModeToAllPlotCards === 'function') {
+            this.applyLayoutModeToAllPlotCards();
+        } else {
+            for (const plot of this.plots || []) {
+                this.applyMobileModeForPlotCard?.(plot);
+            }
+        }
         this.requestRender({ onlyIfActive: true });
+    }
+
+    resolveQuickPresetContext() {
+        const selectedComponentId = this.app?.interaction?.selectedComponent;
+        if (selectedComponentId) {
+            return { sourceId: selectedComponentId };
+        }
+
+        const selectedWireId = this.app?.interaction?.selectedWire;
+        if (selectedWireId && typeof this.circuit?.getAllObservationProbes === 'function') {
+            const probes = this.circuit.getAllObservationProbes() || [];
+            const preferredProbe = probes.find((probe) => probe?.wireId === selectedWireId && probe.type === 'WireCurrentProbe');
+            const fallbackProbe = probes.find((probe) => probe?.wireId === selectedWireId);
+            const matchedProbe = preferredProbe || fallbackProbe;
+            if (matchedProbe?.id) {
+                return {
+                    sourceId: `${PROBE_SOURCE_PREFIX}${matchedProbe.id}`,
+                    probeType: matchedProbe.type
+                };
+            }
+        }
+
+        return { sourceId: this.getDefaultComponentId() };
+    }
+
+    applyQuickPreset(presetId) {
+        const preferred = presetId === 'current-time'
+            ? 'current'
+            : (presetId === 'power-time' ? 'power' : 'voltage');
+        const preset = createObservationPreset({
+            ...this.resolveQuickPresetContext(),
+            preferred
+        });
+        this.addPlotForSource(preset.y.sourceId, { quantityId: preset.y.quantityId });
+        this.requestRender({ onlyIfActive: true });
+        this.schedulePersist(0);
     }
 
     removePlot(plotId) {
         const idx = this.plots.findIndex((p) => p.id === plotId);
         if (idx < 0) return;
         const plot = this.plots[idx];
+        plot.cardController?.dispose?.();
         plot.elements.card?.remove();
         this.plots.splice(idx, 1);
+        this.requestRender({ onlyIfActive: true });
+        this.schedulePersist(0);
+    }
+
+    onPlotCardControlChange(plot, event) {
+        if (!plot || !event) return;
+        if (event.type === 'plot-source-change') {
+            if (event.axis === 'x') {
+                plot.x.sourceId = event.value;
+                this.refreshQuantityOptionsForAxis(plot, 'x');
+            } else {
+                plot.y.sourceId = event.value;
+                this.refreshQuantityOptionsForAxis(plot, 'y');
+            }
+        } else if (event.type === 'plot-quantity-change') {
+            if (event.axis === 'x') {
+                plot.x.quantityId = event.value;
+            } else {
+                plot.y.quantityId = event.value;
+            }
+        } else if (event.type === 'plot-transform-change') {
+            if (event.axis === 'x') {
+                plot.x.transformId = event.value;
+            } else {
+                plot.y.transformId = event.value;
+            }
+        } else if (event.type === 'plot-display-change') {
+            plot.yDisplayMode = event.value;
+        } else {
+            return;
+        }
+        plot._needsRedraw = true;
         this.requestRender({ onlyIfActive: true });
         this.schedulePersist(0);
     }
@@ -391,12 +615,18 @@ export class ObservationPanel {
             className: 'plot-title-input',
             attrs: { type: 'text', value: plot.name, placeholder: '图像名称' }
         });
+        const collapseBtn = createElement('button', {
+            className: 'plot-collapse-btn',
+            textContent: '收起设置',
+            attrs: { type: 'button', title: '收起参数设置' }
+        });
         const removeBtn = createElement('button', {
             className: 'plot-remove-btn',
             textContent: '删除',
             attrs: { type: 'button' }
         });
         header.appendChild(titleInput);
+        header.appendChild(collapseBtn);
         header.appendChild(removeBtn);
         card.appendChild(header);
 
@@ -455,9 +685,11 @@ export class ObservationPanel {
             card,
             titleInput,
             removeBtn,
+            collapseBtn,
             clearBtn,
             latestText,
             canvas,
+            controls,
             xSourceSelect: xSourceGroup.querySelector('select'),
             xQuantitySelect: xQuantityGroup.querySelector('select'),
             xTransformSelect: xTransformGroup.querySelector('select'),
@@ -469,9 +701,31 @@ export class ObservationPanel {
             yRangeGroup: card.querySelector(`[data-range-for="${plot.id}-y"]`),
             pointsInput
         };
+        plot.cardController = new ObservationPlotCardController({
+            onChange: (event) => this.onPlotCardControlChange(plot, event)
+        });
+        plot.cardController.mount({
+            xSourceSelect: plot.elements.xSourceSelect,
+            ySourceSelect: plot.elements.ySourceSelect,
+            xQuantitySelect: plot.elements.xQuantitySelect,
+            yQuantitySelect: plot.elements.yQuantitySelect,
+            xTransformSelect: plot.elements.xTransformSelect,
+            yTransformSelect: plot.elements.yTransformSelect,
+            yDisplaySelect: plot.elements.yDisplaySelect
+        });
 
         titleInput.addEventListener('change', () => {
             plot.name = String(titleInput.value || '').trim() || plot.name;
+            this.schedulePersist(0);
+        });
+        collapseBtn.addEventListener('click', () => {
+            const isCollapsed = plot.elements.card?.classList?.contains?.('observation-card-collapsed');
+            if (isCollapsed) {
+                plot.controlsOverride = 'expanded';
+            } else {
+                plot.controlsOverride = 'collapsed';
+            }
+            this.applyMobileModeForPlotCard(plot);
             this.schedulePersist(0);
         });
         removeBtn.addEventListener('click', () => this.removePlot(plot.id));
@@ -496,52 +750,6 @@ export class ObservationPanel {
             plot.yDisplayMode
         );
 
-        plot.elements.xTransformSelect?.addEventListener('change', () => {
-            plot.x.transformId = plot.elements.xTransformSelect.value;
-            plot._needsRedraw = true;
-            this.requestRender({ onlyIfActive: true });
-            this.schedulePersist(0);
-        });
-        plot.elements.yTransformSelect?.addEventListener('change', () => {
-            plot.y.transformId = plot.elements.yTransformSelect.value;
-            plot._needsRedraw = true;
-            this.requestRender({ onlyIfActive: true });
-            this.schedulePersist(0);
-        });
-        plot.elements.yDisplaySelect?.addEventListener('change', () => {
-            plot.yDisplayMode = plot.elements.yDisplaySelect.value;
-            plot._needsRedraw = true;
-            this.requestRender({ onlyIfActive: true });
-            this.schedulePersist(0);
-        });
-
-        plot.elements.xSourceSelect?.addEventListener('change', () => {
-            plot.x.sourceId = plot.elements.xSourceSelect.value;
-            this.refreshQuantityOptionsForAxis(plot, 'x');
-            plot._needsRedraw = true;
-            this.requestRender({ onlyIfActive: true });
-            this.schedulePersist(0);
-        });
-        plot.elements.ySourceSelect?.addEventListener('change', () => {
-            plot.y.sourceId = plot.elements.ySourceSelect.value;
-            this.refreshQuantityOptionsForAxis(plot, 'y');
-            plot._needsRedraw = true;
-            this.requestRender({ onlyIfActive: true });
-            this.schedulePersist(0);
-        });
-        plot.elements.xQuantitySelect?.addEventListener('change', () => {
-            plot.x.quantityId = plot.elements.xQuantitySelect.value;
-            plot._needsRedraw = true;
-            this.requestRender({ onlyIfActive: true });
-            this.schedulePersist(0);
-        });
-        plot.elements.yQuantitySelect?.addEventListener('change', () => {
-            plot.y.quantityId = plot.elements.yQuantitySelect.value;
-            plot._needsRedraw = true;
-            this.requestRender({ onlyIfActive: true });
-            this.schedulePersist(0);
-        });
-
         pointsInput.addEventListener('change', () => {
             const next = Math.floor(Number(pointsInput.value));
             if (!Number.isFinite(next) || next <= 0) {
@@ -560,8 +768,52 @@ export class ObservationPanel {
 
         // 初始化 canvas size
         this.resizeCanvasToDisplaySize(canvas);
+        this.bindPlotCanvasInteraction(plot);
 
         return card;
+    }
+
+    bindPlotCanvasInteraction(plot) {
+        const canvas = plot?.elements?.canvas;
+        if (!canvas || typeof canvas.addEventListener !== 'function') return;
+        const getPoint = (event) => {
+            const rect = canvas.getBoundingClientRect?.();
+            if (!rect) return null;
+            const x = Number(event?.clientX) - Number(rect.left || 0);
+            const y = Number(event?.clientY) - Number(rect.top || 0);
+            if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+            return {
+                x,
+                y,
+                pointerType: event?.pointerType || 'mouse',
+                time: typeof event?.timeStamp === 'number' ? event.timeStamp : Date.now()
+            };
+        };
+
+        canvas.addEventListener('pointerdown', (event) => {
+            const point = getPoint(event);
+            if (!point) return;
+            plot.chartInteraction?.onPointerDown(point);
+            plot._needsRedraw = true;
+            this.requestRender({ onlyIfActive: true });
+        });
+        canvas.addEventListener('pointermove', (event) => {
+            const point = getPoint(event);
+            if (!point) return;
+            plot.chartInteraction?.onPointerMove(point);
+            plot._needsRedraw = true;
+            this.requestRender({ onlyIfActive: true });
+        });
+        canvas.addEventListener('pointerup', () => {
+            plot.chartInteraction?.onPointerUp();
+            plot._needsRedraw = true;
+            this.requestRender({ onlyIfActive: true });
+        });
+        canvas.addEventListener('pointerleave', () => {
+            plot.chartInteraction?.onPointerLeave();
+            plot._needsRedraw = true;
+            this.requestRender({ onlyIfActive: true });
+        });
     }
 
     createRangeControls(plot, axisKey, labelText) {
@@ -1242,5 +1494,33 @@ export class ObservationPanel {
             }
         });
         if (started) ctx.stroke();
+
+        this.renderPlotInteractionOverlay(plot, ctx, frame, dpr);
+    }
+
+    renderPlotInteractionOverlay(plot, ctx, frame, dpr) {
+        const point = plot?.chartInteraction?.getReadout?.();
+        if (!point) return;
+        const x = Math.max(frame.padL, Math.min(frame.padL + frame.innerW, point.x * dpr));
+        const y = Math.max(frame.padT, Math.min(frame.padT + frame.innerH, point.y * dpr));
+        const frozen = !!plot.chartInteraction?.isFrozen?.();
+
+        ctx.save();
+        ctx.strokeStyle = frozen ? 'rgba(220, 38, 38, 0.85)' : 'rgba(37, 99, 235, 0.85)';
+        ctx.lineWidth = 1.5 * dpr;
+        ctx.beginPath();
+        ctx.moveTo(x, frame.padT);
+        ctx.lineTo(x, frame.padT + frame.innerH);
+        ctx.moveTo(frame.padL, y);
+        ctx.lineTo(frame.padL + frame.innerW, y);
+        ctx.stroke();
+
+        const label = `${frozen ? '冻结' : '游标'} x=${formatNumberCompact((x - frame.padL) / dpr, 2)}, y=${formatNumberCompact((y - frame.padT) / dpr, 2)}`;
+        ctx.font = `${11 * dpr}px sans-serif`;
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+        const textX = Math.min(frame.padL + frame.innerW - 120 * dpr, Math.max(frame.padL + 8 * dpr, x + 8 * dpr));
+        const textY = Math.max(frame.padT + 14 * dpr, y - 8 * dpr);
+        ctx.fillText(label, textX, textY);
+        ctx.restore();
     }
 }

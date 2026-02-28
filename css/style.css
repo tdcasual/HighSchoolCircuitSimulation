@@ -797,6 +797,39 @@ body.layout-mode-phone .panel-close-btn {
     background: rgba(244, 67, 54, 0.18);
 }
 
+.observation-sticky-controls {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    display: grid;
+    gap: 10px;
+    padding: 10px 0;
+    background: linear-gradient(to bottom, rgba(245, 248, 252, 0.98), rgba(245, 248, 252, 0.88) 75%, rgba(245, 248, 252, 0));
+    backdrop-filter: blur(2px);
+}
+
+.observation-mode-bar,
+.observation-preset-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.observation-mode-bar .control-btn,
+.observation-preset-bar .control-btn {
+    width: auto;
+    margin: 0;
+    border-radius: 999px;
+    padding: 8px 12px;
+    font-size: 12px;
+}
+
+.observation-mode-bar .control-btn.active {
+    border-color: rgba(33, 150, 243, 0.55);
+    background: rgba(33, 150, 243, 0.24);
+    color: var(--primary-dark);
+}
+
 .observation-plot-list {
     display: flex;
     flex-direction: column;
@@ -922,8 +955,20 @@ body.layout-mode-phone .panel-close-btn {
     cursor: pointer;
 }
 
+.plot-collapse-btn {
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid rgba(33, 150, 243, 0.28);
+    background: rgba(33, 150, 243, 0.12);
+    color: var(--primary-dark);
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
 .plot-remove-btn:hover,
-.plot-clear-btn:hover {
+.plot-clear-btn:hover,
+.plot-collapse-btn:hover {
     border-color: rgba(33, 150, 243, 0.35);
     background: #eef6ff;
     color: var(--primary-dark);
@@ -978,6 +1023,10 @@ body.layout-mode-phone .panel-close-btn {
     display: flex;
     gap: 8px;
     margin-top: 10px;
+}
+
+.observation-plot-card.observation-card-collapsed .plot-controls {
+    display: none;
 }
 
 .obs-range-inputs input {
@@ -1956,6 +2005,24 @@ body.layout-mode-phone #side-panel {
 body.layout-mode-phone #toolbox.layout-open,
 body.layout-mode-phone #side-panel.layout-open {
     transform: translateY(var(--drawer-drag-y, 0px));
+}
+
+body.layout-mode-phone #observation-root .observation-sticky-controls {
+    top: -6px;
+    margin: -6px -2px 0;
+    padding: 10px 2px 8px;
+}
+
+body.layout-mode-phone #observation-root .observation-plot-card {
+    padding: 10px;
+}
+
+body.layout-mode-phone #observation-root .plot-card-header {
+    gap: 8px;
+}
+
+body.layout-mode-phone #observation-root .plot-title-input {
+    min-width: 0;
 }
 
 /* ==========================================
