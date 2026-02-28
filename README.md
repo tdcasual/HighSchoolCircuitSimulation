@@ -33,6 +33,12 @@
 - AI 教学：运行时故障诊断可映射为“发生了什么/为什么/如何修复”教学提示
 - 质量门禁：`check:full` + P0/CircuitJS/AI 三组 baseline 回归通过
 
+## ✅ v1.0 8-Day 冲刺收官（2026-04-06）
+
+- 发布门禁：[`docs/releases/v1.0-8day-readiness-gate.md`](docs/releases/v1.0-8day-readiness-gate.md)
+- Go/No-Go 矩阵：[`docs/releases/v1.0-8day-go-no-go-matrix.md`](docs/releases/v1.0-8day-go-no-go-matrix.md)
+- 收官审计：[`docs/audits/mobile/2026-04-06-sprint-closure-review.md`](docs/audits/mobile/2026-04-06-sprint-closure-review.md)
+
 ## 🔄 迁移说明（v0.9 RC）
 
 - Observation 配置可直接沿用旧存档，加载时会自动归一化到 v2 schema。
