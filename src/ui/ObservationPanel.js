@@ -4,7 +4,7 @@
  */
 
 import { createElement, clearElement } from '../utils/SafeDOM.js';
-import { applyTransform, computeNiceTicks, computeRangeFromBuffer, formatNumberCompact, RingBuffer2D, TransformOptions } from './observation/ObservationMath.js';
+import { applyTransform, computeNiceTicks, computeRangeFromBuffer, formatNumberCompact, RingBuffer2D, stabilizeAutoRangeWindow, TransformOptions } from './observation/ObservationMath.js';
 import { evaluateSourceQuantity, getQuantitiesForSource, getSourceOptions, PROBE_SOURCE_PREFIX, QuantityIds, TIME_SOURCE_ID } from './observation/ObservationSources.js';
 import {
     createDefaultPlotState,
@@ -1756,11 +1756,45 @@ export class ObservationPanel {
         const innerW = Math.max(1, w - padL - padR);
         const innerH = Math.max(1, h - padT - padB);
 
+        plot._autoRangeWindow = plot._autoRangeWindow && typeof plot._autoRangeWindow === 'object'
+            ? plot._autoRangeWindow
+            : { x: null, y: null };
         const autoRange = computeRangeFromBuffer(plot.buffer);
-        let xMin = plot.x.autoRange ? autoRange?.minX : plot.x.min;
-        let xMax = plot.x.autoRange ? autoRange?.maxX : plot.x.max;
-        let yMin = plot.y.autoRange ? autoRange?.minY : plot.y.min;
-        let yMax = plot.y.autoRange ? autoRange?.maxY : plot.y.max;
+        let xAutoWindow = null;
+        let yAutoWindow = null;
+        if (plot.x.autoRange && autoRange) {
+            xAutoWindow = stabilizeAutoRangeWindow({
+                min: autoRange.minX,
+                max: autoRange.maxX
+            }, plot._autoRangeWindow.x, {
+                paddingRatio: 0.03,
+                expandRatio: 0.02,
+                shrinkDeadbandRatio: 0.14,
+                shrinkSmoothing: 0.2
+            });
+            plot._autoRangeWindow.x = xAutoWindow;
+        } else {
+            plot._autoRangeWindow.x = null;
+        }
+        if (plot.y.autoRange && autoRange) {
+            yAutoWindow = stabilizeAutoRangeWindow({
+                min: autoRange.minY,
+                max: autoRange.maxY
+            }, plot._autoRangeWindow.y, {
+                paddingRatio: 0.05,
+                expandRatio: 0.025,
+                shrinkDeadbandRatio: 0.16,
+                shrinkSmoothing: 0.2
+            });
+            plot._autoRangeWindow.y = yAutoWindow;
+        } else {
+            plot._autoRangeWindow.y = null;
+        }
+
+        let xMin = plot.x.autoRange ? xAutoWindow?.min : plot.x.min;
+        let xMax = plot.x.autoRange ? xAutoWindow?.max : plot.x.max;
+        let yMin = plot.y.autoRange ? yAutoWindow?.min : plot.y.min;
+        let yMax = plot.y.autoRange ? yAutoWindow?.max : plot.y.max;
 
         if (!Number.isFinite(xMin) || !Number.isFinite(xMax) || !Number.isFinite(yMin) || !Number.isFinite(yMax)) {
             return null;
@@ -1779,12 +1813,16 @@ export class ObservationPanel {
         if (xMin > xMax) [xMin, xMax] = [xMax, xMin];
         if (yMin > yMax) [yMin, yMax] = [yMax, yMin];
 
-        const xPad = (xMax - xMin) * 0.03;
-        const yPad = (yMax - yMin) * 0.05;
-        xMin -= xPad;
-        xMax += xPad;
-        yMin -= yPad;
-        yMax += yPad;
+        if (!plot.x.autoRange) {
+            const xPad = (xMax - xMin) * 0.03;
+            xMin -= xPad;
+            xMax += xPad;
+        }
+        if (!plot.y.autoRange) {
+            const yPad = (yMax - yMin) * 0.05;
+            yMin -= yPad;
+            yMax += yPad;
+        }
 
         const xTicks = computeNiceTicks(xMin, xMax, 5);
         const yTicks = computeNiceTicks(yMin, yMax, 5);

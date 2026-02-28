@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { applyTransform, computeNiceTicks, computeRangeFromBuffer, RingBuffer2D, TransformIds } from '../src/ui/observation/ObservationMath.js';
+import { applyTransform, computeNiceTicks, computeRangeFromBuffer, RingBuffer2D, stabilizeAutoRangeWindow, TransformIds } from '../src/ui/observation/ObservationMath.js';
 
 describe('ObservationMath', () => {
     it('applyTransform supports identity/abs/negate', () => {
@@ -76,5 +76,36 @@ describe('ObservationMath', () => {
         }
         expect(ticks[0]).toBeLessThanOrEqual(0.12);
         expect(ticks[ticks.length - 1]).toBeGreaterThanOrEqual(9.87);
+    });
+
+    it('stabilizeAutoRangeWindow keeps small jitter inside hysteresis window', () => {
+        const previous = { min: -1, max: 1 };
+        const next = stabilizeAutoRangeWindow(
+            { min: -0.95, max: 0.95 },
+            previous,
+            {
+                paddingRatio: 0.05,
+                shrinkDeadbandRatio: 0.12,
+                shrinkSmoothing: 0.2
+            }
+        );
+
+        expect(next.min).toBeLessThanOrEqual(-0.98);
+        expect(next.max).toBeGreaterThanOrEqual(0.98);
+    });
+
+    it('stabilizeAutoRangeWindow expands quickly when samples exceed window', () => {
+        const previous = { min: -1, max: 1 };
+        const next = stabilizeAutoRangeWindow(
+            { min: -3, max: 1.2 },
+            previous,
+            {
+                paddingRatio: 0.05,
+                expandRatio: 0.02
+            }
+        );
+
+        expect(next.min).toBeLessThanOrEqual(-3);
+        expect(next.max).toBeGreaterThanOrEqual(1.2);
     });
 });

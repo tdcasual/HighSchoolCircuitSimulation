@@ -186,6 +186,79 @@ export function computeRangeFromBuffer(buffer) {
     return { minX, maxX, minY, maxY };
 }
 
+function normalizeAxisRange(minValue, maxValue, minSpan = 1e-9) {
+    let min = Number(minValue);
+    let max = Number(maxValue);
+    if (!Number.isFinite(min) || !Number.isFinite(max)) return null;
+    if (min > max) [min, max] = [max, min];
+    if (min === max) {
+        const pad = Math.max(Math.abs(min) * 0.05, minSpan * 0.5, 1e-9);
+        min -= pad;
+        max += pad;
+    }
+    const span = max - min;
+    if (span < minSpan) {
+        const center = (min + max) / 2;
+        min = center - minSpan / 2;
+        max = center + minSpan / 2;
+    }
+    return { min, max };
+}
+
+export function stabilizeAutoRangeWindow(currentRange, previousWindow, options = {}) {
+    const minSpanRaw = Number(options.minSpan);
+    const minSpan = Number.isFinite(minSpanRaw) && minSpanRaw > 0 ? minSpanRaw : 1e-9;
+    const paddingRatioRaw = Number(options.paddingRatio);
+    const paddingRatio = Number.isFinite(paddingRatioRaw) ? Math.max(0, paddingRatioRaw) : 0.05;
+    const expandRatioRaw = Number(options.expandRatio);
+    const expandRatio = Number.isFinite(expandRatioRaw) ? Math.max(0, expandRatioRaw) : 0.03;
+    const shrinkDeadbandRatioRaw = Number(options.shrinkDeadbandRatio);
+    const shrinkDeadbandRatio = Number.isFinite(shrinkDeadbandRatioRaw) ? Math.max(0, shrinkDeadbandRatioRaw) : 0.12;
+    const shrinkSmoothingRaw = Number(options.shrinkSmoothing);
+    const shrinkSmoothing = Number.isFinite(shrinkSmoothingRaw)
+        ? Math.max(0, Math.min(1, shrinkSmoothingRaw))
+        : 0.22;
+
+    const normalizedCurrent = normalizeAxisRange(currentRange?.min, currentRange?.max, minSpan);
+    if (!normalizedCurrent) return null;
+    const currentSpan = Math.max(minSpan, normalizedCurrent.max - normalizedCurrent.min);
+    const paddedCurrent = {
+        min: normalizedCurrent.min - currentSpan * paddingRatio,
+        max: normalizedCurrent.max + currentSpan * paddingRatio
+    };
+
+    const normalizedPrevious = normalizeAxisRange(previousWindow?.min, previousWindow?.max, minSpan);
+    if (!normalizedPrevious) {
+        return paddedCurrent;
+    }
+
+    let nextMin = normalizedPrevious.min;
+    let nextMax = normalizedPrevious.max;
+    const previousSpan = Math.max(minSpan, normalizedPrevious.max - normalizedPrevious.min);
+    const expandMargin = previousSpan * expandRatio;
+    const shrinkMargin = previousSpan * shrinkDeadbandRatio;
+
+    if (paddedCurrent.min < normalizedPrevious.min + expandMargin) {
+        nextMin = Math.min(nextMin, paddedCurrent.min);
+    }
+    if (paddedCurrent.max > normalizedPrevious.max - expandMargin) {
+        nextMax = Math.max(nextMax, paddedCurrent.max);
+    }
+
+    if (paddedCurrent.min > normalizedPrevious.min + shrinkMargin) {
+        nextMin = normalizedPrevious.min + (paddedCurrent.min - normalizedPrevious.min) * shrinkSmoothing;
+    }
+    if (paddedCurrent.max < normalizedPrevious.max - shrinkMargin) {
+        nextMax = normalizedPrevious.max + (paddedCurrent.max - normalizedPrevious.max) * shrinkSmoothing;
+    }
+
+    // Always keep original samples visible.
+    nextMin = Math.min(nextMin, normalizedCurrent.min);
+    nextMax = Math.max(nextMax, normalizedCurrent.max);
+
+    return normalizeAxisRange(nextMin, nextMax, minSpan) || paddedCurrent;
+}
+
 function niceNumber(range, round) {
     if (!Number.isFinite(range) || range <= 0) return 0;
     const exponent = Math.floor(Math.log10(range));
