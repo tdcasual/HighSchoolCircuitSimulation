@@ -6,7 +6,16 @@
 import { createElement, clearElement } from '../utils/SafeDOM.js';
 import { applyTransform, computeNiceTicks, computeRangeFromBuffer, formatNumberCompact, RingBuffer2D, TransformOptions } from './observation/ObservationMath.js';
 import { evaluateSourceQuantity, getQuantitiesForSource, getSourceOptions, PROBE_SOURCE_PREFIX, QuantityIds, TIME_SOURCE_ID } from './observation/ObservationSources.js';
-import { createDefaultPlotState, DEFAULT_SAMPLE_INTERVAL_MS, normalizeObservationState, normalizeSampleIntervalMs, ObservationDisplayModes, shouldSampleAtTime } from './observation/ObservationState.js';
+import {
+    createDefaultPlotState,
+    DEFAULT_OBSERVATION_TEMPLATE_NAME,
+    DEFAULT_SAMPLE_INTERVAL_MS,
+    normalizeObservationState,
+    normalizeObservationTemplate,
+    normalizeSampleIntervalMs,
+    ObservationDisplayModes,
+    shouldSampleAtTime
+} from './observation/ObservationState.js';
 import { ObservationUIModes, normalizeObservationUI } from './observation/ObservationPreferences.js';
 import { ObservationPlotCardController } from './observation/ObservationPlotCardController.js';
 import { ObservationChartInteraction } from './observation/ObservationChartInteraction.js';
@@ -131,6 +140,8 @@ export class ObservationPanel {
         this.nextPlotIndex = 1;
         this.sampleIntervalMs = DEFAULT_SAMPLE_INTERVAL_MS;
         this.ui = normalizeObservationUI();
+        this.templates = [];
+        this.templateControls = {};
         this.modeButtons = {};
         this.presetButtons = {};
         this._renderRaf = 0;
@@ -250,6 +261,73 @@ export class ObservationPanel {
         });
         this.updatePresetButtonHints();
 
+        const templateBar = createElement('div', { className: 'observation-template-bar' });
+        const templateNameInput = createElement('input', {
+            className: 'observation-template-name-input',
+            attrs: {
+                type: 'text',
+                placeholder: '模板名称（留空自动命名）',
+                'data-observation-template-name': 'true'
+            }
+        });
+        const saveTemplateBtn = createElement('button', {
+            className: 'control-btn',
+            textContent: '保存模板',
+            attrs: {
+                type: 'button',
+                'data-observation-template-action': 'save'
+            }
+        });
+        const templateSelect = createElement('select', {
+            className: 'observation-template-select',
+            attrs: {
+                'data-observation-template-select': 'true',
+                'aria-label': '观察模板列表'
+            }
+        });
+        const applyTemplateBtn = createElement('button', {
+            className: 'control-btn',
+            textContent: '应用模板',
+            attrs: {
+                type: 'button',
+                'data-observation-template-action': 'apply'
+            }
+        });
+        const deleteTemplateBtn = createElement('button', {
+            className: 'control-btn stop',
+            textContent: '删除模板',
+            attrs: {
+                type: 'button',
+                'data-observation-template-action': 'delete'
+            }
+        });
+        templateBar.appendChild(templateNameInput);
+        templateBar.appendChild(saveTemplateBtn);
+        templateBar.appendChild(templateSelect);
+        templateBar.appendChild(applyTemplateBtn);
+        templateBar.appendChild(deleteTemplateBtn);
+        this.templateControls = {
+            nameInput: templateNameInput,
+            select: templateSelect,
+            saveBtn: saveTemplateBtn,
+            applyBtn: applyTemplateBtn,
+            deleteBtn: deleteTemplateBtn,
+            lastSelectedName: ''
+        };
+        templateSelect.addEventListener('change', () => {
+            this.templateControls.lastSelectedName = String(templateSelect.value || '').trim();
+        });
+        saveTemplateBtn.addEventListener('click', () => {
+            this.saveCurrentAsTemplate(templateNameInput.value);
+        });
+        applyTemplateBtn.addEventListener('click', () => {
+            this.applySelectedTemplate();
+        });
+        deleteTemplateBtn.addEventListener('click', () => {
+            this.deleteSelectedTemplate();
+        });
+        this.refreshTemplateControls();
+
         this.runtimeStatusEl = createElement('p', {
             className: 'hint observation-runtime-status',
             textContent: ''
@@ -276,6 +354,7 @@ export class ObservationPanel {
         const stickyControls = createElement('div', { className: 'observation-sticky-controls' });
         stickyControls.appendChild(modeBar);
         stickyControls.appendChild(presetBar);
+        stickyControls.appendChild(templateBar);
         stickyControls.appendChild(sampleGroup);
         this.root.appendChild(stickyControls);
         this.sampleIntervalInput = sampleInput;
@@ -455,8 +534,187 @@ export class ObservationPanel {
         this.plots = [];
     }
 
+    normalizeTemplateCollection(rawTemplates) {
+        if (!Array.isArray(rawTemplates)) return [];
+        const deduped = new Map();
+        for (const rawTemplate of rawTemplates) {
+            const template = normalizeObservationTemplate(rawTemplate, {
+                defaultName: DEFAULT_OBSERVATION_TEMPLATE_NAME,
+                defaultYSourceId: this.getDefaultComponentId(),
+                defaultPlotCount: 1,
+                allowEmptyPlots: true
+            });
+            if (!template?.name) continue;
+            deduped.set(template.name, template);
+            if (deduped.size >= 30) break;
+        }
+        return Array.from(deduped.values());
+    }
+
+    buildTemplateSaveName(rawName = '') {
+        const explicitName = typeof rawName === 'string' ? rawName.trim() : '';
+        if (explicitName) return explicitName;
+
+        const baseName = DEFAULT_OBSERVATION_TEMPLATE_NAME;
+        if (!Array.isArray(this.templates) || this.templates.length === 0) {
+            return baseName;
+        }
+        const hasBase = this.templates.some((item) => item?.name === baseName);
+        if (!hasBase) return baseName;
+
+        let suffix = 2;
+        let candidate = `${baseName} ${suffix}`;
+        while (this.templates.some((item) => item?.name === candidate)) {
+            suffix += 1;
+            candidate = `${baseName} ${suffix}`;
+        }
+        return candidate;
+    }
+
+    buildCurrentTemplate(rawName = '') {
+        const name = ObservationPanel.prototype.buildTemplateSaveName.call(this, rawName);
+        const state = this.toJSON();
+        return normalizeObservationTemplate({
+            name,
+            plots: state?.plots || [],
+            ui: state?.ui || normalizeObservationUI()
+        }, {
+            defaultName: name,
+            defaultYSourceId: this.getDefaultComponentId(),
+            defaultPlotCount: 1,
+            allowEmptyPlots: true
+        });
+    }
+
+    refreshTemplateControls(options = {}) {
+        const controls = this.templateControls || {};
+        const selectEl = controls.select;
+        if (!selectEl) return;
+
+        const preferredName = typeof options.preferredName === 'string'
+            ? options.preferredName.trim()
+            : '';
+        const fallbackName = preferredName || controls.lastSelectedName || String(selectEl.value || '').trim();
+        const templateOptions = Array.isArray(this.templates)
+            ? this.templates.map((template) => ({ id: template.name, label: template.name }))
+            : [];
+        const resolved = setSelectOptions(selectEl, templateOptions, fallbackName);
+        const hasTemplates = templateOptions.length > 0;
+
+        if (!hasTemplates) {
+            selectEl.appendChild(createElement('option', {
+                textContent: '暂无模板',
+                attrs: { value: '' }
+            }));
+            selectEl.value = '';
+        }
+
+        controls.lastSelectedName = hasTemplates ? (resolved || templateOptions[0]?.id || '') : '';
+        if (controls.applyBtn) controls.applyBtn.disabled = !hasTemplates;
+        if (controls.deleteBtn) controls.deleteBtn.disabled = !hasTemplates;
+    }
+
+    getSelectedTemplateName() {
+        const selectEl = this.templateControls?.select;
+        const selectedName = typeof selectEl?.value === 'string' ? selectEl.value.trim() : '';
+        if (selectedName) return selectedName;
+        if (Array.isArray(this.templates) && this.templates.length > 0) {
+            return this.templates[0].name;
+        }
+        return '';
+    }
+
+    saveCurrentAsTemplate(rawName = '') {
+        const template = ObservationPanel.prototype.buildCurrentTemplate.call(this, rawName);
+        if (!template) return null;
+
+        this.templates = Array.isArray(this.templates) ? this.templates : [];
+        const existingIndex = this.templates.findIndex((item) => item?.name === template.name);
+        const isUpdate = existingIndex >= 0;
+        if (isUpdate) {
+            this.templates[existingIndex] = template;
+        } else {
+            this.templates.push(template);
+        }
+
+        const normalizeCollection = typeof this.normalizeTemplateCollection === 'function'
+            ? this.normalizeTemplateCollection
+            : ObservationPanel.prototype.normalizeTemplateCollection;
+        this.templates = normalizeCollection.call(this, this.templates);
+
+        const refreshControls = typeof this.refreshTemplateControls === 'function'
+            ? this.refreshTemplateControls
+            : ObservationPanel.prototype.refreshTemplateControls;
+        refreshControls.call(this, { preferredName: template.name });
+
+        if (this.templateControls?.nameInput) {
+            this.templateControls.nameInput.value = '';
+        }
+
+        this.showTransientStatus?.(isUpdate ? `已更新模板：${template.name}` : `已保存模板：${template.name}`);
+        this.schedulePersist?.(0);
+        return template;
+    }
+
+    applyTemplateByName(rawName = '') {
+        const templateName = typeof rawName === 'string' ? rawName.trim() : '';
+        if (!templateName || !Array.isArray(this.templates) || this.templates.length === 0) {
+            return false;
+        }
+        const matched = this.templates.find((item) => item?.name === templateName);
+        if (!matched) return false;
+
+        const template = normalizeObservationTemplate(matched, {
+            defaultName: templateName,
+            defaultYSourceId: this.getDefaultComponentId(),
+            defaultPlotCount: 1,
+            allowEmptyPlots: true
+        });
+
+        this.fromJSON?.({
+            sampleIntervalMs: this.sampleIntervalMs,
+            plots: template.plots,
+            ui: template.ui,
+            templates: this.templates
+        });
+        this.showTransientStatus?.(`已应用模板：${template.name}`);
+        this.schedulePersist?.(0);
+        return true;
+    }
+
+    applySelectedTemplate() {
+        const selectedName = ObservationPanel.prototype.getSelectedTemplateName.call(this);
+        if (!selectedName) return false;
+        return ObservationPanel.prototype.applyTemplateByName.call(this, selectedName);
+    }
+
+    deleteTemplateByName(rawName = '') {
+        const templateName = typeof rawName === 'string' ? rawName.trim() : '';
+        if (!templateName || !Array.isArray(this.templates) || this.templates.length === 0) {
+            return false;
+        }
+        const index = this.templates.findIndex((item) => item?.name === templateName);
+        if (index < 0) return false;
+
+        const [removed] = this.templates.splice(index, 1);
+        const nextName = this.templates[index]?.name || this.templates[index - 1]?.name || '';
+        const refreshControls = typeof this.refreshTemplateControls === 'function'
+            ? this.refreshTemplateControls
+            : ObservationPanel.prototype.refreshTemplateControls;
+        refreshControls.call(this, { preferredName: nextName });
+        this.showTransientStatus?.(`已删除模板：${removed?.name || templateName}`);
+        this.schedulePersist?.(0);
+        return true;
+    }
+
+    deleteSelectedTemplate() {
+        const selectedName = ObservationPanel.prototype.getSelectedTemplateName.call(this);
+        if (!selectedName) return false;
+        return ObservationPanel.prototype.deleteTemplateByName.call(this, selectedName);
+    }
+
     toJSON() {
-        return {
+        const data = {
             sampleIntervalMs: normalizeSampleIntervalMs(this.sampleIntervalMs, DEFAULT_SAMPLE_INTERVAL_MS),
             ui: normalizeObservationUI(this.ui),
             plots: this.plots.map((plot) => ({
@@ -481,10 +739,21 @@ export class ObservationPanel {
                 }
             }))
         };
+        const normalizeCollection = typeof this.normalizeTemplateCollection === 'function'
+            ? this.normalizeTemplateCollection
+            : ObservationPanel.prototype.normalizeTemplateCollection;
+        const templates = normalizeCollection.call(this, this.templates);
+        if (templates.length > 0) {
+            data.templates = templates;
+        }
+        return data;
     }
 
     fromJSON(rawState) {
         if (!this.root) return;
+        const templates = rawState && typeof rawState === 'object'
+            ? (rawState.templates ?? rawState.templatePresets ?? [])
+            : [];
         const normalized = normalizeObservationState(rawState, {
             defaultYSourceId: this.getDefaultComponentId(),
             defaultPlotCount: 1,
@@ -493,6 +762,10 @@ export class ObservationPanel {
 
         this.sampleIntervalMs = normalized.sampleIntervalMs;
         this.ui = normalizeObservationUI(normalized.ui);
+        const normalizeCollection = typeof this.normalizeTemplateCollection === 'function'
+            ? this.normalizeTemplateCollection
+            : ObservationPanel.prototype.normalizeTemplateCollection;
+        this.templates = normalizeCollection.call(this, templates);
         if (this.sampleIntervalInput) {
             this.sampleIntervalInput.value = String(this.sampleIntervalMs);
         }
@@ -507,6 +780,10 @@ export class ObservationPanel {
 
         this.refreshComponentOptions();
         this.updateModeToggleUI();
+        const refreshControls = typeof this.refreshTemplateControls === 'function'
+            ? this.refreshTemplateControls
+            : ObservationPanel.prototype.refreshTemplateControls;
+        refreshControls.call(this);
         this.applyLayoutModeToAllPlotCards();
         this.requestRender({ onlyIfActive: true });
     }

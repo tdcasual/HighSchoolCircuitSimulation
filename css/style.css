@@ -815,6 +815,34 @@ body.layout-mode-phone .panel-close-btn {
     gap: 8px;
 }
 
+.observation-template-bar {
+    display: grid;
+    grid-template-columns: minmax(130px, 1fr) auto minmax(130px, 1fr) auto auto;
+    gap: 8px;
+    align-items: center;
+}
+
+.observation-template-bar .observation-template-name-input,
+.observation-template-bar .observation-template-select {
+    width: 100%;
+    min-width: 0;
+    margin: 0;
+    border-radius: 10px;
+    border: 1px solid var(--border-color);
+    background: #ffffff;
+    padding: 8px 10px;
+    font-size: 12px;
+    color: var(--text-color);
+}
+
+.observation-template-bar .control-btn {
+    width: auto;
+    margin: 0;
+    border-radius: 999px;
+    padding: 8px 12px;
+    font-size: 12px;
+}
+
 .observation-mode-bar .control-btn,
 .observation-preset-bar .control-btn {
     width: auto;
@@ -2040,6 +2068,14 @@ body.layout-mode-phone #observation-root .observation-sticky-controls {
     top: -6px;
     margin: -6px -2px 0;
     padding: 10px 2px 8px;
+}
+
+body.layout-mode-phone #observation-root .observation-template-bar {
+    grid-template-columns: 1fr 1fr;
+}
+
+body.layout-mode-phone #observation-root .observation-template-bar .observation-template-select {
+    grid-column: 1 / -1;
 }
 
 body.layout-mode-phone #observation-root .observation-plot-card {
