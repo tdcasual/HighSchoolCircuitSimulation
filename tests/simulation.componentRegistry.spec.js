@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ComponentRegistry, DefaultComponentRegistry } from '../src/core/simulation/ComponentRegistry.js';
 import { ComponentDefaults } from '../src/components/Component.js';
 import { computeNtcThermistorResistance, computePhotoresistorResistance } from '../src/utils/Physics.js';
+import { evaluateJunctionCurrent, linearizeJunctionAt, resolveJunctionParameters } from '../src/core/simulation/JunctionModel.js';
 
 describe('ComponentRegistry', () => {
     it('returns handlers for known types', () => {
@@ -174,6 +175,65 @@ describe('ComponentRegistry', () => {
             position: 0.25,
             connectionMode: 'left-slider'
         }, context)).toBeCloseTo(0.16, 9);
+    });
+
+    it('covers day10 diode/led target types with stamp/current handlers', () => {
+        const targetTypes = ['Diode', 'LED'];
+        for (const type of targetTypes) {
+            expect(ComponentDefaults[type]).toBeTruthy();
+            const handler = DefaultComponentRegistry.get(type);
+            expect(handler, `${type} should be registered`).toBeTruthy();
+            expect(typeof handler.stamp, `${type} should provide stamp()`).toBe('function');
+            expect(typeof handler.current, `${type} should provide current()`).toBe('function');
+        }
+    });
+
+    it('uses diode registry stamp/current behaviors equivalent to solver and postprocessor logic', () => {
+        const calls = [];
+        const context = {
+            stampResistor: (i1, i2, r) => calls.push({ kind: 'R', i1, i2, r }),
+            stampCurrentSource: (from, to, current) => calls.push({ kind: 'I', from, to, current }),
+            voltage: (nodeIdx) => ({ 1: 0.75, 2: 0 }[nodeIdx] || 0),
+            state: {
+                junctionVoltage: 0.71,
+                junctionCurrent: 0.002
+            }
+        };
+        const nodes = { i1: 0, i2: 1, n1: 1, n2: 2 };
+        const comp = {
+            id: 'D1',
+            type: 'Diode',
+            forwardVoltage: 0.7,
+            onResistance: 1,
+            idealityFactor: 1.8,
+            referenceCurrent: 0.001
+        };
+        const handler = DefaultComponentRegistry.get('Diode');
+        const params = resolveJunctionParameters(comp);
+        const expectedLinearized = linearizeJunctionAt(
+            context.state.junctionVoltage,
+            params,
+            context.state.junctionCurrent
+        );
+
+        handler.stamp(comp, context, nodes);
+        expect(calls[0].kind).toBe('R');
+        expect(calls[0].i1).toBe(0);
+        expect(calls[0].i2).toBe(1);
+        expect(calls[0].r).toBeCloseTo(1 / Math.max(1e-12, expectedLinearized.conductance), 12);
+        expect(calls[1]).toEqual({
+            kind: 'I',
+            from: 0,
+            to: 1,
+            current: expectedLinearized.currentOffset
+        });
+
+        const expectedCurrent = evaluateJunctionCurrent(
+            context.voltage(1) - context.voltage(2),
+            params,
+            context.state.junctionCurrent
+        );
+        expect(handler.current(comp, context, nodes)).toBeCloseTo(expectedCurrent, 12);
     });
 
     it('covers day9 source target types with stamp/current handlers', () => {

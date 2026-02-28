@@ -1,5 +1,6 @@
 import { DynamicIntegrationMethods } from './DynamicIntegrator.js';
 import { computeNtcThermistorResistance, computePhotoresistorResistance } from '../../utils/Physics.js';
+import { evaluateJunctionCurrent, linearizeJunctionAt, resolveJunctionParameters } from './JunctionModel.js';
 
 export class ComponentRegistry {
     constructor() {
@@ -17,6 +18,17 @@ export class ComponentRegistry {
 }
 
 export const DefaultComponentRegistry = new ComponentRegistry();
+
+const resolveStateEntry = (context, comp) => {
+    const source = context?.state;
+    if (!source) {
+        return null;
+    }
+    if (typeof source.get === 'function' && comp?.id) {
+        return source.get(comp.id) || null;
+    }
+    return source;
+};
 
 DefaultComponentRegistry.register('Resistor', {
     stamp: (comp, context, nodes) => {
@@ -161,6 +173,43 @@ DefaultComponentRegistry.register('Fuse', {
         return dV / resistance;
     }
 });
+
+const stampJunctionViaLinearization = (comp, context, nodes) => {
+    const params = resolveJunctionParameters(comp);
+    const entry = resolveStateEntry(context, comp);
+    const linearizationVoltage = Number.isFinite(entry?.junctionVoltage)
+        ? entry.junctionVoltage
+        : (Number.isFinite(comp.junctionVoltage) ? comp.junctionVoltage : 0);
+    const linearizationCurrent = Number.isFinite(entry?.junctionCurrent)
+        ? entry.junctionCurrent
+        : (Number.isFinite(comp.junctionCurrent) ? comp.junctionCurrent : 0);
+    const linearized = linearizeJunctionAt(linearizationVoltage, params, linearizationCurrent);
+    const conductance = Math.max(1e-12, linearized.conductance);
+    if (typeof context.stampResistor === 'function') {
+        context.stampResistor(nodes.i1, nodes.i2, 1 / conductance);
+    }
+    if (typeof context.stampCurrentSource === 'function') {
+        context.stampCurrentSource(nodes.i1, nodes.i2, linearized.currentOffset);
+    }
+};
+
+const currentForJunction = (comp, context, nodes) => {
+    const dV = context.voltage(nodes.n1) - context.voltage(nodes.n2);
+    const params = resolveJunctionParameters(comp);
+    const entry = resolveStateEntry(context, comp);
+    const initialCurrent = Number.isFinite(entry?.junctionCurrent)
+        ? entry.junctionCurrent
+        : (Number.isFinite(comp.junctionCurrent) ? comp.junctionCurrent : 0);
+    const current = evaluateJunctionCurrent(dV, params, initialCurrent);
+    return Number.isFinite(current) ? current : 0;
+};
+
+DefaultComponentRegistry.register('Diode', {
+    stamp: (comp, context, nodes) => stampJunctionViaLinearization(comp, context, nodes),
+    current: (comp, context, nodes) => currentForJunction(comp, context, nodes)
+});
+
+DefaultComponentRegistry.register('LED', DefaultComponentRegistry.get('Diode'));
 
 DefaultComponentRegistry.register('Relay', {
     stamp: (comp, context, nodes) => {
@@ -374,17 +423,6 @@ const resolveMethod = (context, comp) => {
         return context.resolveDynamicIntegrationMethod(comp);
     }
     return DynamicIntegrationMethods.BackwardEuler;
-};
-
-const resolveStateEntry = (context, comp) => {
-    const source = context?.state;
-    if (!source) {
-        return null;
-    }
-    if (typeof source.get === 'function' && comp?.id) {
-        return source.get(comp.id) || null;
-    }
-    return source;
 };
 
 DefaultComponentRegistry.register('Capacitor', {
