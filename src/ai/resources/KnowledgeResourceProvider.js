@@ -42,6 +42,126 @@ function uniqueStrings(values = []) {
     return [...new Set(values.map(value => String(value || '').trim()).filter(Boolean))];
 }
 
+const DIAGNOSTIC_CATEGORY_PRIORITY = Object.freeze([
+    'CONFLICTING_SOURCES',
+    'SHORT_CIRCUIT',
+    'SINGULAR_MATRIX',
+    'INVALID_PARAMS',
+    'FLOATING_SUBCIRCUIT'
+]);
+
+const DIAGNOSTIC_LESSON_COPY = Object.freeze({
+    CONFLICTING_SOURCES: Object.freeze({
+        id: 'diag-conflicting-sources',
+        title: '故障学习提示：理想电压源冲突',
+        category: 'topology',
+        keywords: ['理想电压源', '并联冲突', '电压源冲突'],
+        appliesTo: ['PowerSource', 'ACVoltageSource'],
+        what: '检测到并联理想电压源给出了互相矛盾的约束，仿真已停止。',
+        why: '理想电压源会强制端电压；当同一节点对被不同电压同时约束时，方程组无解。',
+        fix: '保留一个主电源；其余电源改为串联或增加内阻后再并联；重新运行确认冲突消失。'
+    }),
+    SHORT_CIRCUIT: Object.freeze({
+        id: 'diag-short-circuit',
+        title: '故障学习提示：电源短路',
+        category: 'topology',
+        keywords: ['短路', '零阻路径', '电源回接'],
+        appliesTo: ['PowerSource', 'ACVoltageSource', 'Wire'],
+        what: '检测到电源近似零阻路径，仿真已触发短路保护。',
+        why: '理想电源被低阻导线直接回接，会让电流理论值异常增大，方程不再稳定。',
+        fix: '先断开短接导线；再在电源回路串联负载或限流电阻；重新运行并确认短路高亮消失。'
+    }),
+    SINGULAR_MATRIX: Object.freeze({
+        id: 'diag-singular-matrix',
+        title: '故障学习提示：方程奇异',
+        category: 'topology',
+        keywords: ['矩阵奇异', '方程不可解', '无参考地'],
+        appliesTo: ['Ground', 'PowerSource', 'Resistor'],
+        what: '当前电路约束不足或互相矛盾，求解矩阵出现奇异。',
+        why: '常见原因是缺少参考地、回路断裂，或理想源约束重复导致自由度异常。',
+        fix: '先补充参考地与闭合回路；再检查理想源连接方式；必要时加入小电阻稳定方程。'
+    }),
+    INVALID_PARAMS: Object.freeze({
+        id: 'diag-invalid-params',
+        title: '故障学习提示：参数非法',
+        category: 'misconception',
+        keywords: ['参数错误', 'NaN', '非法值'],
+        appliesTo: ['Resistor', 'Capacitor', 'Inductor', 'PowerSource'],
+        what: '检测到元件参数超出允许范围，仿真已阻止继续计算。',
+        why: '无效数值（空值、NaN、负阻等）会破坏元件模型，导致结果失真或发散。',
+        fix: '恢复异常元件为默认参数，再按量纲逐项检查输入值并重新运行。'
+    }),
+    FLOATING_SUBCIRCUIT: Object.freeze({
+        id: 'diag-floating-subcircuit',
+        title: '故障学习提示：悬浮子电路',
+        category: 'topology',
+        keywords: ['悬浮', '未接地', '参考依赖'],
+        appliesTo: ['Ground', 'Voltmeter', 'Ammeter'],
+        what: '检测到局部子电路未连接参考地，读数可能依赖参考选择。',
+        why: '悬浮网络电压只确定相对差值，绝对电位缺少统一基准。',
+        fix: '为该子电路补充参考地或与主回路建立连接；教学展示时需明确参考条件。'
+    })
+});
+
+function normalizeDiagnosticCode(value) {
+    return String(value || '').trim().toUpperCase();
+}
+
+function normalizeRuntimeDiagnostics(raw = null) {
+    if (!raw || typeof raw !== 'object') {
+        return {
+            code: '',
+            categories: [],
+            summary: '',
+            hints: []
+        };
+    }
+
+    const code = normalizeDiagnosticCode(raw.code);
+    const categories = uniqueStrings(Array.isArray(raw.categories) ? raw.categories : [])
+        .map(normalizeDiagnosticCode)
+        .filter(Boolean);
+    if (code && !categories.includes(code)) {
+        categories.unshift(code);
+    }
+
+    const ordered = DIAGNOSTIC_CATEGORY_PRIORITY.filter((item) => categories.includes(item));
+    const extras = categories.filter((item) => !DIAGNOSTIC_CATEGORY_PRIORITY.includes(item));
+
+    return {
+        code: code || ordered[0] || '',
+        categories: [...ordered, ...extras],
+        summary: String(raw.summary || '').trim(),
+        hints: uniqueStrings(Array.isArray(raw.hints) ? raw.hints : []).slice(0, 4)
+    };
+}
+
+function buildDiagnosticLessonEntries(runtimeDiagnostics, limit = 3) {
+    const safeLimit = Math.max(0, Number.isFinite(Number(limit)) ? Number(limit) : 3);
+    if (safeLimit === 0) return [];
+    if (!runtimeDiagnostics || !Array.isArray(runtimeDiagnostics.categories)) return [];
+
+    const selected = [];
+    const selectedIds = new Set();
+    for (const category of runtimeDiagnostics.categories) {
+        const template = DIAGNOSTIC_LESSON_COPY[category];
+        if (!template) continue;
+        if (selectedIds.has(template.id)) continue;
+        selected.push({
+            id: template.id,
+            title: template.title,
+            category: template.category,
+            keywords: [...template.keywords],
+            appliesTo: [...template.appliesTo],
+            content: `发生了什么：${template.what}\n为什么会这样：${template.why}\n如何修复：${template.fix}`
+        });
+        selectedIds.add(template.id);
+        if (selected.length >= safeLimit) break;
+    }
+
+    return selected;
+}
+
 function calcScore(entry, normalizedQuestion, componentTypes) {
     let score = 0;
 
@@ -130,6 +250,9 @@ export class LocalKnowledgeResourceProvider extends KnowledgeResourceProvider {
         const normalizedQuestion = normalizeText(query.question);
         const componentTypes = new Set(uniqueStrings(query.componentTypes));
         const limit = Math.max(1, Number.isFinite(Number(query.limit)) ? Number(query.limit) : 3);
+        const runtimeDiagnostics = normalizeRuntimeDiagnostics(query.runtimeDiagnostics);
+        const diagnosticEntries = buildDiagnosticLessonEntries(runtimeDiagnostics, limit);
+        const remainingLimit = Math.max(0, limit - diagnosticEntries.length);
 
         const scored = this.entries
             .map(entry => ({ entry, score: calcScore(entry, normalizedQuestion, componentTypes) }))
@@ -138,14 +261,18 @@ export class LocalKnowledgeResourceProvider extends KnowledgeResourceProvider {
                 return String(left.entry.id).localeCompare(String(right.entry.id));
             });
 
-        let selected = selectBalancedEntries(scored.filter(item => item.score > 0), limit);
-        if (selected.length === 0) {
-            selected = this.entries
-                .filter(entry => this.fallbackIds.includes(entry.id))
-                .slice(0, limit);
+        let selected = [];
+        if (remainingLimit > 0) {
+            selected = selectBalancedEntries(scored.filter(item => item.score > 0), remainingLimit);
+            if (selected.length === 0) {
+                selected = this.entries
+                    .filter(entry => this.fallbackIds.includes(entry.id))
+                    .slice(0, remainingLimit);
+            }
         }
 
-        return selected.map(entry => ({
+        const merged = [...diagnosticEntries, ...selected].slice(0, limit);
+        return merged.map(entry => ({
             id: entry.id,
             title: entry.title,
             content: entry.content,
@@ -351,7 +478,8 @@ export class McpKnowledgeResourceProvider extends KnowledgeResourceProvider {
             params: {
                 question: String(query.question || ''),
                 componentTypes: Array.isArray(query.componentTypes) ? query.componentTypes : [],
-                limit: query.limit ?? 3
+                limit: query.limit ?? 3,
+                runtimeDiagnostics: query.runtimeDiagnostics || null
             }
         };
         if (this.mode === 'resource') {

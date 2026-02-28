@@ -173,12 +173,49 @@ export class CircuitAIAgent {
         )].sort();
     }
 
-    buildKnowledgeCacheKey({ question, componentTypes = [], limit = 3 } = {}) {
+    extractRuntimeDiagnostics(circuit = this.circuit) {
+        const raw = circuit?.lastResults?.runtimeDiagnostics;
+        if (!raw || typeof raw !== 'object') return null;
+
+        const code = String(raw.code || '').trim().toUpperCase();
+        const categories = Array.isArray(raw.categories)
+            ? [...new Set(raw.categories.map((item) => String(item || '').trim().toUpperCase()).filter(Boolean))]
+            : [];
+        if (code && !categories.includes(code)) {
+            categories.unshift(code);
+        }
+        if (!code && categories.length === 0) return null;
+
+        return {
+            code: code || categories[0] || '',
+            categories,
+            summary: String(raw.summary || '').trim(),
+            hints: Array.isArray(raw.hints)
+                ? raw.hints.map((hint) => String(hint || '').trim()).filter(Boolean).slice(0, 4)
+                : [],
+            fatal: !!raw.fatal
+        };
+    }
+
+    normalizeDiagnosticsCacheToken(runtimeDiagnostics = null) {
+        if (!runtimeDiagnostics || typeof runtimeDiagnostics !== 'object') {
+            return 'diag:none';
+        }
+        const code = String(runtimeDiagnostics.code || '').trim().toUpperCase() || 'none';
+        const categories = Array.isArray(runtimeDiagnostics.categories)
+            ? [...new Set(runtimeDiagnostics.categories.map((item) => String(item || '').trim().toUpperCase()).filter(Boolean))]
+            : [];
+        const categoryToken = categories.sort().join(',');
+        return `diag:${code}|${categoryToken}`;
+    }
+
+    buildKnowledgeCacheKey({ question, componentTypes = [], limit = 3, runtimeDiagnostics = null } = {}) {
         const normalizedQuestion = this.normalizeCacheQuestion(question);
         const normalizedTypes = [...new Set(componentTypes.map(type => String(type || '').trim()).filter(Boolean))]
             .sort()
             .join(',');
-        return `${normalizedQuestion}|${normalizedTypes}|${limit}`;
+        const diagnosticsToken = this.normalizeDiagnosticsCacheToken(runtimeDiagnostics);
+        return `${normalizedQuestion}|${normalizedTypes}|${limit}|${diagnosticsToken}`;
     }
 
     pruneKnowledgeCache(nowMs = Date.now()) {
@@ -199,8 +236,9 @@ export class CircuitAIAgent {
         }
     }
 
-    async getKnowledgeItems(question, { limit = 3, circuit = this.circuit } = {}) {
+    async getKnowledgeItems(question, { limit = 3, circuit = this.circuit, runtimeDiagnostics = null } = {}) {
         const componentTypes = this.extractComponentTypes(circuit);
+        const diagnosticContext = runtimeDiagnostics || this.extractRuntimeDiagnostics(circuit);
         const providerTokenBefore = this.getKnowledgeProviderToken();
         if (providerTokenBefore !== this.knowledgeCacheProviderToken) {
             this.invalidateKnowledgeCache('provider-token-updated');
@@ -214,7 +252,8 @@ export class CircuitAIAgent {
         const cacheKey = this.buildKnowledgeCacheKey({
             question,
             componentTypes,
-            limit
+            limit,
+            runtimeDiagnostics: diagnosticContext
         });
         const cached = this.knowledgeCache.get(cacheKey);
         if (cached && cached.expiresAt > now) {
@@ -234,7 +273,8 @@ export class CircuitAIAgent {
             question,
             circuit,
             componentTypes,
-            limit
+            limit,
+            runtimeDiagnostics: diagnosticContext
         }, {
             knowledgeProvider: this.knowledgeProvider,
             circuit
@@ -455,11 +495,13 @@ ${evidence}
             durationMs: Date.now() - snapshotStart
         }, traceId);
         const evidenceSection = this.buildEvidenceSection(normalizedQuestion, plan?.evidenceLimit || 6);
+        const runtimeDiagnostics = this.extractRuntimeDiagnostics(this.circuit);
 
         const knowledgeStart = Date.now();
         const knowledgeItems = await this.getKnowledgeItems(normalizedQuestion, {
             limit: plan?.knowledgeLimit || 3,
-            circuit: this.circuit
+            circuit: this.circuit,
+            runtimeDiagnostics
         });
         this.logEvent('info', 'knowledge_items_ready', {
             count: Array.isArray(knowledgeItems) ? knowledgeItems.length : 0,

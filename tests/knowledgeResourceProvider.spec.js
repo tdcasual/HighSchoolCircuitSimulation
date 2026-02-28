@@ -65,4 +65,27 @@ describe('LocalKnowledgeResourceProvider', () => {
         const categories = new Set(results.map((item) => item.category));
         expect(categories.size).toBe(2);
     });
+
+    it('prioritizes runtime diagnostic lesson copy with what-why-how structure', async () => {
+        const provider = new LocalKnowledgeResourceProvider();
+        const results = await provider.search({
+            question: '为什么仿真突然停止了？',
+            componentTypes: ['PowerSource', 'Resistor'],
+            runtimeDiagnostics: {
+                code: 'SHORT_CIRCUIT',
+                categories: ['SHORT_CIRCUIT'],
+                summary: '检测到电源短路风险，请检查导线连接。',
+                hints: ['检查电源正负极是否被导线直接短接。']
+            },
+            limit: 2
+        });
+
+        expect(results).toHaveLength(2);
+        expect(results[0].id).toBe('diag-short-circuit');
+        expect(results[0].content).toMatchInlineSnapshot(`
+          "发生了什么：检测到电源近似零阻路径，仿真已触发短路保护。
+          为什么会这样：理想电源被低阻导线直接回接，会让电流理论值异常增大，方程不再稳定。
+          如何修复：先断开短接导线；再在电源回路串联负载或限流电阻；重新运行并确认短路高亮消失。"
+        `);
+    });
 });

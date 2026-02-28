@@ -27,11 +27,13 @@ export const KnowledgeRetrievalSkill = {
             ? input.componentTypes
             : extractComponentTypes(circuit);
         const limit = Math.max(1, Number.isFinite(Number(input.limit)) ? Number(input.limit) : 3);
+        const runtimeDiagnostics = input.runtimeDiagnostics || null;
 
         return provider.search({
             question,
             componentTypes,
-            limit
+            limit,
+            runtimeDiagnostics
         });
     }
 };

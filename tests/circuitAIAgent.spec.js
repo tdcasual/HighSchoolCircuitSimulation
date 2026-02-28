@@ -166,6 +166,66 @@ describe('CircuitAIAgent', () => {
         expect(answer).toContain('关键证据值');
     });
 
+    it('passes runtime diagnostics into knowledge query for error-to-lesson mapping', async () => {
+        const callAPI = vi.fn().mockResolvedValue('这是一次解释性回答。');
+        const aiClient = {
+            config: {
+                apiKey: 'test-key',
+                textModel: 'gpt-test'
+            },
+            callAPI
+        };
+        const explainer = {
+            extractCircuitState: vi.fn().mockReturnValue('mock-circuit')
+        };
+        const circuit = {
+            dt: 0.01,
+            simTime: 0,
+            components: new Map(),
+            rebuildNodes: vi.fn(),
+            ensureSolverPrepared: vi.fn(),
+            solver: {
+                solve: vi.fn().mockReturnValue({
+                    valid: false,
+                    voltages: [0],
+                    currents: new Map(),
+                    runtimeDiagnostics: {
+                        code: 'SHORT_CIRCUIT',
+                        categories: ['SHORT_CIRCUIT'],
+                        summary: '检测到电源短路风险，请检查导线连接。',
+                        hints: ['检查电源正负极是否被导线直接短接。']
+                    }
+                }),
+                updateDynamicComponents: vi.fn()
+            }
+        };
+        const knowledgeProvider = {
+            search: vi.fn().mockImplementation(async (query) => [{
+                id: 'diag-test',
+                title: '故障学习提示',
+                content: `发生了什么：${query?.runtimeDiagnostics?.code || 'NONE'}`
+            }]),
+            getMetadata: vi.fn().mockReturnValue({ source: 'local', version: 'v1', detail: 'local' })
+        };
+
+        const agent = new CircuitAIAgent({ aiClient, explainer, circuit, knowledgeProvider });
+        await agent.answerQuestion({
+            question: '为什么仿真报错了？',
+            history: []
+        });
+
+        expect(knowledgeProvider.search).toHaveBeenCalledTimes(1);
+        const [query] = knowledgeProvider.search.mock.calls[0];
+        expect(query.runtimeDiagnostics?.code).toBe('SHORT_CIRCUIT');
+
+        const [messages] = callAPI.mock.calls[0];
+        const lessonBlock = String(messages[0]?.content || '')
+            .split('教学参考要点（用于校正推理，不要逐字复述）：')[1]
+            ?.split('\n\n回答流程提示：')[0]
+            ?.trim() || '';
+        expect(lessonBlock).toMatchInlineSnapshot(`"1. 故障学习提示：发生了什么：SHORT_CIRCUIT"`);
+    });
+
     it('tracks knowledge cache hit rate and access log', async () => {
         const callAPI = vi.fn().mockResolvedValue('R1 电流约 0.300A。');
         const aiClient = {

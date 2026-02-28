@@ -26,4 +26,26 @@ describe('KnowledgeRetrievalSkill', () => {
         const [query] = provider.search.mock.calls[0];
         expect(query.componentTypes).toEqual(['Resistor', 'Voltmeter']);
     });
+
+    it('passes runtime diagnostics through to provider query', async () => {
+        const provider = {
+            search: vi.fn().mockResolvedValue([])
+        };
+
+        await KnowledgeRetrievalSkill.run({
+            provider,
+            question: '为什么会短路？',
+            runtimeDiagnostics: {
+                code: 'SHORT_CIRCUIT',
+                categories: ['SHORT_CIRCUIT']
+            }
+        });
+
+        expect(provider.search).toHaveBeenCalledTimes(1);
+        const [query] = provider.search.mock.calls[0];
+        expect(query.runtimeDiagnostics).toEqual({
+            code: 'SHORT_CIRCUIT',
+            categories: ['SHORT_CIRCUIT']
+        });
+    });
 });

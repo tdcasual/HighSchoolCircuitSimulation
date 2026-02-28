@@ -41,4 +41,38 @@ describe('SimulationRefreshSkill', () => {
         expect(result.ok).toBe(false);
         expect(result.reason).toContain('求解器不可用');
     });
+
+    it('attaches runtime diagnostics for invalid solve results', () => {
+        const circuit = {
+            dt: 0.01,
+            simTime: 0,
+            solver: {
+                shortCircuitDetected: true,
+                solve: vi.fn().mockReturnValue({
+                    valid: false,
+                    voltages: [0],
+                    currents: new Map(),
+                    meta: { invalidReason: 'solve_failed' }
+                }),
+                updateDynamicComponents: vi.fn()
+            },
+            rebuildNodes: vi.fn(),
+            ensureSolverPrepared: vi.fn(),
+            validateSimulationTopology: vi.fn().mockReturnValue({
+                ok: false,
+                error: { code: 'TOPO_CONFLICTING_IDEAL_SOURCES', details: { sourceIds: ['V1', 'V2'] } },
+                warnings: []
+            }),
+            refreshShortCircuitDiagnostics: vi.fn(),
+            shortedSourceIds: new Set(['V1']),
+            shortedWireIds: new Set(['W1']),
+            lastResults: null
+        };
+
+        const result = SimulationRefreshSkill.run({ circuit });
+
+        expect(result.valid).toBe(false);
+        expect(circuit.lastResults?.runtimeDiagnostics?.code).toBe('CONFLICTING_SOURCES');
+        expect(Array.isArray(circuit.lastResults?.runtimeDiagnostics?.hints)).toBe(true);
+    });
 });
