@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { validateCircuitJSON } from '../src/engine/CircuitSchema.js';
-import { getClassroomScenarioPack } from '../src/core/scenarios/ClassroomScenarioPack.js';
+import { getClassroomScenarioPack } from '../src/engine/scenarios/ClassroomScenarioPack.js';
 
 const base = {
     meta: { version: '1.0' },

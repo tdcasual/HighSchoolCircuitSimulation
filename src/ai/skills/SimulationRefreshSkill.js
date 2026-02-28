@@ -3,8 +3,6 @@
  * Run a non-intrusive one-shot solve to refresh component readouts.
  */
 
-import { buildRuntimeDiagnostics } from '../../core/simulation/RuntimeDiagnostics.js';
-
 function safeNumber(value, fallback = 0) {
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : fallback;
@@ -48,20 +46,11 @@ export const SimulationRefreshSkill = {
             circuit.lastResults = results;
 
             if (results && typeof results === 'object' && !results.runtimeDiagnostics) {
-                if (typeof circuit.refreshShortCircuitDiagnostics === 'function') {
-                    circuit.refreshShortCircuitDiagnostics(results);
+                if (typeof circuit.attachRuntimeDiagnostics === 'function') {
+                    circuit.attachRuntimeDiagnostics(results, simTime);
+                } else if (typeof circuit.collectRuntimeDiagnostics === 'function') {
+                    results.runtimeDiagnostics = circuit.collectRuntimeDiagnostics(results, simTime);
                 }
-                const topologyReport = (!results.valid && typeof circuit.validateSimulationTopology === 'function')
-                    ? circuit.validateSimulationTopology(simTime)
-                    : null;
-                results.runtimeDiagnostics = buildRuntimeDiagnostics({
-                    topologyReport,
-                    results,
-                    solverShortCircuitDetected: !!solver?.shortCircuitDetected,
-                    shortedSourceIds: circuit?.shortedSourceIds,
-                    shortedWireIds: circuit?.shortedWireIds,
-                    invalidParameterIssues: circuit?.invalidParameterIssues
-                });
             }
 
             if (results?.valid && typeof solver.updateDynamicComponents === 'function') {

@@ -58,20 +58,20 @@ describe('SimulationRefreshSkill', () => {
             },
             rebuildNodes: vi.fn(),
             ensureSolverPrepared: vi.fn(),
-            validateSimulationTopology: vi.fn().mockReturnValue({
-                ok: false,
-                error: { code: 'TOPO_CONFLICTING_IDEAL_SOURCES', details: { sourceIds: ['V1', 'V2'] } },
-                warnings: []
+            attachRuntimeDiagnostics: vi.fn((results) => {
+                results.runtimeDiagnostics = {
+                    code: 'CONFLICTING_SOURCES',
+                    hints: ['检查并联理想电压源是否对同一节点对设置了不同电压。']
+                };
+                return results.runtimeDiagnostics;
             }),
-            refreshShortCircuitDiagnostics: vi.fn(),
-            shortedSourceIds: new Set(['V1']),
-            shortedWireIds: new Set(['W1']),
             lastResults: null
         };
 
         const result = SimulationRefreshSkill.run({ circuit });
 
         expect(result.valid).toBe(false);
+        expect(circuit.attachRuntimeDiagnostics).toHaveBeenCalledTimes(1);
         expect(circuit.lastResults?.runtimeDiagnostics?.code).toBe('CONFLICTING_SOURCES');
         expect(Array.isArray(circuit.lastResults?.runtimeDiagnostics?.hints)).toBe(true);
     });

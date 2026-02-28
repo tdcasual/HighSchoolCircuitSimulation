@@ -18,10 +18,18 @@ const REQUIRED_DIST_FILES = Object.freeze([
     path.join('src', 'main.js')
 ]);
 
-async function ensureExists(absolutePath) {
+async function pathExists(absolutePath) {
     try {
         await stat(absolutePath);
+        return true;
     } catch (_) {
+        return false;
+    }
+}
+
+async function ensureExists(absolutePath) {
+    const exists = await pathExists(absolutePath);
+    if (!exists) {
         throw new Error(`Missing expected file: ${absolutePath}`);
     }
 }
@@ -49,7 +57,10 @@ async function copyRequiredBundle() {
     await cp(path.join(distDir, 'deploycircuit.js'), path.join(packageAssetsDir, 'deploycircuit.js'));
     await cp(path.join(distDir, 'css'), path.join(packageAssetsDir, 'css'), { recursive: true });
     await cp(path.join(distDir, 'src'), path.join(packageAssetsDir, 'src'), { recursive: true });
-    await cp(path.join(distDir, 'examples'), path.join(packageAssetsDir, 'examples'), { recursive: true });
+    const examplesSource = path.join(distDir, 'examples');
+    if (await pathExists(examplesSource)) {
+        await cp(examplesSource, path.join(packageAssetsDir, 'examples'), { recursive: true });
+    }
 }
 
 async function writeManifest() {

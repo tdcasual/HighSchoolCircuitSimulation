@@ -1041,6 +1041,37 @@ export class Circuit {
         }
     }
 
+    collectRuntimeDiagnostics(results = this.lastResults, simTime = this.simTime) {
+        const normalizedResults = (results && typeof results === 'object')
+            ? results
+            : { voltages: [], currents: new Map(), valid: false };
+        this.refreshShortCircuitDiagnostics(normalizedResults);
+        const topologyReport = normalizedResults.valid
+            ? null
+            : this.validateSimulationTopology(simTime);
+        return buildRuntimeDiagnostics({
+            topologyReport,
+            results: normalizedResults,
+            solverShortCircuitDetected: !!this.solver?.shortCircuitDetected,
+            shortedSourceIds: this.shortedSourceIds,
+            shortedWireIds: this.shortedWireIds,
+            invalidParameterIssues: this.invalidParameterIssues
+        });
+    }
+
+    attachRuntimeDiagnostics(results = this.lastResults, simTime = this.simTime) {
+        const target = (results && typeof results === 'object')
+            ? results
+            : (this.lastResults && typeof this.lastResults === 'object' ? this.lastResults : null);
+        if (!target) return buildRuntimeDiagnostics();
+        const diagnostics = this.collectRuntimeDiagnostics(target, simTime);
+        target.runtimeDiagnostics = diagnostics;
+        if (target === this.lastResults) {
+            this.lastResults.runtimeDiagnostics = diagnostics;
+        }
+        return diagnostics;
+    }
+
     /**
      * 执行一步模拟
      */
@@ -1078,17 +1109,7 @@ export class Circuit {
             }
         }
 
-        this.refreshShortCircuitDiagnostics(this.lastResults);
-        const topologyReport = this.lastResults.valid
-            ? null
-            : this.validateSimulationTopology(this.simTime);
-        this.lastResults.runtimeDiagnostics = buildRuntimeDiagnostics({
-            topologyReport,
-            results: this.lastResults,
-            solverShortCircuitDetected: !!this.solver?.shortCircuitDetected,
-            shortedSourceIds: this.shortedSourceIds,
-            shortedWireIds: this.shortedWireIds
-        });
+        this.attachRuntimeDiagnostics(this.lastResults, this.simTime);
 
         if (this.lastResults.valid) {
             // 更新各元器件的显示值

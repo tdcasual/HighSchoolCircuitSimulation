@@ -1,14 +1,16 @@
-import { Circuit } from '../../engine/Circuit.js';
-import { createComponent } from '../../components/Component.js';
 import { getTerminalWorldPosition } from '../../utils/TerminalGeometry.js';
-import { CircuitSerializer } from '../io/CircuitSerializer.js';
+import { CircuitSerializer } from '../../core/io/CircuitSerializer.js';
 
 function cloneJson(value) {
     return JSON.parse(JSON.stringify(value));
 }
 
 function createScenarioBuilderContext() {
-    const circuit = new Circuit();
+    const components = [];
+    const wires = [];
+    const probes = [];
+    const propertyMap = new Map();
+    const wireIds = new Set();
     let componentIndex = 0;
 
     const addComponent = (type, id, props = {}) => {
@@ -18,12 +20,20 @@ function createScenarioBuilderContext() {
         const y = props.y ?? (120 + row * 150);
         componentIndex += 1;
 
-        const component = createComponent(type, x, y, id);
         const normalizedProps = { ...props };
         delete normalizedProps.x;
         delete normalizedProps.y;
-        Object.assign(component, normalizedProps);
-        circuit.addComponent(component);
+        const component = {
+            id,
+            type,
+            label: id,
+            x,
+            y,
+            rotation: Number.isFinite(Number(props.rotation)) ? Number(props.rotation) : 0,
+            ...normalizedProps
+        };
+        components.push(component);
+        propertyMap.set(component.id, normalizedProps);
         return component;
     };
 
@@ -33,31 +43,42 @@ function createScenarioBuilderContext() {
         if (!a || !b) {
             throw new Error(`invalid terminal position for wire ${wireId}`);
         }
-        circuit.addWire({
+        wires.push({
             id: wireId,
             a,
             b,
             aRef: { componentId: aComp.id, terminalIndex: aTerminal },
             bRef: { componentId: bComp.id, terminalIndex: bTerminal }
         });
+        wireIds.add(wireId);
     };
 
     const addProbe = (probe) => {
-        circuit.addObservationProbe(probe);
+        probes.push({
+            ...probe
+        });
     };
 
     return {
-        circuit,
         addComponent,
         connect,
-        addProbe
+        addProbe,
+        toJSON() {
+            return CircuitSerializer.serialize(null, {
+                components,
+                wires,
+                probes,
+                getComponentProperties: (component) => propertyMap.get(component.id) || {},
+                hasWire: (wireId) => wireIds.has(wireId)
+            });
+        }
     };
 }
 
 function buildScenarioJson(definition) {
     const ctx = createScenarioBuilderContext();
     definition.build(ctx);
-    const json = CircuitSerializer.serialize(ctx.circuit);
+    const json = ctx.toJSON();
     const timestamp = Date.UTC(2026, 2, 23, 0, 0, 0, 0);
     json.meta = {
         ...(json.meta || {}),
@@ -216,4 +237,3 @@ export function getClassroomScenarioById(id) {
     const scenarios = getClassroomScenarioPack();
     return scenarios.find((scenario) => scenario.id === normalizedId) || null;
 }
-

@@ -4,7 +4,7 @@ import { createComponent } from '../src/components/Component.js';
 import { CircuitSerializer } from '../src/core/io/CircuitSerializer.js';
 import { CircuitDeserializer } from '../src/core/io/CircuitDeserializer.js';
 import { CircuitSchemaGateway } from '../src/core/io/CircuitSchemaGateway.js';
-import { getClassroomScenarioPack } from '../src/core/scenarios/ClassroomScenarioPack.js';
+import { getClassroomScenarioPack } from '../src/engine/scenarios/ClassroomScenarioPack.js';
 
 describe('Circuit IO gateway', () => {
     it('serializes and deserializes circuit with stable schema', () => {

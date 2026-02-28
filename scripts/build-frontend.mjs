@@ -16,16 +16,17 @@ const FILE_COPIES = Object.freeze([
 ]);
 
 const DIR_COPIES = Object.freeze([
-    ['css', 'css'],
-    ['src', 'src'],
-    ['examples', 'examples']
+    ['css', 'css', true],
+    ['src', 'src', true],
+    ['examples', 'examples', false]
 ]);
 
 async function ensureExists(absolutePath) {
     try {
         await stat(absolutePath);
+        return true;
     } catch (_) {
-        throw new Error(`Missing build input: ${absolutePath}`);
+        return false;
     }
 }
 
@@ -36,14 +37,23 @@ async function main() {
     for (const [sourceRel, targetRel] of FILE_COPIES) {
         const sourceAbs = path.join(projectRoot, sourceRel);
         const targetAbs = path.join(distDir, targetRel);
-        await ensureExists(sourceAbs);
+        const exists = await ensureExists(sourceAbs);
+        if (!exists) {
+            throw new Error(`Missing build input: ${sourceAbs}`);
+        }
         await cp(sourceAbs, targetAbs);
     }
 
-    for (const [sourceRel, targetRel] of DIR_COPIES) {
+    for (const [sourceRel, targetRel, required] of DIR_COPIES) {
         const sourceAbs = path.join(projectRoot, sourceRel);
         const targetAbs = path.join(distDir, targetRel);
-        await ensureExists(sourceAbs);
+        const exists = await ensureExists(sourceAbs);
+        if (!exists) {
+            if (required) {
+                throw new Error(`Missing build input: ${sourceAbs}`);
+            }
+            continue;
+        }
         await cp(sourceAbs, targetAbs, { recursive: true });
     }
 
