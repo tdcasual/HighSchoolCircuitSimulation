@@ -14,6 +14,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, '..', '..');
 const outputDir = path.join(projectRoot, 'output', 'e2e', 'responsive-touch');
+const diffNotesPath = path.join(outputDir, 'responsive-touch-diff-notes.md');
+const failureArtifacts = [];
 
 const MIME_TYPES = {
     '.html': 'text/html; charset=utf-8',
@@ -170,6 +172,53 @@ async function readLayoutState(page) {
 async function capture(page, fileName) {
     await mkdir(outputDir, { recursive: true });
     await page.screenshot({ path: path.join(outputDir, fileName), fullPage: true });
+}
+
+async function recordFailureArtifact(scenario, page, error) {
+    let screenshotPath = '';
+    const fileName = `failure-${scenario}.png`;
+    try {
+        if (page) {
+            await capture(page, fileName);
+            screenshotPath = path.join(outputDir, fileName);
+        }
+    } catch (_) {
+        screenshotPath = '';
+    }
+
+    failureArtifacts.push({
+        scenario,
+        message: error?.message || String(error),
+        screenshotPath
+    });
+}
+
+async function writeDiffNotes(entries = [], options = {}) {
+    const generatedAt = new Date().toISOString();
+    const intro = options.intro || 'Responsive touch regression diff notes';
+    const lines = [
+        '# Responsive Touch Diff Notes',
+        '',
+        `Generated at: ${generatedAt}`,
+        '',
+        intro,
+        ''
+    ];
+
+    if (!entries.length) {
+        lines.push('## Result');
+        lines.push('- No failures in this run.');
+        lines.push('- Expanded edit + measure workflow checks passed.');
+    } else {
+        lines.push('## Failures');
+        entries.forEach((entry, index) => {
+            lines.push(`${index + 1}. Scenario: ${entry.scenario}`);
+            lines.push(`- Error: ${entry.message}`);
+            lines.push(`- Screenshot: ${entry.screenshotPath || 'not-captured'}`);
+        });
+    }
+
+    await writeFile(diffNotesPath, `${lines.join('\n')}\n`, 'utf8');
 }
 
 async function runPhoneTaskScenario(page, taskId) {
@@ -411,6 +460,9 @@ async function verifyDesktopLayout(browser, baseUrl) {
         );
 
         await capture(page, 'desktop-1366x768-classroom-mode.png');
+    } catch (error) {
+        await recordFailureArtifact('desktop-layout', page, error);
+        throw error;
     } finally {
         await context.close();
     }
@@ -431,6 +483,9 @@ async function verifyTabletLayout(browser, baseUrl) {
         assertCondition(state.toolboxToggleHidden === true, 'toolbox toggle should stay hidden on tablet mode');
         assertCondition(state.sidePanelToggleHidden === true, 'side-panel toggle should stay hidden on tablet mode');
         await capture(page, 'tablet-1024x768.png');
+    } catch (error) {
+        await recordFailureArtifact('tablet-layout', page, error);
+        throw error;
     } finally {
         await context.close();
     }
@@ -497,6 +552,9 @@ async function verifyCompactDrawerBehavior(browser, baseUrl) {
         assertCondition(quickActionHidden, 'quick-action bar should hide while overlay drawers are open');
 
         await capture(page, 'compact-768x1024-drawers.png');
+    } catch (error) {
+        await recordFailureArtifact('compact-drawer-behavior', page, error);
+        throw error;
     } finally {
         await context.close();
     }
@@ -589,6 +647,19 @@ async function verifyPhoneTouchFlow(browser, baseUrl, collector) {
             );
         });
 
+        await page.click('#quick-action-bar .quick-action-btn[data-action="component-edit"]');
+        await page.waitForFunction(() => {
+            const overlay = document.getElementById('dialog-overlay');
+            return !!overlay && !overlay.classList.contains('hidden');
+        });
+        const dialogTitle = await page.$eval('#dialog-title', (el) => el.textContent?.trim() || '');
+        assertCondition(dialogTitle.includes('编辑'), `component edit dialog title mismatch: ${dialogTitle}`);
+        await page.click('#dialog-cancel');
+        await page.waitForFunction(() => {
+            const overlay = document.getElementById('dialog-overlay');
+            return !!overlay && overlay.classList.contains('hidden');
+        });
+
         await page.click('#btn-toggle-side-panel');
         await page.waitForFunction(() => {
             const sidePanel = document.getElementById('side-panel');
@@ -621,6 +692,12 @@ async function verifyPhoneTouchFlow(browser, baseUrl, collector) {
         await page.waitForFunction(() => {
             const sidePanel = document.getElementById('side-panel');
             return !sidePanel?.classList.contains('layout-open');
+        });
+
+        await page.click('#btn-toggle-side-panel');
+        await page.waitForFunction(() => {
+            const sidePanel = document.getElementById('side-panel');
+            return !!sidePanel?.classList.contains('layout-open');
         });
 
         const phoneBottomOverlap = await page.evaluate(() => {
@@ -675,6 +752,18 @@ async function verifyPhoneTouchFlow(browser, baseUrl, collector) {
             button: 0
         });
 
+        await page.evaluate(() => {
+            const backdrop = document.getElementById('layout-backdrop');
+            if (backdrop && backdrop.hidden === false) {
+                backdrop.click();
+            }
+            window.app?.responsiveLayout?.closeDrawers?.();
+        });
+        await page.waitForFunction(() => {
+            const backdrop = document.getElementById('layout-backdrop');
+            return !backdrop || backdrop.hidden !== false;
+        });
+
         await page.click('#status-bar', { position: { x: 8, y: 8 } });
         await page.waitForTimeout(30);
 
@@ -704,8 +793,83 @@ async function verifyPhoneTouchFlow(browser, baseUrl, collector) {
             `drawer interaction loop is unexpectedly slow: ${interactionCostMs}ms`
         );
 
+        const editMeasureSetup = await page.evaluate(() => {
+            const app = window.app;
+            const interaction = app?.interaction;
+            const renderer = app?.renderer;
+            const circuit = app?.circuit;
+            if (!app || !interaction || !renderer || !circuit) {
+                return { ok: false, error: 'app_not_ready' };
+            }
+
+            let wireSeq = 0;
+            const makeWireId = () => `e2e_day12_measure_${Date.now()}_${wireSeq++}`;
+            const add = (type, x, y) => {
+                const result = interaction.addComponent(type, x, y);
+                if (!result?.ok || !result?.payload?.componentId) return null;
+                return result.payload.componentId;
+            };
+            const connect = (fromId, fromTerminal, toId, toTerminal) => {
+                const from = renderer.getTerminalPosition(fromId, fromTerminal);
+                const to = renderer.getTerminalPosition(toId, toTerminal);
+                if (!from || !to) return false;
+                const wire = {
+                    id: makeWireId(),
+                    a: { x: from.x, y: from.y },
+                    b: { x: to.x, y: to.y },
+                    aRef: { componentId: fromId, terminalIndex: fromTerminal },
+                    bRef: { componentId: toId, terminalIndex: toTerminal }
+                };
+                circuit.addWire(wire);
+                renderer.addWire(wire);
+                return true;
+            };
+
+            app.clearCircuit?.();
+            const source = add('PowerSource', 90, 220);
+            const resistor = add('Resistor', 250, 220);
+            if (!source || !resistor) {
+                return { ok: false, error: 'add_component_failed' };
+            }
+            if (!connect(source, 0, resistor, 0) || !connect(resistor, 1, source, 1)) {
+                return { ok: false, error: 'wire_connect_failed' };
+            }
+            interaction.selectComponent?.(resistor);
+            app.startSimulation?.();
+            return { ok: true, resistorId: resistor };
+        });
+        assertCondition(editMeasureSetup.ok, `edit+measure setup failed: ${editMeasureSetup.error || 'unknown_error'}`);
+
+        await page.waitForTimeout(220);
+
+        const readoutState = await page.evaluate(() => {
+            const current = document.getElementById('measure-current')?.textContent?.trim() || '';
+            const voltage = document.getElementById('measure-voltage')?.textContent?.trim() || '';
+            const power = document.getElementById('measure-power')?.textContent?.trim() || '';
+            return {
+                current,
+                voltage,
+                power,
+                hasCurrent: /\d/.test(current),
+                hasVoltage: /\d/.test(voltage),
+                hasPower: /\d/.test(power)
+            };
+        });
+        assertCondition(readoutState.hasCurrent, `measurement current readout missing numeric value: ${readoutState.current}`);
+        assertCondition(readoutState.hasVoltage, `measurement voltage readout missing numeric value: ${readoutState.voltage}`);
+        assertCondition(readoutState.hasPower, `measurement power readout missing numeric value: ${readoutState.power}`);
+        await capture(page, 'phone-390x844-edit-measure-workflow.png');
+
+        await page.evaluate(() => {
+            window.app?.stopSimulation?.();
+            window.app?.responsiveLayout?.closeDrawers?.();
+        });
+
         await collectMobileTaskBaselines(page, collector);
         await capture(page, 'phone-390x844-touch-flow.png');
+    } catch (error) {
+        await recordFailureArtifact('phone-touch-flow', page, error);
+        throw error;
     } finally {
         await context.close();
     }
@@ -734,10 +898,26 @@ async function main() {
             `${JSON.stringify({ report: metricsReport, summary: metricsSummary }, null, 2)}\n`,
             'utf8'
         );
+        await writeDiffNotes([], {
+            intro: 'Responsive touch regressions passed with expanded edit + measure workflow checks.'
+        });
 
         console.log('Responsive touch E2E passed.');
         console.log(`Mobile task baseline: ${path.join(outputDir, 'mobile-flow-baseline.json')}`);
+        console.log(`Diff notes: ${diffNotesPath}`);
         console.log(`Screenshots: ${outputDir}`);
+    } catch (error) {
+        if (failureArtifacts.length === 0) {
+            failureArtifacts.push({
+                scenario: 'main',
+                message: error?.message || String(error),
+                screenshotPath: ''
+            });
+        }
+        await writeDiffNotes(failureArtifacts, {
+            intro: 'Responsive touch regressions failed. See failure entries below.'
+        });
+        throw error;
     } finally {
         if (browser) {
             await browser.close();
