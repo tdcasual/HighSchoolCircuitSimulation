@@ -19,12 +19,14 @@ function readText(relPath) {
 }
 
 function extractMethodBody(source, signature, fileLabel) {
-    const signatureIdx = source.indexOf(signature);
-    if (signatureIdx < 0) {
+    const escapedSignature = signature.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const headerRegex = new RegExp(`(?:^|\\n)\\s*${escapedSignature}\\s*\\{`);
+    const headerMatch = headerRegex.exec(source);
+    if (!headerMatch) {
         fail(`cannot find method signature "${signature}" in ${fileLabel}`);
     }
 
-    const openBraceIdx = source.indexOf('{', signatureIdx + signature.length);
+    const openBraceIdx = headerMatch.index + headerMatch[0].lastIndexOf('{');
     if (openBraceIdx < 0) {
         fail(`cannot find opening brace for "${signature}" in ${fileLabel}`);
     }
@@ -103,6 +105,14 @@ function assertMethodBodyDoesNotMatch(body, signature, fileLabel, checks = []) {
     }
 }
 
+function assertMethodBodyMatches(body, signature, fileLabel, checks = []) {
+    for (const check of checks) {
+        if (!check.regex.test(body)) {
+            fail(`${fileLabel} -> ${signature} ${check.message}`);
+        }
+    }
+}
+
 const solverPath = 'src/engine/Solver.js';
 const resultPath = 'src/core/simulation/ResultPostprocessor.js';
 
@@ -144,6 +154,58 @@ assertTypeComparisonWhitelist(
     'calculateCurrent(comp, context = {})',
     resultPath,
     structuralTypeWhitelist
+);
+
+assertMethodBodyMatches(
+    solverStampBody,
+    'stampComponent(comp, A, z, nodeCount)',
+    solverPath,
+    [
+        {
+            regex: /registry\.get\(\s*comp\.type\s*\)/,
+            message: 'must keep registry-first type lookup'
+        },
+        {
+            regex: /DefaultComponentRegistry\.get\(\s*comp\.type\s*\)/,
+            message: 'must keep default registry fallback lookup'
+        },
+        {
+            regex: /if\s*\(\s*handler\s*&&\s*typeof handler\.stamp === ['"]function['"]\s*\)[\s\S]*?handler\.stamp\(/,
+            message: 'must keep stamp handler invocation path'
+        },
+        {
+            regex: /const handledByDispatcher = this\.stampDispatcher\.stamp\(/,
+            message: 'must keep dispatcher fallback path'
+        },
+        {
+            regex: /if\s*\(\s*handledByDispatcher\s*\)\s*\{\s*return;\s*\}/,
+            message: 'must keep dispatcher handled short-circuit return'
+        }
+    ]
+);
+
+assertMethodBodyMatches(
+    resultCurrentBody,
+    'calculateCurrent(comp, context = {})',
+    resultPath,
+    [
+        {
+            regex: /registryRef\s*\?\s*registryRef\.get\(\s*comp\.type\s*\)\s*:\s*null/,
+            message: 'must keep registry-first current lookup'
+        },
+        {
+            regex: /DefaultComponentRegistry\.get\(\s*comp\.type\s*\)/,
+            message: 'must keep default registry current fallback lookup'
+        },
+        {
+            regex: /if\s*\(\s*handler\s*&&\s*typeof handler\.current === ['"]function['"]\s*\)[\s\S]*?return handler\.current\(/,
+            message: 'must keep current handler invocation path'
+        },
+        {
+            regex: /return\s+0\s*;/,
+            message: 'must keep explicit 0A no-handler fallback'
+        }
+    ]
 );
 
 assertMethodBodyDoesNotMatch(
