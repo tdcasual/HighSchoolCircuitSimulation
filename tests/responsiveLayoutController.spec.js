@@ -161,6 +161,36 @@ describe('ResponsiveLayoutController', () => {
         expect(toolboxToggleBtn.hidden).toBe(false);
     });
 
+    it('ignores drawer swipe gesture when header interaction starts on a button-like element', () => {
+        setupLayoutFixture(640);
+        const controller = new ResponsiveLayoutController({});
+        const setPointerCapture = vi.fn();
+        const currentTarget = {
+            id: 'toolbox',
+            style: { transition: '' },
+            setPointerCapture
+        };
+        const target = {
+            closest: vi.fn((selector) => {
+                if (selector === '.toolbox-header') return {};
+                if (selector === 'button, [role="button"], input, select, textarea, a') return {};
+                return null;
+            })
+        };
+
+        controller.onDrawerPointerDown({
+            pointerType: 'touch',
+            pointerId: 7,
+            clientX: 40,
+            clientY: 40,
+            currentTarget,
+            target
+        });
+
+        expect(controller.drawerSwipe).toBe(null);
+        expect(setPointerCapture).not.toHaveBeenCalled();
+    });
+
     it('removes window and drawer listeners on destroy', () => {
         const {
             win,

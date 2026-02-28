@@ -52,6 +52,35 @@ describe('ToolPlacementController.setPendingToolType', () => {
         expect(context.clearPendingToolType).toHaveBeenCalledTimes(1);
         expect(context.updateStatus).toHaveBeenCalledWith('已取消工具放置模式');
     });
+
+    it('auto closes overlay drawers after selecting a pending tool on mobile layout', () => {
+        vi.stubGlobal('document', {
+            querySelectorAll: vi.fn(() => [])
+        });
+
+        const closeDrawers = vi.fn();
+        const context = {
+            pendingToolType: null,
+            pendingToolItem: null,
+            isWiring: false,
+            clearPendingToolType: vi.fn(),
+            cancelWiring: vi.fn(),
+            updateStatus: vi.fn(),
+            app: {
+                responsiveLayout: {
+                    isOverlayMode: vi.fn(() => true),
+                    toolboxOpen: true,
+                    sidePanelOpen: false,
+                    closeDrawers
+                }
+            }
+        };
+
+        ToolPlacementController.setPendingToolType.call(context, 'Resistor', null);
+
+        expect(closeDrawers).toHaveBeenCalledTimes(1);
+        expect(context.updateStatus).toHaveBeenCalledWith(expect.stringContaining('已选择'));
+    });
 });
 
 describe('ToolPlacementController.clearPendingToolType', () => {

@@ -16,6 +16,14 @@ export function setPendingToolType(type, item = null) {
     this.pendingToolItem = item;
     document.querySelectorAll('.tool-item.tool-item-pending').forEach((el) => el.classList.remove('tool-item-pending'));
     if (item) item.classList.add('tool-item-pending');
+
+    const layout = this.app?.responsiveLayout;
+    const shouldAutoCloseDrawers = !!layout?.isOverlayMode?.()
+        && (layout.toolboxOpen || layout.sidePanelOpen);
+    if (shouldAutoCloseDrawers) {
+        layout.closeDrawers?.();
+    }
+
     this.updateStatus(`已选择 ${ComponentNames[type] || type}，点击画布放置`);
 }
 

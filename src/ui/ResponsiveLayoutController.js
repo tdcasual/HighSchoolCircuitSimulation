@@ -139,6 +139,8 @@ export class ResponsiveLayoutController {
             event.currentTarget?.id === 'toolbox' ? '.toolbox-header' : '.side-panel-header'
         );
         if (!header) return;
+        const interactiveTarget = event.target?.closest?.('button, [role="button"], input, select, textarea, a');
+        if (interactiveTarget) return;
         const targetId = event.currentTarget?.id === 'toolbox' ? 'toolbox' : 'side-panel';
         this.drawerSwipe = {
             pointerId: event.pointerId,
