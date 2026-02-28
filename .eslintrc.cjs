@@ -11,7 +11,7 @@ module.exports = {
         ecmaVersion: 'latest',
         sourceType: 'module'
     },
-    ignorePatterns: ['node_modules/', 'output/', '.worktrees/', '_reference/'],
+    ignorePatterns: ['node_modules/', 'output/', 'dist/', '.worktrees/', '_reference/'],
     settings: {
         'boundaries/include': ['src/**/*.js'],
         'boundaries/elements': [

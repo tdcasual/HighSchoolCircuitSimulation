@@ -21,6 +21,8 @@
     "baseline:circuitjs:update": "node scripts/benchmark/circuitjs-golden-regression.mjs --update",
     "baseline:ai": "node scripts/benchmark/ai-eval-regression.mjs",
     "baseline:ai:update": "node scripts/benchmark/ai-eval-regression.mjs --update",
+    "check:docs-integrity": "node scripts/ci/assert-release-doc-integrity.mjs",
+    "check:interaction-guide": "node scripts/ci/assert-interaction-guide-sync.mjs",
     "test:reliability": "vitest run tests/failureDiagnostics.spec.js tests/runtimeDiagnostics.spec.js tests/circuit.runtimeDiagnostics.spec.js tests/solver.commonCases.spec.js tests/wireShortCircuit.spec.js tests/solver.inputHardening.spec.js tests/solver.dynamicIntegration.spec.js",
     "test:e2e:responsive": "node scripts/e2e/responsive-touch-regression.mjs",
     "test:e2e:wire": "node scripts/e2e/wire-interaction-regression.mjs",

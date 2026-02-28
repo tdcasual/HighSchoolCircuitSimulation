@@ -26,6 +26,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Check release docs integrity
+        run: node scripts/ci/assert-release-doc-integrity.mjs
+
+      - name: Check interaction guide sync
+        run: node scripts/ci/assert-interaction-guide-sync.mjs
+
       - name: Run reliability regression gate
         run: npm run test:reliability
 

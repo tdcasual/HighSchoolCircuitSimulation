@@ -20,4 +20,14 @@ describe('CI workflow coverage', () => {
         expect(content).toContain('Run reliability regression gate');
         expect(content).toContain('npm run test:reliability');
     });
+
+    it('runs docs integrity and interaction-guide sync checks in quality job', () => {
+        const workflowPath = resolve(process.cwd(), '.github/workflows/ci.yml');
+        const content = readFileSync(workflowPath, 'utf8');
+
+        expect(content).toContain('Check release docs integrity');
+        expect(content).toContain('node scripts/ci/assert-release-doc-integrity.mjs');
+        expect(content).toContain('Check interaction guide sync');
+        expect(content).toContain('node scripts/ci/assert-interaction-guide-sync.mjs');
+    });
 });
