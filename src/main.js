@@ -16,6 +16,7 @@ import { TopActionMenuController } from './ui/TopActionMenuController.js';
 import { EmbedRuntimeBridge, parseEmbedRuntimeOptionsFromSearch } from './embed/EmbedRuntimeBridge.js';
 import { resetIdCounter, updateIdCounterFromExisting } from './components/Component.js';
 import { createRuntimeLogger } from './utils/Logger.js';
+import { buildRuntimeDiagnostics } from './core/simulation/RuntimeDiagnostics.js';
 
 class CircuitSimulatorApp {
     constructor() {
@@ -167,6 +168,16 @@ class CircuitSimulatorApp {
      * 电路更新回调
      */
     onCircuitUpdate(results) {
+        const runtimeDiagnostics = buildRuntimeDiagnostics({
+            results,
+            solverShortCircuitDetected: !!this.circuit?.solver?.shortCircuitDetected,
+            shortedSourceIds: this.circuit?.shortedSourceIds || null,
+            shortedWireIds: this.circuit?.shortedWireIds || null
+        });
+        if (results && typeof results === 'object') {
+            results.runtimeDiagnostics = runtimeDiagnostics;
+        }
+
         // Always refresh value labels so the UI never stays blank.
         this.renderer.updateValues();
 
@@ -175,6 +186,14 @@ class CircuitSimulatorApp {
 
         // 更新观察面板（采样、绘制与无效解提示）
         this.observationPanel?.onCircuitUpdate(results);
+
+        if (runtimeDiagnostics.summary) {
+            const shouldShow = !results?.valid || runtimeDiagnostics.code === 'SHORT_CIRCUIT';
+            if (shouldShow) {
+                this.observationPanel?.setRuntimeStatus?.(runtimeDiagnostics.summary);
+                this.updateStatus(runtimeDiagnostics.summary);
+            }
+        }
 
         if (results.valid) {
             // 更新选中元器件的属性面板
@@ -212,15 +231,20 @@ class CircuitSimulatorApp {
         }
 
         const topologyReport = this.circuit.validateSimulationTopology(0);
+        const topologyDiagnostics = buildRuntimeDiagnostics({
+            topologyReport
+        });
         if (!topologyReport.ok) {
-            const message = topologyReport.error?.message || '电路拓扑校验失败，无法开始模拟';
+            const message = topologyDiagnostics.summary
+                || topologyReport.error?.message
+                || '电路拓扑校验失败，无法开始模拟';
             this.observationPanel?.setRuntimeStatus?.(message);
             this.updateStatus(message);
             return;
         }
 
-        const topologyWarning = Array.isArray(topologyReport.warnings) && topologyReport.warnings.length > 0
-            ? topologyReport.warnings[0]?.message || ''
+        const topologyWarning = topologyDiagnostics.code === 'FLOATING_SUBCIRCUIT'
+            ? topologyDiagnostics.summary
             : '';
 
         this.circuit.startSimulation();
