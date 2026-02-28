@@ -280,7 +280,7 @@ async function runWireInteractionRegression(browser, baseUrl) {
 
             const originalStartTerminalExtend = interaction.startTerminalExtend;
             let extendCallCount = 0;
-            interaction.startTerminalExtend = (...args) => {
+            interaction.startTerminalExtend = (..._args) => {
                 extendCallCount += 1;
                 return undefined;
             };
