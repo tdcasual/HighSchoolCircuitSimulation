@@ -1,4 +1,5 @@
 import { DynamicIntegrationMethods } from './DynamicIntegrator.js';
+import { computeNtcThermistorResistance, computePhotoresistorResistance } from '../../utils/Physics.js';
 
 export class ComponentRegistry {
     constructor() {
@@ -28,6 +29,70 @@ DefaultComponentRegistry.register('Resistor', {
 });
 
 DefaultComponentRegistry.register('Bulb', DefaultComponentRegistry.get('Resistor'));
+
+DefaultComponentRegistry.register('Thermistor', {
+    stamp: (comp, context, nodes) => {
+        context.stampResistor(nodes.i1, nodes.i2, computeNtcThermistorResistance(comp));
+    },
+    current: (comp, context, nodes) => {
+        const dV = context.voltage(nodes.n1) - context.voltage(nodes.n2);
+        const resistance = computeNtcThermistorResistance(comp);
+        return resistance > 0 ? dV / resistance : 0;
+    }
+});
+
+DefaultComponentRegistry.register('Photoresistor', {
+    stamp: (comp, context, nodes) => {
+        context.stampResistor(nodes.i1, nodes.i2, computePhotoresistorResistance(comp));
+    },
+    current: (comp, context, nodes) => {
+        const dV = context.voltage(nodes.n1) - context.voltage(nodes.n2);
+        const resistance = computePhotoresistorResistance(comp);
+        return resistance > 0 ? dV / resistance : 0;
+    }
+});
+
+DefaultComponentRegistry.register('Ammeter', {
+    stamp: (comp, context, nodes) => {
+        const resistance = Number(comp.resistance);
+        const hasFiniteResistance = Number.isFinite(resistance) && resistance > 0;
+        if (hasFiniteResistance) {
+            context.stampResistor(nodes.i1, nodes.i2, resistance);
+            return;
+        }
+        if (typeof context.stampVoltageSource === 'function') {
+            context.stampVoltageSource(nodes.i1, nodes.i2, 0, comp.vsIndex, nodes.nodeCount);
+        }
+    },
+    current: (comp, context, nodes) => {
+        const dV = context.voltage(nodes.n1) - context.voltage(nodes.n2);
+        const resistance = Number(comp.resistance);
+        const hasFiniteResistance = Number.isFinite(resistance) && resistance > 0;
+        if (hasFiniteResistance) {
+            return dV / resistance;
+        }
+        const vector = Array.isArray(context.solveVector) ? context.solveVector : [];
+        const nodeCount = Number.isFinite(context.nodeCount) ? context.nodeCount : 0;
+        return -(vector[nodeCount - 1 + comp.vsIndex] || 0);
+    }
+});
+
+DefaultComponentRegistry.register('Voltmeter', {
+    stamp: (comp, context, nodes) => {
+        const resistance = Number(comp.resistance);
+        if (Number.isFinite(resistance) && resistance > 0) {
+            context.stampResistor(nodes.i1, nodes.i2, resistance);
+        }
+    },
+    current: (comp, context, nodes) => {
+        const resistance = Number(comp.resistance);
+        if (Number.isFinite(resistance) && resistance > 0) {
+            const dV = context.voltage(nodes.n1) - context.voltage(nodes.n2);
+            return dV / resistance;
+        }
+        return 0;
+    }
+});
 
 const resolveMethod = (context, comp) => {
     if (context && typeof context.resolveDynamicIntegrationMethod === 'function') {

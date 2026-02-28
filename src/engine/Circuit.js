@@ -14,6 +14,7 @@ import { CircuitSerializer } from '../core/io/CircuitSerializer.js';
 import { CircuitDeserializer } from '../core/io/CircuitDeserializer.js';
 import { SimulationState } from '../core/simulation/SimulationState.js';
 import { buildRuntimeDiagnostics } from '../core/simulation/RuntimeDiagnostics.js';
+import { NetlistBuilder } from '../core/simulation/NetlistBuilder.js';
 import { createRuntimeLogger } from '../utils/Logger.js';
 
 export class Circuit {
@@ -56,6 +57,8 @@ export class Circuit {
         this.componentTerminalTopologyKeys = new Map(); // componentId -> topology key used for terminal geometry cache
         this.terminalWorldPosCache = new Map(); // componentId -> Map(terminalIndex -> {x,y})
         this.simulationState = new SimulationState();
+        this.netlistBuilder = new NetlistBuilder();
+        this.netlist = null;
         this.debugMode = false;
         this.logger = createRuntimeLogger({ scope: 'circuit' });
         this.solver.setLogger?.(this.logger.child?.('solver') || this.logger);
@@ -156,10 +159,19 @@ export class Circuit {
         const needsPrepare = this.solverCircuitDirty || this.solverPreparedTopologyVersion !== this.topologyVersion;
         if (!needsPrepare) return false;
 
-        this.solver.setCircuit(
-            Array.from(this.components.values()),
-            this.nodes
-        );
+        const components = Array.from(this.components.values());
+        const builtNetlist = this.netlistBuilder?.build?.({
+            components,
+            nodes: this.nodes
+        });
+
+        if (builtNetlist && Array.isArray(builtNetlist.components) && Array.isArray(builtNetlist.nodes)) {
+            this.netlist = builtNetlist;
+            this.solver.setCircuit(builtNetlist);
+        } else {
+            this.netlist = null;
+            this.solver.setCircuit(components, this.nodes);
+        }
         if (typeof this.solver.setSimulationState === 'function') {
             this.solver.setSimulationState(this.simulationState);
         }
@@ -1872,6 +1884,7 @@ export class Circuit {
         this.wires.clear();
         this.observationProbes.clear();
         this.nodes = [];
+        this.netlist = null;
         this.lastResults = null;
         this.simTime = 0;
         this.currentDt = this.dt;

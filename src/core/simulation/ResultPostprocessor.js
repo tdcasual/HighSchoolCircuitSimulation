@@ -139,8 +139,18 @@ export class ResultPostprocessor {
                 voltage: (nodeIdx) => {
                     if (nodeIdx === undefined || nodeIdx < 0) return 0;
                     return voltages[nodeIdx] || 0;
-                }
-            }, { n1: comp.nodes?.[0], n2: comp.nodes?.[1] });
+                },
+                solveVector: x,
+                nodeCount,
+                dt: context.dt,
+                resolveDynamicIntegrationMethod: (targetComp) => this.resolveDynamicIntegrationMethod(targetComp, context),
+                getSourceInstantVoltage: (targetComp) => this.getSourceInstantVoltage(targetComp, context),
+                state
+            }, {
+                n1: comp.nodes?.[0],
+                n2: comp.nodes?.[1],
+                nodeCount
+            });
         }
 
         switch (comp.type) {

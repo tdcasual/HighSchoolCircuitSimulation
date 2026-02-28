@@ -17,6 +17,7 @@ export class MNASolver {
     constructor() {
         this.nodes = [];           // 节点列表
         this.components = [];       // 元器件列表
+        this.netlist = null;        // 规范化网表 DTO（可选）
         this.groundNode = 0;        // 接地节点（参考节点）
         this.voltageSourceCount = 0; // 电压源数量（用于扩展矩阵）
         this.dt = 0.001;            // 时间步长（秒）
@@ -55,20 +56,49 @@ export class MNASolver {
 
     /**
      * 设置电路数据
-     * @param {Object[]} components - 元器件数组
-     * @param {Object[]} nodes - 节点数组
+     * @param {Object[]|Object} components - 元器件数组或 netlist DTO
+     * @param {Object[]} nodes - 节点数组（旧路径）
      */
     setCircuit(components, nodes) {
-        this.components = components;
-        this.nodes = nodes;
+        const isNetlistInput = !Array.isArray(components)
+            && components
+            && typeof components === 'object'
+            && Array.isArray(components.components)
+            && Array.isArray(components.nodes)
+            && nodes === undefined;
+
+        if (isNetlistInput) {
+            this.netlist = components;
+            this.components = components.components
+                .map((entry) => {
+                    if (entry && typeof entry === 'object' && entry.source && typeof entry.source === 'object') {
+                        return entry.source;
+                    }
+                    return entry;
+                })
+                .filter((entry) => entry && typeof entry === 'object');
+            this.nodes = components.nodes.map((entry) => {
+                if (entry && typeof entry === 'object'
+                    && Object.prototype.hasOwnProperty.call(entry, 'node')) {
+                    return entry.node;
+                }
+                return entry;
+            });
+        } else {
+            this.netlist = null;
+            this.components = Array.isArray(components) ? components : [];
+            this.nodes = Array.isArray(nodes) ? nodes : [];
+        }
+
         this.voltageSourceCount = 0;
         this.shortCircuitDetected = false;
         this.hasConnectedSwitch = false;
         this.resetMatrixFactorizationCache();
         const isValidNode = (nodeIdx) => nodeIdx !== undefined && nodeIdx !== null && nodeIdx >= 0;
+        const circuitComponents = this.components;
         
         // 检测并标记被短路的元器件（两端节点相同）
-        for (const comp of components) {
+        for (const comp of circuitComponents) {
             comp.vsIndex = undefined;
             const isPowerSource = comp.type === 'PowerSource' || comp.type === 'ACVoltageSource';
             if (comp.type === 'Ground') {
@@ -108,7 +138,7 @@ export class MNASolver {
         // 统计电压源数量
         // 注意：有内阻的电源使用诺顿等效，不计入电压源
         // 被短路的电源不作为电压源处理
-        for (const comp of components) {
+        for (const comp of circuitComponents) {
             if (comp.type === 'PowerSource' || comp.type === 'ACVoltageSource') {
                 const n1 = comp.nodes?.[0];
                 const n2 = comp.nodes?.[1];
@@ -712,6 +742,8 @@ export class MNASolver {
             handler.stamp(comp, {
                 stampResistor: (rI1, rI2, rValue) => this.stampResistor(A, rI1, rI2, rValue),
                 stampCurrentSource: (cFrom, cTo, current) => this.stampCurrentSource(z, cFrom, cTo, current),
+                stampVoltageSource: (vI1, vI2, voltage, vsIndex, totalNodeCount) =>
+                    this.stampVoltageSource(A, z, vI1, vI2, voltage, vsIndex, totalNodeCount),
                 dt: this.dt,
                 resolveDynamicIntegrationMethod: (targetComp) => this.resolveDynamicIntegrationMethod(targetComp),
                 state: this.simulationState
