@@ -1,0 +1,71 @@
+import { describe, expect, it } from 'vitest';
+import { MNASolver } from '../src/engine/Solver.js';
+import { ResultPostprocessor } from '../src/core/simulation/ResultPostprocessor.js';
+import { DefaultComponentRegistry } from '../src/core/simulation/ComponentRegistry.js';
+
+describe('Registry fallback behavior', () => {
+    it('falls back to DefaultComponentRegistry stamp handler when custom registry misses type', () => {
+        const solver = new MNASolver();
+        solver.componentRegistry = {
+            get: () => null
+        };
+
+        const originalGet = DefaultComponentRegistry.get;
+        let defaultLookupCount = 0;
+        DefaultComponentRegistry.get = function patchedGet(type) {
+            defaultLookupCount += 1;
+            return originalGet.call(this, type);
+        };
+
+        try {
+            const A = [[0]];
+            const z = [0];
+            solver.stampComponent({
+                id: 'R1',
+                type: 'Resistor',
+                nodes: [1, 0],
+                resistance: 10,
+                _isShorted: false
+            }, A, z, 2);
+
+            expect(defaultLookupCount).toBeGreaterThan(0);
+            expect(A[0][0]).toBeCloseTo(0.1, 12);
+        } finally {
+            DefaultComponentRegistry.get = originalGet;
+        }
+    });
+
+    it('falls back to DefaultComponentRegistry current handler when custom registry misses type', () => {
+        const postprocessor = new ResultPostprocessor();
+        const customRegistry = {
+            get: () => null
+        };
+
+        const originalGet = DefaultComponentRegistry.get;
+        let defaultLookupCount = 0;
+        DefaultComponentRegistry.get = function patchedGet(type) {
+            defaultLookupCount += 1;
+            return originalGet.call(this, type);
+        };
+
+        try {
+            const current = postprocessor.calculateCurrent({
+                id: 'R1',
+                type: 'Resistor',
+                nodes: [1, 0],
+                resistance: 10,
+                _isShorted: false
+            }, {
+                voltages: [0, 10],
+                x: [],
+                nodeCount: 2,
+                registry: customRegistry
+            });
+
+            expect(defaultLookupCount).toBeGreaterThan(0);
+            expect(current).toBeCloseTo(1, 12);
+        } finally {
+            DefaultComponentRegistry.get = originalGet;
+        }
+    });
+});

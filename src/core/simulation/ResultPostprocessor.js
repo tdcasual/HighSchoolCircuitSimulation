@@ -133,7 +133,10 @@ export class ResultPostprocessor {
         const dV = v1 - v2;
 
         const registryRef = context.registry || DefaultComponentRegistry;
-        const handler = registryRef ? registryRef.get(comp.type) : null;
+        const handler = registryRef
+            ? (registryRef.get(comp.type)
+                || (registryRef === DefaultComponentRegistry ? null : DefaultComponentRegistry.get(comp.type)))
+            : null;
         if (handler && typeof handler.current === 'function') {
             return handler.current(comp, {
                 voltage: (nodeIdx) => {
@@ -154,10 +157,6 @@ export class ResultPostprocessor {
         }
 
         switch (comp.type) {
-            case 'Resistor':
-            case 'Bulb':
-                return comp.resistance > 0 ? dV / comp.resistance : 0;
-
             case 'Thermistor': {
                 const resistance = computeNtcThermistorResistance(comp);
                 return resistance > 0 ? dV / resistance : 0;

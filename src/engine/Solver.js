@@ -737,7 +737,8 @@ export class MNASolver {
         }
 
         const registry = this.componentRegistry || DefaultComponentRegistry;
-        const handler = registry.get(comp.type);
+        const handler = registry.get(comp.type)
+            || (registry === DefaultComponentRegistry ? null : DefaultComponentRegistry.get(comp.type));
         if (handler && typeof handler.stamp === 'function') {
             handler.stamp(comp, {
                 stampResistor: (rI1, rI2, rValue) => this.stampResistor(A, rI1, rI2, rValue),
@@ -774,11 +775,6 @@ export class MNASolver {
         }
 
         switch (comp.type) {
-            case 'Resistor':
-            case 'Bulb':
-                this.stampResistor(A, i1, i2, comp.resistance);
-                break;
-
             case 'Thermistor':
                 this.stampResistor(A, i1, i2, computeNtcThermistorResistance(comp));
                 break;
