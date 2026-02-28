@@ -95,6 +95,9 @@ npm run build:edgeone
 
 ## 📚 深入阅读（技术细节）
 
+- 文档系统入口：[`docs/README.md`](docs/README.md)
+- 改进闭环流程：[`docs/process/improvement-workflow.md`](docs/process/improvement-workflow.md)
+- 手机端交互回归清单：[`docs/process/mobile-ux-regression-checklist.md`](docs/process/mobile-ux-regression-checklist.md)
 - 元器件行为与扩展流程：[`AGENTS.md`](AGENTS.md)
 - 架构重构设计：[`docs/plans/2026-02-07-full-architecture-refactor-design.md`](docs/plans/2026-02-07-full-architecture-refactor-design.md)
 - 仿真解耦设计：[`docs/plans/2026-02-08-simulation-decoupling-design.md`](docs/plans/2026-02-08-simulation-decoupling-design.md)
