@@ -2126,42 +2126,27 @@ body.layout-mode-phone .mobile-mode-btn {
     flex: 1 1 0;
 }
 
-body.layout-mode-phone.mobile-controls-condensed #canvas-mobile-controls {
-    padding: 4px;
-    gap: 4px;
-}
-
+body.layout-mode-phone.mobile-controls-condensed #canvas-mobile-controls,
 body.layout-mode-phone.ai-panel-open #canvas-mobile-controls {
     padding: 4px;
     gap: 4px;
 }
 
-body.layout-mode-phone.mobile-controls-condensed .mobile-toggle-btn {
-    min-height: 34px;
-    padding: 6px 6px;
-    font-size: 11px;
-}
-
+body.layout-mode-phone.mobile-controls-condensed .mobile-toggle-btn,
 body.layout-mode-phone.ai-panel-open .mobile-toggle-btn {
     min-height: 34px;
     padding: 6px 6px;
     font-size: 11px;
 }
 
-body.layout-mode-phone.mobile-controls-condensed #btn-toggle-toolbox {
-    display: none;
-}
-
+body.layout-mode-phone.mobile-controls-condensed #btn-toggle-toolbox,
 body.layout-mode-phone.ai-panel-open #btn-toggle-toolbox {
     display: none;
 }
 
-body.layout-mode-phone.mobile-controls-condensed .mobile-run-btn,
-body.layout-mode-phone.mobile-controls-condensed .mobile-stop-btn {
-    display: none;
-}
-
 body.layout-mode-phone.ai-panel-open .mobile-run-btn,
+body.layout-mode-phone.mobile-controls-condensed .mobile-run-btn,
+body.layout-mode-phone.mobile-controls-condensed .mobile-stop-btn,
 body.layout-mode-phone.ai-panel-open .mobile-stop-btn {
     display: none;
 }
@@ -2192,14 +2177,6 @@ body.layout-mode-phone .mobile-sim-toggle {
     min-height: 44px;
     padding: 0 16px;
     border-radius: 12px;
-}
-
-body.layout-mode-phone.mobile-controls-condensed .mobile-sim-toggle {
-    display: inline-flex;
-}
-
-body.layout-mode-phone.ai-panel-open .mobile-sim-toggle {
-    display: inline-flex;
 }
 
 body.layout-mode-phone.ai-input-active .mobile-sim-toggle,
