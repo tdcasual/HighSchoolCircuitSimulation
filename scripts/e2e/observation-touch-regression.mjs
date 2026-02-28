@@ -178,6 +178,35 @@ async function runObservationScenario(browser, baseUrl) {
         'chart readout should contain finite x/y'
     );
 
+    const exportResult = await page.evaluate(() => {
+        const panel = window.app.observationPanel;
+        const exportButton = document.querySelector('[data-observation-action="export"]');
+        if (!panel || !exportButton) {
+            return { ok: false, reason: 'missing-panel-or-button' };
+        }
+        let payload = null;
+        const originalDownload = panel.downloadCanvasImage?.bind(panel);
+        panel.downloadCanvasImage = (canvas, fileName) => {
+            payload = {
+                fileName,
+                width: Number(canvas?.width) || 0,
+                height: Number(canvas?.height) || 0
+            };
+            return true;
+        };
+        exportButton.click();
+        if (typeof originalDownload === 'function') {
+            panel.downloadCanvasImage = originalDownload;
+        }
+        return {
+            ok: !!payload,
+            ...payload
+        };
+    });
+    assertCondition(exportResult.ok, `observation export should be triggered (${exportResult.reason || 'no-payload'})`);
+    assertCondition(/\.png$/iu.test(exportResult.fileName || ''), 'observation export filename should end with .png');
+    assertCondition(exportResult.width > 0 && exportResult.height > 0, 'observation export canvas should have valid size');
+
     await capture(page, 'observation-phone-touch.png');
     await context.close();
 }

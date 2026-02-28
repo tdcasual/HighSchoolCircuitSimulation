@@ -121,4 +121,35 @@ describe('ObservationPanel quick bind', () => {
         }));
         expect(showTransientStatus).toHaveBeenCalledWith(expect.stringContaining('已应用模板'));
     });
+
+    it('builds export metadata lines for plots and gauges', () => {
+        const ctx = {
+            sampleIntervalMs: 80,
+            plots: [
+                {
+                    name: '图像A',
+                    x: { sourceId: TIME_SOURCE_ID, quantityId: QuantityIds.Time },
+                    y: { sourceId: 'R1', quantityId: QuantityIds.Voltage },
+                    _latestText: '最新: x=0.2, y=4.6'
+                }
+            ],
+            circuit: {
+                components: new Map([
+                    ['A1', { id: 'A1', label: '主回路电流表', type: 'Ammeter', selfReading: true, range: 3, currentValue: 0.34 }],
+                    ['V1', { id: 'V1', type: 'Voltmeter', selfReading: false, range: 15, voltageValue: 4.6 }]
+                ])
+            },
+            resolveSourceLabel: ObservationPanel.prototype.resolveSourceLabel
+        };
+
+        const lines = ObservationPanel.prototype.buildObservationExportMetadata.call(ctx, { exportedAt: new Date('2026-03-20T08:30:00.000Z') });
+
+        expect(lines).toEqual(expect.arrayContaining([
+            expect.stringContaining('采样间隔: 80 ms'),
+            expect.stringContaining('[图 1] 图像A'),
+            expect.stringContaining('最新: x=0.2, y=4.6'),
+            expect.stringContaining('主回路电流表'),
+            expect.stringContaining('0.3400 A')
+        ]));
+    });
 });

@@ -80,5 +80,6 @@ describe('ObservationPanel UX mode toolbar', () => {
         expect(findByAttr(root, 'data-observation-template-action', 'save')).toBeTruthy();
         expect(findByAttr(root, 'data-observation-template-action', 'apply')).toBeTruthy();
         expect(findByAttr(root, 'data-observation-template-select', 'true')).toBeTruthy();
+        expect(findByAttr(root, 'data-observation-action', 'export')).toBeTruthy();
     });
 });
