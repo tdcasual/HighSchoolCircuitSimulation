@@ -29,5 +29,7 @@ describe('CI workflow coverage', () => {
         expect(content).toContain('node scripts/ci/assert-release-doc-integrity.mjs');
         expect(content).toContain('Check interaction guide sync');
         expect(content).toContain('node scripts/ci/assert-interaction-guide-sync.mjs');
+        expect(content).toContain('Check registry legacy fallback guard');
+        expect(content).toContain('node scripts/ci/assert-registry-legacy-fallback-guard.mjs');
     });
 });
