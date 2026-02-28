@@ -780,12 +780,6 @@ export class MNASolver {
         }
 
         switch (comp.type) {
-            case 'Thermistor':
-                this.stampResistor(A, i1, i2, computeNtcThermistorResistance(comp));
-                break;
-            case 'Photoresistor':
-                this.stampResistor(A, i1, i2, computePhotoresistorResistance(comp));
-                break;
             case 'Relay': {
                 // 端子: 0/1=线圈, 2/3=触点
                 const nCoilA = comp.nodes?.[0];
@@ -1027,30 +1021,6 @@ export class MNASolver {
                 // 反电动势作为电压源处理
                 const backEmf = comp.backEmf || 0;
                 this.stampVoltageSource(A, z, i1, i2, -backEmf, comp.vsIndex, nodeCount);
-                break;
-                
-            case 'Ammeter':
-                // 电流表模型
-                if (Number.isFinite(Number(comp.resistance)) && Number(comp.resistance) > 0) {
-                    // 有内阻的电流表
-                    this.stampResistor(A, i1, i2, comp.resistance);
-                } else {
-                    // 理想电流表：使用电压源（V=0）来测量电流
-                    this.stampVoltageSource(A, z, i1, i2, 0, comp.vsIndex, nodeCount);
-                }
-                break;
-                
-            case 'Voltmeter':
-                // 电压表模型
-                // resistance 可能是 null, undefined, Infinity 或正数
-                const vmResistance = comp.resistance;
-                if (vmResistance !== null && vmResistance !== undefined && 
-                    vmResistance !== Infinity && vmResistance > 0) {
-                    // 有内阻的电压表
-                    this.stampResistor(A, i1, i2, vmResistance);
-                }
-                // 理想电压表：不连入电路（无穷大电阻），仅测量电压
-                // 不需要添加任何印记
                 break;
         }
     }

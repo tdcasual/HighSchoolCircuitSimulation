@@ -1,4 +1,3 @@
-import { computeNtcThermistorResistance, computePhotoresistorResistance } from '../../utils/Physics.js';
 import { DynamicIntegrationMethods } from './DynamicIntegrator.js';
 import { DefaultComponentRegistry } from './ComponentRegistry.js';
 import { evaluateJunctionCurrent, resolveJunctionParameters } from './JunctionModel.js';
@@ -160,14 +159,6 @@ export class ResultPostprocessor {
         }
 
         switch (comp.type) {
-            case 'Thermistor': {
-                const resistance = computeNtcThermistorResistance(comp);
-                return resistance > 0 ? dV / resistance : 0;
-            }
-            case 'Photoresistor': {
-                const resistance = computePhotoresistorResistance(comp);
-                return resistance > 0 ? dV / resistance : 0;
-            }
             case 'Relay': {
                 const coilR = Math.max(1e-9, Number(comp.coilResistance) || 200);
                 return dV / coilR;
@@ -292,21 +283,6 @@ export class ResultPostprocessor {
                 }
                 const dt = Number.isFinite(context.dt) && context.dt > 0 ? context.dt : 0.001;
                 return prevCurrent + (dt / L) * dV;
-            }
-
-            case 'Ammeter':
-                if (comp.resistance > 0) {
-                    return dV / comp.resistance;
-                }
-                return -(x[nodeCount - 1 + comp.vsIndex] || 0);
-
-            case 'Voltmeter': {
-                const vmResistance = comp.resistance;
-                if (vmResistance !== null && vmResistance !== undefined
-                    && vmResistance !== Infinity && vmResistance > 0) {
-                    return dV / vmResistance;
-                }
-                return 0;
             }
 
             default:
