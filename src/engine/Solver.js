@@ -744,6 +744,7 @@ export class MNASolver {
                 stampCurrentSource: (cFrom, cTo, current) => this.stampCurrentSource(z, cFrom, cTo, current),
                 stampVoltageSource: (vI1, vI2, voltage, vsIndex, totalNodeCount) =>
                     this.stampVoltageSource(A, z, vI1, vI2, voltage, vsIndex, totalNodeCount),
+                getSourceInstantVoltage: (targetComp) => this.getSourceInstantVoltage(targetComp),
                 dt: this.dt,
                 resolveDynamicIntegrationMethod: (targetComp) => this.resolveDynamicIntegrationMethod(targetComp),
                 state: this.simulationState

@@ -162,6 +162,48 @@ DefaultComponentRegistry.register('Fuse', {
     }
 });
 
+const stampSourceViaMNA = (comp, context, nodes) => {
+    const sourceVoltage = typeof context.getSourceInstantVoltage === 'function'
+        ? context.getSourceInstantVoltage(comp)
+        : (Number.isFinite(comp.voltage) ? comp.voltage : 0);
+    const internalResistance = Number(comp.internalResistance);
+    if (comp._nortonModel && Number.isFinite(internalResistance) && internalResistance > 1e-9) {
+        context.stampResistor(nodes.i1, nodes.i2, internalResistance);
+        context.stampCurrentSource(nodes.i2, nodes.i1, sourceVoltage / internalResistance);
+        return;
+    }
+    if (typeof context.stampVoltageSource === 'function') {
+        context.stampVoltageSource(nodes.i1, nodes.i2, sourceVoltage, comp.vsIndex, nodes.nodeCount);
+    }
+};
+
+const currentForSourceViaMNA = (comp, context, nodes) => {
+    const terminalVoltage = context.voltage(nodes.n1) - context.voltage(nodes.n2);
+    if (comp._nortonModel) {
+        const sourceVoltage = typeof context.getSourceInstantVoltage === 'function'
+            ? context.getSourceInstantVoltage(comp)
+            : (Number.isFinite(comp.voltage) ? comp.voltage : 0);
+        const resistance = Number(comp.internalResistance);
+        if (Number.isFinite(resistance) && resistance > 1e-9) {
+            return (sourceVoltage - terminalVoltage) / resistance;
+        }
+        return 0;
+    }
+    const vector = Array.isArray(context.solveVector) ? context.solveVector : [];
+    const nodeCount = Number.isFinite(context.nodeCount) ? context.nodeCount : 0;
+    if (!Number.isInteger(comp.vsIndex)) {
+        return 0;
+    }
+    return -(vector[nodeCount - 1 + comp.vsIndex] || 0);
+};
+
+DefaultComponentRegistry.register('PowerSource', {
+    stamp: (comp, context, nodes) => stampSourceViaMNA(comp, context, nodes),
+    current: (comp, context, nodes) => currentForSourceViaMNA(comp, context, nodes)
+});
+
+DefaultComponentRegistry.register('ACVoltageSource', DefaultComponentRegistry.get('PowerSource'));
+
 const resolveMethod = (context, comp) => {
     if (context && typeof context.resolveDynamicIntegrationMethod === 'function') {
         return context.resolveDynamicIntegrationMethod(comp);

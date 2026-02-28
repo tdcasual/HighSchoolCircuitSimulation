@@ -121,4 +121,59 @@ describe('ComponentRegistry', () => {
         comp.position = 'b';
         expect(handler.current(comp, context, nodes)).toBeCloseTo(4, 9);
     });
+
+    it('covers day9 source target types with stamp/current handlers', () => {
+        const targetTypes = ['PowerSource', 'ACVoltageSource'];
+        for (const type of targetTypes) {
+            expect(ComponentDefaults[type]).toBeTruthy();
+            const handler = DefaultComponentRegistry.get(type);
+            expect(handler, `${type} should be registered`).toBeTruthy();
+            expect(typeof handler.stamp, `${type} should provide stamp()`).toBe('function');
+            expect(typeof handler.current, `${type} should provide current()`).toBe('function');
+        }
+    });
+
+    it('stamps sources with norton-or-ideal branches equivalent to solver behavior', () => {
+        const calls = [];
+        const handler = DefaultComponentRegistry.get('PowerSource');
+        const context = {
+            stampResistor: (i1, i2, r) => calls.push({ kind: 'R', i1, i2, r }),
+            stampCurrentSource: (from, to, current) => calls.push({ kind: 'I', from, to, current }),
+            stampVoltageSource: (i1, i2, voltage, vsIndex, nodeCount) => calls.push({
+                kind: 'V',
+                i1,
+                i2,
+                voltage,
+                vsIndex,
+                nodeCount
+            }),
+            getSourceInstantVoltage: (comp) => comp._v || 0
+        };
+
+        const nodes = { i1: 0, i2: 1, nodeCount: 3, n1: 1, n2: 2 };
+        handler.stamp({
+            type: 'PowerSource',
+            internalResistance: 2,
+            _nortonModel: true,
+            _v: 10
+        }, context, nodes);
+        expect(calls[0]).toEqual({ kind: 'R', i1: 0, i2: 1, r: 2 });
+        expect(calls[1]).toEqual({ kind: 'I', from: 1, to: 0, current: 5 });
+
+        handler.stamp({
+            type: 'PowerSource',
+            internalResistance: 0,
+            _nortonModel: false,
+            _v: 3,
+            vsIndex: 1
+        }, context, nodes);
+        expect(calls[2]).toEqual({
+            kind: 'V',
+            i1: 0,
+            i2: 1,
+            voltage: 3,
+            vsIndex: 1,
+            nodeCount: 3
+        });
+    });
 });
