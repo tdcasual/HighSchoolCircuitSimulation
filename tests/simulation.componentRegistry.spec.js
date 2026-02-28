@@ -12,6 +12,20 @@ describe('ComponentRegistry', () => {
         expect(registry.get('Unknown')).toBe(null);
     });
 
+    it('covers all ComponentDefaults types with stamp/current handlers in default registry', () => {
+        const supportedTypes = Object.keys(ComponentDefaults);
+        const missing = [];
+
+        for (const type of supportedTypes) {
+            const handler = DefaultComponentRegistry.get(type);
+            if (!handler || typeof handler.stamp !== 'function' || typeof handler.current !== 'function') {
+                missing.push(type);
+            }
+        }
+
+        expect(missing).toEqual([]);
+    });
+
     it('stamps resistor via registry', () => {
         const handler = DefaultComponentRegistry.get('Resistor');
         const calls = [];
