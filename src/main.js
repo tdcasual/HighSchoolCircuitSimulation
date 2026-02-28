@@ -18,6 +18,7 @@ import { EmbedRuntimeBridge, parseEmbedRuntimeOptionsFromSearch } from './embed/
 import { resetIdCounter, updateIdCounterFromExisting } from './components/Component.js';
 import { createRuntimeLogger } from './utils/Logger.js';
 import { buildRuntimeDiagnostics } from './core/simulation/RuntimeDiagnostics.js';
+import { resolveRuntimeDiagnosticsForUpdate } from './app/RuntimeDiagnosticsPipeline.js';
 
 class CircuitSimulatorApp {
     constructor() {
@@ -174,15 +175,10 @@ class CircuitSimulatorApp {
      * 电路更新回调
      */
     onCircuitUpdate(results) {
-        const runtimeDiagnostics = buildRuntimeDiagnostics({
+        const runtimeDiagnostics = resolveRuntimeDiagnosticsForUpdate({
             results,
-            solverShortCircuitDetected: !!this.circuit?.solver?.shortCircuitDetected,
-            shortedSourceIds: this.circuit?.shortedSourceIds || null,
-            shortedWireIds: this.circuit?.shortedWireIds || null
+            circuit: this.circuit
         });
-        if (results && typeof results === 'object') {
-            results.runtimeDiagnostics = runtimeDiagnostics;
-        }
 
         // Always refresh value labels so the UI never stays blank.
         this.renderer.updateValues();
