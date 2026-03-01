@@ -39,15 +39,27 @@ function getJobBlock(source, jobName) {
 }
 
 function parseNamedSteps(jobBlock) {
-    const steps = [];
-    const stepRegex = /^\s{6}- name:\s*(.+)\n([\s\S]*?)(?=^\s{6}- name:\s*.+\n|\s*$)/gm;
-    let match = stepRegex.exec(jobBlock);
+    const headers = [];
+    const headerRegex = /^\s{6}- name:\s*(.+)$/gm;
+    let match = headerRegex.exec(jobBlock);
     while (match) {
-        steps.push({
+        headers.push({
             name: match[1].trim(),
-            body: match[2]
+            index: match.index,
+            bodyStart: match.index + match[0].length + 1
         });
-        match = stepRegex.exec(jobBlock);
+        match = headerRegex.exec(jobBlock);
+    }
+
+    const steps = [];
+    for (let i = 0; i < headers.length; i += 1) {
+        const current = headers[i];
+        const next = headers[i + 1];
+        const bodyEnd = next ? next.index : jobBlock.length;
+        steps.push({
+            name: current.name,
+            body: jobBlock.slice(current.bodyStart, bodyEnd)
+        });
     }
     return steps;
 }
@@ -61,6 +73,19 @@ function assertStepRun(steps, jobName, stepName, runCommand) {
     const expectedRunLine = `run: ${runCommand}`;
     if (!step.body.includes(expectedRunLine)) {
         fail(`${jobName} -> ${stepName} missing run command: ${runCommand}`);
+    }
+}
+
+function assertStepContains(steps, jobName, stepName, requiredSnippets = []) {
+    const step = steps.find((entry) => entry.name === stepName);
+    if (!step) {
+        fail(`missing required step in ${jobName}: ${stepName}`);
+    }
+
+    for (const snippet of requiredSnippets) {
+        if (!step.body.includes(snippet)) {
+            fail(`${jobName} -> ${stepName} missing snippet: ${snippet}`);
+        }
     }
 }
 
@@ -81,9 +106,13 @@ function assertStepOrder(steps, jobName, stepNames) {
 
 const qualityJob = getJobBlock(content, 'quality');
 const wireE2EJob = getJobBlock(content, 'wire-e2e');
+const responsiveE2EJob = getJobBlock(content, 'responsive-e2e');
+const observationE2EJob = getJobBlock(content, 'observation-e2e');
 
 const qualitySteps = parseNamedSteps(qualityJob);
 const wireSteps = parseNamedSteps(wireE2EJob);
+const responsiveSteps = parseNamedSteps(responsiveE2EJob);
+const observationSteps = parseNamedSteps(observationE2EJob);
 
 assertStepRun(
     qualitySteps,
@@ -137,12 +166,63 @@ assertStepRun(
     'Run wire interaction E2E',
     'npm run test:e2e:wire'
 );
+assertStepRun(
+    responsiveSteps,
+    'responsive-e2e',
+    'Run responsive touch E2E',
+    'npm run test:e2e:responsive'
+);
+assertStepRun(
+    observationSteps,
+    'observation-e2e',
+    'Run observation touch E2E',
+    'npm run test:e2e:observation'
+);
+assertStepContains(
+    responsiveSteps,
+    'responsive-e2e',
+    'Upload responsive E2E screenshots on failure',
+    [
+        'if: failure()',
+        'uses: actions/upload-artifact@v4',
+        'name: responsive-e2e-screenshots',
+        'path: output/e2e/responsive-touch'
+    ]
+);
+assertStepContains(
+    wireSteps,
+    'wire-e2e',
+    'Upload wire E2E screenshots on failure',
+    [
+        'if: failure()',
+        'uses: actions/upload-artifact@v4',
+        'name: wire-e2e-screenshots',
+        'path: output/e2e/wire-interaction'
+    ]
+);
+assertStepContains(
+    observationSteps,
+    'observation-e2e',
+    'Upload observation E2E screenshots on failure',
+    [
+        'if: failure()',
+        'uses: actions/upload-artifact@v4',
+        'name: observation-e2e-screenshots',
+        'path: output/e2e/observation-touch'
+    ]
+);
 
 const requiredJobSnippets = [
     'quality:',
+    'responsive-e2e:',
     'wire-e2e:',
+    'observation-e2e:',
+    'responsive-e2e-screenshots',
     'wire-e2e-screenshots',
-    'output/e2e/wire-interaction'
+    'observation-e2e-screenshots',
+    'output/e2e/responsive-touch',
+    'output/e2e/wire-interaction',
+    'output/e2e/observation-touch'
 ];
 
 for (const snippet of requiredJobSnippets) {

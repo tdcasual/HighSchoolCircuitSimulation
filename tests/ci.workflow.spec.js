@@ -4,14 +4,24 @@ import { resolve } from 'node:path';
 import { runScriptInTempWorkspace } from './helpers/scriptGuardTestUtils.js';
 
 describe('CI workflow coverage', () => {
-    it('runs wire interaction e2e in GitHub Actions', () => {
+    it('runs responsive/wire/observation e2e jobs in GitHub Actions', () => {
         const workflowPath = resolve(process.cwd(), '.github/workflows/ci.yml');
         const content = readFileSync(workflowPath, 'utf8');
+
+        expect(content).toContain('responsive-e2e:');
+        expect(content).toContain('npm run test:e2e:responsive');
+        expect(content).toContain('responsive-e2e-screenshots');
+        expect(content).toContain('output/e2e/responsive-touch');
 
         expect(content).toContain('wire-e2e:');
         expect(content).toContain('npm run test:e2e:wire');
         expect(content).toContain('wire-e2e-screenshots');
         expect(content).toContain('output/e2e/wire-interaction');
+
+        expect(content).toContain('observation-e2e:');
+        expect(content).toContain('npm run test:e2e:observation');
+        expect(content).toContain('observation-e2e-screenshots');
+        expect(content).toContain('output/e2e/observation-touch');
     });
 
     it('runs reliability-focused regression gate in quality job', () => {
@@ -85,5 +95,22 @@ describe('CI workflow coverage', () => {
         expect(output.ok).toBe(false);
         expect(output.output).toContain('missing run command');
         expect(output.output).toContain('npm run test:reliability');
+    });
+
+    it('fails CI workflow coverage script when observation e2e run step is removed', () => {
+        const output = runScriptInTempWorkspace({
+            scriptRelPath: 'scripts/ci/assert-ci-workflow-coverage.mjs',
+            sourceFiles: ['.github/workflows/ci.yml'],
+            mutateByFile: {
+                '.github/workflows/ci.yml': (content) =>
+                    content
+                        .replace('      - name: Run observation touch E2E\n', '')
+                        .replace('        run: npm run test:e2e:observation\n', '')
+            }
+        });
+
+        expect(output.ok).toBe(false);
+        expect(output.output).toContain('missing required step in observation-e2e');
+        expect(output.output).toContain('Run observation touch E2E');
     });
 });
