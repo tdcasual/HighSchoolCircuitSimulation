@@ -245,7 +245,7 @@ async function runWireInteractionRegression(browser, baseUrl) {
             }
 
             // WIR-004: default terminal action should select component;
-            // wire tool mode should start wiring; Alt+terminal should extend lead.
+            // wire tool mode should start wiring; Ctrl/Cmd+terminal should extend lead.
             resetScene();
             const addRes2 = interaction.addComponent('Resistor', 260, 260);
             if (!addRes2?.ok || !addRes2.payload?.componentId) {
@@ -295,13 +295,13 @@ async function runWireInteractionRegression(browser, baseUrl) {
                 extendCallCount += 1;
                 return undefined;
             };
-            interaction.onMouseDown({ ...baseEvent, altKey: true });
+            interaction.onMouseDown({ ...baseEvent, ctrlKey: true });
             interaction.startTerminalExtend = originalStartTerminalExtend;
 
             result.defaultTerminalAction = {
                 defaultSelectsComponent,
                 wireToolStartsWiring,
-                altExtendsLead: extendCallCount === 1,
+                ctrlExtendsLead: extendCallCount === 1,
                 pass: defaultSelectsComponent && wireToolStartsWiring && extendCallCount === 1
             };
 

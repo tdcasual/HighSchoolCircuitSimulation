@@ -25,6 +25,31 @@ function shouldCreateEndpointBridge(context, pointerType) {
     return isPhoneLikeLayout();
 }
 
+function isTouchLikePointer(pointerType) {
+    return pointerType === 'touch' || pointerType === 'pen';
+}
+
+function resolveWireModeGestureThreshold(pointerType, kind = 'default') {
+    const isPen = pointerType === 'pen';
+    if (kind === 'terminal-extend') return isPen ? 14 : 18;
+    if (kind === 'rheostat-slider-terminal') return isPen ? 10 : 12;
+    if (kind === 'wire-endpoint') return isPen ? 10 : 12;
+    return isPen ? 10 : 12;
+}
+
+function restorePendingWireToolAfterAction(context) {
+    if (context.stickyWireTool) {
+        context.pendingToolType = 'Wire';
+        context.pendingToolItem = null;
+        context.mobileInteractionMode = 'wire';
+        if (typeof context.syncMobileModeButtons === 'function') {
+            context.syncMobileModeButtons();
+        }
+    } else {
+        context.clearPendingToolType({ silent: true });
+    }
+}
+
 function consumeActionResult(context, result) {
     if (!result || result.ok !== false) {
         return result;
@@ -78,6 +103,7 @@ export function onMouseDown(e) {
     this.lastPointerCanvas = this.screenToCanvas(e.clientX, e.clientY);
     this.quickActionBar?.notifyActivity?.();
     this.pointerDownInfo = null;
+    this.wireModeGesture = null;
     this.hideContextMenu?.();
     this.app?.topActionMenu?.setOpen?.(false);
 
@@ -88,6 +114,64 @@ export function onMouseDown(e) {
 
     if (this.pendingToolType && e.button === 0) {
         if (this.pendingToolType === 'Wire') {
+            const pointerType = this.resolvePointerType(e);
+
+            if (isTouchLikePointer(pointerType)) {
+                if (target.classList?.contains?.('rheostat-slider') && componentGroup) {
+                    this.startRheostatDrag(componentGroup.dataset.id, e);
+                    return;
+                }
+
+                if (terminalTarget && componentGroup) {
+                    const componentId = componentGroup.dataset.id;
+                    const terminalIndex = parseInt(terminalTarget.dataset.terminal, 10);
+                    if (!Number.isNaN(terminalIndex) && terminalIndex >= 0) {
+                        const point = this.renderer.getTerminalPosition(componentId, terminalIndex)
+                            || this.screenToCanvas(e.clientX, e.clientY);
+                        const comp = this.circuit.getComponent(componentId);
+                        const kind = comp?.type === 'Rheostat' && terminalIndex === 2
+                            ? 'rheostat-slider-terminal'
+                            : 'terminal-extend';
+                        this.wireModeGesture = {
+                            kind,
+                            pointerType,
+                            componentId,
+                            terminalIndex,
+                            point,
+                            screenX: e.clientX,
+                            screenY: e.clientY,
+                            moveThresholdPx: resolveWireModeGestureThreshold(pointerType, kind),
+                            wasWiring: !!this.isWiring
+                        };
+                        return;
+                    }
+                }
+
+                if (typeof this.isWireEndpointTarget === 'function' && this.isWireEndpointTarget(target)) {
+                    const wireGroup = target.closest('.wire-group');
+                    if (wireGroup) {
+                        const wireId = wireGroup.dataset.id;
+                        const end = target.dataset.end;
+                        const wire = this.circuit.getWire(wireId);
+                        const point = wire && (end === 'a' || end === 'b') ? wire[end] : null;
+                        if (point) {
+                            this.wireModeGesture = {
+                                kind: 'wire-endpoint',
+                                pointerType,
+                                wireId,
+                                end,
+                                point: { x: point.x, y: point.y },
+                                screenX: e.clientX,
+                                screenY: e.clientY,
+                                moveThresholdPx: resolveWireModeGestureThreshold(pointerType, 'wire-endpoint'),
+                                wasWiring: !!this.isWiring
+                            };
+                            return;
+                        }
+                    }
+                }
+            }
+
             const resolveWireToolPoint = () => {
                 if (terminalTarget && componentGroup) {
                     const componentId = componentGroup.dataset.id;
@@ -113,7 +197,6 @@ export function onMouseDown(e) {
             };
 
             const wireToolPoint = resolveWireToolPoint();
-            const pointerType = this.resolvePointerType(e);
             if (this.isWiring) {
                 let finishPoint = wireToolPoint;
                 const terminalOrEndpointTarget = Boolean(
@@ -140,16 +223,7 @@ export function onMouseDown(e) {
                         this.updateStatus('未连接到端子/端点，已取消连线');
                     }
                 }
-                if (this.stickyWireTool) {
-                    this.pendingToolType = 'Wire';
-                    this.pendingToolItem = null;
-                    this.mobileInteractionMode = 'wire';
-                    if (typeof this.syncMobileModeButtons === 'function') {
-                        this.syncMobileModeButtons();
-                    }
-                } else {
-                    this.clearPendingToolType({ silent: true });
-                }
+                restorePendingWireToolAfterAction(this);
             } else {
                 this.startWiringFromPoint(wireToolPoint, e, true);
                 this.updateStatus('导线模式：选择终点');
@@ -325,6 +399,27 @@ export function onMouseMove(e) {
             }
         }
     }
+
+    if (this.wireModeGesture) {
+        const gesture = this.wireModeGesture;
+        const moved = Math.hypot(
+            (e.clientX || 0) - (gesture.screenX || 0),
+            (e.clientY || 0) - (gesture.screenY || 0)
+        );
+        if (moved >= (gesture.moveThresholdPx || 12)) {
+            if (gesture.kind === 'wire-endpoint') {
+                this.startWireEndpointDrag(gesture.wireId, gesture.end, e);
+            } else if (gesture.kind === 'rheostat-slider-terminal') {
+                this.startRheostatDrag(gesture.componentId, e);
+            } else {
+                this.startTerminalExtend(gesture.componentId, gesture.terminalIndex, e);
+            }
+            this.wireModeGesture = null;
+            return;
+        }
+        return;
+    }
+
     // 画布平移（使用屏幕坐标）
     if (this.isPanning) {
         this.viewOffset = {
@@ -648,6 +743,27 @@ export function onMouseMove(e) {
 export function onMouseUp(e) {
     this.quickActionBar?.notifyActivity?.();
     const pointerDownInfo = this.pointerDownInfo;
+    const wireModeGesture = this.wireModeGesture;
+    this.wireModeGesture = null;
+
+    if (wireModeGesture) {
+        const pointerType = wireModeGesture.pointerType || this.resolvePointerType(e);
+        const gesturePoint = wireModeGesture.point || this.screenToCanvas(e.clientX, e.clientY);
+        if (wireModeGesture.wasWiring) {
+            if (gesturePoint) {
+                this.finishWiringToPoint(gesturePoint, { pointerType });
+            } else {
+                this.cancelWiring();
+                this.updateStatus?.('未连接到端子/端点，已取消连线');
+            }
+            restorePendingWireToolAfterAction(this);
+        } else {
+            this.startWiringFromPoint(gesturePoint, e, true);
+            this.updateStatus('导线模式：选择终点');
+        }
+        this.pointerDownInfo = null;
+        return;
+    }
 
     // 结束画布平移
     if (this.isPanning) {
@@ -852,6 +968,7 @@ export function onMouseUp(e) {
 
 export function onMouseLeave(_e) {
     this.quickActionBar?.notifyActivity?.();
+    this.wireModeGesture = null;
     if (this.isPanning) {
         this.isPanning = false;
         this.svg.style.cursor = '';

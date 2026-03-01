@@ -63,6 +63,7 @@ export function initializeInteractionState(context, app, options = {}) {
     context.lastPointerCanvas = null;
     context.lastPointerScreen = null;
     context.pointerDownInfo = null;
+    context.wireModeGesture = null;
 
     // 工具箱触屏放置（点击工具 -> 点击画布落子）
     context.pendingToolType = null;

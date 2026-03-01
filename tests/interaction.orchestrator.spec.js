@@ -231,6 +231,130 @@ describe('InteractionOrchestrator.onMouseDown', () => {
         expect(context.pendingToolItem).toBe(null);
     });
 
+    it('defers touch terminal input in wire mode for tap-vs-drag arbitration', () => {
+        const terminalTarget = makeTarget({ classes: ['terminal-hit-area'] });
+        terminalTarget.dataset.terminal = '1';
+        const componentGroup = { dataset: { id: 'R1' } };
+        const context = {
+            resolvePointerType: vi.fn(() => 'touch'),
+            resolveProbeMarkerTarget: vi.fn(() => null),
+            resolveTerminalTarget: vi.fn(() => terminalTarget),
+            pendingToolType: 'Wire',
+            isWiring: false,
+            renderer: {
+                getTerminalPosition: vi.fn(() => ({ x: 210, y: 310 }))
+            },
+            circuit: {
+                getComponent: vi.fn(() => ({ type: 'Resistor' }))
+            },
+            startWiringFromPoint: vi.fn(),
+            startTerminalExtend: vi.fn(),
+            screenToCanvas: vi.fn(() => ({ x: 5, y: 6 }))
+        };
+        const event = {
+            button: 0,
+            clientX: 100,
+            clientY: 70,
+            target: {
+                ...terminalTarget,
+                closest: (selector) => {
+                    if (selector === '.component') return componentGroup;
+                    return null;
+                }
+            },
+            preventDefault: vi.fn(),
+            stopPropagation: vi.fn()
+        };
+
+        InteractionOrchestrator.onMouseDown.call(context, event);
+
+        expect(context.wireModeGesture).toMatchObject({
+            kind: 'terminal-extend',
+            componentId: 'R1',
+            terminalIndex: 1,
+            wasWiring: false
+        });
+        expect(context.startWiringFromPoint).not.toHaveBeenCalled();
+        expect(context.startTerminalExtend).not.toHaveBeenCalled();
+    });
+
+    it('defers touch wire-endpoint input in wire mode for tap-vs-drag arbitration', () => {
+        const endpointTarget = makeTarget({ classes: ['wire-endpoint-hit'] });
+        endpointTarget.dataset.end = 'a';
+        const wireGroup = { dataset: { id: 'W1' } };
+        const context = {
+            resolvePointerType: vi.fn(() => 'touch'),
+            resolveProbeMarkerTarget: vi.fn(() => null),
+            resolveTerminalTarget: vi.fn(() => null),
+            pendingToolType: 'Wire',
+            isWiring: false,
+            isWireEndpointTarget: vi.fn(() => true),
+            circuit: {
+                getWire: vi.fn(() => ({
+                    id: 'W1',
+                    a: { x: 10, y: 20 },
+                    b: { x: 30, y: 40 }
+                }))
+            },
+            screenToCanvas: vi.fn(() => ({ x: 0, y: 0 })),
+            startWireEndpointDrag: vi.fn(),
+            startWiringFromPoint: vi.fn()
+        };
+        const event = {
+            button: 0,
+            clientX: 110,
+            clientY: 210,
+            target: {
+                ...endpointTarget,
+                closest: (selector) => {
+                    if (selector === '.wire-group') return wireGroup;
+                    return null;
+                }
+            },
+            preventDefault: vi.fn(),
+            stopPropagation: vi.fn()
+        };
+
+        InteractionOrchestrator.onMouseDown.call(context, event);
+
+        expect(context.wireModeGesture).toMatchObject({
+            kind: 'wire-endpoint',
+            wireId: 'W1',
+            end: 'a',
+            wasWiring: false
+        });
+        expect(context.startWireEndpointDrag).not.toHaveBeenCalled();
+        expect(context.startWiringFromPoint).not.toHaveBeenCalled();
+    });
+
+    it('starts rheostat drag directly on slider shape in wire mode touch input', () => {
+        const componentGroup = { dataset: { id: 'RH1' } };
+        const target = makeTarget({ classes: ['rheostat-slider'], closestComponent: componentGroup });
+        const context = {
+            resolvePointerType: vi.fn(() => 'touch'),
+            resolveProbeMarkerTarget: vi.fn(() => null),
+            resolveTerminalTarget: vi.fn(() => null),
+            pendingToolType: 'Wire',
+            isWiring: false,
+            startRheostatDrag: vi.fn(),
+            isWireEndpointTarget: vi.fn(() => false),
+            screenToCanvas: vi.fn(() => ({ x: 0, y: 0 }))
+        };
+        const event = {
+            button: 0,
+            clientX: 80,
+            clientY: 90,
+            target,
+            preventDefault: vi.fn(),
+            stopPropagation: vi.fn()
+        };
+
+        InteractionOrchestrator.onMouseDown.call(context, event);
+
+        expect(context.startRheostatDrag).toHaveBeenCalledWith('RH1', event);
+        expect(context.wireModeGesture).toBeNull();
+    });
+
     it('splits wire on ctrl-click', () => {
         const context = {
             resolvePointerType: vi.fn(() => 'mouse'),
@@ -405,6 +529,62 @@ describe('InteractionOrchestrator.onMouseUp', () => {
 
         expect(context.isPanning).toBe(false);
         expect(context.svg.style.cursor).toBe('');
+    });
+
+    it('treats deferred wire-mode terminal tap as wiring start', () => {
+        const context = {
+            wireModeGesture: {
+                kind: 'terminal-extend',
+                pointerType: 'touch',
+                point: { x: 210, y: 310 },
+                wasWiring: false
+            },
+            startWiringFromPoint: vi.fn(),
+            updateStatus: vi.fn(),
+            resolvePointerType: vi.fn(() => 'touch')
+        };
+
+        InteractionOrchestrator.onMouseUp.call(context, {
+            clientX: 300,
+            clientY: 200,
+            target: makeTarget()
+        });
+
+        expect(context.startWiringFromPoint).toHaveBeenCalledTimes(1);
+        expect(context.startWiringFromPoint.mock.calls[0][0]).toEqual({ x: 210, y: 310 });
+        expect(context.updateStatus).toHaveBeenCalledWith('导线模式：选择终点');
+        expect(context.wireModeGesture).toBeNull();
+    });
+
+    it('treats deferred wire-mode endpoint tap as wiring finish and keeps sticky wire mode armed', () => {
+        const context = {
+            wireModeGesture: {
+                kind: 'wire-endpoint',
+                pointerType: 'touch',
+                point: { x: 40, y: 60 },
+                wasWiring: true
+            },
+            stickyWireTool: true,
+            pendingToolType: 'Wire',
+            pendingToolItem: { classList: { remove: vi.fn() } },
+            finishWiringToPoint: vi.fn(),
+            clearPendingToolType: vi.fn(),
+            syncMobileModeButtons: vi.fn(),
+            resolvePointerType: vi.fn(() => 'touch')
+        };
+
+        InteractionOrchestrator.onMouseUp.call(context, {
+            clientX: 100,
+            clientY: 80,
+            target: makeTarget()
+        });
+
+        expect(context.finishWiringToPoint).toHaveBeenCalledWith({ x: 40, y: 60 }, { pointerType: 'touch' });
+        expect(context.pendingToolType).toBe('Wire');
+        expect(context.mobileInteractionMode).toBe('wire');
+        expect(context.syncMobileModeButtons).toHaveBeenCalledTimes(1);
+        expect(context.clearPendingToolType).not.toHaveBeenCalled();
+        expect(context.wireModeGesture).toBeNull();
     });
 
     it('finalizes wire endpoint drag transaction', () => {
@@ -718,6 +898,80 @@ describe('InteractionOrchestrator.onMouseMove', () => {
 
         expect(context.viewOffset).toEqual({ x: 25, y: 45 });
         expect(context.updateViewTransform).toHaveBeenCalledTimes(1);
+    });
+
+    it('starts terminal-extend drag when deferred wire-mode terminal gesture exceeds move threshold', () => {
+        const context = {
+            wireModeGesture: {
+                kind: 'terminal-extend',
+                componentId: 'R1',
+                terminalIndex: 0,
+                screenX: 100,
+                screenY: 100,
+                moveThresholdPx: 18
+            },
+            startTerminalExtend: vi.fn()
+        };
+
+        InteractionOrchestrator.onMouseMove.call(context, {
+            clientX: 122,
+            clientY: 100
+        });
+
+        expect(context.startTerminalExtend).toHaveBeenCalledWith('R1', 0, {
+            clientX: 122,
+            clientY: 100
+        });
+        expect(context.wireModeGesture).toBeNull();
+    });
+
+    it('starts wire endpoint drag when deferred wire-mode endpoint gesture exceeds move threshold', () => {
+        const context = {
+            wireModeGesture: {
+                kind: 'wire-endpoint',
+                wireId: 'W1',
+                end: 'b',
+                screenX: 100,
+                screenY: 100,
+                moveThresholdPx: 12
+            },
+            startWireEndpointDrag: vi.fn()
+        };
+
+        InteractionOrchestrator.onMouseMove.call(context, {
+            clientX: 114,
+            clientY: 100
+        });
+
+        expect(context.startWireEndpointDrag).toHaveBeenCalledWith('W1', 'b', {
+            clientX: 114,
+            clientY: 100
+        });
+        expect(context.wireModeGesture).toBeNull();
+    });
+
+    it('starts rheostat drag when deferred slider-terminal gesture exceeds move threshold', () => {
+        const context = {
+            wireModeGesture: {
+                kind: 'rheostat-slider-terminal',
+                componentId: 'RH1',
+                screenX: 100,
+                screenY: 100,
+                moveThresholdPx: 12
+            },
+            startRheostatDrag: vi.fn()
+        };
+
+        InteractionOrchestrator.onMouseMove.call(context, {
+            clientX: 113,
+            clientY: 100
+        });
+
+        expect(context.startRheostatDrag).toHaveBeenCalledWith('RH1', {
+            clientX: 113,
+            clientY: 100
+        });
+        expect(context.wireModeGesture).toBeNull();
     });
 
     it('updates temp wire preview and terminal highlight while wiring', () => {
