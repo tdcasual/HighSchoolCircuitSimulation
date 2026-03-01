@@ -797,6 +797,178 @@ async function verifyPhoneTouchFlow(browser, baseUrl, collector) {
             `drawer interaction loop is unexpectedly slow: ${interactionCostMs}ms`
         );
 
+        const weakMergeState = await page.evaluate(() => {
+            const app = window.app;
+            const interaction = app?.interaction;
+            const renderer = app?.renderer;
+            const circuit = app?.circuit;
+            const svg = app?.svg;
+            if (!app || !interaction || !renderer || !circuit || !svg) {
+                return { ok: false, error: 'app_not_ready_for_weak_merge_check' };
+            }
+
+            const toClient = (canvasX, canvasY) => {
+                const rect = svg.getBoundingClientRect();
+                return {
+                    x: rect.left + interaction.viewOffset.x + canvasX * interaction.scale,
+                    y: rect.top + interaction.viewOffset.y + canvasY * interaction.scale
+                };
+            };
+            const dispatchPointer = (target, type, pointerId, clientX, clientY, options = {}) => {
+                const eventTarget = target || svg;
+                if (!eventTarget || typeof eventTarget.dispatchEvent !== 'function') return false;
+                const event = new PointerEvent(type, {
+                    pointerId,
+                    pointerType: options.pointerType || 'touch',
+                    isPrimary: true,
+                    bubbles: true,
+                    cancelable: true,
+                    composed: true,
+                    button: options.button ?? 0,
+                    buttons: options.buttons ?? (type === 'pointerup' || type === 'pointercancel' ? 0 : 1),
+                    clientX,
+                    clientY,
+                    ctrlKey: !!options.ctrlKey,
+                    metaKey: !!options.metaKey,
+                    shiftKey: !!options.shiftKey
+                });
+                return eventTarget.dispatchEvent(event);
+            };
+            const dispatchTap = (target, pointerId, clientX, clientY, options = {}) => {
+                dispatchPointer(target, 'pointerdown', pointerId, clientX, clientY, options);
+                dispatchPointer(target, 'pointerup', pointerId, clientX, clientY, { ...options, buttons: 0 });
+            };
+            const add = (type, x, y) => {
+                const result = interaction.addComponent(type, x, y);
+                if (!result?.ok || !result?.payload?.componentId) return null;
+                return result.payload.componentId;
+            };
+            const getTerminalTarget = (componentId, terminalIndex) =>
+                document.querySelector(
+                    `g.component[data-id="${componentId}"] .terminal-hit-area[data-terminal="${terminalIndex}"]`
+                );
+
+            app.clearCircuit?.();
+            interaction.scale = 1;
+            interaction.viewOffset = { x: 0, y: 0 };
+            interaction.updateViewTransform?.();
+            interaction.setMobileInteractionMode?.('wire', { silentStatus: true });
+
+            const resistorA = add('Resistor', 120, 220);
+            const resistorB = add('Resistor', 300, 220);
+            const rheostatId = add('Rheostat', 220, 320);
+            if (!resistorA || !resistorB || !rheostatId) {
+                return { ok: false, error: 'weak_merge_setup_add_component_failed' };
+            }
+
+            const aOutTarget = getTerminalTarget(resistorA, 1);
+            const bInTarget = getTerminalTarget(resistorB, 0);
+            const aOutPos = renderer.getTerminalPosition(resistorA, 1);
+            const bInPos = renderer.getTerminalPosition(resistorB, 0);
+            if (!aOutTarget || !bInTarget || !aOutPos || !bInPos) {
+                return { ok: false, error: 'weak_merge_terminal_target_missing' };
+            }
+
+            const aOutClient = toClient(aOutPos.x, aOutPos.y);
+            dispatchTap(aOutTarget, 501, aOutClient.x, aOutClient.y);
+            const tapStartArmsWiring = interaction.isWiring === true
+                && interaction.wireStart?.snap?.type === 'terminal'
+                && interaction.wireStart?.snap?.componentId === resistorA
+                && interaction.wireStart?.snap?.terminalIndex === 1;
+
+            const wireCountBeforeFinish = circuit.wires?.size || 0;
+            const bInClient = toClient(bInPos.x, bInPos.y);
+            dispatchTap(bInTarget, 502, bInClient.x, bInClient.y);
+            const wireCountAfterFinish = circuit.wires?.size || 0;
+            const tapFinishCreatesWire = interaction.isWiring === false && wireCountAfterFinish > wireCountBeforeFinish;
+
+            const resistorAComp = circuit.getComponent(resistorA);
+            const extendTarget = getTerminalTarget(resistorA, 0);
+            const extendPos = renderer.getTerminalPosition(resistorA, 0);
+            if (!resistorAComp || !extendTarget || !extendPos) {
+                return { ok: false, error: 'weak_merge_terminal_extend_target_missing' };
+            }
+            const extBefore = { ...(resistorAComp.terminalExtensions?.[0] || { x: 0, y: 0 }) };
+            const extStart = toClient(extendPos.x, extendPos.y);
+            dispatchPointer(extendTarget, 'pointerdown', 503, extStart.x, extStart.y);
+            dispatchPointer(svg, 'pointermove', 503, extStart.x - 24, extStart.y);
+            dispatchPointer(svg, 'pointermove', 503, extStart.x - 52, extStart.y);
+            dispatchPointer(svg, 'pointerup', 503, extStart.x - 52, extStart.y, { buttons: 0 });
+            const extAfter = { ...(resistorAComp.terminalExtensions?.[0] || { x: 0, y: 0 }) };
+            const terminalDragExtendsLead = extBefore.x !== extAfter.x || extBefore.y !== extAfter.y;
+
+            let candidateWire = null;
+            for (const wire of circuit.getAllWires()) {
+                if (wire?.aRef?.componentId === resistorA && wire?.bRef?.componentId === resistorB) {
+                    candidateWire = wire;
+                    break;
+                }
+            }
+            if (!candidateWire) {
+                candidateWire = circuit.getAllWires().find(Boolean) || null;
+            }
+            if (!candidateWire?.id || !candidateWire?.b) {
+                return { ok: false, error: 'weak_merge_candidate_wire_missing' };
+            }
+
+            interaction.selectWire(candidateWire.id);
+            renderer.refreshWire?.(candidateWire.id);
+            const endpointTarget = document.querySelector(
+                `g.wire-group[data-id="${candidateWire.id}"] .wire-endpoint-hit[data-end="b"]`
+            ) || document.querySelector(
+                `g.wire-group[data-id="${candidateWire.id}"] .wire-endpoint[data-end="b"]`
+            );
+            if (!endpointTarget) {
+                return { ok: false, error: 'weak_merge_endpoint_target_missing' };
+            }
+            const endpointBefore = { x: candidateWire.b.x, y: candidateWire.b.y };
+            const endpointClient = toClient(endpointBefore.x, endpointBefore.y);
+            dispatchPointer(endpointTarget, 'pointerdown', 504, endpointClient.x, endpointClient.y);
+            dispatchPointer(svg, 'pointermove', 504, endpointClient.x + 16, endpointClient.y + 2);
+            dispatchPointer(svg, 'pointermove', 504, endpointClient.x + 42, endpointClient.y + 10);
+            dispatchPointer(svg, 'pointerup', 504, endpointClient.x + 42, endpointClient.y + 10, { buttons: 0 });
+            const endpointAfter = { x: candidateWire.b.x, y: candidateWire.b.y };
+            const endpointDragMovesWire = Math.hypot(
+                endpointAfter.x - endpointBefore.x,
+                endpointAfter.y - endpointBefore.y
+            ) > 1e-6;
+
+            const rheostatComp = circuit.getComponent(rheostatId);
+            const sliderTarget = document.querySelector(`g.component[data-id="${rheostatId}"] .rheostat-slider`);
+            const sliderPos = renderer.getTerminalPosition(rheostatId, 2);
+            if (!rheostatComp || !sliderTarget || !sliderPos) {
+                return { ok: false, error: 'weak_merge_rheostat_slider_missing' };
+            }
+            const rheostatBefore = Number(rheostatComp.position) || 0;
+            const sliderClient = toClient(sliderPos.x, sliderPos.y + 8);
+            dispatchPointer(sliderTarget, 'pointerdown', 505, sliderClient.x, sliderClient.y);
+            dispatchPointer(svg, 'pointermove', 505, sliderClient.x + 34, sliderClient.y);
+            dispatchPointer(svg, 'pointerup', 505, sliderClient.x + 34, sliderClient.y, { buttons: 0 });
+            const rheostatAfter = Number(rheostatComp.position) || 0;
+            const sliderDragAdjustsRheostat = Math.abs(rheostatAfter - rheostatBefore) > 1e-6;
+
+            const wireModeStillArmed = interaction.pendingToolType === 'Wire'
+                && interaction.mobileInteractionMode === 'wire'
+                && interaction.stickyWireTool === true;
+
+            return {
+                ok: true,
+                tapStartArmsWiring,
+                tapFinishCreatesWire,
+                terminalDragExtendsLead,
+                endpointDragMovesWire,
+                sliderDragAdjustsRheostat,
+                wireModeStillArmed
+            };
+        });
+        assertCondition(weakMergeState.ok, `weak merge mobile flow setup failed: ${weakMergeState.error || 'unknown_error'}`);
+        assertCondition(weakMergeState.tapStartArmsWiring, 'wire mode tap on terminal should arm wiring');
+        assertCondition(weakMergeState.tapFinishCreatesWire, 'wire mode second terminal tap should finish wiring');
+        assertCondition(weakMergeState.terminalDragExtendsLead, 'wire mode terminal drag should extend terminal lead');
+        assertCondition(weakMergeState.endpointDragMovesWire, 'wire mode endpoint drag should move wire endpoint');
+        assertCondition(weakMergeState.sliderDragAdjustsRheostat, 'wire mode slider drag should adjust rheostat position');
+        assertCondition(weakMergeState.wireModeStillArmed, 'wire mode should remain armed after weak-merge edit gestures');
+
         const editMeasureSetup = await page.evaluate(() => {
             const app = window.app;
             const interaction = app?.interaction;
