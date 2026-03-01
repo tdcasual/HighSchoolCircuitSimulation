@@ -58,7 +58,7 @@ describe('CI workflow coverage', () => {
     it('executes CI workflow coverage script on current workflow', () => {
         const output = runScriptInTempWorkspace({
             scriptRelPath: 'scripts/ci/assert-ci-workflow-coverage.mjs',
-            sourceFiles: ['.github/workflows/ci.yml']
+            sourceFiles: ['.github/workflows/ci.yml', 'package.json']
         });
 
         expect(output.ok).toBe(true);
@@ -68,7 +68,7 @@ describe('CI workflow coverage', () => {
     it('fails CI workflow coverage script when registry guard step is removed', () => {
         const output = runScriptInTempWorkspace({
             scriptRelPath: 'scripts/ci/assert-ci-workflow-coverage.mjs',
-            sourceFiles: ['.github/workflows/ci.yml'],
+            sourceFiles: ['.github/workflows/ci.yml', 'package.json'],
             mutateByFile: {
                 '.github/workflows/ci.yml': (content) =>
                     content
@@ -85,7 +85,7 @@ describe('CI workflow coverage', () => {
     it('fails CI workflow coverage script when required step run command drifts', () => {
         const output = runScriptInTempWorkspace({
             scriptRelPath: 'scripts/ci/assert-ci-workflow-coverage.mjs',
-            sourceFiles: ['.github/workflows/ci.yml'],
+            sourceFiles: ['.github/workflows/ci.yml', 'package.json'],
             mutateByFile: {
                 '.github/workflows/ci.yml': (content) =>
                     content.replace('        run: npm run test:reliability', '        run: npm run test:all')
@@ -100,7 +100,7 @@ describe('CI workflow coverage', () => {
     it('fails CI workflow coverage script when observation e2e run step is removed', () => {
         const output = runScriptInTempWorkspace({
             scriptRelPath: 'scripts/ci/assert-ci-workflow-coverage.mjs',
-            sourceFiles: ['.github/workflows/ci.yml'],
+            sourceFiles: ['.github/workflows/ci.yml', 'package.json'],
             mutateByFile: {
                 '.github/workflows/ci.yml': (content) =>
                     content
@@ -112,5 +112,22 @@ describe('CI workflow coverage', () => {
         expect(output.ok).toBe(false);
         expect(output.output).toContain('missing required step in observation-e2e');
         expect(output.output).toContain('Run observation touch E2E');
+    });
+
+    it('fails CI workflow coverage script when workflow npm script is missing in package', () => {
+        const output = runScriptInTempWorkspace({
+            scriptRelPath: 'scripts/ci/assert-ci-workflow-coverage.mjs',
+            sourceFiles: ['.github/workflows/ci.yml', 'package.json'],
+            mutateByFile: {
+                'package.json': (content) => content.replace(
+                    "\"test:e2e:wire\": \"node scripts/e2e/wire-interaction-regression.mjs\",",
+                    ''
+                )
+            }
+        });
+
+        expect(output.ok).toBe(false);
+        expect(output.output).toContain('package.json missing npm script required by workflow');
+        expect(output.output).toContain('test:e2e:wire');
     });
 });

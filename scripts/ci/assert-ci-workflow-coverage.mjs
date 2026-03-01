@@ -17,6 +17,15 @@ if (!existsSync(workflowAbsPath)) {
 }
 
 const content = readFileSync(workflowAbsPath, 'utf8');
+const packagePath = 'package.json';
+const packageAbsPath = path.resolve(root, packagePath);
+if (!existsSync(packageAbsPath)) {
+    fail(`missing file: ${packagePath}`);
+}
+const pkg = JSON.parse(readFileSync(packageAbsPath, 'utf8'));
+const packageScripts = pkg && typeof pkg === 'object' && pkg.scripts && typeof pkg.scripts === 'object'
+    ? pkg.scripts
+    : {};
 
 function escapeRegex(value) {
     return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -101,6 +110,21 @@ function assertStepOrder(steps, jobName, stepNames) {
         if (indices[i] <= indices[i - 1]) {
             fail(`${jobName} steps out of order: ${stepNames[i - 1]} -> ${stepNames[i]}`);
         }
+    }
+}
+
+function assertNpmScriptExists(scriptName) {
+    if (!Object.prototype.hasOwnProperty.call(packageScripts, scriptName)) {
+        fail(`package.json missing npm script required by workflow: ${scriptName}`);
+    }
+}
+
+function assertWorkflowNpmRunCommandsExistInPackage(source) {
+    const runRegex = /^\s*run:\s*npm run ([a-z0-9:._-]+)\s*$/gm;
+    let match = runRegex.exec(source);
+    while (match) {
+        assertNpmScriptExists(match[1]);
+        match = runRegex.exec(source);
     }
 }
 
@@ -230,5 +254,7 @@ for (const snippet of requiredJobSnippets) {
         fail(`missing required workflow snippet: ${snippet}`);
     }
 }
+
+assertWorkflowNpmRunCommandsExistInPackage(content);
 
 console.log('[ci-workflow] ok');
