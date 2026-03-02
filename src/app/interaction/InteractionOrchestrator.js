@@ -109,6 +109,15 @@ function ensureInteractionModeStore(context) {
     return context.interactionModeStore;
 }
 
+export function initializeInteractionModeStore(context) {
+    if (!context) return null;
+    const store = ensureInteractionModeStore(context);
+    if (!store) return null;
+    const state = store.getState();
+    applyInteractionModeStateToContext(context, state);
+    return state;
+}
+
 export function syncInteractionModeStore(context, options = {}) {
     if (!context) return null;
     const store = ensureInteractionModeStore(context);

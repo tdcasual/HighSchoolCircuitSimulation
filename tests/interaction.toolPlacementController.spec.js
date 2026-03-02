@@ -20,7 +20,8 @@ describe('ToolPlacementController.setPendingToolType', () => {
             isWiring: false,
             clearPendingToolType: vi.fn(),
             cancelWiring: vi.fn(),
-            updateStatus: vi.fn()
+            updateStatus: vi.fn(),
+            syncInteractionModeStore: vi.fn()
         };
 
         ToolPlacementController.setPendingToolType.call(context, 'Resistor', item);
@@ -30,6 +31,7 @@ describe('ToolPlacementController.setPendingToolType', () => {
         expect(previous.classList.remove).toHaveBeenCalledWith('tool-item-pending');
         expect(item.classList.add).toHaveBeenCalledWith('tool-item-pending');
         expect(context.updateStatus).toHaveBeenCalledWith(expect.stringContaining('已选择'));
+        expect(context.syncInteractionModeStore).toHaveBeenCalledTimes(1);
     });
 
     it('toggles off same tool and cancels wiring for wire tool', () => {
@@ -236,7 +238,8 @@ describe('ToolPlacementController.setMobileInteractionMode', () => {
             clearPendingToolType: vi.fn(),
             cancelWiring: vi.fn(),
             updateStatus: vi.fn(),
-            quickActionBar: { update: vi.fn() }
+            quickActionBar: { update: vi.fn() },
+            syncInteractionModeStore: vi.fn()
         };
 
         ToolPlacementController.setMobileInteractionMode.call(context, 'wire');
@@ -246,6 +249,9 @@ describe('ToolPlacementController.setMobileInteractionMode', () => {
         expect(context.setPendingToolType).toHaveBeenCalledWith('Wire', null, expect.objectContaining({
             allowToggleOff: false,
             silentStatus: true
+        }));
+        expect(context.syncInteractionModeStore).toHaveBeenCalledWith(expect.objectContaining({
+            mode: 'wire'
         }));
     });
 
@@ -264,7 +270,8 @@ describe('ToolPlacementController.setMobileInteractionMode', () => {
             clearPendingToolType: vi.fn(),
             cancelWiring: vi.fn(),
             updateStatus: vi.fn(),
-            quickActionBar: { update: vi.fn() }
+            quickActionBar: { update: vi.fn() },
+            syncInteractionModeStore: vi.fn()
         };
 
         ToolPlacementController.setMobileInteractionMode.call(context, 'select');
@@ -275,6 +282,9 @@ describe('ToolPlacementController.setMobileInteractionMode', () => {
         expect(context.clearPendingToolType).toHaveBeenCalledWith(expect.objectContaining({
             silent: true,
             preserveMobileMode: true
+        }));
+        expect(context.syncInteractionModeStore).toHaveBeenCalledWith(expect.objectContaining({
+            mode: 'select'
         }));
     });
 

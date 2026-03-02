@@ -47,6 +47,25 @@ describe('InteractionModeStore', () => {
 });
 
 describe('InteractionOrchestrator mode-store integration', () => {
+    it('initializes interaction mode store eagerly from current runtime flags', () => {
+        const context = {
+            pendingToolType: 'Wire',
+            mobileInteractionMode: 'wire',
+            stickyWireTool: true,
+            isWiring: true,
+            isDraggingWireEndpoint: false,
+            isTerminalExtending: false,
+            isRheostatDragging: false
+        };
+
+        const state = InteractionOrchestrator.initializeInteractionModeStore(context);
+
+        expect(state.mode).toBe('wire');
+        expect(context.interactionMode).toBe('wire');
+        expect(context.interactionModeStore).toBeInstanceOf(InteractionModeStore);
+        expect(context.interactionModeStore.getState().version).toBe(0);
+    });
+
     it('syncs conflicting runtime flags into one authoritative mode', () => {
         const context = {
             pendingToolType: 'Wire',

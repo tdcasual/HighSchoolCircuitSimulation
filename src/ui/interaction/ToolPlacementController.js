@@ -69,6 +69,16 @@ function clearSuspendedWiringSession(context) {
     context.suspendedWiringSession = null;
 }
 
+function syncInteractionModeStore(context, options = {}) {
+    const sync = context?.syncInteractionModeStore;
+    if (typeof sync !== 'function') return null;
+    try {
+        return sync.call(context, options);
+    } catch (_) {
+        return null;
+    }
+}
+
 function resolveStorage() {
     if (typeof localStorage === 'undefined') return null;
     return localStorage;
@@ -268,6 +278,17 @@ export function setMobileInteractionMode(mode = 'select', options = {}) {
         }
     }
 
+    syncInteractionModeStore(this, {
+        mode: isWireMode ? 'wire' : 'select',
+        source: 'toolPlacement.setMobileInteractionMode',
+        context: {
+            pendingToolType: isWireMode ? 'Wire' : null,
+            mobileInteractionMode: this.mobileInteractionMode,
+            stickyWireTool: this.stickyWireTool,
+            isWiring: !!this.isWiring
+        }
+    });
+
     this.syncMobileModeButtons?.();
     this.quickActionBar?.update?.();
 }
@@ -290,6 +311,16 @@ export function setPendingToolType(type, item = null, options = {}) {
         if (!options.silentStatus) {
             this.updateStatus('已取消工具放置模式');
         }
+        syncInteractionModeStore(this, {
+            mode: 'select',
+            source: 'toolPlacement.setPendingToolType:toggle-off',
+            context: {
+                pendingToolType: null,
+                mobileInteractionMode: this.mobileInteractionMode,
+                stickyWireTool: this.stickyWireTool,
+                isWiring: !!this.isWiring
+            }
+        });
         this.syncMobileModeButtons?.();
         return;
     }
@@ -320,6 +351,16 @@ export function setPendingToolType(type, item = null, options = {}) {
     if (!options.silentStatus) {
         this.updateStatus(`已选择 ${ComponentNames[type] || type}，点击画布放置`);
     }
+    syncInteractionModeStore(this, {
+        mode: type === 'Wire' ? 'wire' : 'select',
+        source: 'toolPlacement.setPendingToolType',
+        context: {
+            pendingToolType: this.pendingToolType,
+            mobileInteractionMode: this.mobileInteractionMode,
+            stickyWireTool: this.stickyWireTool,
+            isWiring: !!this.isWiring
+        }
+    });
     this.syncMobileModeButtons?.();
 }
 
@@ -339,6 +380,15 @@ export function clearPendingToolType(options = {}) {
         this.stickyWireTool = false;
         this.mobileInteractionMode = 'select';
     }
+    syncInteractionModeStore(this, {
+        source: 'toolPlacement.clearPendingToolType',
+        context: {
+            pendingToolType: this.pendingToolType,
+            mobileInteractionMode: this.mobileInteractionMode,
+            stickyWireTool: this.stickyWireTool,
+            isWiring: !!this.isWiring
+        }
+    });
     this.syncMobileModeButtons?.();
 }
 
