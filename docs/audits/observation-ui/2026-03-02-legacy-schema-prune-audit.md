@@ -43,6 +43,26 @@
 2. 使用 fixture backfill 调整测试输入为“仍受支持”的 legacy 结构（保留 `templateName/plotBindings`，绑定项改为规范键）。
 3. 跑回归门禁并记录结果。
 
+## 执行更新（2026-03-02）
+
+1. 已落地删除
+- `resolveTemplateName` 移除 `title`、`presetName` 别名读取。
+- `normalizeObservationTemplateBindings` 移除 `plot/plotId`、`target/source/quantity` 项级别别名读取。
+- `normalizeObservationTemplate` 移除 `bindingMap` 容器别名读取。
+
+2. fixture backfill
+- `tests/observationState.spec.js`、`tests/observationPanel.quickBind.spec.js` 已改为：
+  - 仍保留 `templateName + plotBindings` 作为 legacy 容器兼容；
+  - 绑定项统一使用规范键（`plotIndex/axis/sourceId/quantityId`）；
+  - 新增断言覆盖“已移除别名应被忽略”。
+
+3. 提交与验证
+- 删除实现提交：`2ec3aba`
+- 观测审计提交：`d005ed4`
+- 定向测试：
+  - `npm test -- tests/observationState.spec.js tests/observationPanel.quickBind.spec.js`
+  - `npm test -- tests/observationState.spec.js tests/observationPanel.quickBind.spec.js tests/observationPanel.uxMode.spec.js tests/observationPanel.sampleCache.spec.js`
+
 ## 风险与回滚
 
 - 风险：极老模板若仅使用被移除字段，将在归一化后回落到默认值/忽略绑定项。
