@@ -93,4 +93,47 @@ describe('Interaction mode matrix diagnostics', () => {
             endpointAutoBridgeMode: 'on'
         });
     });
+
+    it('prefers interaction mode-store context when runtime flags lag behind', () => {
+        class FakeInteractionManager {}
+        installInteractionCoreInputPlacementDelegates(FakeInteractionManager);
+        vi.stubGlobal('document', {
+            body: {
+                classList: {
+                    contains: vi.fn(() => false)
+                }
+            }
+        });
+
+        const context = createContext({
+            pendingToolType: null,
+            mobileInteractionMode: 'select',
+            stickyWireTool: false,
+            isWiring: false,
+            interactionModeStore: {
+                getState: () => ({
+                    mode: 'wire',
+                    context: {
+                        pendingToolType: 'Wire',
+                        mobileInteractionMode: 'wire',
+                        stickyWireTool: true,
+                        isWiring: true,
+                        isDraggingWireEndpoint: false,
+                        isTerminalExtending: false,
+                        isRheostatDragging: false
+                    }
+                })
+            }
+        });
+
+        const snapshot = FakeInteractionManager.prototype.getInteractionModeSnapshot.call(context);
+        expect(snapshot.mode).toBe('wire');
+        expect(snapshot.pendingToolType).toBe('Wire');
+        expect(snapshot.wireSignals).toEqual({
+            pendingWireTool: true,
+            wireModeSelected: true,
+            stickyWireTool: true,
+            activeWiringSession: true
+        });
+    });
 });

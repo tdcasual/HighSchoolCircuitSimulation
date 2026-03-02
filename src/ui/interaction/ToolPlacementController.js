@@ -1,5 +1,10 @@
 import { ComponentNames } from '../../components/Component.js';
 import { GRID_SIZE, snapToGrid } from '../../utils/CanvasCoords.js';
+import {
+    readInteractionModeContext,
+    setInteractionModeContext,
+    setWireToolContext
+} from '../../app/interaction/InteractionModeBridge.js';
 
 const ENDPOINT_AUTO_BRIDGE_STORAGE_KEY = 'interaction.endpoint_auto_bridge_mode';
 const ENDPOINT_AUTO_BRIDGE_CLASSROOM_LOCK_LABEL = '端点补线: 课堂锁定';
@@ -69,14 +74,17 @@ function clearSuspendedWiringSession(context) {
     context.suspendedWiringSession = null;
 }
 
-function syncInteractionModeStore(context, options = {}) {
-    const sync = context?.syncInteractionModeStore;
-    if (typeof sync !== 'function') return null;
-    try {
-        return sync.call(context, options);
-    } catch (_) {
-        return null;
-    }
+function readToolModeContext(context) {
+    const modeContext = readInteractionModeContext(context);
+    return {
+        pendingToolType: modeContext?.pendingToolType ?? null,
+        mobileInteractionMode: normalizeMobileInteractionMode(modeContext?.mobileInteractionMode),
+        stickyWireTool: !!modeContext?.stickyWireTool,
+        isWiring: !!modeContext?.isWiring,
+        isDraggingWireEndpoint: !!modeContext?.isDraggingWireEndpoint,
+        isTerminalExtending: !!modeContext?.isTerminalExtending,
+        isRheostatDragging: !!modeContext?.isRheostatDragging
+    };
 }
 
 function resolveStorage() {
@@ -149,19 +157,20 @@ export function syncEndpointAutoBridgeButton() {
 }
 
 export function getInteractionModeSnapshot() {
-    const mobileInteractionMode = normalizeMobileInteractionMode(this.mobileInteractionMode);
+    const modeContext = readToolModeContext(this);
+    const mobileInteractionMode = normalizeMobileInteractionMode(modeContext.mobileInteractionMode);
     const endpointAutoBridgeMode = normalizeEndpointAutoBridgeMode(this.endpointAutoBridgeMode);
 
     const wireSignals = {
-        pendingWireTool: this.pendingToolType === 'Wire',
+        pendingWireTool: modeContext.pendingToolType === 'Wire',
         wireModeSelected: mobileInteractionMode === 'wire',
-        stickyWireTool: !!this.stickyWireTool,
-        activeWiringSession: !!this.isWiring
+        stickyWireTool: !!modeContext.stickyWireTool,
+        activeWiringSession: !!modeContext.isWiring
     };
     const endpointSignals = {
-        draggingWireEndpoint: !!this.isDraggingWireEndpoint,
-        terminalExtending: !!this.isTerminalExtending,
-        rheostatDragging: !!this.isRheostatDragging
+        draggingWireEndpoint: !!modeContext.isDraggingWireEndpoint,
+        terminalExtending: !!modeContext.isTerminalExtending,
+        rheostatDragging: !!modeContext.isRheostatDragging
     };
 
     const activeModes = [];
@@ -191,12 +200,12 @@ export function getInteractionModeSnapshot() {
         mode: hasConflict ? 'conflict' : uniqueActiveModes[0],
         activeModes: uniqueActiveModes,
         hasConflict,
-        pendingToolType: this.pendingToolType || null,
+        pendingToolType: modeContext.pendingToolType || null,
         wireSignals,
         endpointSignals,
         mobile: {
             interactionMode: mobileInteractionMode,
-            stickyWireTool: !!this.stickyWireTool,
+            stickyWireTool: !!modeContext.stickyWireTool,
             endpointAutoBridgeMode
         },
         runtime: {
@@ -254,8 +263,13 @@ export function setMobileInteractionMode(mode = 'select', options = {}) {
     const nextMode = normalizeMobileInteractionMode(mode);
     const isWireMode = nextMode === 'wire';
 
-    this.mobileInteractionMode = nextMode;
-    this.stickyWireTool = isWireMode;
+    setInteractionModeContext(this, {
+        mobileInteractionMode: nextMode,
+        stickyWireTool: isWireMode
+    }, {
+        mode: isWireMode ? 'wire' : 'select',
+        source: 'toolPlacement.setMobileInteractionMode'
+    });
 
     if (isWireMode) {
         this.setPendingToolType('Wire', null, {
@@ -270,24 +284,14 @@ export function setMobileInteractionMode(mode = 'select', options = {}) {
         if (this.isWiring && typeof this.cancelWiring === 'function') {
             this.cancelWiring();
         }
-        if (this.pendingToolType === 'Wire' && typeof this.clearPendingToolType === 'function') {
+        const modeContext = readToolModeContext(this);
+        if (modeContext.pendingToolType === 'Wire' && typeof this.clearPendingToolType === 'function') {
             this.clearPendingToolType({ silent: true, preserveMobileMode: true });
         }
         if (!options.silentStatus) {
             this.updateStatus('已切换到选择模式');
         }
     }
-
-    syncInteractionModeStore(this, {
-        mode: isWireMode ? 'wire' : 'select',
-        source: 'toolPlacement.setMobileInteractionMode',
-        context: {
-            pendingToolType: isWireMode ? 'Wire' : null,
-            mobileInteractionMode: this.mobileInteractionMode,
-            stickyWireTool: this.stickyWireTool,
-            isWiring: !!this.isWiring
-        }
-    });
 
     this.syncMobileModeButtons?.();
     this.quickActionBar?.update?.();
@@ -305,27 +309,14 @@ export function setPendingToolType(type, item = null, options = {}) {
         if (type === 'Wire' && this.isWiring && typeof this.cancelWiring === 'function') {
             this.cancelWiring();
         }
-        this.stickyWireTool = false;
-        this.mobileInteractionMode = 'select';
-        this.clearPendingToolType({ preserveMobileMode: true });
+        this.clearPendingToolType();
         if (!options.silentStatus) {
             this.updateStatus('已取消工具放置模式');
         }
-        syncInteractionModeStore(this, {
-            mode: 'select',
-            source: 'toolPlacement.setPendingToolType:toggle-off',
-            context: {
-                pendingToolType: null,
-                mobileInteractionMode: this.mobileInteractionMode,
-                stickyWireTool: this.stickyWireTool,
-                isWiring: !!this.isWiring
-            }
-        });
         this.syncMobileModeButtons?.();
         return;
     }
 
-    this.pendingToolType = type;
     this.pendingToolItem = item;
     if (hasDocument()) {
         document.querySelectorAll('.tool-item.tool-item-pending').forEach((el) => safeRemoveClass(el, 'tool-item-pending'));
@@ -334,11 +325,23 @@ export function setPendingToolType(type, item = null, options = {}) {
 
     if (type === 'Wire') {
         const fromMobileMode = options.source === 'mobile-mode';
-        this.stickyWireTool = !!fromMobileMode;
-        this.mobileInteractionMode = fromMobileMode ? 'wire' : normalizeMobileInteractionMode(this.mobileInteractionMode);
+        setWireToolContext(this, {
+            pendingToolType: type,
+            mobileInteractionMode: fromMobileMode ? 'wire' : normalizeMobileInteractionMode(this.mobileInteractionMode),
+            stickyWireTool: !!fromMobileMode
+        }, {
+            mode: 'wire',
+            source: 'toolPlacement.setPendingToolType:wire'
+        });
     } else {
-        this.stickyWireTool = false;
-        this.mobileInteractionMode = 'select';
+        setWireToolContext(this, {
+            pendingToolType: type,
+            mobileInteractionMode: 'select',
+            stickyWireTool: false
+        }, {
+            mode: 'select',
+            source: 'toolPlacement.setPendingToolType:select'
+        });
     }
 
     const layout = this.app?.responsiveLayout;
@@ -351,22 +354,11 @@ export function setPendingToolType(type, item = null, options = {}) {
     if (!options.silentStatus) {
         this.updateStatus(`已选择 ${ComponentNames[type] || type}，点击画布放置`);
     }
-    syncInteractionModeStore(this, {
-        mode: type === 'Wire' ? 'wire' : 'select',
-        source: 'toolPlacement.setPendingToolType',
-        context: {
-            pendingToolType: this.pendingToolType,
-            mobileInteractionMode: this.mobileInteractionMode,
-            stickyWireTool: this.stickyWireTool,
-            isWiring: !!this.isWiring
-        }
-    });
     this.syncMobileModeButtons?.();
 }
 
 export function clearPendingToolType(options = {}) {
     clearSuspendedWiringSession(this);
-    this.pendingToolType = null;
     if (this.pendingToolItem) {
         safeRemoveClass(this.pendingToolItem, 'tool-item-pending');
         this.pendingToolItem = null;
@@ -376,18 +368,15 @@ export function clearPendingToolType(options = {}) {
             document.querySelectorAll('.tool-item.tool-item-pending').forEach((el) => safeRemoveClass(el, 'tool-item-pending'));
         }
     }
+    const contextPatch = {
+        pendingToolType: null
+    };
     if (!options.preserveMobileMode) {
-        this.stickyWireTool = false;
-        this.mobileInteractionMode = 'select';
+        contextPatch.stickyWireTool = false;
+        contextPatch.mobileInteractionMode = 'select';
     }
-    syncInteractionModeStore(this, {
-        source: 'toolPlacement.clearPendingToolType',
-        context: {
-            pendingToolType: this.pendingToolType,
-            mobileInteractionMode: this.mobileInteractionMode,
-            stickyWireTool: this.stickyWireTool,
-            isWiring: !!this.isWiring
-        }
+    setInteractionModeContext(this, contextPatch, {
+        source: 'toolPlacement.clearPendingToolType'
     });
     this.syncMobileModeButtons?.();
 }

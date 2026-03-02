@@ -186,6 +186,25 @@ describe('ToolPlacementController.clearPendingToolType', () => {
         expect(context.pendingToolType).toBe(null);
         expect(context.pendingToolItem).toBe(null);
     });
+
+    it('preserves mobile interaction mode when preserveMobileMode is true', () => {
+        vi.stubGlobal('document', {
+            querySelectorAll: vi.fn(() => [])
+        });
+
+        const context = {
+            pendingToolType: 'Wire',
+            pendingToolItem: null,
+            mobileInteractionMode: 'wire',
+            stickyWireTool: true
+        };
+
+        ToolPlacementController.clearPendingToolType.call(context, { preserveMobileMode: true });
+
+        expect(context.pendingToolType).toBe(null);
+        expect(context.mobileInteractionMode).toBe('wire');
+        expect(context.stickyWireTool).toBe(true);
+    });
 });
 
 describe('ToolPlacementController.placePendingToolAt', () => {
