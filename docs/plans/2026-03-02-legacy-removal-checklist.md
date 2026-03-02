@@ -54,6 +54,9 @@ Week5-10 执行轨道：`docs/plans/2026-03-02-architecture-de-risk-week5-10-imp
 - 前置条件：
   - 发布说明明确“兼容窗口结束”。
   - 提供一次性迁移脚本或迁移公告。
+- 2026-03-02 Slice A 执行更新：
+  - 已停止写入 classroom legacy bool key `ui.classroom_mode_enabled`，仅保留读取兼容窗口（commit: `5db4799`）。
+  - 一次性迁移说明已补充到 `docs/releases/v0.10-stability-checklist.md`。
 
 ### Batch D（高风险）
 
@@ -76,13 +79,14 @@ Week5-10 执行轨道：`docs/plans/2026-03-02-architecture-de-risk-week5-10-imp
 - Batch A：已完成第 1 轮（commit: `ec3ee3a`，删无引用 script alias）。
 - Batch A：已完成第 2 轮（commit: `c89dbdb`，删 Toolbox wire legacy fallback）。
 - Batch B：已完成第 1 轮（commit: `1ad7da4`，删 UIStateController legacy mode fallback）。
-- Batch C/D：未开始。
+- Batch C：Slice A 已完成（commit: `5db4799`，停写 classroom legacy bool mirror key）。
+- Batch D：未开始。
 
 ## Week5-10 落地状态（2026-03-02 起）
 
 - Week 5：已完成（Task13/14：legacy path usage tracker + readiness guard 脚本）。
 - Week 6：已完成（Task15/16：mode store 启动初始化 + ToolPlacement 入口同步收敛）。
 - Week 7：已完成（Task17/18：测试契约迁移 + UIStateController legacy fallback 删除）。
-- Week 8：未开始（目标：执行 Batch C Slice A）。
+- Week 8：已完成（Task19/20：classroom legacy bool 停写 + 一次性迁移说明补充）。
 - Week 9：未开始（目标：执行 Batch C Slice B）。
 - Week 10：未开始（目标：执行 Batch D 与大规模删除窗口）。
