@@ -273,6 +273,29 @@ describe('ResponsiveLayoutController', () => {
         expect(closeDrawers).toHaveBeenCalledTimes(1);
     });
 
+    it('ignores drawer pointerdown when target.closest is not callable', () => {
+        setupLayoutFixture(640);
+        const controller = new ResponsiveLayoutController({});
+        const currentTarget = {
+            id: 'toolbox',
+            style: { transition: '' },
+            setPointerCapture: vi.fn()
+        };
+
+        expect(() => {
+            controller.onDrawerPointerDown({
+                pointerType: 'touch',
+                pointerId: 1,
+                clientX: 10,
+                clientY: 10,
+                currentTarget,
+                target: { closest: {} }
+            });
+        }).not.toThrow();
+        expect(controller.drawerSwipe).toBe(null);
+        expect(currentTarget.setPointerCapture).not.toHaveBeenCalled();
+    });
+
     it('removes window and drawer listeners on destroy', () => {
         const {
             win,
@@ -289,5 +312,25 @@ describe('ResponsiveLayoutController', () => {
         expect(toolboxToggleBtn.removeEventListener).toHaveBeenCalledWith('click', expect.any(Function));
         expect(sidePanelToggleBtn.removeEventListener).toHaveBeenCalledWith('click', expect.any(Function));
         expect(backdrop.removeEventListener).toHaveBeenCalledWith('click', expect.any(Function));
+    });
+
+    it('does not throw when classList and setAttribute methods are non-callable', () => {
+        const {
+            body,
+            toolbox,
+            sidePanel,
+            backdrop,
+            toolboxToggleBtn,
+            sidePanelToggleBtn
+        } = setupLayoutFixture(640);
+        body.classList = { add: {}, remove: {} };
+        toolbox.classList = { toggle: {} };
+        sidePanel.classList = { toggle: {} };
+        backdrop.classList = { toggle: {} };
+        backdrop.setAttribute = {};
+        toolboxToggleBtn.setAttribute = {};
+        sidePanelToggleBtn.setAttribute = {};
+
+        expect(() => new ResponsiveLayoutController({})).not.toThrow();
     });
 });

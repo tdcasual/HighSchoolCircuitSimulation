@@ -122,9 +122,62 @@ function getBodyClassList() {
     return document.body?.classList || null;
 }
 
-function isPhoneLayout(panel) {
+function safeHasClass(nodeOrClassList, className) {
+    const classList = nodeOrClassList?.classList || nodeOrClassList;
+    if (!classList || typeof classList.contains !== 'function') return false;
+    try {
+        return classList.contains(className);
+    } catch (_) {
+        return false;
+    }
+}
+
+function safeInvokeMethod(target, methodName, ...args) {
+    const fn = target?.[methodName];
+    if (typeof fn !== 'function') return undefined;
+    try {
+        return fn.apply(target, args);
+    } catch (_) {
+        return undefined;
+    }
+}
+
+function safeAddClass(node, className) {
+    safeInvokeMethod(node?.classList, 'add', className);
+}
+
+function safeRemoveClass(node, className) {
+    safeInvokeMethod(node?.classList, 'remove', className);
+}
+
+function safeToggleClass(node, className, force) {
+    safeInvokeMethod(node?.classList, 'toggle', className, force);
+}
+
+function readBoundingClientRect(element) {
+    const rect = safeInvokeMethod(element, 'getBoundingClientRect');
+    const left = Number(rect?.left) || 0;
+    const top = Number(rect?.top) || 0;
+    const width = Number(rect?.width) || 0;
+    const height = Number(rect?.height) || 0;
+    return {
+        left,
+        top,
+        width,
+        height,
+        right: Number(rect?.right) || (left + width),
+        bottom: Number(rect?.bottom) || (top + height)
+    };
+}
+
+function isPhoneLayout(_panel) {
     const classList = getBodyClassList();
-    return !!classList?.contains?.('layout-mode-phone');
+    return safeHasClass(classList, 'layout-mode-phone');
+}
+
+function safeClosestTarget(target, selector) {
+    if (!target || typeof target.closest !== 'function') return null;
+    return target.closest(selector);
 }
 
 function getViewportMetrics() {
@@ -150,7 +203,7 @@ function getElementHeightById(id) {
     if (typeof document === 'undefined') return 0;
     const element = document.getElementById(id);
     if (!element || element.hidden) return 0;
-    const rect = element.getBoundingClientRect?.();
+    const rect = safeInvokeMethod(element, 'getBoundingClientRect');
     const height = Number(rect?.height);
     return Number.isFinite(height) && height > 0 ? height : 0;
 }
@@ -205,7 +258,7 @@ function applyPhonePanelLayout(panel, bounds, baseExpandedHeight, shouldCollapse
         : panel.clamp(bounds.minX, bounds.minX, maxLeft);
     const top = panel.clamp(bounds.maxY - effectiveHeight, bounds.minY, maxTop);
 
-    panel.panel.classList.toggle('collapsed', shouldCollapse);
+    safeToggleClass(panel.panel, 'collapsed', shouldCollapse);
     panel.panel.style.width = `${effectiveWidth}px`;
     panel.panel.style.height = `${effectiveHeight}px`;
     panel.setPanelAbsolutePosition(left, top);
@@ -222,21 +275,21 @@ function initializePanelLayoutControlsImpl() {
     this.restorePanelLayout();
 
     if (this.panelHeader) {
-        this.panelHeader.addEventListener('pointerdown', (e) => this.tryStartPanelDrag(e));
+        safeInvokeMethod(this.panelHeader, 'addEventListener', 'pointerdown', (e) => this.tryStartPanelDrag(e));
     }
 
     if (this.panel) {
-        this.panel.addEventListener('pointerdown', (e) => this.tryStartCollapsedPanelDrag(e));
+        safeInvokeMethod(this.panel, 'addEventListener', 'pointerdown', (e) => this.tryStartCollapsedPanelDrag(e));
     }
 
     if (this.resizeHandle) {
-        this.resizeHandle.addEventListener('pointerdown', (e) => this.tryStartPanelResize(e));
+        safeInvokeMethod(this.resizeHandle, 'addEventListener', 'pointerdown', (e) => this.tryStartPanelResize(e));
     }
 
-    window.addEventListener('resize', this.boundViewportConstrain);
+    safeInvokeMethod(window, 'addEventListener', 'resize', this.boundViewportConstrain);
     if (typeof window !== 'undefined' && window.visualViewport) {
-        window.visualViewport.addEventListener('resize', this.boundViewportConstrain);
-        window.visualViewport.addEventListener('scroll', this.boundViewportConstrain);
+        safeInvokeMethod(window.visualViewport, 'addEventListener', 'resize', this.boundViewportConstrain);
+        safeInvokeMethod(window.visualViewport, 'addEventListener', 'scroll', this.boundViewportConstrain);
     }
     this.initializeIdleBehavior();
     this.constrainPanelToViewport();
@@ -246,9 +299,9 @@ function tryStartPanelDragImpl(event) {
     if (!this.panel) return;
     if (isPhoneLayout(this)) return;
     if (event.pointerType === 'mouse' && event.button !== 0) return;
-    if (event.target.closest('#ai-panel-actions')) return;
+    if (safeClosestTarget(event.target, '#ai-panel-actions')) return;
 
-    event.preventDefault();
+    safeInvokeMethod(event, 'preventDefault');
     this.startPanelGesture('drag', event);
 }
 
@@ -256,24 +309,24 @@ function tryStartCollapsedPanelDragImpl(event) {
     if (!this.panel || !this.isPanelCollapsed()) return;
     if (isPhoneLayout(this)) return;
     if (event.pointerType === 'mouse' && event.button !== 0) return;
-    if (!event.target.closest('#ai-fab-btn')) return;
-    event.preventDefault();
-    event.stopPropagation();
+    if (!safeClosestTarget(event.target, '#ai-fab-btn')) return;
+    safeInvokeMethod(event, 'preventDefault');
+    safeInvokeMethod(event, 'stopPropagation');
     this.startPanelGesture('drag', event);
 }
 
 function tryStartPanelResizeImpl(event) {
-    if (!this.panel || this.panel.classList.contains('collapsed')) return;
+    if (!this.panel || safeHasClass(this.panel, 'collapsed')) return;
     if (isPhoneLayout(this)) return;
     if (event.pointerType === 'mouse' && event.button !== 0) return;
 
-    event.preventDefault();
-    event.stopPropagation();
+    safeInvokeMethod(event, 'preventDefault');
+    safeInvokeMethod(event, 'stopPropagation');
     this.startPanelGesture('resize', event);
 }
 
 function startPanelGestureImpl(type, event) {
-    const rect = this.panel.getBoundingClientRect();
+    const rect = readBoundingClientRect(this.panel);
     const styleLeft = parseFloat(this.panel.style.left);
     const styleTop = parseFloat(this.panel.style.top);
     const startLeft = Number.isFinite(styleLeft) ? styleLeft : rect.left;
@@ -293,17 +346,17 @@ function startPanelGestureImpl(type, event) {
         moved: false
     };
 
-    this.panel.classList.add(type === 'drag' ? 'dragging' : 'resizing');
-    window.addEventListener('pointermove', this.boundPanelPointerMove);
-    window.addEventListener('pointerup', this.boundPanelPointerUp);
-    window.addEventListener('pointercancel', this.boundPanelPointerUp);
+    safeAddClass(this.panel, type === 'drag' ? 'dragging' : 'resizing');
+    safeInvokeMethod(window, 'addEventListener', 'pointermove', this.boundPanelPointerMove);
+    safeInvokeMethod(window, 'addEventListener', 'pointerup', this.boundPanelPointerUp);
+    safeInvokeMethod(window, 'addEventListener', 'pointercancel', this.boundPanelPointerUp);
     this.markPanelActive();
 }
 
 function handlePanelPointerMoveImpl(event) {
     if (!this.panelGesture || event.pointerId !== this.panelGesture.pointerId) return;
 
-    event.preventDefault();
+    safeInvokeMethod(event, 'preventDefault');
     this.markPanelActive();
     if (this.panelGesture.type === 'drag') {
         this.updatePanelDrag(event);
@@ -317,10 +370,11 @@ function handlePanelPointerUpImpl(event) {
     const endedGestureType = this.panelGesture.type;
     const moved = !!this.panelGesture.moved;
 
-    window.removeEventListener('pointermove', this.boundPanelPointerMove);
-    window.removeEventListener('pointerup', this.boundPanelPointerUp);
-    window.removeEventListener('pointercancel', this.boundPanelPointerUp);
-    this.panel.classList.remove('dragging', 'resizing');
+    safeInvokeMethod(window, 'removeEventListener', 'pointermove', this.boundPanelPointerMove);
+    safeInvokeMethod(window, 'removeEventListener', 'pointerup', this.boundPanelPointerUp);
+    safeInvokeMethod(window, 'removeEventListener', 'pointercancel', this.boundPanelPointerUp);
+    safeRemoveClass(this.panel, 'dragging');
+    safeRemoveClass(this.panel, 'resizing');
     this.panelGesture = null;
     if (endedGestureType === 'resize' && !this.isPanelCollapsed()) {
         this.rememberExpandedPanelSize();
@@ -392,7 +446,7 @@ function getPanelBoundsImpl() {
     const sidePanel = document.getElementById('side-panel');
     let reservedRight = 0;
     if (sidePanel) {
-        const rect = sidePanel.getBoundingClientRect();
+        const rect = readBoundingClientRect(sidePanel);
         if (rect.width > 0) {
             reservedRight = rect.width + 12;
         }
@@ -408,25 +462,25 @@ function getPanelBoundsImpl() {
 function initializeIdleBehaviorImpl() {
     const activate = () => this.markPanelActive();
     ['pointerdown', 'pointermove', 'keydown', 'focusin', 'wheel', 'touchstart'].forEach((eventName) => {
-        window.addEventListener(eventName, activate, { passive: true });
+        safeInvokeMethod(window, 'addEventListener', eventName, activate, { passive: true });
     });
     if (this.panel) {
-        this.panel.addEventListener('pointerenter', activate);
-        this.panel.addEventListener('focusin', activate);
+        safeInvokeMethod(this.panel, 'addEventListener', 'pointerenter', activate);
+        safeInvokeMethod(this.panel, 'addEventListener', 'focusin', activate);
     }
     this.markPanelActive();
 }
 
 function markPanelActiveImpl() {
     if (!this.panel) return;
-    this.panel.classList.remove('idle');
+    safeRemoveClass(this.panel, 'idle');
     if (this.idleTimer) {
         clearTimeout(this.idleTimer);
     }
     this.idleTimer = setTimeout(() => {
         if (!this.panel) return;
         if (this.panelGesture) return;
-        this.panel.classList.add('idle');
+        safeAddClass(this.panel, 'idle');
     }, this.idleTimeoutMs);
 }
 
@@ -436,7 +490,7 @@ function clampImpl(value, min, max) {
 }
 
 function isPanelCollapsedImpl() {
-    return !!this.panel?.classList?.contains('collapsed');
+    return safeHasClass(this.panel, 'collapsed');
 }
 
 function getCollapsedPanelSizeImpl() {
@@ -462,20 +516,16 @@ function rememberExpandedPanelSizeImpl() {
 function syncPanelCollapsedUIImpl() {
     const collapsed = this.isPanelCollapsed();
     const bodyClassList = getBodyClassList();
-    if (typeof bodyClassList?.toggle === 'function') {
-        bodyClassList.toggle('ai-panel-open', isPhoneLayout(this) && !collapsed);
-    }
+    safeInvokeMethod(bodyClassList, 'toggle', 'ai-panel-open', isPhoneLayout(this) && !collapsed);
     if (this.toggleBtn) {
         this.toggleBtn.textContent = collapsed ? '展开' : '最小化';
         this.toggleBtn.title = collapsed ? '展开面板' : '最小化面板';
-        if (typeof this.toggleBtn.setAttribute === 'function') {
-            this.toggleBtn.setAttribute('aria-label', this.toggleBtn.title);
-            this.toggleBtn.setAttribute('aria-expanded', String(!collapsed));
-        }
+        safeInvokeMethod(this.toggleBtn, 'setAttribute', 'aria-label', this.toggleBtn.title);
+        safeInvokeMethod(this.toggleBtn, 'setAttribute', 'aria-expanded', String(!collapsed));
     }
     if (this.fabBtn) {
-        this.fabBtn.setAttribute('aria-hidden', String(!collapsed));
-        this.fabBtn.setAttribute('title', collapsed ? '展开 AI 助手' : 'AI 助手');
+        safeInvokeMethod(this.fabBtn, 'setAttribute', 'aria-hidden', String(!collapsed));
+        safeInvokeMethod(this.fabBtn, 'setAttribute', 'title', collapsed ? '展开 AI 助手' : 'AI 助手');
     }
 }
 
@@ -493,11 +543,11 @@ function setPanelCollapsedImpl(collapsed, options = {}) {
 
     if (shouldCollapse) {
         this.rememberExpandedPanelSize();
-        this.panel.classList.add('collapsed');
+        safeAddClass(this.panel, 'collapsed');
         this.panel.style.width = `${this.getCollapsedPanelWidth()}px`;
         this.panel.style.height = `${this.getCollapsedPanelHeight()}px`;
     } else {
-        this.panel.classList.remove('collapsed');
+        safeRemoveClass(this.panel, 'collapsed');
         const bounds = this.getPanelBounds();
         const availableWidth = Math.max(bounds.maxX - bounds.minX, 0);
         const availableHeight = Math.max(bounds.maxY - bounds.minY, 0);
@@ -578,7 +628,7 @@ function applyPanelLayoutImpl(layout) {
         maxTop
     );
 
-    this.panel.classList.toggle('collapsed', shouldCollapse);
+    safeToggleClass(this.panel, 'collapsed', shouldCollapse);
     this.panel.style.width = `${effectiveWidth}px`;
     this.panel.style.height = `${effectiveHeight}px`;
     this.setPanelAbsolutePosition(left, top);
@@ -612,7 +662,7 @@ function getSavedPanelLayoutImpl() {
 function savePanelLayoutImpl() {
     if (!this.panel) return;
     try {
-        const rect = this.panel.getBoundingClientRect();
+        const rect = readBoundingClientRect(this.panel);
         const styleLeft = parseFloat(this.panel.style.left);
         const styleTop = parseFloat(this.panel.style.top);
         if (!this.isPanelCollapsed()) {
@@ -656,7 +706,7 @@ function getDefaultPanelLayoutImpl() {
 
 function constrainPanelToViewportImpl() {
     if (!this.panel) return;
-    const rect = this.panel.getBoundingClientRect();
+    const rect = readBoundingClientRect(this.panel);
     const styleLeft = parseFloat(this.panel.style.left);
     const styleTop = parseFloat(this.panel.style.top);
     const styleWidth = parseFloat(this.panel.style.width);

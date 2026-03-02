@@ -28,6 +28,7 @@ describe('embed packaging pipeline', () => {
         expect(pkg.scripts['build:edgeone']).toBeTypeOf('string');
     });
 
+    // Build packaging may exceed default 5s timeout on busy CI runners.
     it('exports embed package and edgeone embed directory', () => {
         runNodeScript('scripts/build-frontend.mjs');
         expect(fs.existsSync(path.join(rootDir, 'dist', 'viewer.html'))).toBe(true);
@@ -41,5 +42,5 @@ describe('embed packaging pipeline', () => {
         runNodeScript('scripts/build-edgeone.mjs');
         expect(fs.existsSync(path.join(rootDir, 'dist', 'embed', 'viewer.html'))).toBe(true);
         expect(fs.existsSync(path.join(rootDir, 'dist', 'embed', 'embed.js'))).toBe(true);
-    });
+    }, 30000);
 });

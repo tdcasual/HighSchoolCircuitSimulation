@@ -12,6 +12,28 @@ const DRAWER_SWIPE_CLOSE_THRESHOLD_PX = 40;
 
 const MODE_CLASS_PREFIX = 'layout-mode-';
 
+function safeInvokeMethod(target, methodName, ...args) {
+    const fn = target?.[methodName];
+    if (typeof fn !== 'function') return undefined;
+    try {
+        return fn.apply(target, args);
+    } catch (_) {
+        return undefined;
+    }
+}
+
+function safeAddClass(node, className) {
+    safeInvokeMethod(node?.classList, 'add', className);
+}
+
+function safeRemoveClass(node, className) {
+    safeInvokeMethod(node?.classList, 'remove', className);
+}
+
+function safeToggleClass(node, className, force) {
+    safeInvokeMethod(node?.classList, 'toggle', className, force);
+}
+
 export class ResponsiveLayoutController {
     constructor(app) {
         this.app = app;
@@ -61,9 +83,7 @@ export class ResponsiveLayoutController {
 
     initialize() {
         if (typeof window === 'undefined') return;
-        if (this.body?.classList) {
-            this.body.classList.remove('layout-ready');
-        }
+        safeRemoveClass(this.body, 'layout-ready');
         this.bindEvents();
         this.updateLayoutMode({ force: true });
         this.scheduleLayoutReady();
@@ -71,73 +91,73 @@ export class ResponsiveLayoutController {
 
     bindEvents() {
         if (typeof window !== 'undefined') {
-            window.addEventListener('resize', this.boundResize);
-            window.addEventListener('keydown', this.boundKeyDown);
+            safeInvokeMethod(window, 'addEventListener', 'resize', this.boundResize);
+            safeInvokeMethod(window, 'addEventListener', 'keydown', this.boundKeyDown);
         }
 
         if (this.toolboxToggleBtn) {
-            this.toolboxToggleBtn.addEventListener('click', this.boundToolboxToggleClick);
+            safeInvokeMethod(this.toolboxToggleBtn, 'addEventListener', 'click', this.boundToolboxToggleClick);
         }
 
         if (this.sidePanelToggleBtn) {
-            this.sidePanelToggleBtn.addEventListener('click', this.boundSidePanelToggleClick);
+            safeInvokeMethod(this.sidePanelToggleBtn, 'addEventListener', 'click', this.boundSidePanelToggleClick);
         }
         if (this.toolboxCloseBtn) {
-            this.toolboxCloseBtn.addEventListener('click', this.boundToolboxCloseClick);
+            safeInvokeMethod(this.toolboxCloseBtn, 'addEventListener', 'click', this.boundToolboxCloseClick);
         }
         if (this.sidePanelCloseBtn) {
-            this.sidePanelCloseBtn.addEventListener('click', this.boundSidePanelCloseClick);
+            safeInvokeMethod(this.sidePanelCloseBtn, 'addEventListener', 'click', this.boundSidePanelCloseClick);
         }
 
         if (this.backdrop) {
-            this.backdrop.addEventListener('click', this.boundBackdropClick);
+            safeInvokeMethod(this.backdrop, 'addEventListener', 'click', this.boundBackdropClick);
         }
         if (this.toolbox) {
-            this.toolbox.addEventListener('pointerdown', this.boundDrawerPointerDown);
-            this.toolbox.addEventListener('pointermove', this.boundDrawerPointerMove, { passive: false });
-            this.toolbox.addEventListener('pointerup', this.boundDrawerPointerUp);
-            this.toolbox.addEventListener('pointercancel', this.boundDrawerPointerCancel);
+            safeInvokeMethod(this.toolbox, 'addEventListener', 'pointerdown', this.boundDrawerPointerDown);
+            safeInvokeMethod(this.toolbox, 'addEventListener', 'pointermove', this.boundDrawerPointerMove, { passive: false });
+            safeInvokeMethod(this.toolbox, 'addEventListener', 'pointerup', this.boundDrawerPointerUp);
+            safeInvokeMethod(this.toolbox, 'addEventListener', 'pointercancel', this.boundDrawerPointerCancel);
         }
         if (this.sidePanel) {
-            this.sidePanel.addEventListener('pointerdown', this.boundDrawerPointerDown);
-            this.sidePanel.addEventListener('pointermove', this.boundDrawerPointerMove, { passive: false });
-            this.sidePanel.addEventListener('pointerup', this.boundDrawerPointerUp);
-            this.sidePanel.addEventListener('pointercancel', this.boundDrawerPointerCancel);
+            safeInvokeMethod(this.sidePanel, 'addEventListener', 'pointerdown', this.boundDrawerPointerDown);
+            safeInvokeMethod(this.sidePanel, 'addEventListener', 'pointermove', this.boundDrawerPointerMove, { passive: false });
+            safeInvokeMethod(this.sidePanel, 'addEventListener', 'pointerup', this.boundDrawerPointerUp);
+            safeInvokeMethod(this.sidePanel, 'addEventListener', 'pointercancel', this.boundDrawerPointerCancel);
         }
     }
 
     destroy() {
         this.clearLayoutReadySchedule();
         if (typeof window !== 'undefined') {
-            window.removeEventListener('resize', this.boundResize);
-            window.removeEventListener('keydown', this.boundKeyDown);
+            safeInvokeMethod(window, 'removeEventListener', 'resize', this.boundResize);
+            safeInvokeMethod(window, 'removeEventListener', 'keydown', this.boundKeyDown);
         }
         if (this.backdrop) {
-            this.backdrop.removeEventListener('click', this.boundBackdropClick);
+            safeInvokeMethod(this.backdrop, 'removeEventListener', 'click', this.boundBackdropClick);
         }
         if (this.toolboxToggleBtn) {
-            this.toolboxToggleBtn.removeEventListener('click', this.boundToolboxToggleClick);
+            safeInvokeMethod(this.toolboxToggleBtn, 'removeEventListener', 'click', this.boundToolboxToggleClick);
         }
         if (this.sidePanelToggleBtn) {
-            this.sidePanelToggleBtn.removeEventListener('click', this.boundSidePanelToggleClick);
+            safeInvokeMethod(this.sidePanelToggleBtn, 'removeEventListener', 'click', this.boundSidePanelToggleClick);
         }
         if (this.toolboxCloseBtn) {
-            this.toolboxCloseBtn.removeEventListener('click', this.boundToolboxCloseClick);
+            safeInvokeMethod(this.toolboxCloseBtn, 'removeEventListener', 'click', this.boundToolboxCloseClick);
         }
         if (this.sidePanelCloseBtn) {
-            this.sidePanelCloseBtn.removeEventListener('click', this.boundSidePanelCloseClick);
+            safeInvokeMethod(this.sidePanelCloseBtn, 'removeEventListener', 'click', this.boundSidePanelCloseClick);
         }
         if (this.toolbox) {
-            this.toolbox.removeEventListener('pointerdown', this.boundDrawerPointerDown);
-            this.toolbox.removeEventListener('pointermove', this.boundDrawerPointerMove);
-            this.toolbox.removeEventListener('pointerup', this.boundDrawerPointerUp);
-            this.toolbox.removeEventListener('pointercancel', this.boundDrawerPointerCancel);
+            safeInvokeMethod(this.toolbox, 'removeEventListener', 'pointerdown', this.boundDrawerPointerDown);
+            safeInvokeMethod(this.toolbox, 'removeEventListener', 'pointermove', this.boundDrawerPointerMove);
+            safeInvokeMethod(this.toolbox, 'removeEventListener', 'pointerup', this.boundDrawerPointerUp);
+            safeInvokeMethod(this.toolbox, 'removeEventListener', 'pointercancel', this.boundDrawerPointerCancel);
         }
         if (this.sidePanel) {
-            this.sidePanel.removeEventListener('pointerdown', this.boundDrawerPointerDown);
-            this.sidePanel.removeEventListener('pointermove', this.boundDrawerPointerMove);
-            this.sidePanel.removeEventListener('pointerup', this.boundDrawerPointerUp);
-            this.sidePanel.removeEventListener('pointercancel', this.boundDrawerPointerCancel);
+            safeInvokeMethod(this.sidePanel, 'removeEventListener', 'pointerdown', this.boundDrawerPointerDown);
+            safeInvokeMethod(this.sidePanel, 'removeEventListener', 'pointermove', this.boundDrawerPointerMove);
+            safeInvokeMethod(this.sidePanel, 'removeEventListener', 'pointerup', this.boundDrawerPointerUp);
+            safeInvokeMethod(this.sidePanel, 'removeEventListener', 'pointercancel', this.boundDrawerPointerCancel);
         }
     }
 
@@ -154,8 +174,7 @@ export class ResponsiveLayoutController {
     }
 
     markLayoutReady() {
-        if (!this.body?.classList) return;
-        this.body.classList.add('layout-ready');
+        safeAddClass(this.body, 'layout-ready');
     }
 
     scheduleLayoutReady() {
@@ -178,11 +197,17 @@ export class ResponsiveLayoutController {
         if (!this.isOverlayMode()) return;
         const pointerType = event?.pointerType || '';
         if (pointerType !== 'touch' && pointerType !== 'pen') return;
-        const header = event.target?.closest?.(
-            event.currentTarget?.id === 'toolbox' ? '.toolbox-header' : '.side-panel-header'
-        );
+        const targetClosest = typeof event?.target?.closest === 'function'
+            ? event.target.closest.bind(event.target)
+            : null;
+        const headerSelector = event.currentTarget?.id === 'toolbox'
+            ? '.toolbox-header'
+            : '.side-panel-header';
+        const header = targetClosest ? targetClosest(headerSelector) : null;
         if (!header) return;
-        const interactiveTarget = event.target?.closest?.('button, [role="button"], input, select, textarea, a');
+        const interactiveTarget = targetClosest
+            ? targetClosest('button, [role="button"], input, select, textarea, a')
+            : null;
         if (interactiveTarget) return;
         const targetId = event.currentTarget?.id === 'toolbox' ? 'toolbox' : 'side-panel';
         this.drawerSwipe = {
@@ -240,13 +265,13 @@ export class ResponsiveLayoutController {
         if (drawerEl?.style) {
             if (isPhoneModeSwipe) {
                 const dragY = Math.max(0, dy);
-                drawerEl.style.setProperty('--drawer-drag-y', `${dragY}px`);
+                safeInvokeMethod(drawerEl.style, 'setProperty', '--drawer-drag-y', `${dragY}px`);
             } else if (this.drawerSwipe.target === 'toolbox') {
                 const dragX = Math.min(0, dx);
-                drawerEl.style.setProperty('--drawer-drag-x', `${dragX}px`);
+                safeInvokeMethod(drawerEl.style, 'setProperty', '--drawer-drag-x', `${dragX}px`);
             } else if (this.drawerSwipe.target === 'side-panel') {
                 const dragX = Math.max(0, dx);
-                drawerEl.style.setProperty('--drawer-drag-x', `${dragX}px`);
+                safeInvokeMethod(drawerEl.style, 'setProperty', '--drawer-drag-x', `${dragX}px`);
             }
         }
         if (event.cancelable) {
@@ -286,8 +311,8 @@ export class ResponsiveLayoutController {
         this.drawerSwipe = null;
         if (drawerEl?.style) {
             drawerEl.style.transition = prevTransition;
-            drawerEl.style.removeProperty('--drawer-drag-x');
-            drawerEl.style.removeProperty('--drawer-drag-y');
+            safeInvokeMethod(drawerEl.style, 'removeProperty', '--drawer-drag-x');
+            safeInvokeMethod(drawerEl.style, 'removeProperty', '--drawer-drag-y');
         }
         if (typeof currentTarget?.releasePointerCapture === 'function') {
             try {
@@ -336,12 +361,10 @@ export class ResponsiveLayoutController {
     }
 
     applyBodyModeClass(mode) {
-        if (!this.body || !this.body.classList) return;
-
         [MODE_DESKTOP, MODE_TABLET, MODE_COMPACT, MODE_PHONE].forEach((layoutMode) => {
-            this.body.classList.remove(`${MODE_CLASS_PREFIX}${layoutMode}`);
+            safeRemoveClass(this.body, `${MODE_CLASS_PREFIX}${layoutMode}`);
         });
-        this.body.classList.add(`${MODE_CLASS_PREFIX}${mode}`);
+        safeAddClass(this.body, `${MODE_CLASS_PREFIX}${mode}`);
     }
 
     toggleDrawer(target) {
@@ -374,19 +397,15 @@ export class ResponsiveLayoutController {
     setToggleButtonState(button, expanded, hidden) {
         if (!button) return;
         button.hidden = !!hidden;
-        button.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+        safeInvokeMethod(button, 'setAttribute', 'aria-expanded', expanded ? 'true' : 'false');
     }
 
     syncLayoutUI() {
         const overlay = this.isOverlayMode();
 
-        if (this.toolbox?.classList) {
-            this.toolbox.classList.toggle('layout-open', overlay && this.toolboxOpen);
-        }
+        safeToggleClass(this.toolbox, 'layout-open', overlay && this.toolboxOpen);
 
-        if (this.sidePanel?.classList) {
-            this.sidePanel.classList.toggle('layout-open', overlay && this.sidePanelOpen);
-        }
+        safeToggleClass(this.sidePanel, 'layout-open', overlay && this.sidePanelOpen);
 
         this.setToggleButtonState(this.toolboxToggleBtn, overlay && this.toolboxOpen, !overlay);
         this.setToggleButtonState(this.sidePanelToggleBtn, overlay && this.sidePanelOpen, !overlay);
@@ -394,10 +413,8 @@ export class ResponsiveLayoutController {
         const shouldShowBackdrop = overlay && (this.toolboxOpen || this.sidePanelOpen);
         if (this.backdrop) {
             this.backdrop.hidden = !shouldShowBackdrop;
-            this.backdrop.setAttribute('aria-hidden', shouldShowBackdrop ? 'false' : 'true');
-            if (this.backdrop.classList) {
-                this.backdrop.classList.toggle('active', shouldShowBackdrop);
-            }
+            safeInvokeMethod(this.backdrop, 'setAttribute', 'aria-hidden', shouldShowBackdrop ? 'false' : 'true');
+            safeToggleClass(this.backdrop, 'active', shouldShowBackdrop);
         }
 
         this.app?.topActionMenu?.sync?.();
