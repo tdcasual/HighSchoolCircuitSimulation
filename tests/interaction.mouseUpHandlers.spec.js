@@ -3,6 +3,7 @@ import {
     handleActiveWiringMouseUp,
     handlePointerDownSelectionToggleMouseUp,
     handlePanningMouseUp,
+    handleWireEndpointDragMouseUp,
     handleWireModeGestureMouseUp
 } from '../src/app/interaction/InteractionOrchestratorMouseUpHandlers.js';
 
@@ -255,5 +256,50 @@ describe('InteractionOrchestratorMouseUpHandlers.handlePointerDownSelectionToggl
 
         expect(handled).toBe(false);
         expect(context.clearSelection).not.toHaveBeenCalled();
+    });
+});
+
+describe('InteractionOrchestratorMouseUpHandlers.handleWireEndpointDragMouseUp', () => {
+    it('returns false when endpoint dragging is not active', () => {
+        const context = {
+            isDraggingWireEndpoint: false
+        };
+        const event = { target: {} };
+
+        const handled = handleWireEndpointDragMouseUp.call(context, event);
+
+        expect(handled).toBe(false);
+    });
+
+    it('finalizes endpoint drag transaction and compacts wires', () => {
+        const context = {
+            isDraggingWireEndpoint: true,
+            wireEndpointDrag: {
+                wireId: 'W1',
+                affected: [{ wireId: 'W1', end: 'a' }]
+            },
+            resolvePointerType: vi.fn(() => 'touch'),
+            renderer: { clearTerminalHighlight: vi.fn() },
+            selectedWire: 'W1',
+            compactWiresAndRefresh: vi.fn(),
+            circuit: { rebuildNodes: vi.fn() },
+            commitHistoryTransaction: vi.fn(),
+            pointerDownInfo: { componentId: 'R1' }
+        };
+        const event = { target: {} };
+
+        const handled = handleWireEndpointDragMouseUp.call(context, event);
+
+        expect(handled).toBe(true);
+        expect(context.isDraggingWireEndpoint).toBe(false);
+        expect(context.wireEndpointDrag).toBe(null);
+        expect(context.renderer.clearTerminalHighlight).toHaveBeenCalledTimes(1);
+        expect(context.compactWiresAndRefresh).toHaveBeenCalledWith({
+            preferredWireId: 'W1',
+            scopeWireIds: ['W1']
+        });
+        expect(context.circuit.rebuildNodes).toHaveBeenCalledTimes(1);
+        expect(context.commitHistoryTransaction).toHaveBeenCalledTimes(1);
+        expect(context.pointerDownInfo).toBeNull();
     });
 });
