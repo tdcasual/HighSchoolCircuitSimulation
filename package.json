@@ -13,7 +13,6 @@
     "format": "prettier --write \"package*.json\" \"vercel.json\" \"README.md\" \".github/**/*.yml\"",
     "format:check": "prettier --check \"package*.json\" \"vercel.json\" \"README.md\" \".github/**/*.yml\"",
     "test": "vitest run",
-    "test:interaction-mode": "vitest run tests/interaction.modeMatrix.spec.js",
     "test:watch": "vitest",
     "benchmark:p0": "node scripts/benchmark/p0-baseline.mjs",
     "baseline:p0": "node scripts/benchmark/p0-electrical-regression.mjs",
