@@ -35,6 +35,7 @@
     "check:e2e": "npm run test:e2e:wire && npm run test:e2e:responsive && npm run test:e2e:observation && npm run test:e2e:ai-mobile"
   },
   "devDependencies": {
+    "esbuild": "^0.25.11",
     "eslint": "^8.57.1",
     "eslint-plugin-boundaries": "^5.4.0",
     "playwright": "^1.58.2",
