@@ -170,7 +170,7 @@ describe('ClassroomModeController', () => {
         expect(button.getAttribute('aria-pressed')).toBe('true');
     });
 
-    it('cycles off -> standard -> enhanced -> off and persists level', () => {
+    it('cycles off -> standard -> enhanced -> off and only persists level key', () => {
         const { body, button, storage } = setupFixture({ width: 1366 });
         const updateStatus = vi.fn();
         new ClassroomModeController({
@@ -184,7 +184,7 @@ describe('ClassroomModeController', () => {
         expect(body.classList.contains('classroom-mode-enhanced')).toBe(false);
         expect(button.textContent).toBe('课堂模式: 标准');
         expect(storage.setItem).toHaveBeenCalledWith('ui.classroom_mode_level', 'standard');
-        expect(storage.setItem).toHaveBeenCalledWith('ui.classroom_mode_enabled', '1');
+        expect(storage.setItem).not.toHaveBeenCalledWith('ui.classroom_mode_enabled', expect.anything());
         expect(updateStatus).toHaveBeenLastCalledWith('已开启课堂模式（标准）');
 
         button.trigger('click');
@@ -201,7 +201,7 @@ describe('ClassroomModeController', () => {
         expect(body.classList.contains('classroom-mode-enhanced')).toBe(false);
         expect(button.textContent).toBe('课堂模式: 关');
         expect(storage.setItem).toHaveBeenCalledWith('ui.classroom_mode_level', 'off');
-        expect(storage.setItem).toHaveBeenCalledWith('ui.classroom_mode_enabled', '0');
+        expect(storage.setItem).not.toHaveBeenCalledWith('ui.classroom_mode_enabled', expect.anything());
         expect(updateStatus).toHaveBeenLastCalledWith('已关闭课堂模式');
     });
 

@@ -50,10 +50,6 @@ function writeStoredPreference(storageKey, level) {
     if (typeof localStorage === 'undefined') return;
     try {
         localStorage.setItem(storageKey, level);
-        localStorage.setItem(
-            CLASSROOM_MODE_LEGACY_STORAGE_KEY,
-            level === CLASSROOM_LEVEL_OFF ? '0' : '1'
-        );
     } catch (_) {
         // ignore storage write failures (privacy mode/quota)
     }
