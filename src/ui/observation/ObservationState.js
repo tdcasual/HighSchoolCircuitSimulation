@@ -10,20 +10,6 @@ export const MIN_MAX_POINTS = 100;
 export const MAX_MAX_POINTS = 200000;
 export const OBSERVATION_TEMPLATE_SCHEMA_VERSION = 1;
 export const DEFAULT_OBSERVATION_TEMPLATE_NAME = '未命名模板';
-export const OBSERVATION_LEGACY_SCHEMA_AUDIT = Object.freeze({
-    mustKeep: Object.freeze([
-        'templateName',
-        'plotBindings',
-        'mode/collapsedCards/showGaugeSection'
-    ]),
-    removable: Object.freeze([
-        'title',
-        'presetName',
-        'bindingMap',
-        'plot/plotId',
-        'target/source/quantity'
-    ])
-});
 
 const VALID_TRANSFORM_IDS = new Set(Object.values(TransformIds));
 export const ObservationDisplayModes = /** @type {const} */ ({
@@ -48,8 +34,7 @@ function normalizeTemplateName(rawName, fallbackName = DEFAULT_OBSERVATION_TEMPL
 
 function resolveTemplateName(rawTemplate = {}, fallbackName = DEFAULT_OBSERVATION_TEMPLATE_NAME) {
     const candidates = [
-        rawTemplate?.name,
-        rawTemplate?.templateName
+        rawTemplate?.name
     ];
     for (const candidate of candidates) {
         if (typeof candidate === 'string' && candidate.trim()) {
@@ -217,11 +202,6 @@ export function normalizeObservationTemplateBindings(rawBindings) {
 export function normalizeObservationTemplate(rawTemplate, options = {}) {
     const template = rawTemplate && typeof rawTemplate === 'object' ? rawTemplate : {};
     const fallbackName = options.defaultName || DEFAULT_OBSERVATION_TEMPLATE_NAME;
-    const legacyUi = {
-        mode: template?.mode,
-        collapsedCards: template?.collapsedCards,
-        showGaugeSection: template?.showGaugeSection
-    };
     const defaultYSourceId = options.defaultYSourceId ?? TIME_SOURCE_ID;
     const defaultPlotCountRaw = Number(options.defaultPlotCount);
     const defaultPlotCount = Number.isFinite(defaultPlotCountRaw) ? Math.max(1, Math.floor(defaultPlotCountRaw)) : 1;
@@ -230,14 +210,14 @@ export function normalizeObservationTemplate(rawTemplate, options = {}) {
     const normalizedState = normalizeObservationState({
         sampleIntervalMs: template?.sampleIntervalMs,
         plots: template?.plots,
-        ui: template?.ui ?? legacyUi
+        ui: template?.ui
     }, {
         defaultYSourceId,
         defaultPlotCount,
         allowEmptyPlots
     });
 
-    const bindingsRaw = template?.bindings ?? template?.plotBindings;
+    const bindingsRaw = template?.bindings;
 
     return {
         schemaVersion: OBSERVATION_TEMPLATE_SCHEMA_VERSION,

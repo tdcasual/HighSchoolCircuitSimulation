@@ -8,7 +8,6 @@ import {
     normalizePlotState,
     normalizeSampleIntervalMs,
     ObservationDisplayModes,
-    OBSERVATION_LEGACY_SCHEMA_AUDIT,
     OBSERVATION_TEMPLATE_SCHEMA_VERSION,
     shouldSampleAtTime
 } from '../src/ui/observation/ObservationState.js';
@@ -176,7 +175,7 @@ describe('ObservationState', () => {
         ]);
     });
 
-    it('migrates legacy template fields into schema', () => {
+    it('ignores legacy template aliases and keeps canonical schema only', () => {
         const template = normalizeObservationTemplate({
             templateName: '  老模板 ',
             mode: 'advanced',
@@ -189,14 +188,12 @@ describe('ObservationState', () => {
             ]
         });
 
-        expect(template.name).toBe('老模板');
+        expect(template.name).toBe('未命名模板');
         expect(template.plots).toEqual([]);
-        expect(template.ui.mode).toBe('advanced');
-        expect(template.ui.collapsedCards).toEqual(['plot_legacy']);
-        expect(template.ui.showGaugeSection).toBe(false);
-        expect(template.bindings).toEqual([
-            { plotIndex: 0, axis: 'y', sourceId: 'R2', quantityId: QuantityIds.Current }
-        ]);
+        expect(template.ui.mode).toBe('basic');
+        expect(template.ui.collapsedCards).toEqual([]);
+        expect(template.ui.showGaugeSection).toBe(true);
+        expect(template.bindings).toEqual([]);
     });
 
     it('falls back to default name and ignores deprecated template name/bindings aliases', () => {
@@ -214,18 +211,4 @@ describe('ObservationState', () => {
         expect(template.bindings).toEqual([]);
     });
 
-    it('provides legacy schema audit classification for week9 prune', () => {
-        expect(OBSERVATION_LEGACY_SCHEMA_AUDIT.mustKeep).toEqual(expect.arrayContaining([
-            'templateName',
-            'plotBindings',
-            'mode/collapsedCards/showGaugeSection'
-        ]));
-        expect(OBSERVATION_LEGACY_SCHEMA_AUDIT.removable).toEqual(expect.arrayContaining([
-            'title',
-            'presetName',
-            'bindingMap',
-            'plot/plotId',
-            'target/source/quantity'
-        ]));
-    });
 });

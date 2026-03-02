@@ -54,7 +54,7 @@ describe('ObservationPanel quick bind', () => {
         expect(plot).toEqual(ctx.plots[0]);
     });
 
-    it('normalizes supported legacy template fields and ignores deprecated binding aliases', () => {
+    it('ignores legacy template aliases and keeps canonical template fields', () => {
         const ctx = {
             getDefaultComponentId: () => 'R1'
         };
@@ -72,11 +72,9 @@ describe('ObservationPanel quick bind', () => {
         ]);
 
         expect(templates).toHaveLength(1);
-        expect(templates[0].name).toBe('旧模板');
-        expect(templates[0].ui.mode).toBe('advanced');
-        expect(templates[0].bindings).toEqual([
-            { plotIndex: 0, axis: 'y', sourceId: 'R2', quantityId: QuantityIds.Current }
-        ]);
+        expect(templates[0].name).toBe('未命名模板');
+        expect(templates[0].ui.mode).toBe('basic');
+        expect(templates[0].bindings).toEqual([]);
     });
 
     it('saves and applies template presets', () => {
