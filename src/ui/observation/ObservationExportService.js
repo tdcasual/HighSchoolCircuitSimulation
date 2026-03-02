@@ -108,6 +108,14 @@ export function downloadCanvasImage(_panel, canvas, fileName = 'observation_expo
     return true;
 }
 
+function resolvePanelDownloadHandler(panel) {
+    const panelHandler = panel?.downloadCanvasImage;
+    if (typeof panelHandler === 'function') {
+        return (canvas, fileName) => panelHandler.call(panel, canvas, fileName);
+    }
+    return (canvas, fileName) => downloadCanvasImage(panel, canvas, fileName);
+}
+
 export function exportObservationSnapshot(panel, options = {}) {
     if (typeof document === 'undefined') return false;
     const plots = Array.isArray(panel.plots) ? panel.plots : [];
@@ -198,7 +206,13 @@ export function exportObservationSnapshot(panel, options = {}) {
     }
 
     const fileName = buildObservationExportFileName(panel, exportedAt);
-    const ok = downloadCanvasImage(panel, exportCanvas, fileName);
+    const handler = resolvePanelDownloadHandler(panel);
+    let ok = false;
+    try {
+        ok = Boolean(handler(exportCanvas, fileName));
+    } catch (_) {
+        ok = false;
+    }
     panel.showTransientStatus?.(ok ? `已导出观察图像：${fileName}` : '导出失败：下载不可用');
     return ok;
 }
