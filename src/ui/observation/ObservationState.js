@@ -1,6 +1,5 @@
 import { TransformIds } from './ObservationMath.js';
 import { QuantityIds, TIME_SOURCE_ID } from './ObservationSources.js';
-import { normalizeObservationUI } from './ObservationPreferences.js';
 
 export const DEFAULT_SAMPLE_INTERVAL_MS = 50;
 export const MIN_SAMPLE_INTERVAL_MS = 0;
@@ -10,6 +9,10 @@ export const MIN_MAX_POINTS = 100;
 export const MAX_MAX_POINTS = 200000;
 export const OBSERVATION_TEMPLATE_SCHEMA_VERSION = 1;
 export const DEFAULT_OBSERVATION_TEMPLATE_NAME = '未命名模板';
+export const ObservationUIModes = /** @type {const} */ ({
+    Basic: 'basic',
+    Advanced: 'advanced'
+});
 
 const VALID_TRANSFORM_IDS = new Set(Object.values(TransformIds));
 export const ObservationDisplayModes = /** @type {const} */ ({
@@ -17,6 +20,27 @@ export const ObservationDisplayModes = /** @type {const} */ ({
     Magnitude: 'magnitude'
 });
 const VALID_DISPLAY_MODES = new Set(Object.values(ObservationDisplayModes));
+
+function normalizeObservationUI(rawUI) {
+    const mode = rawUI?.mode === ObservationUIModes.Advanced
+        ? ObservationUIModes.Advanced
+        : ObservationUIModes.Basic;
+    const rawCollapsed = Array.isArray(rawUI?.collapsedCards) ? rawUI.collapsedCards : [];
+    const collapsedCards = [];
+    rawCollapsed.forEach((item) => {
+        const text = typeof item === 'string' ? item.trim() : '';
+        if (!text || collapsedCards.includes(text)) return;
+        collapsedCards.push(text);
+    });
+    const showGaugeSection = typeof rawUI?.showGaugeSection === 'boolean'
+        ? rawUI.showGaugeSection
+        : true;
+    return {
+        mode,
+        collapsedCards,
+        showGaugeSection
+    };
+}
 
 function toFiniteOrNull(value) {
     if (value == null) return null;
