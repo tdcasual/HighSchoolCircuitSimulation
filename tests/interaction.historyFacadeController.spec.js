@@ -120,4 +120,35 @@ describe('HistoryFacadeController', () => {
         expect(ctx.historyManager.commitTransaction).toHaveBeenCalledTimes(1);
         expect(ctx.historyManager.redo).toHaveBeenCalledTimes(1);
     });
+
+    it('syncs mode-store endpoint-edit flags before undo when ending terminal edit fallback', () => {
+        const ctx = {
+            historyManager: {
+                undo: vi.fn(),
+                commitTransaction: vi.fn(),
+                transaction: { label: 'tx' }
+            },
+            syncInteractionModeStore: vi.fn(),
+            isDragging: false,
+            isDraggingWire: false,
+            isDraggingWireEndpoint: false,
+            isTerminalExtending: true,
+            isRheostatDragging: true,
+            isWiring: false,
+            suspendedWiringSession: null,
+            wireModeGesture: null,
+            pointerDownInfo: null
+        };
+
+        HistoryFacadeController.undo.call(ctx);
+
+        expect(ctx.syncInteractionModeStore).toHaveBeenCalledWith({
+            source: 'history.prepareForNavigation:endpoint-edit-clear',
+            context: {
+                isTerminalExtending: false,
+                isRheostatDragging: false
+            }
+        });
+        expect(ctx.historyManager.undo).toHaveBeenCalledTimes(1);
+    });
 });

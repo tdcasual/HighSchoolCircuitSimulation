@@ -1,3 +1,5 @@
+import { setInteractionModeContext } from '../../app/interaction/InteractionModeBridge.js';
+
 function hasActiveEditLikeDrag(context) {
     return !!(
         context?.isDraggingWireEndpoint
@@ -30,7 +32,11 @@ function prepareForHistoryNavigation(context) {
         if (typeof context.cancelWiring === 'function') {
             context.cancelWiring();
         } else {
-            context.isWiring = false;
+            setInteractionModeContext(context, {
+                isWiring: false
+            }, {
+                source: 'history.prepareForNavigation:wiring-clear'
+            });
             context.wireStart = null;
             context.ignoreNextWireMouseUp = false;
             context.tempWire = null;
@@ -41,7 +47,11 @@ function prepareForHistoryNavigation(context) {
         if (typeof context.onMouseLeave === 'function') {
             context.onMouseLeave({ buttons: 0 });
         } else {
-            context.isDraggingWireEndpoint = false;
+            setInteractionModeContext(context, {
+                isDraggingWireEndpoint: false
+            }, {
+                source: 'history.prepareForNavigation:drag-clear'
+            });
             context.wireEndpointDrag = null;
             context.isDraggingWire = false;
             context.wireDrag = null;
@@ -55,8 +65,12 @@ function prepareForHistoryNavigation(context) {
     }
 
     if (hadTerminalExtending || hadRheostatDragging) {
-        context.isTerminalExtending = false;
-        context.isRheostatDragging = false;
+        setInteractionModeContext(context, {
+            isTerminalExtending: false,
+            isRheostatDragging: false
+        }, {
+            source: 'history.prepareForNavigation:endpoint-edit-clear'
+        });
         if (hadTerminalExtending) {
             context.circuit?.rebuildNodes?.();
         }
