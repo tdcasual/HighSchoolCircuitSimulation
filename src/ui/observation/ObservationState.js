@@ -49,9 +49,7 @@ function normalizeTemplateName(rawName, fallbackName = DEFAULT_OBSERVATION_TEMPL
 function resolveTemplateName(rawTemplate = {}, fallbackName = DEFAULT_OBSERVATION_TEMPLATE_NAME) {
     const candidates = [
         rawTemplate?.name,
-        rawTemplate?.templateName,
-        rawTemplate?.title,
-        rawTemplate?.presetName
+        rawTemplate?.templateName
     ];
     for (const candidate of candidates) {
         if (typeof candidate === 'string' && candidate.trim()) {
@@ -190,27 +188,19 @@ export function normalizeObservationTemplateBindings(rawBindings) {
 
     for (const item of rawBindings) {
         if (!item || typeof item !== 'object') continue;
-        const indexRaw = Number(item.plotIndex ?? item.plot ?? item.plotId);
+        const indexRaw = Number(item.plotIndex);
         const plotIndex = Number.isFinite(indexRaw) ? Math.floor(indexRaw) : -1;
         if (plotIndex < 0) continue;
 
-        const axisRaw = String(item.axis ?? item.target ?? '').trim().toLowerCase();
+        const axisRaw = String(item.axis ?? '').trim().toLowerCase();
         const axis = axisRaw === 'x' ? 'x' : axisRaw === 'y' ? 'y' : '';
         if (!axis) continue;
 
-        const sourceIdRaw = typeof item.sourceId === 'string'
-            ? item.sourceId
-            : typeof item.source === 'string'
-                ? item.source
-                : '';
+        const sourceIdRaw = typeof item.sourceId === 'string' ? item.sourceId : '';
         const sourceId = sourceIdRaw.trim();
         if (!sourceId) continue;
 
-        const quantityRaw = typeof item.quantityId === 'string'
-            ? item.quantityId
-            : typeof item.quantity === 'string'
-                ? item.quantity
-                : '';
+        const quantityRaw = typeof item.quantityId === 'string' ? item.quantityId : '';
         const quantityId = quantityRaw.trim();
 
         normalized.push({
@@ -247,7 +237,7 @@ export function normalizeObservationTemplate(rawTemplate, options = {}) {
         allowEmptyPlots
     });
 
-    const bindingsRaw = template?.bindings ?? template?.plotBindings ?? template?.bindingMap;
+    const bindingsRaw = template?.bindings ?? template?.plotBindings;
 
     return {
         schemaVersion: OBSERVATION_TEMPLATE_SCHEMA_VERSION,

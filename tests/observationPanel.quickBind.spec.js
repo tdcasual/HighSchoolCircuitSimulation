@@ -54,7 +54,7 @@ describe('ObservationPanel quick bind', () => {
         expect(plot).toEqual(ctx.plots[0]);
     });
 
-    it('normalizes legacy template fields for backward compatibility', () => {
+    it('normalizes supported legacy template fields and ignores deprecated binding aliases', () => {
         const ctx = {
             getDefaultComponentId: () => 'R1'
         };
@@ -65,7 +65,8 @@ describe('ObservationPanel quick bind', () => {
                 mode: 'advanced',
                 plots: [],
                 plotBindings: [
-                    { plot: 0, target: 'y', source: 'R2', quantity: QuantityIds.Current }
+                    { plotIndex: 0, axis: 'y', sourceId: 'R2', quantityId: QuantityIds.Current },
+                    { plot: 1, target: 'x', source: TIME_SOURCE_ID, quantity: QuantityIds.Time }
                 ]
             }
         ]);

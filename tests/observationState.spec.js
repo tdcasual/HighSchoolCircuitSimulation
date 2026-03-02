@@ -125,10 +125,12 @@ describe('ObservationState', () => {
         expect(shouldSampleAtTime(NaN, 0, 50)).toBe(false);
     });
 
-    it('normalizes template bindings and migrates legacy binding field names', () => {
+    it('normalizes template bindings and ignores deprecated binding aliases', () => {
         const bindings = normalizeObservationTemplateBindings([
             { plotIndex: '2', axis: 'Y', sourceId: '  R1 ', quantityId: 'current' },
-            { plot: 1, target: 'x', source: TIME_SOURCE_ID, quantity: QuantityIds.Time },
+            { plotIndex: 1, axis: 'x', sourceId: TIME_SOURCE_ID, quantityId: QuantityIds.Time },
+            { plot: 5, target: 'y', source: 'R5', quantity: QuantityIds.Current },
+            { plotId: 6, axis: 'y', sourceId: 'R6', quantityId: QuantityIds.Voltage },
             { plotIndex: -1, axis: 'z', sourceId: '' }
         ]);
 
@@ -182,7 +184,8 @@ describe('ObservationState', () => {
             showGaugeSection: false,
             plots: [],
             plotBindings: [
-                { plot: 0, target: 'y', source: 'R2', quantity: QuantityIds.Current }
+                { plotIndex: 0, axis: 'y', sourceId: 'R2', quantityId: QuantityIds.Current },
+                { plot: 1, target: 'x', source: 'R3', quantity: QuantityIds.Voltage }
             ]
         });
 
@@ -194,6 +197,21 @@ describe('ObservationState', () => {
         expect(template.bindings).toEqual([
             { plotIndex: 0, axis: 'y', sourceId: 'R2', quantityId: QuantityIds.Current }
         ]);
+    });
+
+    it('falls back to default name and ignores deprecated template name/bindings aliases', () => {
+        const template = normalizeObservationTemplate({
+            title: '标题模板',
+            presetName: '预设模板',
+            bindingMap: [
+                { plotIndex: 0, axis: 'y', sourceId: 'R1', quantityId: QuantityIds.Voltage }
+            ]
+        }, {
+            defaultName: '默认模板'
+        });
+
+        expect(template.name).toBe('默认模板');
+        expect(template.bindings).toEqual([]);
     });
 
     it('provides legacy schema audit classification for week9 prune', () => {
