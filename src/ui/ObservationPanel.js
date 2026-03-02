@@ -597,76 +597,12 @@ export class ObservationPanel {
         this.linkedCursorSnapshot = null;
     }
 
-    normalizeTemplateCollection(rawTemplates) {
-        return normalizeTemplateCollectionService(this, rawTemplates);
-    }
-
-    buildTemplateSaveName(rawName = '') {
-        return buildTemplateSaveNameService(this, rawName);
-    }
-
-    buildCurrentTemplate(rawName = '') {
-        return buildCurrentTemplateService(this, rawName);
-    }
-
-    refreshTemplateControls(options = {}) {
-        return refreshTemplateControlsService(this, options);
-    }
-
-    getSelectedTemplateName() {
-        return getSelectedTemplateNameService(this);
-    }
-
-    saveCurrentAsTemplate(rawName = '') {
-        return saveCurrentAsTemplateService(this, rawName);
-    }
-
-    applyTemplateByName(rawName = '') {
-        return applyTemplateByNameService(this, rawName);
-    }
-
-    applySelectedTemplate() {
-        return applySelectedTemplateService(this);
-    }
-
-    deleteTemplateByName(rawName = '') {
-        return deleteTemplateByNameService(this, rawName);
-    }
-
-    deleteSelectedTemplate() {
-        return deleteSelectedTemplateService(this);
-    }
-
     resolveQuantityLabel(sourceId, quantityId) {
         const quantities = getQuantitiesForSource(sourceId, this.circuit);
         const matched = quantities.find((item) => item.id === quantityId);
         if (matched?.label) return matched.label;
         const fallback = typeof quantityId === 'string' ? quantityId.trim() : '';
         return fallback || '未知量';
-    }
-
-    buildObservationExportMetadata(options = {}) {
-        return buildObservationExportMetadataService(this, options);
-    }
-
-    buildObservationExportFileName(rawDate = new Date()) {
-        return buildObservationExportFileNameService(this, rawDate);
-    }
-
-    downloadCanvasImage(canvas, fileName = 'observation_export.png') {
-        return downloadCanvasImageService(this, canvas, fileName);
-    }
-
-    exportObservationSnapshot(options = {}) {
-        return exportObservationSnapshotService(this, options);
-    }
-
-    toJSON() {
-        return serializeObservationStateService(this);
-    }
-
-    fromJSON(rawState) {
-        return hydrateObservationStateService(this, rawState);
     }
 
     setUIMode(mode) {
@@ -1624,3 +1560,28 @@ export class ObservationPanel {
         ctx.restore();
     }
 }
+
+function bindPanelService(service) {
+    return function panelServiceDelegate(...args) {
+        return service(this, ...args);
+    };
+}
+
+Object.assign(ObservationPanel.prototype, {
+    normalizeTemplateCollection: bindPanelService(normalizeTemplateCollectionService),
+    buildTemplateSaveName: bindPanelService(buildTemplateSaveNameService),
+    buildCurrentTemplate: bindPanelService(buildCurrentTemplateService),
+    refreshTemplateControls: bindPanelService(refreshTemplateControlsService),
+    getSelectedTemplateName: bindPanelService(getSelectedTemplateNameService),
+    saveCurrentAsTemplate: bindPanelService(saveCurrentAsTemplateService),
+    applyTemplateByName: bindPanelService(applyTemplateByNameService),
+    applySelectedTemplate: bindPanelService(applySelectedTemplateService),
+    deleteTemplateByName: bindPanelService(deleteTemplateByNameService),
+    deleteSelectedTemplate: bindPanelService(deleteSelectedTemplateService),
+    buildObservationExportMetadata: bindPanelService(buildObservationExportMetadataService),
+    buildObservationExportFileName: bindPanelService(buildObservationExportFileNameService),
+    downloadCanvasImage: bindPanelService(downloadCanvasImageService),
+    exportObservationSnapshot: bindPanelService(exportObservationSnapshotService),
+    toJSON: bindPanelService(serializeObservationStateService),
+    fromJSON: bindPanelService(hydrateObservationStateService)
+});
