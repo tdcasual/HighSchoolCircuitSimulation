@@ -136,3 +136,31 @@ jobs:
           path: output/e2e/observation-touch
           if-no-files-found: ignore
           retention-days: 7
+
+  mode-conflict-matrix-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run mode conflict matrix E2E
+        run: npm run mode-conflict-matrix
+
+      - name: Upload mode conflict matrix artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mode-conflict-matrix-artifacts
+          path: output/e2e/mode-conflict
+          if-no-files-found: ignore
+          retention-days: 7

@@ -132,11 +132,13 @@ const qualityJob = getJobBlock(content, 'quality');
 const wireE2EJob = getJobBlock(content, 'wire-e2e');
 const responsiveE2EJob = getJobBlock(content, 'responsive-e2e');
 const observationE2EJob = getJobBlock(content, 'observation-e2e');
+const modeConflictMatrixE2EJob = getJobBlock(content, 'mode-conflict-matrix-e2e');
 
 const qualitySteps = parseNamedSteps(qualityJob);
 const wireSteps = parseNamedSteps(wireE2EJob);
 const responsiveSteps = parseNamedSteps(responsiveE2EJob);
 const observationSteps = parseNamedSteps(observationE2EJob);
+const modeConflictMatrixSteps = parseNamedSteps(modeConflictMatrixE2EJob);
 
 assertStepRun(
     qualitySteps,
@@ -202,6 +204,12 @@ assertStepRun(
     'Run observation touch E2E',
     'npm run test:e2e:observation'
 );
+assertStepRun(
+    modeConflictMatrixSteps,
+    'mode-conflict-matrix-e2e',
+    'Run mode conflict matrix E2E',
+    'npm run mode-conflict-matrix'
+);
 assertStepContains(
     responsiveSteps,
     'responsive-e2e',
@@ -235,18 +243,32 @@ assertStepContains(
         'path: output/e2e/observation-touch'
     ]
 );
+assertStepContains(
+    modeConflictMatrixSteps,
+    'mode-conflict-matrix-e2e',
+    'Upload mode conflict matrix artifacts on failure',
+    [
+        'if: failure()',
+        'uses: actions/upload-artifact@v4',
+        'name: mode-conflict-matrix-artifacts',
+        'path: output/e2e/mode-conflict'
+    ]
+);
 
 const requiredJobSnippets = [
     'quality:',
     'responsive-e2e:',
     'wire-e2e:',
     'observation-e2e:',
+    'mode-conflict-matrix-e2e:',
     'responsive-e2e-screenshots',
     'wire-e2e-screenshots',
     'observation-e2e-screenshots',
+    'mode-conflict-matrix-artifacts',
     'output/e2e/responsive-touch',
     'output/e2e/wire-interaction',
-    'output/e2e/observation-touch'
+    'output/e2e/observation-touch',
+    'output/e2e/mode-conflict'
 ];
 
 for (const snippet of requiredJobSnippets) {
