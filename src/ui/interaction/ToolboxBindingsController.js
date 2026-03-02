@@ -143,16 +143,7 @@ export function bindToolboxEvents() {
             if (typeof this.addWireAt === 'function') {
                 this.addWireAt(x, y);
             } else {
-                // Fallback (should not happen): create a short wire segment at the drop point.
-                const wire = {
-                    id: `wire_${Date.now()}`,
-                    a: { x: x - 30, y },
-                    b: { x: x + 30, y }
-                };
-                this.circuit.addWire(wire);
-                this.renderer.addWire(wire);
-                this.selectWire(wire.id);
-                this.updateStatus('已添加导线');
+                logWarn(this, 'Missing addWireAt delegate, skipping wire drop');
             }
         } else {
             this.addComponent(type, x, y);

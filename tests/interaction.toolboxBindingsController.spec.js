@@ -157,6 +157,54 @@ describe('ToolboxBindingsController.bindToolboxEvents', () => {
         expect(addWireAt).toHaveBeenCalledWith(20, 20);
     });
 
+    it('does not execute legacy wire fallback path when addWireAt is unavailable', () => {
+        const wire = createToolItem('Wire');
+        const svg = createSvgNode();
+        vi.stubGlobal('document', {
+            querySelectorAll: vi.fn(() => [wire])
+        });
+
+        const addWire = vi.fn();
+        const addRenderedWire = vi.fn();
+        const selectWire = vi.fn();
+        const updateStatus = vi.fn();
+        const warn = vi.fn();
+        const clearPendingToolType = vi.fn();
+        const ctx = {
+            svg,
+            viewOffset: { x: 0, y: 0 },
+            scale: 1,
+            isDraggingComponent: false,
+            circuit: { addWire },
+            renderer: { addWire: addRenderedWire },
+            selectWire,
+            updateStatus,
+            logger: { warn },
+            clearPendingToolType
+        };
+
+        ToolboxBindingsController.bindToolboxEvents.call(ctx);
+
+        const dropEvent = {
+            preventDefault: vi.fn(),
+            stopPropagation: vi.fn(),
+            clientX: 21,
+            clientY: 18,
+            dataTransfer: {
+                getData: vi.fn(() => 'Wire')
+            }
+        };
+
+        svg.trigger('drop', dropEvent);
+
+        expect(addWire).not.toHaveBeenCalled();
+        expect(addRenderedWire).not.toHaveBeenCalled();
+        expect(selectWire).not.toHaveBeenCalled();
+        expect(updateStatus).not.toHaveBeenCalled();
+        expect(warn).toHaveBeenCalledTimes(1);
+        expect(clearPendingToolType).toHaveBeenCalledWith({ silent: true });
+    });
+
     it('does not throw when item classList add/remove are non-callable', () => {
         const resistor = createToolItem('Resistor');
         resistor.classList.add = {};

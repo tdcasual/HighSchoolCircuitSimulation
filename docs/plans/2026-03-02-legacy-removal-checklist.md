@@ -22,6 +22,7 @@
 - 范围：无引用的冗余入口（script alias、重复命令别名）。
 - 候选：
   - `package.json` 中 `test:interaction-mode`（仅在 `package.json` 自身出现，无工作流/文档/测试依赖）。
+  - `src/ui/interaction/ToolboxBindingsController.js` 中 `addWireAt` 缺失时手工造导线 fallback（运行时委托链已覆盖）。
 - 风险：低。
 - 预期收益：减少维护噪音，避免“看起来还在使用”的误导。
 
@@ -67,6 +68,7 @@
 
 ## 当前状态
 
-- Batch A：已完成（commit: `ec3ee3a`）。
+- Batch A：已完成第 1 轮（commit: `ec3ee3a`，删无引用 script alias）。
+- Batch A：已完成第 2 轮（本地待提交，删 Toolbox wire legacy fallback）。
 - Batch B：预审计已完成，结论为“暂缓删除（阻塞中）”。
 - Batch C/D：未开始。
