@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+    handleWireEndpointDragMouseMove,
     handlePanningMouseMove,
     handlePointerDownInfoMouseMove,
     handleWireModeGestureMouseMove
@@ -160,5 +161,121 @@ describe('InteractionOrchestratorMouseMoveHandlers.handlePanningMouseMove', () =
         expect(handled).toBe(true);
         expect(context.viewOffset).toEqual({ x: 25, y: 45 });
         expect(context.updateViewTransform).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('InteractionOrchestratorMouseMoveHandlers.handleWireEndpointDragMouseMove', () => {
+    it('returns false when endpoint dragging is inactive', () => {
+        const context = {
+            isDraggingWireEndpoint: false
+        };
+
+        const handled = handleWireEndpointDragMouseMove.call(context, { clientX: 10, clientY: 20 }, 30, 40);
+
+        expect(handled).toBe(false);
+    });
+
+    it('updates endpoint position, detaches terminal ref, and highlights wire segment snap', () => {
+        const wire = {
+            id: 'W1',
+            a: { x: 10, y: 10 },
+            b: { x: 90, y: 10 },
+            aRef: { componentId: 'R1', terminalIndex: 0 }
+        };
+        const context = {
+            isDraggingWireEndpoint: true,
+            wireEndpointDrag: {
+                wireId: 'W1',
+                end: 'a',
+                origin: { x: 10, y: 10 },
+                affected: [{ wireId: 'W1', end: 'a' }],
+                detached: false
+            },
+            resolvePointerType: vi.fn(() => 'mouse'),
+            snapPoint: vi.fn(() => ({ x: 80, y: 20, snap: { type: 'wire-segment', wireId: 'W2' } })),
+            circuit: {
+                getWire: vi.fn((id) => (id === 'W1' ? wire : null))
+            },
+            renderer: {
+                highlightTerminal: vi.fn(),
+                highlightWireNode: vi.fn(),
+                clearTerminalHighlight: vi.fn(),
+                refreshWire: vi.fn()
+            }
+        };
+
+        const handled = handleWireEndpointDragMouseMove.call(context, { clientX: 120, clientY: 140 }, 60, 40);
+
+        expect(handled).toBe(true);
+        expect(wire.a).toEqual({ x: 80, y: 20 });
+        expect(wire.aRef).toBeUndefined();
+        expect(context.wireEndpointDrag.detached).toBe(true);
+        expect(context.renderer.highlightWireNode).toHaveBeenCalledWith(80, 20);
+        expect(context.renderer.highlightTerminal).not.toHaveBeenCalled();
+        expect(context.renderer.clearTerminalHighlight).not.toHaveBeenCalled();
+        expect(context.renderer.refreshWire).toHaveBeenCalledWith('W1');
+    });
+
+    it('applies touch axis-lock and forwards drag speed / excluded terminals into snap options', () => {
+        const wire = {
+            id: 'W1',
+            a: { x: 12, y: 18 },
+            b: { x: 96, y: 18 }
+        };
+        const context = {
+            isDraggingWireEndpoint: true,
+            wireEndpointDrag: {
+                wireId: 'W1',
+                end: 'a',
+                origin: { x: 12, y: 18 },
+                affected: [{ wireId: 'W1', end: 'a' }],
+                originTerminalKeys: new Set(['R1:0']),
+                detached: false,
+                axisLock: null,
+                axisLockStartTime: 0,
+                axisLockWindowMs: 80,
+                startClient: { x: 100, y: 100 },
+                lastClient: { x: 100, y: 100 },
+                lastMoveTimeStamp: 0
+            },
+            resolvePointerType: vi.fn(() => 'touch'),
+            snapPoint: vi.fn(() => ({ x: 84, y: 24, snap: { type: 'wire-segment', wireId: 'W2' } })),
+            circuit: {
+                getWire: vi.fn((id) => (id === 'W1' ? wire : null))
+            },
+            renderer: {
+                highlightTerminal: vi.fn(),
+                highlightWireNode: vi.fn(),
+                clearTerminalHighlight: vi.fn(),
+                refreshWire: vi.fn()
+            },
+            touchActionController: {
+                cancel: vi.fn()
+            }
+        };
+
+        const handled = handleWireEndpointDragMouseMove.call(
+            context,
+            { clientX: 126, clientY: 104, timeStamp: 40 },
+            58,
+            42
+        );
+
+        expect(handled).toBe(true);
+        expect(context.wireEndpointDrag.axisLock).toBe('x');
+        expect(context.wireEndpointDrag.excludeOriginTerminals).toBe(true);
+        const snapCall = context.snapPoint.mock.calls[0];
+        expect(snapCall[0]).toBe(58);
+        expect(snapCall[1]).toBe(18);
+        expect(snapCall[2]).toEqual(expect.objectContaining({
+            excludeWireEndpoints: new Set(['W1:a']),
+            allowWireSegmentSnap: true,
+            excludeWireIds: new Set(['W1']),
+            excludeTerminalKeys: new Set(['R1:0']),
+            pointerType: 'touch',
+            snapIntent: 'wire-endpoint-drag'
+        }));
+        expect(snapCall[2].dragSpeedPxPerMs).toBeCloseTo(0.6576, 3);
+        expect(context.touchActionController.cancel).toHaveBeenCalledTimes(1);
     });
 });
