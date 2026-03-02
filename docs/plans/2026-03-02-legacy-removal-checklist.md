@@ -34,6 +34,9 @@
 - 前置条件：
   - 连续两轮主干回归全绿。
   - 确认运行期所有入口都初始化了 `interactionModeStore`。
+- 2026-03-02 预审计结论：
+  - 当前不满足删除前置条件，详见 `docs/plans/2026-03-02-batch-b-mode-fallback-audit.md`。
+  - 结论：暂不删除，保持 fallback。
 
 ### Batch C（中高风险）
 
@@ -64,5 +67,6 @@
 
 ## 当前状态
 
-- Batch A：进行中（本次开始执行）。
-- Batch B/C/D：未开始。
+- Batch A：已完成（commit: `ec3ee3a`）。
+- Batch B：预审计已完成，结论为“暂缓删除（阻塞中）”。
+- Batch C/D：未开始。
