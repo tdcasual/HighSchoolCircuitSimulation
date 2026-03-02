@@ -3,6 +3,11 @@ import { ErrorCodes } from '../../core/errors/ErrorCodes.js';
 import { AppError } from '../../core/errors/AppError.js';
 import { createTraceId, logActionFailure } from '../../utils/Logger.js';
 import { InteractionModeStore, InteractionModes } from './InteractionModeStore.js';
+import {
+    readInteractionModeContext,
+    setInteractionModeContext,
+    setWireToolContext
+} from './InteractionModeBridge.js';
 
 function normalizeEndpointAutoBridgeMode(rawMode) {
     if (rawMode === 'on' || rawMode === 'off' || rawMode === 'auto') {
@@ -142,19 +147,15 @@ function resolveWireModeGestureThreshold(pointerType, kind = 'default') {
 }
 
 function restorePendingWireToolAfterAction(context) {
-    const modeState = syncInteractionModeStore(context, { source: 'restorePendingWireTool:start' });
-    if (modeState?.context?.stickyWireTool) {
-        context.pendingToolType = 'Wire';
-        context.mobileInteractionMode = 'wire';
-        context.stickyWireTool = true;
-        syncInteractionModeStore(context, {
+    const modeContext = readInteractionModeContext(context);
+    if (modeContext?.stickyWireTool) {
+        setWireToolContext(context, {
+            pendingToolType: 'Wire',
+            mobileInteractionMode: 'wire',
+            stickyWireTool: true
+        }, {
             mode: InteractionModes.WIRE,
-            source: 'restorePendingWireTool:wire',
-            context: {
-                pendingToolType: 'Wire',
-                mobileInteractionMode: 'wire',
-                stickyWireTool: true
-            }
+            source: 'restorePendingWireTool:wire'
         });
         context.pendingToolItem = null;
         if (typeof context.syncMobileModeButtons === 'function') {
@@ -162,18 +163,14 @@ function restorePendingWireToolAfterAction(context) {
         }
     } else {
         context.clearPendingToolType({ silent: true });
-        context.pendingToolType = null;
-        context.mobileInteractionMode = 'select';
-        context.stickyWireTool = false;
-        syncInteractionModeStore(context, {
+        setInteractionModeContext(context, {
+            pendingToolType: null,
+            mobileInteractionMode: 'select',
+            stickyWireTool: false,
+            isWiring: false
+        }, {
             mode: InteractionModes.SELECT,
-            source: 'restorePendingWireTool:select',
-            context: {
-                pendingToolType: null,
-                mobileInteractionMode: 'select',
-                stickyWireTool: false,
-                isWiring: false
-            }
+            source: 'restorePendingWireTool:select'
         });
     }
 }
@@ -977,7 +974,11 @@ export function onMouseUp(e) {
         const pointerType = typeof this.resolvePointerType === 'function'
             ? this.resolvePointerType(e)
             : (this.lastPrimaryPointerType || 'mouse');
-        this.isDraggingWireEndpoint = false;
+        setInteractionModeContext(this, {
+            isDraggingWireEndpoint: false
+        }, {
+            source: 'onMouseUp:endpoint-drag-end'
+        });
         this.wireEndpointDrag = null;
         this.renderer.clearTerminalHighlight();
 
@@ -1174,7 +1175,11 @@ export function onMouseLeave(_e) {
     }
     if (this.isDraggingWireEndpoint) {
         const drag = this.wireEndpointDrag;
-        this.isDraggingWireEndpoint = false;
+        setInteractionModeContext(this, {
+            isDraggingWireEndpoint: false
+        }, {
+            source: 'onMouseLeave:endpoint-drag-end'
+        });
         this.wireEndpointDrag = null;
         this.renderer.clearTerminalHighlight();
         const affectedIds = Array.isArray(drag?.affected)
@@ -1346,15 +1351,14 @@ export function onKeyDown(e) {
     if (e.key === 'Escape') {
         this.cancelWiring();
         this.clearPendingToolType({ silent: true });
-        syncInteractionModeStore(this, {
+        setInteractionModeContext(this, {
+            pendingToolType: null,
+            mobileInteractionMode: 'select',
+            stickyWireTool: false,
+            isWiring: false
+        }, {
             mode: InteractionModes.SELECT,
-            source: 'onKeyDown:escape',
-            context: {
-                pendingToolType: null,
-                mobileInteractionMode: 'select',
-                stickyWireTool: false,
-                isWiring: false
-            }
+            source: 'onKeyDown:escape'
         });
         this.clearSelection();
     }

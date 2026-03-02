@@ -1,4 +1,5 @@
 import { normalizeCanvasPoint, toCanvasInt } from '../../utils/CanvasCoords.js';
+import { setWiringActive } from '../../app/interaction/InteractionModeBridge.js';
 
 function resolveScaledThreshold(context, screenPx) {
     const scale = Number(context?.scale);
@@ -80,13 +81,11 @@ export function startWiringFromPoint(point, e = null, armMouseUpGuard = false) {
         pointerType: this.resolvePointerType(e)
     });
 
-    this.isWiring = true;
-    this.wireStart = { x: start.x, y: start.y, snap: start.snap || null };
-    this.syncInteractionModeStore?.({
+    setWiringActive(this, true, {
         mode: 'wire',
-        source: 'wire.startWiringFromPoint',
-        context: { isWiring: true }
+        source: 'wire.startWiringFromPoint'
     });
+    this.wireStart = { x: start.x, y: start.y, snap: start.snap || null };
 
     // 创建临时导线
     this.tempWire = this.renderer.createTempWire();
@@ -542,11 +541,12 @@ export function splitWireAtPointInternal(wireId, x, y, options = {}) {
  * 取消连线
  */
 export function cancelWiring() {
-    this.isWiring = false;
+    setWiringActive(this, false, {
+        source: 'wire.cancelWiring'
+    });
     this.wireStart = null;
     this.ignoreNextWireMouseUp = false;
     this.suspendedWiringSession = null;
-    this.syncInteractionModeStore?.({ source: 'wire.cancelWiring' });
     if (this.tempWire) {
         this.renderer.removeTempWire(this.tempWire);
         this.tempWire = null;

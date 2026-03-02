@@ -1,3 +1,11 @@
+import {
+    readInteractionModeContext,
+    readInteractionModeState,
+    setInteractionModeContext,
+    setWireToolContext,
+    setWiringActive
+} from '../../app/interaction/InteractionModeBridge.js';
+
 const DESTRUCTIVE_TAP_RULES = Object.freeze({
     touch: Object.freeze({ minPressMs: 140, maxMovePx: 14 }),
     pen: Object.freeze({ minPressMs: 90, maxMovePx: 10 }),
@@ -62,26 +70,6 @@ function resolveSuspendedWireStartPoint(context, wireStartSnapshot) {
     return null;
 }
 
-function syncInteractionModeStore(context, options = {}) {
-    const sync = context?.syncInteractionModeStore;
-    if (typeof sync !== 'function') return null;
-    try {
-        return sync.call(context, options);
-    } catch (_) {
-        return null;
-    }
-}
-
-function readInteractionModeStoreState(context) {
-    const getter = context?.interactionModeStore?.getState;
-    if (typeof getter !== 'function') return null;
-    try {
-        return getter.call(context.interactionModeStore);
-    } catch (_) {
-        return null;
-    }
-}
-
 function suspendWiringForPinch(context) {
     if (!context?.isWiring) return;
     const wireStartSnapshot = cloneWireStartSnapshot(context.wireStart);
@@ -89,7 +77,7 @@ function suspendWiringForPinch(context) {
         context.cancelWiring?.();
         return;
     }
-    const modeStoreContext = readInteractionModeStoreState(context)?.context || null;
+    const modeStoreContext = readInteractionModeContext(context);
     const pendingToolType = modeStoreContext?.pendingToolType ?? context.pendingToolType ?? null;
     const mobileInteractionMode = modeStoreContext?.mobileInteractionMode ?? context.mobileInteractionMode ?? 'select';
     const stickyWireTool = modeStoreContext?.stickyWireTool ?? context.stickyWireTool;
@@ -102,7 +90,9 @@ function suspendWiringForPinch(context) {
         stickyWireTool: !!stickyWireTool
     };
 
-    context.isWiring = false;
+    setWiringActive(context, false, {
+        source: 'pointerSession.suspendWiringForPinch'
+    });
     context.wireStart = null;
     context.ignoreNextWireMouseUp = false;
 
@@ -113,10 +103,6 @@ function suspendWiringForPinch(context) {
 
     context.hideAlignmentGuides?.();
     context.renderer?.clearTerminalHighlight?.();
-    syncInteractionModeStore(context, {
-        source: 'pointerSession.suspendWiringForPinch',
-        context: { isWiring: false }
-    });
 }
 
 function restoreWiringAfterPinch(context) {
@@ -124,20 +110,16 @@ function restoreWiringAfterPinch(context) {
     if (!session || !session.wireStart) return;
     context.suspendedWiringSession = null;
 
-    context.pendingToolType = session.pendingToolType ?? null;
     context.pendingToolItem = session.pendingToolItem ?? null;
-    context.mobileInteractionMode = session.mobileInteractionMode || context.mobileInteractionMode || 'select';
-    context.stickyWireTool = !!session.stickyWireTool;
-    context.syncMobileModeButtons?.();
-    syncInteractionModeStore(context, {
+    setWireToolContext(context, {
+        pendingToolType: session.pendingToolType ?? null,
+        mobileInteractionMode: session.mobileInteractionMode || context.mobileInteractionMode || 'select',
+        stickyWireTool: !!session.stickyWireTool
+    }, {
         mode: 'wire',
-        source: 'pointerSession.restoreWiringAfterPinch',
-        context: {
-            pendingToolType: context.pendingToolType,
-            mobileInteractionMode: context.mobileInteractionMode,
-            stickyWireTool: context.stickyWireTool
-        }
+        source: 'pointerSession.restoreWiringAfterPinch'
     });
+    context.syncMobileModeButtons?.();
 
     const startPoint = resolveSuspendedWireStartPoint(context, session.wireStart);
     if (!startPoint) {
@@ -149,14 +131,16 @@ function restoreWiringAfterPinch(context) {
     if (typeof context.startWiringFromPoint === 'function') {
         context.startWiringFromPoint(startPoint, null, false);
     } else {
-        context.isWiring = true;
+        setWiringActive(context, true, {
+            mode: 'wire',
+            source: 'pointerSession.restoreWiringAfterPinch:start-wiring:fallback'
+        });
         context.wireStart = { x: startPoint.x, y: startPoint.y, snap: startPoint.snap || null };
         context.ignoreNextWireMouseUp = false;
     }
-    syncInteractionModeStore(context, {
+    setWiringActive(context, true, {
         mode: 'wire',
-        source: 'pointerSession.restoreWiringAfterPinch:start-wiring',
-        context: { isWiring: true }
+        source: 'pointerSession.restoreWiringAfterPinch:start-wiring'
     });
     context.updateStatus?.('导线模式：选择终点');
 }
@@ -290,8 +274,8 @@ export function onPointerCancel(e) {
     } else if (!this.blockSinglePointerInteraction && this.primaryPointerId === e.pointerId) {
         const hadTerminalExtending = !!this.isTerminalExtending;
         const hadRheostatDragging = !!this.isRheostatDragging;
-        const modeStoreState = readInteractionModeStoreState(this);
-        const modeStoreContext = modeStoreState?.context || null;
+        const modeStoreState = readInteractionModeState(this);
+        const modeStoreContext = modeStoreState?.context || readInteractionModeContext(this);
         const storeReportsEditLikeDrag = !!(
             modeStoreState?.mode === 'endpoint-edit'
             || modeStoreContext?.isDraggingWireEndpoint
@@ -322,9 +306,12 @@ export function onPointerCancel(e) {
         if (this.isWiring) {
             this.ignoreNextWireMouseUp = false;
         }
-        this.isTerminalExtending = false;
-        this.isRheostatDragging = false;
-        syncInteractionModeStore(this, { source: 'pointerSession.onPointerCancel' });
+        setInteractionModeContext(this, {
+            isTerminalExtending: false,
+            isRheostatDragging: false
+        }, {
+            source: 'pointerSession.onPointerCancel'
+        });
         this.primaryPointerId = null;
     }
 
@@ -419,8 +406,12 @@ export function endPrimaryInteractionForGesture() {
 
     const hadTerminalExtending = !!this.isTerminalExtending;
     const hadRheostatDragging = !!this.isRheostatDragging;
-    this.isTerminalExtending = false;
-    this.isRheostatDragging = false;
+    setInteractionModeContext(this, {
+        isTerminalExtending: false,
+        isRheostatDragging: false
+    }, {
+        source: 'pointerSession.endPrimaryInteractionForGesture:clear-endpoint-flags'
+    });
     if (hadTerminalExtending) {
         this.hideAlignmentGuides?.();
         this.circuit?.rebuildNodes?.();
@@ -432,7 +423,11 @@ export function endPrimaryInteractionForGesture() {
 
     if (this.isDraggingWireEndpoint) {
         const drag = this.wireEndpointDrag;
-        this.isDraggingWireEndpoint = false;
+        setInteractionModeContext(this, {
+            isDraggingWireEndpoint: false
+        }, {
+            source: 'pointerSession.endPrimaryInteractionForGesture:endpoint-drag-end'
+        });
         this.wireEndpointDrag = null;
         const affectedIds = Array.isArray(drag?.affected)
             ? drag.affected.map((item) => item?.wireId).filter(Boolean)
@@ -468,7 +463,14 @@ export function endPrimaryInteractionForGesture() {
     }
 
     suspendWiringForPinch(this);
-    syncInteractionModeStore(this, { source: 'pointerSession.endPrimaryInteractionForGesture' });
+    setInteractionModeContext(this, {
+        isWiring: !!this.isWiring,
+        isDraggingWireEndpoint: !!this.isDraggingWireEndpoint,
+        isTerminalExtending: !!this.isTerminalExtending,
+        isRheostatDragging: !!this.isRheostatDragging
+    }, {
+        source: 'pointerSession.endPrimaryInteractionForGesture'
+    });
 }
 
 export function startPinchGesture() {
