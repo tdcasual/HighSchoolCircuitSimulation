@@ -39,6 +39,27 @@ describe('AIPanel chat behavior', () => {
         expect(panel.chatController.askQuestion).toHaveBeenCalledWith('q1');
     });
 
+    it('insertChatTemplateByMode does not throw when input focus throws', () => {
+        const input = {
+            value: '',
+            selectionStart: 0,
+            selectionEnd: 0,
+            focus: vi.fn(() => {
+                throw new TypeError('focus failed');
+            }),
+            setSelectionRange: vi.fn(),
+            style: {},
+            scrollHeight: 40
+        };
+        const ctx = {
+            syncChatInputHeight: vi.fn()
+        };
+
+        expect(() => AIPanel.prototype.insertChatTemplateByMode.call(ctx, input, 'inline-math')).not.toThrow();
+        expect(input.value).toBe('$公式$');
+        expect(input.setSelectionRange).toHaveBeenCalledWith(1, 3);
+    });
+
     it('keeps user question visible when circuit is empty', async () => {
         const sendBtn = { textContent: '发送', disabled: false };
         vi.stubGlobal('document', {
@@ -389,6 +410,33 @@ describe('AIPanel chat behavior', () => {
         expect(parse).toHaveBeenCalledWith('**hello**', { breaks: true, gfm: true });
         expect(ctx.sanitizeRenderedMarkdown).toHaveBeenCalledWith('<p>unsafe</p>');
         expect(rendered).toBe('<p>safe</p>');
+    });
+
+    it('updateChatActionVisibility does not throw when classList/setAttribute methods are non-callable', () => {
+        const followupActions = { classList: { toggle: {} } };
+        const chatControls = { classList: { toggle: {} } };
+        const quickQuestions = { classList: { toggle: {} } };
+        const advancedToggleBtn = {
+            style: {},
+            setAttribute: {}
+        };
+
+        vi.stubGlobal('document', {
+            getElementById: vi.fn((id) => ({
+                'followup-actions': followupActions,
+                'chat-controls': chatControls,
+                'quick-questions': quickQuestions,
+                'chat-advanced-toggle-btn': advancedToggleBtn
+            }[id] || null))
+        });
+
+        const ctx = {
+            messageHistory: [{ role: 'assistant', content: '回答' }],
+            chatAdvancedExpanded: true,
+            loadHistory: vi.fn(() => [])
+        };
+
+        expect(() => AIPanel.prototype.updateChatActionVisibility.call(ctx)).not.toThrow();
     });
 
     it('retries MathJax typeset when unavailable and clears queue after max retries', () => {

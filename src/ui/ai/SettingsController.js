@@ -75,6 +75,57 @@ export class SettingsController {
     }
 }
 
+function isEventTarget(node) {
+    return !!node && typeof node.addEventListener === 'function';
+}
+
+function safeInvokeMethod(target, methodName, ...args) {
+    const fn = target?.[methodName];
+    if (typeof fn !== 'function') return undefined;
+    try {
+        return fn.apply(target, args);
+    } catch (_) {
+        return undefined;
+    }
+}
+
+function bindClick(node, handler) {
+    if (!isEventTarget(node) || typeof handler !== 'function') return;
+    safeInvokeMethod(node, 'addEventListener', 'click', handler);
+}
+
+function bindChange(node, handler) {
+    if (!isEventTarget(node) || typeof handler !== 'function') return;
+    safeInvokeMethod(node, 'addEventListener', 'change', handler);
+}
+
+function setInputValue(node, value) {
+    if (!node || typeof node !== 'object') return;
+    if (!('value' in node)) return;
+    node.value = String(value ?? '');
+}
+
+function readInputValue(node, fallback = '') {
+    if (!node || typeof node !== 'object' || !('value' in node)) {
+        return String(fallback ?? '');
+    }
+    return String(node.value ?? '');
+}
+
+function safeAddClass(node, className) {
+    if (!node || !node.classList || typeof node.classList.add !== 'function') return;
+    try {
+        node.classList.add(className);
+    } catch (_) {}
+}
+
+function safeRemoveClass(node, className) {
+    if (!node || !node.classList || typeof node.classList.remove !== 'function') return;
+    try {
+        node.classList.remove(className);
+    } catch (_) {}
+}
+
 function initializeSettingsDialogImpl() {
     const dialog = document.getElementById('ai-settings-dialog');
     const saveBtn = document.getElementById('settings-save-btn');
@@ -91,9 +142,9 @@ function initializeSettingsDialogImpl() {
     const knowledgeMcpModeSelect = document.getElementById('knowledge-mcp-mode');
     const requestModeSelect = document.getElementById('request-mode');
 
-    this.bindModelSelector(textSelect, textInput);
+    this.bindModelSelector?.(textSelect, textInput);
     if (knowledgeSourceSelect) {
-        knowledgeSourceSelect.addEventListener('change', () => {
+        bindChange(knowledgeSourceSelect, () => {
             this.syncKnowledgeSettingsVisibility(
                 knowledgeSourceSelect.value,
                 knowledgeMcpModeSelect?.value
@@ -101,7 +152,7 @@ function initializeSettingsDialogImpl() {
         });
     }
     if (knowledgeMcpModeSelect) {
-        knowledgeMcpModeSelect.addEventListener('change', () => {
+        bindChange(knowledgeMcpModeSelect, () => {
             this.syncKnowledgeSettingsVisibility(
                 knowledgeSourceSelect?.value,
                 knowledgeMcpModeSelect.value
@@ -109,26 +160,28 @@ function initializeSettingsDialogImpl() {
         });
     }
     if (requestModeSelect) {
-        requestModeSelect.addEventListener('change', () => {
+        bindChange(requestModeSelect, () => {
             syncRequestModeVisibility(requestModeSelect.value);
         });
         syncRequestModeVisibility(requestModeSelect.value);
     }
 
-    cancelBtn.addEventListener('click', () => {
-        dialog.classList.add('hidden');
+    bindClick(cancelBtn, () => {
+        safeAddClass(dialog, 'hidden');
     });
 
-    saveBtn.addEventListener('click', () => {
+    bindClick(saveBtn, () => {
         this.saveSettings();
-        dialog.classList.add('hidden');
+        safeAddClass(dialog, 'hidden');
     });
 
-    testBtn.addEventListener('click', async () => {
+    bindClick(testBtn, async () => {
         this.saveSettings();
 
-        testBtn.disabled = true;
-        testBtn.textContent = '测试中...';
+        if (testBtn) {
+            testBtn.disabled = true;
+            testBtn.textContent = '测试中...';
+        }
 
         try {
             const result = await this.aiClient.testConnection();
@@ -136,59 +189,57 @@ function initializeSettingsDialogImpl() {
         } catch (error) {
             alert(`❌ 测试失败: ${error.message}`);
         } finally {
-            testBtn.disabled = false;
-            testBtn.textContent = '测试连接';
+            if (testBtn) {
+                testBtn.disabled = false;
+                testBtn.textContent = '测试连接';
+            }
         }
     });
 
-    clearKeyBtn.addEventListener('click', () => {
+    bindClick(clearKeyBtn, () => {
         this.aiClient.clearApiKey();
-        document.getElementById('api-key').value = '';
+        setInputValue(document.getElementById('api-key'), '');
         this.app.updateStatus('API 密钥已清除（仅会话存储）');
         this.logPanelEvent?.('warn', 'api_key_cleared');
     });
 
-    fetchModelsBtn.addEventListener('click', async () => {
+    bindClick(fetchModelsBtn, async () => {
         if (this.isProcessing) return;
-        fetchStatus.textContent = '正在获取模型列表...';
-        fetchModelsBtn.disabled = true;
+        if (fetchStatus) fetchStatus.textContent = '正在获取模型列表...';
+        if (fetchModelsBtn) fetchModelsBtn.disabled = true;
         try {
             this.saveSettings();
             this.isProcessing = true;
             const models = await this.aiClient.listModels();
             this.populateModelLists(models);
-            fetchStatus.textContent = `已加载 ${models.length} 个模型`;
+            if (fetchStatus) fetchStatus.textContent = `已加载 ${models.length} 个模型`;
             this.logPanelEvent?.('info', 'fetch_models_success', { count: models.length });
         } catch (e) {
             this.app?.logger?.error?.('Fetch models failed:', e);
-            fetchStatus.textContent = `获取失败: ${e.message}`;
+            if (fetchStatus) fetchStatus.textContent = `获取失败: ${e.message}`;
             this.logPanelEvent?.('error', 'fetch_models_failed', { error: e.message });
         } finally {
             this.isProcessing = false;
-            fetchModelsBtn.disabled = false;
+            if (fetchModelsBtn) fetchModelsBtn.disabled = false;
             this.updateLogSummaryDisplay?.();
         }
     });
 
-    if (exportLogsBtn) {
-        exportLogsBtn.addEventListener('click', () => {
-            this.exportAILogs();
-        });
-    }
-    if (clearLogsBtn) {
-        clearLogsBtn.addEventListener('click', () => {
-            this.clearAILogs();
-        });
-    }
+    bindClick(exportLogsBtn, () => {
+        this.exportAILogs();
+    });
+    bindClick(clearLogsBtn, () => {
+        this.clearAILogs();
+    });
     this.updateLogSummaryDisplay?.();
 }
 
 function openSettingsImpl() {
-    const config = this.aiClient.config;
-
-    document.getElementById('api-endpoint').value = config.apiEndpoint;
-    document.getElementById('api-key').value = config.apiKey;
-    document.getElementById('text-model').value = config.textModel;
+    const config = this.aiClient?.config || {};
+    const apiEndpointInput = document.getElementById('api-endpoint');
+    const apiKeyInput = document.getElementById('api-key');
+    const textModelInput = document.getElementById('text-model');
+    const textModelSelect = document.getElementById('text-model-select');
     const knowledgeSource = document.getElementById('knowledge-source');
     const knowledgeMcpEndpoint = document.getElementById('knowledge-mcp-endpoint');
     const knowledgeMcpServer = document.getElementById('knowledge-mcp-server');
@@ -197,43 +248,34 @@ function openSettingsImpl() {
     const knowledgeMcpResource = document.getElementById('knowledge-mcp-resource');
     const requestMode = document.getElementById('request-mode');
     const proxyEndpoint = document.getElementById('proxy-endpoint');
-    if (knowledgeSource) {
-        knowledgeSource.value = config.knowledgeSource || 'local';
-    }
-    if (knowledgeMcpMode) {
-        knowledgeMcpMode.value = config.knowledgeMcpMode || 'method';
-    }
-    if (knowledgeMcpEndpoint) {
-        knowledgeMcpEndpoint.value = config.knowledgeMcpEndpoint || '';
-    }
-    if (knowledgeMcpServer) {
-        knowledgeMcpServer.value = config.knowledgeMcpServer || 'circuit-knowledge';
-    }
-    if (knowledgeMcpMethod) {
-        knowledgeMcpMethod.value = config.knowledgeMcpMethod || 'knowledge.search';
-    }
-    if (knowledgeMcpResource) {
-        knowledgeMcpResource.value = config.knowledgeMcpResource || 'knowledge://circuit/high-school';
-    }
-    if (requestMode) {
-        requestMode.value = config.requestMode || 'direct';
-    }
-    if (proxyEndpoint) {
-        proxyEndpoint.value = config.proxyEndpoint || '';
-    }
+    setInputValue(apiEndpointInput, config.apiEndpoint || '');
+    setInputValue(apiKeyInput, config.apiKey || '');
+    setInputValue(textModelInput, config.textModel || '');
+    setInputValue(knowledgeSource, config.knowledgeSource || 'local');
+    setInputValue(knowledgeMcpMode, config.knowledgeMcpMode || 'method');
+    setInputValue(knowledgeMcpEndpoint, config.knowledgeMcpEndpoint || '');
+    setInputValue(knowledgeMcpServer, config.knowledgeMcpServer || 'circuit-knowledge');
+    setInputValue(knowledgeMcpMethod, config.knowledgeMcpMethod || 'knowledge.search');
+    setInputValue(knowledgeMcpResource, config.knowledgeMcpResource || 'knowledge://circuit/high-school');
+    setInputValue(requestMode, config.requestMode || 'direct');
+    setInputValue(proxyEndpoint, config.proxyEndpoint || '');
     syncRequestModeVisibility(requestMode?.value || config.requestMode || 'direct');
     this.syncKnowledgeSettingsVisibility(
         knowledgeSource?.value || config.knowledgeSource || 'local',
         knowledgeMcpMode?.value || config.knowledgeMcpMode || 'method'
     );
-    this.syncSelectToValue(document.getElementById('text-model-select'), config.textModel);
-    this.updateKnowledgeVersionDisplay();
+    this.syncSelectToValue(textModelSelect, config.textModel || '');
+    this.updateKnowledgeVersionDisplay?.();
     this.updateLogSummaryDisplay?.();
 
-    document.getElementById('ai-settings-dialog').classList.remove('hidden');
+    safeRemoveClass(document.getElementById('ai-settings-dialog'), 'hidden');
 }
 
 function saveSettingsImpl() {
+    const existing = this.aiClient?.config || {};
+    const apiEndpointInput = document.getElementById('api-endpoint');
+    const apiKeyInput = document.getElementById('api-key');
+    const textModelInput = document.getElementById('text-model');
     const knowledgeSource = document.getElementById('knowledge-source');
     const knowledgeMcpEndpoint = document.getElementById('knowledge-mcp-endpoint');
     const knowledgeMcpServer = document.getElementById('knowledge-mcp-server');
@@ -243,21 +285,21 @@ function saveSettingsImpl() {
     const requestMode = document.getElementById('request-mode');
     const proxyEndpoint = document.getElementById('proxy-endpoint');
     const config = {
-        apiEndpoint: document.getElementById('api-endpoint').value.trim(),
-        apiKey: document.getElementById('api-key').value.trim(),
-        textModel: document.getElementById('text-model').value.trim(),
-        requestMode: requestMode?.value || 'direct',
-        proxyEndpoint: proxyEndpoint?.value?.trim?.() || '',
-        knowledgeSource: knowledgeSource?.value || 'local',
-        knowledgeMcpEndpoint: knowledgeMcpEndpoint?.value?.trim?.() || '',
-        knowledgeMcpServer: knowledgeMcpServer?.value?.trim?.() || 'circuit-knowledge',
-        knowledgeMcpMode: knowledgeMcpMode?.value || 'method',
-        knowledgeMcpMethod: knowledgeMcpMethod?.value?.trim?.() || 'knowledge.search',
-        knowledgeMcpResource: knowledgeMcpResource?.value?.trim?.() || 'knowledge://circuit/high-school'
+        apiEndpoint: readInputValue(apiEndpointInput, existing.apiEndpoint || '').trim(),
+        apiKey: readInputValue(apiKeyInput, existing.apiKey || '').trim(),
+        textModel: readInputValue(textModelInput, existing.textModel || '').trim(),
+        requestMode: readInputValue(requestMode, existing.requestMode || 'direct') || 'direct',
+        proxyEndpoint: readInputValue(proxyEndpoint, existing.proxyEndpoint || '').trim(),
+        knowledgeSource: readInputValue(knowledgeSource, existing.knowledgeSource || 'local') || 'local',
+        knowledgeMcpEndpoint: readInputValue(knowledgeMcpEndpoint, existing.knowledgeMcpEndpoint || '').trim(),
+        knowledgeMcpServer: readInputValue(knowledgeMcpServer, existing.knowledgeMcpServer || 'circuit-knowledge').trim() || 'circuit-knowledge',
+        knowledgeMcpMode: readInputValue(knowledgeMcpMode, existing.knowledgeMcpMode || 'method') || 'method',
+        knowledgeMcpMethod: readInputValue(knowledgeMcpMethod, existing.knowledgeMcpMethod || 'knowledge.search').trim() || 'knowledge.search',
+        knowledgeMcpResource: readInputValue(knowledgeMcpResource, existing.knowledgeMcpResource || 'knowledge://circuit/high-school').trim() || 'knowledge://circuit/high-school'
     };
 
-    this.aiClient.saveConfig(config);
-    this.refreshKnowledgeProvider();
+    this.aiClient?.saveConfig?.(config);
+    this.refreshKnowledgeProvider?.();
     const keyMsg = config.apiKey ? '（密钥仅保存在当前会话）' : '';
     const sourceText = config.knowledgeSource === 'mcp'
         ? `MCP(${config.knowledgeMcpMode === 'resource' ? 'resource' : 'method'})`
@@ -269,7 +311,7 @@ function saveSettingsImpl() {
         knowledgeMode: config.knowledgeMcpMode
     });
     this.updateLogSummaryDisplay?.();
-    this.app.updateStatus(`AI 设置已保存${keyMsg}，规则库来源：${sourceText}`);
+    this.app?.updateStatus?.(`AI 设置已保存${keyMsg}，规则库来源：${sourceText}`);
 }
 
 function syncRequestModeVisibility(mode) {
@@ -412,7 +454,7 @@ function clearAILogsImpl() {
 
 function bindModelSelectorImpl(selectEl, inputEl) {
     if (!selectEl || !inputEl) return;
-    selectEl.addEventListener('change', () => {
+    bindChange(selectEl, () => {
         if (selectEl.value) {
             inputEl.value = selectEl.value;
         }

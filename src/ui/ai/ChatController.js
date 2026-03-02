@@ -1,3 +1,13 @@
+import {
+    safeAddEventListener,
+    safeClassListAdd,
+    safeClassListRemove,
+    safeClassListToggle,
+    safeFocus,
+    safeInvoke,
+    safeSetAttribute
+} from '../../utils/RuntimeSafety.js';
+
 export class ChatController {
     constructor(deps = {}) {
         this.deps = deps;
@@ -69,9 +79,21 @@ function getBodyClassList() {
     return document.body?.classList || null;
 }
 
+function safeHasClass(classList, className) {
+    return !!safeInvoke(classList, 'contains', [className], false);
+}
+
+function safeAddClass(node, className) {
+    safeClassListAdd(node, className);
+}
+
+function safeRemoveClass(node, className) {
+    safeClassListRemove(node, className);
+}
+
 function isPhoneLayoutMode() {
     const classList = getBodyClassList();
-    return !!classList?.contains?.('layout-mode-phone');
+    return safeHasClass(classList, 'layout-mode-phone');
 }
 
 function isTouchPreferredEnvironment() {
@@ -93,9 +115,8 @@ function hasConversationHistory(panel) {
 }
 
 function setBodyFlag(flag, active) {
-    const classList = getBodyClassList();
-    if (!classList || typeof classList.toggle !== 'function') return;
-    classList.toggle(flag, !!active);
+    if (typeof document === 'undefined') return;
+    safeClassListToggle(document.body, flag, !!active);
 }
 
 function isVirtualKeyboardOpen() {
@@ -168,14 +189,14 @@ function initializeChatImpl() {
         this.constrainPanelToViewport?.();
     };
 
-    input.addEventListener('focus', () => {
+    safeAddEventListener(input, 'focus', () => {
         if (this.chatInputBlurTimer) {
             clearTimeout(this.chatInputBlurTimer);
             this.chatInputBlurTimer = null;
         }
         setInputFocusActive(true);
     });
-    input.addEventListener('blur', () => {
+    safeAddEventListener(input, 'blur', () => {
         if (this.chatInputBlurTimer) {
             clearTimeout(this.chatInputBlurTimer);
         }
@@ -195,8 +216,8 @@ function initializeChatImpl() {
     };
 
     if (typeof window !== 'undefined' && window.visualViewport) {
-        window.visualViewport.addEventListener('resize', updateKeyboardState);
-        window.visualViewport.addEventListener('scroll', updateKeyboardState);
+        safeAddEventListener(window.visualViewport, 'resize', updateKeyboardState);
+        safeAddEventListener(window.visualViewport, 'scroll', updateKeyboardState);
     }
     updateKeyboardState();
 
@@ -234,29 +255,27 @@ function initializeChatImpl() {
         }
     };
 
-    sendBtn.addEventListener('click', () => {
+    safeAddEventListener(sendBtn, 'click', () => {
         void sendMessage();
     });
-    input.addEventListener('keydown', (e) => {
+    safeAddEventListener(input, 'keydown', (e) => {
         if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
             e.preventDefault();
             void sendMessage();
         }
     });
-    input.addEventListener('input', () => {
+    safeAddEventListener(input, 'input', () => {
         this.syncChatInputHeight(input);
     });
     if (inputArea) {
-        inputArea.addEventListener('click', (event) => {
+        safeAddEventListener(inputArea, 'click', (event) => {
             if (!isTouchPreferredEnvironment()) return;
             const target = event?.target;
             const hitInteractive = typeof target?.closest === 'function'
                 ? target.closest('button,select,textarea,a,label,input')
                 : null;
             if (hitInteractive) return;
-            if (typeof input.focus === 'function') {
-                input.focus();
-            }
+            safeFocus(input);
             const textLength = String(input.value || '').length;
             if (typeof input.setSelectionRange === 'function') {
                 input.setSelectionRange(textLength, textLength);
@@ -266,7 +285,7 @@ function initializeChatImpl() {
 
     const quickBtns = document.querySelectorAll('.quick-question-btn');
     quickBtns.forEach((btn) => {
-        btn.addEventListener('click', () => {
+        safeAddEventListener(btn, 'click', () => {
             const question = btn.textContent?.trim();
             if (!question || this.isProcessing) return;
             void runAskQuestionSafely(question);
@@ -274,22 +293,22 @@ function initializeChatImpl() {
     });
 
     insertButtons.forEach((btn) => {
-        btn.addEventListener('click', () => {
+        safeAddEventListener(btn, 'click', () => {
             this.insertChatTemplateByMode(input, btn?.dataset?.insert);
         });
     });
 
     if (quickQuestions) {
-        quickQuestions.classList.remove('visible');
+        safeRemoveClass(quickQuestions, 'visible');
     }
     if (followupActions) {
-        followupActions.classList.remove('visible');
+        safeRemoveClass(followupActions, 'visible');
     }
     if (chatControls) {
-        chatControls.classList.remove('visible');
+        safeRemoveClass(chatControls, 'visible');
     }
     if (advancedToggleBtn) {
-        advancedToggleBtn.addEventListener('click', () => {
+        safeAddEventListener(advancedToggleBtn, 'click', () => {
             this.chatAdvancedExpanded = !this.chatAdvancedExpanded;
             this.updateChatActionVisibility();
         });
@@ -297,14 +316,14 @@ function initializeChatImpl() {
     this.updateChatActionVisibility();
 
     followups.forEach((btn) => {
-        btn.addEventListener('click', () => {
+        safeAddEventListener(btn, 'click', () => {
             const mode = btn.dataset.mode;
             this.triggerFollowup(mode);
         });
     });
 
     if (undoBtn) {
-        undoBtn.addEventListener('click', () => this.undoLastExchange());
+        safeAddEventListener(undoBtn, 'click', () => this.undoLastExchange());
     }
 
     if (newChatBtn) {
@@ -312,17 +331,13 @@ function initializeChatImpl() {
             if (!newChatHint) return;
             newChatHint.hidden = true;
             newChatHint.textContent = '';
-            if (typeof newChatHint.classList?.remove === 'function') {
-                newChatHint.classList.remove('visible');
-            }
+            safeRemoveClass(newChatHint, 'visible');
         };
         const showNewChatConfirmHint = (message = NEW_CHAT_CONFIRM_HINT) => {
             if (!newChatHint) return;
             newChatHint.textContent = String(message || '');
             newChatHint.hidden = false;
-            if (typeof newChatHint.classList?.add === 'function') {
-                newChatHint.classList.add('visible');
-            }
+            safeAddClass(newChatHint, 'visible');
         };
         const defaultNewChatLabel = String(newChatBtn.textContent || '').trim() || '新对话';
         const defaultNewChatTitle = String(newChatBtn.title || '').trim() || defaultNewChatLabel;
@@ -334,18 +349,14 @@ function initializeChatImpl() {
             this.pendingNewChatConfirm = false;
             newChatBtn.textContent = defaultNewChatLabel;
             newChatBtn.title = defaultNewChatTitle;
-            if (typeof newChatBtn.setAttribute === 'function') {
-                newChatBtn.setAttribute('aria-label', defaultNewChatLabel);
-            }
+            safeSetAttribute(newChatBtn, 'aria-label', defaultNewChatLabel);
             hideNewChatConfirmHint();
         };
         const armNewChatConfirm = () => {
             this.pendingNewChatConfirm = true;
             newChatBtn.textContent = NEW_CHAT_CONFIRM_LABEL;
             newChatBtn.title = '再次点击后清空当前对话';
-            if (typeof newChatBtn.setAttribute === 'function') {
-                newChatBtn.setAttribute('aria-label', NEW_CHAT_CONFIRM_LABEL);
-            }
+            safeSetAttribute(newChatBtn, 'aria-label', NEW_CHAT_CONFIRM_LABEL);
             showNewChatConfirmHint();
             this.pendingNewChatConfirmTimer = setTimeout(() => {
                 resetNewChatConfirm();
@@ -407,11 +418,11 @@ function initializeChatImpl() {
             resetNewChatConfirm();
         };
 
-        newChatBtn.addEventListener('pointerdown', (event) => {
+        safeAddEventListener(newChatBtn, 'pointerdown', (event) => {
             if (!isTouchPreferredEnvironment()) return;
             tryStartTouchHold(event);
         });
-        newChatBtn.addEventListener('pointermove', (event) => {
+        safeAddEventListener(newChatBtn, 'pointermove', (event) => {
             if (!matchesHoldPointer(event)) return;
             if (!holdTimer) return;
             const dx = (Number(event?.clientX) || 0) - holdStartX;
@@ -424,12 +435,12 @@ function initializeChatImpl() {
             if (!matchesHoldPointer(event)) return;
             cancelTouchHold();
         };
-        newChatBtn.addEventListener('pointerup', endTouchHold);
-        newChatBtn.addEventListener('pointercancel', endTouchHold);
+        safeAddEventListener(newChatBtn, 'pointerup', endTouchHold);
+        safeAddEventListener(newChatBtn, 'pointercancel', endTouchHold);
 
         hideNewChatConfirmHint();
 
-        newChatBtn.addEventListener('click', (event) => {
+        safeAddEventListener(newChatBtn, 'click', (event) => {
             if (suppressNextClick) {
                 suppressNextClick = false;
                 event?.preventDefault?.();
@@ -446,7 +457,7 @@ function initializeChatImpl() {
     }
 
     if (historySelect) {
-        historySelect.addEventListener('change', (e) => {
+        safeAddEventListener(historySelect, 'change', (e) => {
             const id = e.target.value;
             if (id) this.loadConversationFromHistory(id);
         });
@@ -614,11 +625,13 @@ function addChatMessageImpl(role, content, options = {}) {
     });
     const contentEl = messageEl.querySelector('.chat-message-content');
     if (contentEl && density) {
-        contentEl.classList.add(`chat-density-${density}`);
+        safeAddClass(contentEl, `chat-density-${density}`);
     }
 
-    messagesDiv.appendChild(messageEl);
-    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    if (messagesDiv) {
+        messagesDiv.appendChild(messageEl);
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
 
     if (markdown) {
         this.queueMathTypeset(messageEl);
@@ -657,7 +670,9 @@ function startNewConversationImpl() {
         this.archiveCurrentConversation();
     }
     const messagesDiv = document.getElementById('chat-messages');
-    messagesDiv.innerHTML = '';
+    if (messagesDiv) {
+        messagesDiv.innerHTML = '';
+    }
     this.messageHistory = [];
     this.lastQuestion = '';
     this.updateChatActionVisibility();
@@ -718,7 +733,9 @@ function loadConversationFromHistoryImpl(id) {
     if (!record) return;
 
     const messagesDiv = document.getElementById('chat-messages');
-    messagesDiv.innerHTML = '';
+    if (messagesDiv) {
+        messagesDiv.innerHTML = '';
+    }
     this.messageHistory = [];
     this.lastQuestion = '';
 

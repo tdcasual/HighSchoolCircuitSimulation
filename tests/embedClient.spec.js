@@ -125,3 +125,166 @@ describe('buildEmbedUrl', () => {
         applet.destroy();
     });
 });
+
+describe('HSCSApplet resilience', () => {
+    it('inject keeps progressing when message listener registration throws', async () => {
+        const iframeContentWindow = {
+            postMessage: vi.fn()
+        };
+        const container = {
+            child: null,
+            appendChild(node) {
+                this.child = node;
+                node.parentNode = this;
+            },
+            removeChild(node) {
+                if (this.child === node) {
+                    this.child = null;
+                }
+            }
+        };
+        const doc = {
+            querySelector: vi.fn((selector) => (selector === '#mount' ? container : null)),
+            createElement: vi.fn(() => ({
+                className: '',
+                setAttribute: vi.fn(),
+                style: {},
+                contentWindow: iframeContentWindow,
+                parentNode: null
+            }))
+        };
+        const win = {
+            location: {
+                href: 'https://portal.example/course/lesson',
+                origin: 'https://portal.example'
+            },
+            addEventListener: vi.fn(() => {
+                throw new Error('listener registration failed');
+            }),
+            removeEventListener: vi.fn(),
+            setTimeout,
+            clearTimeout
+        };
+
+        const applet = new HSCSApplet(
+            {
+                src: 'https://sim.example/embed.html',
+                requestTimeoutMs: 100
+            },
+            {
+                window: win,
+                document: doc
+            }
+        );
+
+        const injectPromise = applet.inject('#mount');
+        await Promise.resolve();
+        expect(container.child).toBeTruthy();
+        applet.onWindowMessage({
+            source: container.child.contentWindow,
+            origin: 'https://sim.example',
+            data: {
+                channel: 'HSCS_EMBED_V1',
+                apiVersion: 1,
+                type: 'event',
+                method: 'ready',
+                payload: {}
+            }
+        });
+        await expect(injectPromise).resolves.toBe(applet);
+        applet.destroy();
+    });
+
+    it('inject tolerates iframe setAttribute failures', async () => {
+        const listeners = new Map();
+        const iframeContentWindow = {
+            postMessage: vi.fn()
+        };
+        const container = {
+            child: null,
+            appendChild(node) {
+                this.child = node;
+                node.parentNode = this;
+            },
+            removeChild(node) {
+                if (this.child === node) {
+                    this.child = null;
+                }
+            }
+        };
+        const doc = {
+            querySelector: vi.fn((selector) => (selector === '#mount' ? container : null)),
+            createElement: vi.fn(() => ({
+                className: '',
+                setAttribute: vi.fn(() => {
+                    throw new Error('setAttribute failed');
+                }),
+                style: {},
+                contentWindow: iframeContentWindow,
+                parentNode: null
+            }))
+        };
+        const win = {
+            location: {
+                href: 'https://portal.example/course/lesson',
+                origin: 'https://portal.example'
+            },
+            addEventListener: vi.fn((eventName, handler) => listeners.set(eventName, handler)),
+            removeEventListener: vi.fn((eventName) => listeners.delete(eventName)),
+            setTimeout,
+            clearTimeout
+        };
+
+        const applet = new HSCSApplet(
+            {
+                src: 'https://sim.example/embed.html',
+                requestTimeoutMs: 100
+            },
+            {
+                window: win,
+                document: doc
+            }
+        );
+
+        const injectPromise = applet.inject('#mount');
+        await Promise.resolve();
+        const onMessage = listeners.get('message');
+        expect(onMessage).toBeTypeOf('function');
+        onMessage({
+            source: container.child.contentWindow,
+            origin: 'https://sim.example',
+            data: {
+                channel: 'HSCS_EMBED_V1',
+                apiVersion: 1,
+                type: 'event',
+                method: 'ready',
+                payload: {}
+            }
+        });
+        await expect(injectPromise).resolves.toBe(applet);
+        applet.destroy();
+    });
+
+    it('destroy ignores removeEventListener failures', () => {
+        const applet = new HSCSApplet(
+            {},
+            {
+                window: {
+                    location: { origin: 'https://portal.example' },
+                    removeEventListener: vi.fn(() => {
+                        throw new Error('remove failed');
+                    }),
+                    clearTimeout
+                },
+                document: {}
+            }
+        );
+        applet.iframe = {
+            parentNode: {
+                removeChild: vi.fn()
+            }
+        };
+
+        expect(() => applet.destroy()).not.toThrow();
+    });
+});

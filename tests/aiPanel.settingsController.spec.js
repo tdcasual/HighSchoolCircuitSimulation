@@ -131,4 +131,140 @@ describe('SettingsController', () => {
             proxyEndpoint: 'https://proxy.example.com/openai'
         });
     });
+
+    it('initializeSettingsDialog does not throw when settings dialog nodes are missing', () => {
+        stubDocument({});
+        const panel = {
+            bindModelSelector: vi.fn(),
+            syncKnowledgeSettingsVisibility: vi.fn(),
+            saveSettings: vi.fn(),
+            aiClient: {
+                testConnection: vi.fn(async () => ({ success: true, message: 'ok' })),
+                clearApiKey: vi.fn(),
+                listModels: vi.fn(async () => [])
+            },
+            app: { updateStatus: vi.fn() },
+            populateModelLists: vi.fn()
+        };
+
+        const controller = new SettingsController({ panel });
+        expect(() => controller.initializeSettingsDialog()).not.toThrow();
+    });
+
+    it('openSettings does not throw when core form fields are missing', () => {
+        stubDocument({});
+        const panel = {
+            aiClient: {
+                config: {
+                    apiEndpoint: 'https://api.openai.com/v1/chat/completions',
+                    apiKey: '',
+                    textModel: 'gpt-4o-mini',
+                    knowledgeSource: 'local',
+                    knowledgeMcpMode: 'method',
+                    requestMode: 'direct'
+                }
+            },
+            syncKnowledgeSettingsVisibility: vi.fn(),
+            syncSelectToValue: vi.fn(),
+            updateKnowledgeVersionDisplay: vi.fn(),
+            updateLogSummaryDisplay: vi.fn()
+        };
+
+        const controller = new SettingsController({ panel });
+        expect(() => controller.openSettings()).not.toThrow();
+    });
+
+    it('openSettings does not throw when settings dialog classList remove is non-callable', () => {
+        const elements = {
+            'api-endpoint': createElementMock(),
+            'api-key': createElementMock(),
+            'text-model': createElementMock(),
+            'knowledge-source': createElementMock(),
+            'knowledge-mcp-endpoint': createElementMock(),
+            'knowledge-mcp-server': createElementMock(),
+            'knowledge-mcp-mode': createElementMock(),
+            'knowledge-mcp-method': createElementMock(),
+            'knowledge-mcp-resource': createElementMock(),
+            'text-model-select': createElementMock({ options: [] }),
+            'request-mode': createElementMock(),
+            'proxy-endpoint': createElementMock(),
+            'ai-settings-dialog': createElementMock({
+                classList: {
+                    remove: {}
+                }
+            })
+        };
+        stubDocument(elements);
+        const panel = {
+            aiClient: { config: {} },
+            syncKnowledgeSettingsVisibility: vi.fn(),
+            syncSelectToValue: vi.fn(),
+            updateKnowledgeVersionDisplay: vi.fn(),
+            updateLogSummaryDisplay: vi.fn()
+        };
+
+        const controller = new SettingsController({ panel });
+        expect(() => controller.openSettings()).not.toThrow();
+    });
+
+    it('saveSettings falls back to existing config when form fields are missing', () => {
+        stubDocument({});
+        const panel = {
+            aiClient: {
+                config: {
+                    apiEndpoint: 'https://api.openai.com/v1/chat/completions',
+                    apiKey: 'KEY',
+                    textModel: 'gpt-4o-mini',
+                    requestMode: 'proxy',
+                    proxyEndpoint: 'https://proxy.example.com/openai',
+                    knowledgeSource: 'mcp',
+                    knowledgeMcpEndpoint: 'https://mcp.example.com',
+                    knowledgeMcpServer: 'circuit-knowledge',
+                    knowledgeMcpMode: 'resource',
+                    knowledgeMcpMethod: 'knowledge.search',
+                    knowledgeMcpResource: 'knowledge://circuit/high-school'
+                },
+                saveConfig: vi.fn()
+            },
+            refreshKnowledgeProvider: vi.fn(),
+            app: {
+                updateStatus: vi.fn()
+            },
+            logPanelEvent: vi.fn(),
+            updateLogSummaryDisplay: vi.fn()
+        };
+        const controller = new SettingsController({ panel });
+
+        expect(() => controller.saveSettings()).not.toThrow();
+        expect(panel.aiClient.saveConfig).toHaveBeenCalledWith(expect.objectContaining({
+            apiEndpoint: 'https://api.openai.com/v1/chat/completions',
+            apiKey: 'KEY',
+            textModel: 'gpt-4o-mini',
+            requestMode: 'proxy',
+            proxyEndpoint: 'https://proxy.example.com/openai'
+        }));
+    });
+
+    it('bindModelSelector does not throw when select addEventListener is non-callable', () => {
+        const panel = {};
+        const controller = new SettingsController({ panel });
+        const selectEl = { addEventListener: {}, value: 'gpt-4o' };
+        const inputEl = { value: '' };
+
+        expect(() => controller.bindModelSelector(selectEl, inputEl)).not.toThrow();
+    });
+
+    it('bindModelSelector does not throw when select addEventListener throws', () => {
+        const panel = {};
+        const controller = new SettingsController({ panel });
+        const selectEl = {
+            addEventListener: vi.fn(() => {
+                throw new TypeError('broken add');
+            }),
+            value: 'gpt-4o'
+        };
+        const inputEl = { value: '' };
+
+        expect(() => controller.bindModelSelector(selectEl, inputEl)).not.toThrow();
+    });
 });

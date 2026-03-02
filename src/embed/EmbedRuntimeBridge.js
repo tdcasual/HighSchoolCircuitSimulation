@@ -1,4 +1,11 @@
 import { createRuntimeLogger } from '../utils/Logger.js';
+import {
+    safeAddEventListener,
+    safeClassListAdd,
+    safeClassListToggle,
+    safeRemoveEventListener,
+    safeSetAttribute
+} from '../utils/RuntimeSafety.js';
 
 const EMBED_CHANNEL = 'HSCS_EMBED_V1';
 const EMBED_API_VERSION = 1;
@@ -168,7 +175,7 @@ export class EmbedRuntimeBridge {
 
     initialize() {
         if (!this.window || !this.document) return;
-        this.window.addEventListener('message', this.boundMessage);
+        safeAddEventListener(this.window, 'message', this.boundMessage);
         this.patchStatusPublisher();
         this.applyRuntimeOptions();
         this.window.setTimeout(() => {
@@ -182,7 +189,7 @@ export class EmbedRuntimeBridge {
 
     destroy() {
         if (!this.window) return;
-        this.window.removeEventListener('message', this.boundMessage);
+        safeRemoveEventListener(this.window, 'message', this.boundMessage);
     }
 
     patchStatusPublisher() {
@@ -207,7 +214,7 @@ export class EmbedRuntimeBridge {
     applyRuntimeOptions() {
         const body = this.document?.body;
         if (!body?.classList) return;
-        body.classList.add('embed-runtime');
+        safeClassListAdd(body, 'embed-runtime');
         this.applyMode(this.mode);
         this.applyFeatures(this.featureFlags);
         this.applyClassroomLevel(this.classroomLevel, { announce: false });
@@ -217,10 +224,10 @@ export class EmbedRuntimeBridge {
         const body = this.document?.body;
         if (!body?.classList) return;
         this.mode = normalizeMode(nextMode);
-        body.classList.toggle('embed-mode-edit', this.mode === EMBED_MODE_EDIT);
-        body.classList.toggle('embed-mode-classroom', this.mode === EMBED_MODE_CLASSROOM);
-        body.classList.toggle('embed-mode-readonly', this.mode === EMBED_MODE_READONLY);
-        body.classList.toggle('embed-readonly', this.mode === EMBED_MODE_READONLY || this.readOnly);
+        safeClassListToggle(body, 'embed-mode-edit', this.mode === EMBED_MODE_EDIT);
+        safeClassListToggle(body, 'embed-mode-classroom', this.mode === EMBED_MODE_CLASSROOM);
+        safeClassListToggle(body, 'embed-mode-readonly', this.mode === EMBED_MODE_READONLY);
+        safeClassListToggle(body, 'embed-readonly', this.mode === EMBED_MODE_READONLY || this.readOnly);
     }
 
     applyFeatures(nextFlags = {}) {
@@ -228,12 +235,12 @@ export class EmbedRuntimeBridge {
         const body = this.document?.body;
         if (!body?.classList) return;
 
-        body.classList.toggle('embed-hide-toolbox', !this.featureFlags.toolbox);
-        body.classList.toggle('embed-hide-side-panel', !this.featureFlags.sidePanel);
-        body.classList.toggle('embed-hide-status', !this.featureFlags.statusBar);
-        body.classList.toggle('embed-hide-ai', !this.featureFlags.ai);
-        body.classList.toggle('embed-hide-exercise', !this.featureFlags.exerciseBoard);
-        body.classList.toggle('embed-hide-observation', !this.featureFlags.observation);
+        safeClassListToggle(body, 'embed-hide-toolbox', !this.featureFlags.toolbox);
+        safeClassListToggle(body, 'embed-hide-side-panel', !this.featureFlags.sidePanel);
+        safeClassListToggle(body, 'embed-hide-status', !this.featureFlags.statusBar);
+        safeClassListToggle(body, 'embed-hide-ai', !this.featureFlags.ai);
+        safeClassListToggle(body, 'embed-hide-exercise', !this.featureFlags.exerciseBoard);
+        safeClassListToggle(body, 'embed-hide-observation', !this.featureFlags.observation);
 
         const observationTab = this.document.querySelector?.('.panel-tab-btn[data-panel="observation"]');
         if (observationTab) {
@@ -242,7 +249,11 @@ export class EmbedRuntimeBridge {
         const observationPanel = this.document.getElementById?.('panel-observation');
         if (observationPanel) {
             observationPanel.hidden = !this.featureFlags.observation;
-            observationPanel.setAttribute('aria-hidden', !this.featureFlags.observation ? 'true' : 'false');
+            safeSetAttribute(
+                observationPanel,
+                'aria-hidden',
+                !this.featureFlags.observation ? 'true' : 'false'
+            );
         }
         if (!this.featureFlags.observation && typeof this.app?.interaction?.activateSidePanelTab === 'function') {
             this.app.interaction.activateSidePanelTab('properties');

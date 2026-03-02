@@ -9,6 +9,13 @@ import { AILogService } from '../ai/AILogService.js';
 import { ChatController } from './ai/ChatController.js';
 import { SettingsController } from './ai/SettingsController.js';
 import { PanelLayoutController } from './ai/PanelLayoutController.js';
+import {
+    safeAddEventListener,
+    safeClassListToggle,
+    safeFocus,
+    safeInvoke,
+    safeSetAttribute
+} from '../utils/RuntimeSafety.js';
 
 export class AIPanel {
     constructor(app) {
@@ -75,7 +82,7 @@ export class AIPanel {
 
         // 折叠/展开
         if (this.toggleBtn && this.panel) {
-            this.toggleBtn.addEventListener('click', (event) => {
+            safeAddEventListener(this.toggleBtn, 'click', (event) => {
                 event.preventDefault();
                 event.stopPropagation();
                 this.setPanelCollapsed(!this.isPanelCollapsed());
@@ -83,15 +90,18 @@ export class AIPanel {
             });
         }
         if (this.panelHeader) {
-            this.panelHeader.addEventListener('dblclick', (event) => {
-                if (event.target.closest('#ai-panel-actions')) return;
+            safeAddEventListener(this.panelHeader, 'dblclick', (event) => {
+                const inPanelActions = typeof event?.target?.closest === 'function'
+                    ? event.target.closest('#ai-panel-actions')
+                    : null;
+                if (inPanelActions) return;
                 event.preventDefault();
                 this.setPanelCollapsed(!this.isPanelCollapsed());
                 this.markPanelActive();
             });
         }
         if (this.fabBtn) {
-            this.fabBtn.addEventListener('click', (event) => {
+            safeAddEventListener(this.fabBtn, 'click', (event) => {
                 event.preventDefault();
                 event.stopPropagation();
                 if (this.suppressFabClickOnce) {
@@ -105,7 +115,8 @@ export class AIPanel {
         this.syncPanelCollapsedUI();
 
         // 设置按钮
-        document.getElementById('ai-settings-btn').addEventListener('click', () => {
+        const settingsButton = document.getElementById('ai-settings-btn');
+        safeAddEventListener(settingsButton, 'click', () => {
             this.openSettings();
         });
 
@@ -168,7 +179,7 @@ export class AIPanel {
 
         const selectionStart = start + insertPrefix.length;
         const selectionEnd = selectionStart + template.placeholder.length;
-        input.focus();
+        safeFocus(input);
         if (typeof input.setSelectionRange === 'function') {
             input.setSelectionRange(selectionStart, selectionEnd);
         }
@@ -262,8 +273,8 @@ export class AIPanel {
                 if (!this.isSafeLinkHref(href)) {
                     element.removeAttribute('href');
                 }
-                element.setAttribute('target', '_blank');
-                element.setAttribute('rel', 'noopener noreferrer');
+                safeSetAttribute(element, 'target', '_blank');
+                safeSetAttribute(element, 'rel', 'noopener noreferrer');
             }
             return true;
         };
@@ -293,7 +304,7 @@ export class AIPanel {
         const script = document.getElementById('MathJax-script');
         if (!script || this.mathJaxLoadListenerBound) return;
         this.mathJaxLoadListenerBound = true;
-        script.addEventListener('load', () => {
+        safeAddEventListener(script, 'load', () => {
             this.flushMathTypesetQueue();
         });
     }
@@ -418,19 +429,19 @@ export class AIPanel {
         }
         const advancedOpen = !!this.chatAdvancedExpanded && hasAdvancedActions;
         if (followupActions) {
-            followupActions.classList.toggle('visible', advancedOpen && hasAssistantReply);
+            safeClassListToggle(followupActions, 'visible', advancedOpen && hasAssistantReply);
         }
         if (quickQuestions) {
-            quickQuestions.classList.toggle('visible', advancedOpen && !hasConversation);
+            safeClassListToggle(quickQuestions, 'visible', advancedOpen && !hasConversation);
         }
         if (chatControls) {
-            chatControls.classList.toggle('visible', advancedOpen && (hasConversation || hasArchivedHistory));
+            safeClassListToggle(chatControls, 'visible', advancedOpen && (hasConversation || hasArchivedHistory));
         }
         if (advancedToggleBtn) {
             const showToggle = hasAdvancedActions;
             advancedToggleBtn.style.display = showToggle ? '' : 'none';
-            advancedToggleBtn.setAttribute('aria-hidden', showToggle ? 'false' : 'true');
-            advancedToggleBtn.setAttribute('aria-expanded', advancedOpen ? 'true' : 'false');
+            safeSetAttribute(advancedToggleBtn, 'aria-hidden', showToggle ? 'false' : 'true');
+            safeSetAttribute(advancedToggleBtn, 'aria-expanded', advancedOpen ? 'true' : 'false');
             advancedToggleBtn.textContent = advancedOpen ? '收起操作' : '更多操作';
         }
     }
@@ -550,7 +561,8 @@ export class AIPanel {
     saveCircuitToLocalStorage(circuitJSON) {
         try {
             // Prefer app-level serializer so extra UI state (e.g. 习题板) can be persisted together.
-            const payload = this.app?.buildSaveData ? this.app.buildSaveData() : circuitJSON;
+            const appPayload = safeInvoke(this.app, 'buildSaveData');
+            const payload = appPayload ?? circuitJSON;
             localStorage.setItem('saved_circuit', JSON.stringify(payload));
         } catch (e) {
             this.logPanelEvent?.('error', 'save_circuit_failed', {
@@ -570,7 +582,7 @@ export class AIPanel {
                 const circuitJSON = JSON.parse(saved);
                 this.circuit.fromJSON(circuitJSON);
                 this.app.renderer.render();
-                this.app.exerciseBoard?.fromJSON?.(circuitJSON.meta?.exerciseBoard);
+                safeInvoke(this.app?.exerciseBoard, 'fromJSON', circuitJSON.meta?.exerciseBoard);
                 this.app.updateStatus('已从缓存恢复电路');
                 return true;
             }

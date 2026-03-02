@@ -174,4 +174,78 @@ describe('EmbedRuntimeBridge', () => {
         expect(state.mode).toBe('readonly');
         expect(state.isRunning).toBe(true);
     });
+
+    it('initialize keeps running when message listener registration throws', () => {
+        const fixture = createBridgeFixture();
+        fixture.win.addEventListener = vi.fn(() => {
+            throw new Error('listener registration failed');
+        });
+
+        expect(() => {
+            new EmbedRuntimeBridge(
+                fixture.app,
+                { enabled: true, mode: 'readonly' },
+                { window: fixture.win, document: fixture.doc }
+            );
+        }).not.toThrow();
+        expect(fixture.body.classList.contains('embed-runtime')).toBe(true);
+    });
+
+    it('destroy ignores removeEventListener failures', () => {
+        const fixture = createBridgeFixture();
+        fixture.win.removeEventListener = vi.fn(() => {
+            throw new Error('listener removal failed');
+        });
+        const bridge = new EmbedRuntimeBridge(
+            fixture.app,
+            { enabled: false },
+            { window: fixture.win, document: fixture.doc }
+        );
+
+        expect(() => bridge.destroy()).not.toThrow();
+    });
+
+    it('applyRuntimeOptions ignores classList.add failures', () => {
+        const fixture = createBridgeFixture();
+        fixture.body.classList.add = vi.fn(() => {
+            throw new Error('classList.add failed');
+        });
+        const bridge = new EmbedRuntimeBridge(
+            fixture.app,
+            { enabled: false },
+            { window: fixture.win, document: fixture.doc }
+        );
+
+        expect(() => bridge.applyRuntimeOptions()).not.toThrow();
+    });
+
+    it('applyMode ignores classList.toggle failures', () => {
+        const fixture = createBridgeFixture();
+        fixture.body.classList.toggle = vi.fn(() => {
+            throw new Error('classList.toggle failed');
+        });
+        const bridge = new EmbedRuntimeBridge(
+            fixture.app,
+            { enabled: false },
+            { window: fixture.win, document: fixture.doc }
+        );
+
+        expect(() => bridge.applyMode('readonly')).not.toThrow();
+        expect(bridge.mode).toBe('readonly');
+    });
+
+    it('applyFeatures ignores observation aria attribute failures', () => {
+        const fixture = createBridgeFixture();
+        fixture.observationPanel.setAttribute = vi.fn(() => {
+            throw new Error('setAttribute failed');
+        });
+        const bridge = new EmbedRuntimeBridge(
+            fixture.app,
+            { enabled: false },
+            { window: fixture.win, document: fixture.doc }
+        );
+
+        expect(() => bridge.applyFeatures({ observation: false })).not.toThrow();
+        expect(fixture.observationPanel.hidden).toBe(true);
+    });
 });
