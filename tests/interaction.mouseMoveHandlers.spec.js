@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+    handleWireDragMouseMove,
     handleWireEndpointDragMouseMove,
     handlePanningMouseMove,
     handlePointerDownInfoMouseMove,
@@ -277,5 +278,99 @@ describe('InteractionOrchestratorMouseMoveHandlers.handleWireEndpointDragMouseMo
         }));
         expect(snapCall[2].dragSpeedPxPerMs).toBeCloseTo(0.6576, 3);
         expect(context.touchActionController.cancel).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('InteractionOrchestratorMouseMoveHandlers.handleWireDragMouseMove', () => {
+    it('returns false when whole-wire drag is inactive', () => {
+        const context = {
+            isDraggingWire: false
+        };
+
+        const handled = handleWireDragMouseMove.call(context, { clientX: 10, clientY: 10 }, 20, 30);
+
+        expect(handled).toBe(false);
+    });
+
+    it('cancels touch long-press tracking when drag crosses movement threshold', () => {
+        const wire = {
+            id: 'W1',
+            a: { x: 40, y: 60 },
+            b: { x: 120, y: 60 }
+        };
+        const context = {
+            isDraggingWire: true,
+            wireDrag: {
+                wireId: 'W1',
+                startCanvas: { x: 40, y: 60 },
+                startClient: { x: 100, y: 100 },
+                startA: { x: 40, y: 60 },
+                startB: { x: 120, y: 60 },
+                detached: false,
+                lastDx: 0,
+                lastDy: 0
+            },
+            resolvePointerType: vi.fn(() => 'touch'),
+            circuit: {
+                getWire: vi.fn(() => wire)
+            },
+            touchActionController: { cancel: vi.fn() },
+            renderer: {
+                refreshWire: vi.fn()
+            }
+        };
+
+        const handled = handleWireDragMouseMove.call(context, {
+            clientX: 120,
+            clientY: 100,
+            shiftKey: false
+        }, 56, 60);
+
+        expect(handled).toBe(true);
+        expect(context.touchActionController.cancel).toHaveBeenCalledTimes(1);
+    });
+
+    it('detaches terminal refs and refreshes wire when translation changes', () => {
+        const wire = {
+            id: 'W1',
+            a: { x: 40, y: 60 },
+            b: { x: 120, y: 60 },
+            aRef: { componentId: 'R1', terminalIndex: 0 },
+            bRef: { componentId: 'R2', terminalIndex: 1 }
+        };
+        const context = {
+            isDraggingWire: true,
+            wireDrag: {
+                wireId: 'W1',
+                startCanvas: { x: 40, y: 60 },
+                startClient: { x: 100, y: 100 },
+                startA: { x: 40, y: 60 },
+                startB: { x: 120, y: 60 },
+                detached: false,
+                lastDx: 0,
+                lastDy: 0
+            },
+            resolvePointerType: vi.fn(() => 'mouse'),
+            circuit: {
+                getWire: vi.fn(() => wire)
+            },
+            renderer: {
+                refreshWire: vi.fn()
+            }
+        };
+
+        const handled = handleWireDragMouseMove.call(context, {
+            clientX: 106,
+            clientY: 106,
+            shiftKey: false
+        }, 58, 66);
+
+        expect(handled).toBe(true);
+        expect(context.wireDrag.detached).toBe(true);
+        expect(wire.aRef).toBeUndefined();
+        expect(wire.bRef).toBeUndefined();
+        expect(wire.a).toEqual({ x: 58, y: 66 });
+        expect(wire.b).toEqual({ x: 138, y: 66 });
+        expect(context.renderer.refreshWire).toHaveBeenCalledWith('W1');
     });
 });

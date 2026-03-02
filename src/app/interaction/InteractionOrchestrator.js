@@ -1,4 +1,4 @@
-import { GRID_SIZE, snapToGrid, toCanvasInt } from '../../utils/CanvasCoords.js';
+import { toCanvasInt } from '../../utils/CanvasCoords.js';
 import {
     initializeInteractionModeStore as initializeInteractionModeStoreViaStateMachine,
     syncInteractionModeStore as syncInteractionModeStoreViaStateMachine
@@ -23,6 +23,7 @@ import {
 } from './InteractionOrchestratorMouseUpHandlers.js';
 import {
     handlePanningMouseMove as handlePanningMouseMoveViaHandlers,
+    handleWireDragMouseMove as handleWireDragMouseMoveViaHandlers,
     handlePointerDownInfoMouseMove as handlePointerDownInfoMouseMoveViaHandlers,
     handleWireEndpointDragMouseMove as handleWireEndpointDragMouseMoveViaHandlers,
     handleWireModeGestureMouseMove as handleWireModeGestureMouseMoveViaHandlers
@@ -132,47 +133,7 @@ export function onMouseMove(e) {
     }
 
     // 拖动整条导线（平移，保持线段形状）
-    if (this.isDraggingWire && this.wireDrag) {
-        const drag = this.wireDrag;
-        const wire = this.circuit.getWire(drag.wireId);
-        if (!wire || !wire.a || !wire.b) return;
-        const pointerType = this.resolvePointerType(e);
-
-        const dxScreen = e.clientX - (drag.startClient?.x || 0);
-        const dyScreen = e.clientY - (drag.startClient?.y || 0);
-        const movedScreen = Math.hypot(dxScreen, dyScreen);
-        const moveThreshold = 3; // px
-        if (movedScreen >= moveThreshold && (pointerType === 'touch' || pointerType === 'pen') && !drag.longPressCancelled) {
-            this.touchActionController?.cancel?.();
-            drag.longPressCancelled = true;
-        }
-
-        const rawDx = canvasX - (drag.startCanvas?.x || 0);
-        const rawDy = canvasY - (drag.startCanvas?.y || 0);
-        const snappedDx = e.shiftKey ? snapToGrid(rawDx, GRID_SIZE) : toCanvasInt(rawDx);
-        const snappedDy = e.shiftKey ? snapToGrid(rawDy, GRID_SIZE) : toCanvasInt(rawDy);
-
-        // Avoid accidental micro-moves: only start applying translation after threshold.
-        if (movedScreen < moveThreshold && snappedDx === 0 && snappedDy === 0) {
-            return;
-        }
-
-        if (!drag.detached && (snappedDx !== 0 || snappedDy !== 0)) {
-            // Dragging a wire segment translates both endpoints; detach any terminal bindings.
-            delete wire.aRef;
-            delete wire.bRef;
-            drag.detached = true;
-        }
-
-        if (snappedDx === drag.lastDx && snappedDy === drag.lastDy) {
-            return;
-        }
-        drag.lastDx = snappedDx;
-        drag.lastDy = snappedDy;
-
-        wire.a = { x: (drag.startA?.x || 0) + snappedDx, y: (drag.startA?.y || 0) + snappedDy };
-        wire.b = { x: (drag.startB?.x || 0) + snappedDx, y: (drag.startB?.y || 0) + snappedDy };
-        this.renderer.refreshWire(drag.wireId);
+    if (handleWireDragMouseMoveViaHandlers.call(this, e, canvasX, canvasY)) {
         return;
     }
 
