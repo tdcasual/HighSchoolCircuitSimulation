@@ -46,7 +46,7 @@ export function getActiveInteractionMode() {
                 reason: 'invalid-store-mode'
             });
         } catch (_) {
-            // Ignore store read failures and fall back to legacy runtime flags.
+            // Ignore store read failures and use the safe default mode.
             recordLegacyPathUsage(usageTarget, 'interaction.mode.legacy-fallback', {
                 reason: 'store-read-error'
             });
