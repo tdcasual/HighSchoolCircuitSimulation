@@ -3,7 +3,6 @@ import {
     syncInteractionModeStore as syncInteractionModeStoreViaStateMachine
 } from './InteractionModeStateMachine.js';
 import {
-    resolveLiveWireStart,
     safeClosest,
 } from './InteractionOrchestratorHelpers.js';
 import {
@@ -26,6 +25,7 @@ import {
     handleWireDragMouseMove as handleWireDragMouseMoveViaHandlers,
     handlePointerDownInfoMouseMove as handlePointerDownInfoMouseMoveViaHandlers,
     handleWireEndpointDragMouseMove as handleWireEndpointDragMouseMoveViaHandlers,
+    handleWiringPreviewMouseMove as handleWiringPreviewMouseMoveViaHandlers,
     handleWireModeGestureMouseMove as handleWireModeGestureMouseMoveViaHandlers
 } from './InteractionOrchestratorMouseMoveHandlers.js';
 import { handleMouseLeave as handleMouseLeaveViaHandlers } from './InteractionOrchestratorMouseLeaveHandlers.js';
@@ -138,28 +138,7 @@ export function onMouseMove(e) {
     }
 
     handleComponentDragMouseMoveViaHandlers.call(this, e, canvasX, canvasY);
-
-    // 连线预览
-    if (this.isWiring && this.wireStart && this.tempWire) {
-        const preview = this.snapPoint(canvasX, canvasY, {
-            allowWireSegmentSnap: true,
-            pointerType: this.resolvePointerType(e)
-        });
-        const startAnchor = resolveLiveWireStart(this) || this.wireStart;
-        if (startAnchor && this.wireStart) {
-            this.wireStart.x = startAnchor.x;
-            this.wireStart.y = startAnchor.y;
-            this.wireStart.snap = startAnchor.snap || this.wireStart.snap || null;
-        }
-        this.renderer.updateTempWire(this.tempWire, startAnchor.x, startAnchor.y, preview.x, preview.y);
-        if (preview.snap?.type === 'terminal') {
-            this.renderer.highlightTerminal(preview.snap.componentId, preview.snap.terminalIndex);
-        } else if (preview.snap?.type === 'wire-segment' && typeof this.renderer.highlightWireNode === 'function') {
-            this.renderer.highlightWireNode(preview.x, preview.y);
-        } else {
-            this.renderer.clearTerminalHighlight();
-        }
-    }
+    handleWiringPreviewMouseMoveViaHandlers.call(this, e, canvasX, canvasY);
 }
 
 export function onMouseUp(e) {

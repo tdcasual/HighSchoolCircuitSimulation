@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
     handleComponentDragMouseMove,
+    handleWiringPreviewMouseMove,
     handleWireDragMouseMove,
     handleWireEndpointDragMouseMove,
     handlePanningMouseMove,
@@ -461,5 +462,51 @@ describe('InteractionOrchestratorMouseMoveHandlers.handleComponentDragMouseMove'
         expect(context.renderer.refreshWire).toHaveBeenCalledWith('W1');
         expect(context.renderer.updateComponentPosition).not.toHaveBeenCalled();
         expect(context.showAlignmentGuides).toHaveBeenCalledWith({ snapX: null, snapY: null });
+    });
+});
+
+describe('InteractionOrchestratorMouseMoveHandlers.handleWiringPreviewMouseMove', () => {
+    it('returns false when wiring preview is inactive', () => {
+        const context = {
+            isWiring: false,
+            wireStart: null,
+            tempWire: null
+        };
+
+        const handled = handleWiringPreviewMouseMove.call(context, { clientX: 10, clientY: 20 }, 30, 40);
+
+        expect(handled).toBe(false);
+    });
+
+    it('updates temp wire and wire-node highlight for segment snap', () => {
+        const context = {
+            isWiring: true,
+            wireStart: { x: 10, y: 20 },
+            tempWire: 'TEMP',
+            resolvePointerType: vi.fn(() => 'mouse'),
+            snapPoint: vi.fn(() => ({
+                x: 131,
+                y: 141,
+                snap: { type: 'wire-segment', wireId: 'W2' }
+            })),
+            renderer: {
+                updateTempWire: vi.fn(),
+                highlightTerminal: vi.fn(),
+                highlightWireNode: vi.fn(),
+                clearTerminalHighlight: vi.fn()
+            }
+        };
+
+        const handled = handleWiringPreviewMouseMove.call(context, { clientX: 300, clientY: 320 }, 100, 120);
+
+        expect(handled).toBe(true);
+        expect(context.snapPoint).toHaveBeenCalledWith(100, 120, {
+            allowWireSegmentSnap: true,
+            pointerType: 'mouse'
+        });
+        expect(context.renderer.updateTempWire).toHaveBeenCalledWith('TEMP', 10, 20, 131, 141);
+        expect(context.renderer.highlightWireNode).toHaveBeenCalledWith(131, 141);
+        expect(context.renderer.highlightTerminal).not.toHaveBeenCalled();
+        expect(context.renderer.clearTerminalHighlight).not.toHaveBeenCalled();
     });
 });

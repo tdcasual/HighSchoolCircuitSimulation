@@ -1,4 +1,5 @@
 import { GRID_SIZE, snapToGrid, toCanvasInt } from '../../utils/CanvasCoords.js';
+import { resolveLiveWireStart } from './InteractionOrchestratorHelpers.js';
 
 export function handleWireModeGestureMouseMove(e) {
     if (!this.wireModeGesture) {
@@ -364,5 +365,31 @@ export function handleComponentDragMouseMove(_e, canvasX, canvasY) {
 
     // 显示对齐辅助线
     this.showAlignmentGuides(alignment);
+    return true;
+}
+
+export function handleWiringPreviewMouseMove(e, canvasX, canvasY) {
+    if (!(this.isWiring && this.wireStart && this.tempWire)) {
+        return false;
+    }
+
+    const preview = this.snapPoint(canvasX, canvasY, {
+        allowWireSegmentSnap: true,
+        pointerType: this.resolvePointerType(e)
+    });
+    const startAnchor = resolveLiveWireStart(this) || this.wireStart;
+    if (startAnchor && this.wireStart) {
+        this.wireStart.x = startAnchor.x;
+        this.wireStart.y = startAnchor.y;
+        this.wireStart.snap = startAnchor.snap || this.wireStart.snap || null;
+    }
+    this.renderer.updateTempWire(this.tempWire, startAnchor.x, startAnchor.y, preview.x, preview.y);
+    if (preview.snap?.type === 'terminal') {
+        this.renderer.highlightTerminal(preview.snap.componentId, preview.snap.terminalIndex);
+    } else if (preview.snap?.type === 'wire-segment' && typeof this.renderer.highlightWireNode === 'function') {
+        this.renderer.highlightWireNode(preview.x, preview.y);
+    } else {
+        this.renderer.clearTerminalHighlight();
+    }
     return true;
 }
