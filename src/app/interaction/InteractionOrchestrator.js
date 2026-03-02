@@ -6,7 +6,6 @@ import {
 } from './InteractionModeStateMachine.js';
 import {
     resolveLiveWireStart,
-    restorePendingWireToolAfterAction,
     safeClosest,
     shouldCreateEndpointBridge,
     syncActiveWireStartAfterCompaction
@@ -16,6 +15,10 @@ import {
     handleSurfaceTargetMouseDown as handleSurfaceTargetMouseDownViaHandlers,
     handleWireTargetMouseDown as handleWireTargetMouseDownViaHandlers
 } from './InteractionOrchestratorMouseDownHandlers.js';
+import {
+    handlePanningMouseUp as handlePanningMouseUpViaHandlers,
+    handleWireModeGestureMouseUp as handleWireModeGestureMouseUpViaHandlers
+} from './InteractionOrchestratorMouseUpHandlers.js';
 import {
     onContextMenu as onContextMenuViaTail,
     onDoubleClick as onDoubleClickViaTail,
@@ -474,30 +477,12 @@ export function onMouseUp(e) {
     const wireModeGesture = this.wireModeGesture;
     this.wireModeGesture = null;
 
-    if (wireModeGesture) {
-        const pointerType = wireModeGesture.pointerType || this.resolvePointerType(e);
-        const gesturePoint = wireModeGesture.point || this.screenToCanvas(e.clientX, e.clientY);
-        if (wireModeGesture.wasWiring) {
-            if (gesturePoint) {
-                this.finishWiringToPoint(gesturePoint, { pointerType });
-            } else {
-                this.cancelWiring();
-                this.updateStatus?.('未连接到端子/端点，已取消连线');
-            }
-            restorePendingWireToolAfterAction(this);
-        } else {
-            this.startWiringFromPoint(gesturePoint, e, true);
-            this.updateStatus('导线模式：选择终点');
-        }
-        this.pointerDownInfo = null;
+    if (handleWireModeGestureMouseUpViaHandlers.call(this, e, wireModeGesture)) {
         return;
     }
 
     // 结束画布平移
-    if (this.isPanning) {
-        this.isPanning = false;
-        this.svg.style.cursor = '';
-        this.pointerDownInfo = null;
+    if (handlePanningMouseUpViaHandlers.call(this)) {
         return;
     }
 
