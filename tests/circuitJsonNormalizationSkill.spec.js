@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { CircuitJsonNormalizationSkill } from '../src/ai/skills/CircuitJsonNormalizationSkill.js';
 
 describe('CircuitJsonNormalizationSkill', () => {
-    it('converts legacy start/end wires into v2 a/b segments', () => {
+    it('ignores legacy start/end wire schema and keeps canonical a/b wires only', () => {
         const payload = {
             components: [
                 {
@@ -36,11 +36,7 @@ describe('CircuitJsonNormalizationSkill', () => {
 
         expect(normalized.components).toHaveLength(2);
         expect(normalized.components[1].properties.resistance).toBe(8);
-        expect(normalized.wires).toHaveLength(2);
-        expect(normalized.wires[0].aRef).toEqual({ componentId: 'PowerSource_1', terminalIndex: 1 });
-        expect(normalized.wires[1].bRef).toEqual({ componentId: 'Resistor_1', terminalIndex: 0 });
-        expect(normalized.wires[0].a).toHaveProperty('x');
-        expect(normalized.wires[1].b).toHaveProperty('y');
+        expect(normalized.wires).toHaveLength(0);
     });
 
     it('repairs trailing commas and auto-fills component ids/labels', () => {

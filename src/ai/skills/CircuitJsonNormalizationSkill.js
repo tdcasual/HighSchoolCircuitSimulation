@@ -177,13 +177,6 @@ function normalizeTerminalRef(rawRef, componentGeometryMap = null) {
     };
 }
 
-function getLegacyRef(rawWire, prefix, componentGeometryMap) {
-    const componentId = rawWire?.[`${prefix}ComponentId`];
-    const terminalIndex = rawWire?.[`${prefix}TerminalIndex`];
-    if (componentId === undefined || componentId === null) return null;
-    return normalizeTerminalRef({ componentId, terminalIndex }, componentGeometryMap);
-}
-
 function buildComponentGeometryMap(components = []) {
     const map = new Map();
     components.forEach(component => {
@@ -335,37 +328,6 @@ function parseJsonWithRepairs(rawText) {
     throw new Error(`AI 响应无法解析为 JSON: ${lastError?.message || 'Invalid JSON'}`);
 }
 
-function normalizeWireSegmentsFromLegacy(rawWire, componentGeometryMap, usedWireIds, fallbackWireBase) {
-    const startRef = normalizeTerminalRef(rawWire.start, componentGeometryMap) || getLegacyRef(rawWire, 'start', componentGeometryMap);
-    const endRef = normalizeTerminalRef(rawWire.end, componentGeometryMap) || getLegacyRef(rawWire, 'end', componentGeometryMap);
-    if (!startRef || !endRef) return [];
-
-    const startPoint = resolveTerminalPoint(startRef, componentGeometryMap);
-    const endPoint = resolveTerminalPoint(endRef, componentGeometryMap);
-    if (!startPoint || !endPoint) return [];
-
-    const controlPoints = Array.isArray(rawWire.controlPoints)
-        ? rawWire.controlPoints.map(normalizeCanvasPoint).filter(Boolean)
-        : [];
-    const polyline = [startPoint, ...controlPoints, endPoint];
-    if (polyline.length < 2) return [];
-
-    const segments = [];
-    const rawBaseId = String(rawWire.id || fallbackWireBase || 'wire');
-    for (let index = 0; index < polyline.length - 1; index += 1) {
-        const pointA = polyline[index];
-        const pointB = polyline[index + 1];
-        if (!pointA || !pointB) continue;
-        const baseId = index === 0 ? rawBaseId : `${rawBaseId}_${index}`;
-        const id = makeUniqueString(baseId, usedWireIds);
-        const segment = { id, a: pointA, b: pointB };
-        if (index === 0) segment.aRef = startRef;
-        if (index === polyline.length - 2) segment.bRef = endRef;
-        segments.push(segment);
-    }
-    return segments;
-}
-
 function normalizeWire(rawWire, index, componentGeometryMap, terminalCandidates, usedWireIds) {
     if (!rawWire || typeof rawWire !== 'object') return [];
 
@@ -388,7 +350,7 @@ function normalizeWire(rawWire, index, componentGeometryMap, terminalCandidates,
         return [normalized];
     }
 
-    return normalizeWireSegmentsFromLegacy(rawWire, componentGeometryMap, usedWireIds, `wire_${index + 1}`);
+    return [];
 }
 
 function normalizeMeta(rawMeta = {}) {
