@@ -14,15 +14,38 @@ const INTEGRATION_METHOD_OPTIONS = Object.freeze([
     { value: 'backward-euler', label: '后向欧拉' }
 ]);
 
+function safeInvokeMethod(target, methodName, ...args) {
+    const fn = target?.[methodName];
+    if (typeof fn !== 'function') return undefined;
+    try {
+        return fn.apply(target, args);
+    } catch (_) {
+        return undefined;
+    }
+}
+
+function safeAddClass(node, className) {
+    safeInvokeMethod(node?.classList, 'add', className);
+}
+
+function safeRemoveClass(node, className) {
+    safeInvokeMethod(node?.classList, 'remove', className);
+}
+
 export function showPropertyDialog(id) {
     const comp = this.circuit.getComponent(id);
     if (!comp) return;
-    
-    this.editingComponent = comp;
-    
+
     const dialog = document.getElementById('dialog-overlay');
     const title = document.getElementById('dialog-title');
     const content = document.getElementById('dialog-content');
+    if (!dialog || !title || !content) {
+        this.editingComponent = null;
+        this.updateStatus?.('属性对话框不可用');
+        return;
+    }
+
+    this.editingComponent = comp;
     
     title.textContent = `编辑 ${ComponentNames[comp.type]}`;
     
@@ -510,13 +533,13 @@ export function showPropertyDialog(id) {
         }
     }
     
-    dialog.classList.remove('hidden');
+    safeRemoveClass(dialog, 'hidden');
     
     // 滑块实时更新
     const positionSlider = document.getElementById('edit-position');
     const positionValue = document.getElementById('position-value');
     if (positionSlider && positionValue) {
-        positionSlider.addEventListener('input', () => {
+        safeInvokeMethod(positionSlider, 'addEventListener', 'input', () => {
             positionValue.textContent = `${positionSlider.value}%`;
         });
     }
@@ -524,7 +547,7 @@ export function showPropertyDialog(id) {
     const lightLevelSlider = document.getElementById('edit-light-level');
     const lightLevelValue = document.getElementById('light-level-value');
     if (lightLevelSlider && lightLevelValue) {
-        lightLevelSlider.addEventListener('input', () => {
+        safeInvokeMethod(lightLevelSlider, 'addEventListener', 'input', () => {
             lightLevelValue.textContent = `${Math.round(Number(lightLevelSlider.value) || 0)}%`;
         });
     }
@@ -533,13 +556,13 @@ export function showPropertyDialog(id) {
     const switchOpen = document.getElementById('switch-open');
     const switchClose = document.getElementById('switch-close');
     if (switchOpen && switchClose) {
-        switchOpen.addEventListener('click', () => {
-            switchOpen.classList.add('active');
-            switchClose.classList.remove('active');
+        safeInvokeMethod(switchOpen, 'addEventListener', 'click', () => {
+            safeAddClass(switchOpen, 'active');
+            safeRemoveClass(switchClose, 'active');
         });
-        switchClose.addEventListener('click', () => {
-            switchClose.classList.add('active');
-            switchOpen.classList.remove('active');
+        safeInvokeMethod(switchClose, 'addEventListener', 'click', () => {
+            safeAddClass(switchClose, 'active');
+            safeRemoveClass(switchOpen, 'active');
         });
     }
 }

@@ -53,6 +53,63 @@ describe('InteractionOrchestrator.onMouseDown', () => {
         expect(context.clearSelection).not.toHaveBeenCalled();
     });
 
+    it('does not throw when mousedown target has no classList', () => {
+        const context = {
+            resolvePointerType: vi.fn(() => 'mouse'),
+            resolveProbeMarkerTarget: vi.fn(() => null),
+            resolveTerminalTarget: vi.fn(() => null),
+            pendingToolType: null,
+            isWiring: false,
+            screenToCanvas: vi.fn(() => ({ x: 0, y: 0 })),
+            clearSelection: vi.fn(),
+            isWireEndpointTarget: vi.fn(() => false),
+            app: {
+                responsiveLayout: {
+                    closeDrawers: vi.fn()
+                }
+            }
+        };
+        const event = {
+            button: 0,
+            target: {},
+            preventDefault: vi.fn(),
+            stopPropagation: vi.fn()
+        };
+
+        expect(() => InteractionOrchestrator.onMouseDown.call(context, event)).not.toThrow();
+        expect(context.clearSelection).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not throw when mousedown target classList contains is non-callable', () => {
+        const context = {
+            resolvePointerType: vi.fn(() => 'touch'),
+            resolveProbeMarkerTarget: vi.fn(() => null),
+            resolveTerminalTarget: vi.fn(() => null),
+            pendingToolType: 'Wire',
+            isWiring: false,
+            screenToCanvas: vi.fn(() => ({ x: 0, y: 0 })),
+            startWiringFromPoint: vi.fn(),
+            updateStatus: vi.fn(),
+            placePendingToolAt: vi.fn(),
+            app: {
+                topActionMenu: {
+                    setOpen: vi.fn()
+                }
+            }
+        };
+        const event = {
+            button: 0,
+            clientX: 12,
+            clientY: 16,
+            target: { classList: { contains: {} } },
+            preventDefault: vi.fn(),
+            stopPropagation: vi.fn()
+        };
+
+        expect(() => InteractionOrchestrator.onMouseDown.call(context, event)).not.toThrow();
+        expect(context.startWiringFromPoint).toHaveBeenCalledTimes(1);
+    });
+
     it('starts wiring when pending wire tool is active', () => {
         const context = {
             resolvePointerType: vi.fn(() => 'mouse'),
@@ -355,6 +412,34 @@ describe('InteractionOrchestrator.onMouseDown', () => {
         expect(context.wireModeGesture).toBeNull();
     });
 
+    it('guards next wire mouseup when slider shape drag starts during active wiring', () => {
+        const componentGroup = { dataset: { id: 'RH2' } };
+        const target = makeTarget({ classes: ['rheostat-slider'], closestComponent: componentGroup });
+        const context = {
+            resolvePointerType: vi.fn(() => 'touch'),
+            resolveProbeMarkerTarget: vi.fn(() => null),
+            resolveTerminalTarget: vi.fn(() => null),
+            pendingToolType: 'Wire',
+            isWiring: true,
+            startRheostatDrag: vi.fn(),
+            isWireEndpointTarget: vi.fn(() => false),
+            screenToCanvas: vi.fn(() => ({ x: 0, y: 0 }))
+        };
+        const event = {
+            button: 0,
+            clientX: 80,
+            clientY: 90,
+            target,
+            preventDefault: vi.fn(),
+            stopPropagation: vi.fn()
+        };
+
+        InteractionOrchestrator.onMouseDown.call(context, event);
+
+        expect(context.startRheostatDrag).toHaveBeenCalledWith('RH2', event);
+        expect(context.ignoreNextWireMouseUp).toBe(true);
+    });
+
     it('splits wire on ctrl-click', () => {
         const context = {
             resolvePointerType: vi.fn(() => 'mouse'),
@@ -531,6 +616,60 @@ describe('InteractionOrchestrator.onMouseUp', () => {
         expect(context.svg.style.cursor).toBe('');
     });
 
+    it('does not throw when mouseup target.closest is not callable', () => {
+        const context = {
+            quickActionBar: { notifyActivity: vi.fn() },
+            pointerDownInfo: {
+                componentId: 'R1',
+                wasSelected: true,
+                moved: false,
+                screenX: 0,
+                screenY: 0,
+                pointerType: 'mouse'
+            },
+            wireModeGesture: null,
+            isPanning: false,
+            isDraggingWireEndpoint: false,
+            isDraggingWire: false,
+            isDragging: false,
+            isWiring: false,
+            resolvePointerType: vi.fn(() => 'mouse')
+        };
+
+        expect(() => InteractionOrchestrator.onMouseUp.call(context, {
+            target: { closest: {} },
+            clientX: 0,
+            clientY: 0
+        })).not.toThrow();
+        expect(context.pointerDownInfo).toBeNull();
+    });
+
+    it('consumes guarded wire mouseup without canceling active wiring', () => {
+        const context = {
+            isWiring: true,
+            ignoreNextWireMouseUp: true,
+            resolveTerminalTarget: vi.fn(() => null),
+            isWireEndpointTarget: vi.fn(() => false),
+            screenToCanvas: vi.fn(() => ({ x: 120, y: 90 })),
+            snapPoint: vi.fn(() => ({ x: 120, y: 90, snap: { type: 'grid' } })),
+            finishWiringToPoint: vi.fn(),
+            cancelWiring: vi.fn(),
+            resolvePointerType: vi.fn(() => 'touch'),
+            updateStatus: vi.fn()
+        };
+
+        InteractionOrchestrator.onMouseUp.call(context, {
+            target: makeTarget(),
+            clientX: 300,
+            clientY: 220
+        });
+
+        expect(context.ignoreNextWireMouseUp).toBe(false);
+        expect(context.finishWiringToPoint).not.toHaveBeenCalled();
+        expect(context.cancelWiring).not.toHaveBeenCalled();
+        expect(context.updateStatus).not.toHaveBeenCalled();
+    });
+
     it('treats deferred wire-mode terminal tap as wiring start', () => {
         const context = {
             wireModeGesture: {
@@ -614,6 +753,48 @@ describe('InteractionOrchestrator.onMouseUp', () => {
         });
         expect(context.circuit.rebuildNodes).toHaveBeenCalledTimes(1);
         expect(context.commitHistoryTransaction).toHaveBeenCalledTimes(1);
+    });
+
+    it('realigns active wire-start endpoint after endpoint drag compaction', () => {
+        const context = {
+            isPanning: false,
+            isWiring: true,
+            wireStart: {
+                x: 40,
+                y: 20,
+                snap: { type: 'wire-endpoint', wireId: 'W1', end: 'a' }
+            },
+            isDraggingWireEndpoint: true,
+            wireEndpointDrag: {
+                wireId: 'W1',
+                affected: [{ wireId: 'W1', end: 'a' }]
+            },
+            renderer: { clearTerminalHighlight: vi.fn() },
+            selectedWire: 'W1',
+            resolveCompactedWireId: vi.fn((wireId, replacementByRemovedId) => replacementByRemovedId[wireId] || wireId),
+            compactWiresAndRefresh: vi.fn(() => ({
+                replacementByRemovedId: { W1: 'W3' }
+            })),
+            circuit: {
+                getWire: vi.fn((wireId) => {
+                    if (wireId !== 'W3') return null;
+                    return {
+                        id: 'W3',
+                        a: { x: 88, y: 99 },
+                        b: { x: 140, y: 99 }
+                    };
+                }),
+                rebuildNodes: vi.fn()
+            },
+            commitHistoryTransaction: vi.fn()
+        };
+
+        InteractionOrchestrator.onMouseUp.call(context, { target: makeTarget() });
+
+        expect(context.resolveCompactedWireId).toHaveBeenCalledWith('W1', { W1: 'W3' });
+        expect(context.wireStart.snap.wireId).toBe('W3');
+        expect(context.wireStart.x).toBe(88);
+        expect(context.wireStart.y).toBe(99);
     });
 
     it('auto-creates a bridge wire when touch endpoint drag snaps to another endpoint', () => {
@@ -705,6 +886,47 @@ describe('InteractionOrchestrator.onMouseUp', () => {
             preferredWireId: 'W1',
             scopeWireIds: ['W1']
         });
+    });
+
+    it('does not throw when auto bridge mode checks body classList.contains and it throws', () => {
+        const addWire = vi.fn();
+        vi.stubGlobal('document', {
+            body: {
+                classList: {
+                    contains: () => {
+                        throw new TypeError('broken contains');
+                    }
+                }
+            }
+        });
+        const context = {
+            isPanning: false,
+            endpointAutoBridgeMode: 'auto',
+            isDraggingWireEndpoint: true,
+            wireEndpointDrag: {
+                wireId: 'W1',
+                end: 'a',
+                origin: { x: 40, y: 20 },
+                primaryOriginRef: { componentId: 'R1', terminalIndex: 0 },
+                affected: [{ wireId: 'W1', end: 'a' }],
+                lastSnap: { type: 'wire-endpoint', wireId: 'W2', end: 'b' },
+                lastPoint: { x: 140, y: 80 }
+            },
+            resolvePointerType: vi.fn(() => 'touch'),
+            renderer: { clearTerminalHighlight: vi.fn(), addWire: vi.fn() },
+            selectedWire: 'W1',
+            compactWiresAndRefresh: vi.fn(),
+            circuit: {
+                getWire: vi.fn(() => null),
+                addWire,
+                rebuildNodes: vi.fn()
+            },
+            commitHistoryTransaction: vi.fn()
+        };
+        const event = { target: makeTarget() };
+
+        expect(() => InteractionOrchestrator.onMouseUp.call(context, event)).not.toThrow();
+        expect(addWire).not.toHaveBeenCalled();
     });
 
     it('cancels wiring when mouseup lands on blank canvas', () => {
@@ -805,6 +1027,50 @@ describe('InteractionOrchestrator.onMouseLeave', () => {
         expect(context.circuit.rebuildNodes).toHaveBeenCalledTimes(1);
         expect(context.commitHistoryTransaction).toHaveBeenCalledTimes(1);
     });
+
+    it('realigns active wire-start endpoint after endpoint drag compaction on mouseleave', () => {
+        const context = {
+            isPanning: false,
+            isWiring: true,
+            wireStart: {
+                x: 12,
+                y: 34,
+                snap: { type: 'wire-endpoint', wireId: 'W1', end: 'a' }
+            },
+            isDraggingWireEndpoint: true,
+            wireEndpointDrag: {
+                wireId: 'W1',
+                affected: [{ wireId: 'W1', end: 'a' }]
+            },
+            isDraggingWire: false,
+            isDragging: false,
+            renderer: { clearTerminalHighlight: vi.fn() },
+            selectedWire: 'W1',
+            resolveCompactedWireId: vi.fn((wireId, replacementByRemovedId) => replacementByRemovedId[wireId] || wireId),
+            compactWiresAndRefresh: vi.fn(() => ({
+                replacementByRemovedId: { W1: 'W9' }
+            })),
+            circuit: {
+                getWire: vi.fn((wireId) => {
+                    if (wireId !== 'W9') return null;
+                    return {
+                        id: 'W9',
+                        a: { x: 76, y: 54 },
+                        b: { x: 140, y: 54 }
+                    };
+                }),
+                rebuildNodes: vi.fn()
+            },
+            commitHistoryTransaction: vi.fn()
+        };
+
+        InteractionOrchestrator.onMouseLeave.call(context, { target: makeTarget() });
+
+        expect(context.resolveCompactedWireId).toHaveBeenCalledWith('W1', { W1: 'W9' });
+        expect(context.wireStart.snap.wireId).toBe('W9');
+        expect(context.wireStart.x).toBe(76);
+        expect(context.wireStart.y).toBe(54);
+    });
 });
 
 describe('InteractionOrchestrator.onContextMenu', () => {
@@ -847,6 +1113,56 @@ describe('InteractionOrchestrator.onContextMenu', () => {
         expect(context.showContextMenu).toHaveBeenCalledWith(event, 'R1');
         expect(context.hideContextMenu).not.toHaveBeenCalled();
     });
+
+    it('stabilizes active interactions before opening context menu', () => {
+        const component = { dataset: { id: 'R8' } };
+        const context = {
+            resolveProbeMarkerTarget: vi.fn(() => null),
+            touchActionController: { cancel: vi.fn() },
+            endPrimaryInteractionForGesture: vi.fn(),
+            isWiring: true,
+            cancelWiring: vi.fn(),
+            suspendedWiringSession: { wireStart: { x: 10, y: 20 } },
+            wireModeGesture: { kind: 'terminal-extend' },
+            pointerDownInfo: { moved: true },
+            selectComponent: vi.fn(),
+            showContextMenu: vi.fn(),
+            hideContextMenu: vi.fn()
+        };
+        const event = {
+            preventDefault: vi.fn(),
+            target: makeTarget({ closestComponent: component })
+        };
+
+        InteractionOrchestrator.onContextMenu.call(context, event);
+
+        expect(context.touchActionController.cancel).toHaveBeenCalledTimes(1);
+        expect(context.cancelWiring).toHaveBeenCalledTimes(1);
+        expect(context.endPrimaryInteractionForGesture).toHaveBeenCalledTimes(1);
+        expect(context.suspendedWiringSession).toBeNull();
+        expect(context.wireModeGesture).toBeNull();
+        expect(context.pointerDownInfo).toBeNull();
+        expect(context.showContextMenu).toHaveBeenCalledWith(event, 'R8');
+    });
+
+    it('does not throw when context menu target has no closest method', () => {
+        const context = {
+            resolveProbeMarkerTarget: vi.fn(() => null),
+            touchActionController: { cancel: vi.fn() },
+            selectComponent: vi.fn(),
+            selectWire: vi.fn(),
+            showContextMenu: vi.fn(),
+            showWireContextMenu: vi.fn(),
+            hideContextMenu: vi.fn()
+        };
+        const event = {
+            preventDefault: vi.fn(),
+            target: { dataset: {}, classList: { contains: vi.fn(() => false) } }
+        };
+
+        expect(() => InteractionOrchestrator.onContextMenu.call(context, event)).not.toThrow();
+        expect(context.hideContextMenu).toHaveBeenCalledTimes(1);
+    });
 });
 
 describe('InteractionOrchestrator.onDoubleClick', () => {
@@ -882,6 +1198,38 @@ describe('InteractionOrchestrator.onDoubleClick', () => {
         expect(context.showPropertyDialog).toHaveBeenCalledWith('R2');
         expect(context.renameObservationProbe).not.toHaveBeenCalled();
     });
+
+    it('ignores component double-click while wiring workflow is active', () => {
+        const component = { dataset: { id: 'R3' } };
+        const context = {
+            resolveProbeMarkerTarget: vi.fn(() => null),
+            pendingToolType: 'Wire',
+            isWiring: true,
+            renameObservationProbe: vi.fn(),
+            showPropertyDialog: vi.fn()
+        };
+        const event = {
+            target: makeTarget({ closestComponent: component })
+        };
+
+        InteractionOrchestrator.onDoubleClick.call(context, event);
+
+        expect(context.showPropertyDialog).not.toHaveBeenCalled();
+        expect(context.renameObservationProbe).not.toHaveBeenCalled();
+    });
+
+    it('does not throw when double-click target has no closest method', () => {
+        const context = {
+            resolveProbeMarkerTarget: vi.fn(() => null),
+            pendingToolType: null,
+            isWiring: false,
+            showPropertyDialog: vi.fn()
+        };
+        const event = { target: { dataset: {} } };
+
+        expect(() => InteractionOrchestrator.onDoubleClick.call(context, event)).not.toThrow();
+        expect(context.showPropertyDialog).not.toHaveBeenCalled();
+    });
 });
 
 describe('InteractionOrchestrator.onMouseMove', () => {
@@ -908,7 +1256,8 @@ describe('InteractionOrchestrator.onMouseMove', () => {
                 terminalIndex: 0,
                 screenX: 100,
                 screenY: 100,
-                moveThresholdPx: 18
+                moveThresholdPx: 18,
+                wasWiring: true
             },
             startTerminalExtend: vi.fn()
         };
@@ -922,20 +1271,25 @@ describe('InteractionOrchestrator.onMouseMove', () => {
             clientX: 122,
             clientY: 100
         });
+        expect(context.ignoreNextWireMouseUp).toBe(true);
         expect(context.wireModeGesture).toBeNull();
     });
 
     it('starts wire endpoint drag when deferred wire-mode endpoint gesture exceeds move threshold', () => {
         const context = {
+            isDraggingWireEndpoint: false,
             wireModeGesture: {
                 kind: 'wire-endpoint',
                 wireId: 'W1',
                 end: 'b',
                 screenX: 100,
                 screenY: 100,
-                moveThresholdPx: 12
+                moveThresholdPx: 12,
+                wasWiring: true
             },
-            startWireEndpointDrag: vi.fn()
+            startWireEndpointDrag: vi.fn(() => {
+                context.isDraggingWireEndpoint = true;
+            })
         };
 
         InteractionOrchestrator.onMouseMove.call(context, {
@@ -947,6 +1301,35 @@ describe('InteractionOrchestrator.onMouseMove', () => {
             clientX: 114,
             clientY: 100
         });
+        expect(context.ignoreNextWireMouseUp).not.toBe(true);
+        expect(context.wireModeGesture).toBeNull();
+    });
+
+    it('guards next wire mouseup when deferred endpoint gesture fails to enter drag', () => {
+        const context = {
+            isDraggingWireEndpoint: false,
+            wireModeGesture: {
+                kind: 'wire-endpoint',
+                wireId: 'W404',
+                end: 'a',
+                screenX: 100,
+                screenY: 100,
+                moveThresholdPx: 12,
+                wasWiring: true
+            },
+            startWireEndpointDrag: vi.fn()
+        };
+
+        InteractionOrchestrator.onMouseMove.call(context, {
+            clientX: 114,
+            clientY: 100
+        });
+
+        expect(context.startWireEndpointDrag).toHaveBeenCalledWith('W404', 'a', {
+            clientX: 114,
+            clientY: 100
+        });
+        expect(context.ignoreNextWireMouseUp).toBe(true);
         expect(context.wireModeGesture).toBeNull();
     });
 
@@ -957,7 +1340,8 @@ describe('InteractionOrchestrator.onMouseMove', () => {
                 componentId: 'RH1',
                 screenX: 100,
                 screenY: 100,
-                moveThresholdPx: 12
+                moveThresholdPx: 12,
+                wasWiring: true
             },
             startRheostatDrag: vi.fn()
         };
@@ -971,6 +1355,7 @@ describe('InteractionOrchestrator.onMouseMove', () => {
             clientX: 113,
             clientY: 100
         });
+        expect(context.ignoreNextWireMouseUp).toBe(true);
         expect(context.wireModeGesture).toBeNull();
     });
 
@@ -1007,6 +1392,80 @@ describe('InteractionOrchestrator.onMouseMove', () => {
         expect(context.renderer.updateTempWire).toHaveBeenCalledWith('TEMP', 10, 20, 130, 140);
         expect(context.renderer.highlightTerminal).toHaveBeenCalledWith('R1', 0);
         expect(context.renderer.clearTerminalHighlight).not.toHaveBeenCalled();
+    });
+
+    it('uses latest terminal anchor for temp wire preview while wiring', () => {
+        const context = {
+            isPanning: false,
+            screenToCanvas: vi.fn(() => ({ x: 100, y: 120 })),
+            isDraggingWireEndpoint: false,
+            isDraggingWire: false,
+            isDragging: false,
+            isWiring: true,
+            wireStart: {
+                x: 10,
+                y: 20,
+                snap: { type: 'terminal', componentId: 'R1', terminalIndex: 1 }
+            },
+            tempWire: 'TEMP',
+            resolvePointerType: vi.fn(() => 'mouse'),
+            snapPoint: vi.fn(() => ({ x: 130, y: 140, snap: { type: 'grid' } })),
+            renderer: {
+                getTerminalPosition: vi.fn(() => ({ x: 42, y: 24 })),
+                updateTempWire: vi.fn(),
+                highlightTerminal: vi.fn(),
+                clearTerminalHighlight: vi.fn()
+            }
+        };
+
+        InteractionOrchestrator.onMouseMove.call(context, {
+            clientX: 300,
+            clientY: 320
+        });
+
+        expect(context.renderer.updateTempWire).toHaveBeenCalledWith('TEMP', 42, 24, 130, 140);
+        expect(context.wireStart.x).toBe(42);
+        expect(context.wireStart.y).toBe(24);
+    });
+
+    it('uses latest endpoint anchor for temp wire preview while wiring', () => {
+        const context = {
+            isPanning: false,
+            screenToCanvas: vi.fn(() => ({ x: 100, y: 120 })),
+            isDraggingWireEndpoint: false,
+            isDraggingWire: false,
+            isDragging: false,
+            isWiring: true,
+            wireStart: {
+                x: 10,
+                y: 20,
+                snap: { type: 'wire-endpoint', wireId: 'W1', end: 'b' }
+            },
+            tempWire: 'TEMP',
+            resolvePointerType: vi.fn(() => 'mouse'),
+            snapPoint: vi.fn(() => ({ x: 131, y: 141, snap: { type: 'grid' } })),
+            circuit: {
+                getWire: vi.fn(() => ({
+                    id: 'W1',
+                    a: { x: 20, y: 30 },
+                    b: { x: 77, y: 88 }
+                }))
+            },
+            renderer: {
+                updateTempWire: vi.fn(),
+                highlightTerminal: vi.fn(),
+                clearTerminalHighlight: vi.fn()
+            }
+        };
+
+        InteractionOrchestrator.onMouseMove.call(context, {
+            clientX: 300,
+            clientY: 320
+        });
+
+        expect(context.renderer.updateTempWire).toHaveBeenCalledWith('TEMP', 77, 88, 131, 141);
+        expect(context.wireStart.x).toBe(77);
+        expect(context.wireStart.y).toBe(88);
     });
 
     it('cancels touch long-press tracking once component drag intent is detected', () => {
@@ -1378,6 +1837,30 @@ describe('InteractionOrchestrator.onKeyDown', () => {
 
         expect(context.hideDialog).toHaveBeenCalledTimes(1);
         expect(context.clearSelection).not.toHaveBeenCalled();
+    });
+
+    it('does not throw when dialog classList contains is non-callable', () => {
+        vi.stubGlobal('document', {
+            getElementById: vi.fn(() => ({
+                classList: { contains: {} }
+            })),
+            activeElement: null
+        });
+
+        const context = {
+            undo: vi.fn(),
+            redo: vi.fn()
+        };
+        const event = {
+            key: 'z',
+            preventDefault: vi.fn(),
+            metaKey: false,
+            ctrlKey: true,
+            shiftKey: false
+        };
+
+        expect(() => InteractionOrchestrator.onKeyDown.call(context, event)).not.toThrow();
+        expect(context.undo).not.toHaveBeenCalled();
     });
 
     it('handles Ctrl/Cmd+Z undo shortcut', () => {

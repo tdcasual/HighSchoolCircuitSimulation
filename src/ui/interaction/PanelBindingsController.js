@@ -7,7 +7,17 @@ export function bindButtonEvents() {
     const bindClick = (id, handler) => {
         const element = document.getElementById(id);
         if (!element || typeof element.addEventListener !== 'function') return;
-        element.addEventListener('click', handler);
+        safeInvokeMethod(element, 'addEventListener', 'click', handler);
+    };
+
+    const safeInvokeMethod = (target, methodName, ...args) => {
+        const fn = target?.[methodName];
+        if (typeof fn !== 'function') return undefined;
+        try {
+            return fn.apply(target, args);
+        } catch (_) {
+            return undefined;
+        }
     };
 
     const isTouchPointer = (pointerType) => pointerType === 'touch' || pointerType === 'pen';
@@ -75,9 +85,7 @@ export function bindButtonEvents() {
         };
 
         const removeHoldStyle = () => {
-            if (typeof element.classList?.remove === 'function') {
-                element.classList.remove('danger-hold-armed');
-            }
+            safeInvokeMethod(element.classList, 'remove', 'danger-hold-armed');
         };
 
         const resetHoldState = () => {
@@ -101,7 +109,7 @@ export function bindButtonEvents() {
             return pointerId === activePointerId;
         };
 
-        element.addEventListener('pointerdown', (event) => {
+        safeInvokeMethod(element, 'addEventListener', 'pointerdown', (event) => {
             if (!isTouchPointer(event?.pointerType)) return;
             if (Number.isFinite(event?.button) && event.button !== 0) return;
 
@@ -111,9 +119,7 @@ export function bindButtonEvents() {
             startX = Number(event?.clientX) || 0;
             startY = Number(event?.clientY) || 0;
 
-            if (typeof element.classList?.add === 'function') {
-                element.classList.add('danger-hold-armed');
-            }
+            safeInvokeMethod(element.classList, 'add', 'danger-hold-armed');
             this.updateStatus?.('继续按住可清空电路');
 
             holdTimer = setTimeout(() => {
@@ -131,7 +137,7 @@ export function bindButtonEvents() {
             }
         });
 
-        element.addEventListener('pointermove', (event) => {
+        safeInvokeMethod(element, 'addEventListener', 'pointermove', (event) => {
             if (!shouldHandlePointer(event)) return;
             if (!holdTimer || holdTriggered) return;
 
@@ -159,10 +165,10 @@ export function bindButtonEvents() {
             }
         };
 
-        element.addEventListener('pointerup', endHoldGesture);
-        element.addEventListener('pointercancel', endHoldGesture);
+        safeInvokeMethod(element, 'addEventListener', 'pointerup', endHoldGesture);
+        safeInvokeMethod(element, 'addEventListener', 'pointercancel', endHoldGesture);
 
-        element.addEventListener('click', (event) => {
+        safeInvokeMethod(element, 'addEventListener', 'click', (event) => {
             if (suppressNextClick) {
                 suppressNextClick = false;
                 event?.preventDefault?.();
@@ -184,24 +190,27 @@ export function bindButtonEvents() {
     // 导入按钮
     const handleImport = () => {
         const fileImport = document.getElementById('file-import');
-        fileImport?.click?.();
+        safeInvokeMethod(fileImport, 'click');
     };
     bindClick('btn-import', handleImport);
     bindClick('btn-mobile-import', handleImport);
 
     // 习题板（复用原按钮绑定，避免重复切换）
     bindClick('btn-mobile-exercise-board', () => {
-        document.getElementById('btn-exercise-board')?.click?.();
+        safeInvokeMethod(document.getElementById('btn-exercise-board'), 'click');
     });
 
     // 文件选择
-    document.getElementById('file-import').addEventListener('change', (e) => {
-        const file = e.target.files[0];
-        if (file) {
-            this.app.importCircuit(file);
-        }
-        e.target.value = '';
-    });
+    const fileImportInput = document.getElementById('file-import');
+    if (fileImportInput) {
+        safeInvokeMethod(fileImportInput, 'addEventListener', 'change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                this.app.importCircuit(file);
+            }
+            e.target.value = '';
+        });
+    }
 
     // 对话框按钮
     bindClick('dialog-cancel', () => {
@@ -213,17 +222,30 @@ export function bindButtonEvents() {
     });
 
     // 点击遮罩关闭对话框
-    document.getElementById('dialog-overlay').addEventListener('click', (e) => {
-        if (e.target.id === 'dialog-overlay') {
-            this.hideDialog();
-        }
-    });
+    const dialogOverlay = document.getElementById('dialog-overlay');
+    if (dialogOverlay) {
+        safeInvokeMethod(dialogOverlay, 'addEventListener', 'click', (e) => {
+            if (e.target.id === 'dialog-overlay') {
+                this.hideDialog();
+            }
+        });
+    }
 
     this.restoreEndpointAutoBridgeMode?.({ silentStatus: true });
     this.syncMobileModeButtons?.();
 }
 
 export function bindSidePanelEvents() {
+    const safeInvokeMethod = (target, methodName, ...args) => {
+        const fn = target?.[methodName];
+        if (typeof fn !== 'function') return undefined;
+        try {
+            return fn.apply(target, args);
+        } catch (_) {
+            return undefined;
+        }
+    };
+
     const tabButtons = Array.from(document.querySelectorAll('.panel-tab-btn'));
     const pages = Array.from(document.querySelectorAll('.panel-page'));
     if (tabButtons.length === 0 || pages.length === 0) return;
@@ -231,21 +253,21 @@ export function bindSidePanelEvents() {
     const activate = (panelName) => {
         tabButtons.forEach((btn) => {
             const isActive = btn.dataset.panel === panelName;
-            btn.classList.toggle('active', isActive);
-            btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+            safeInvokeMethod(btn?.classList, 'toggle', 'active', isActive);
+            safeInvokeMethod(btn, 'setAttribute', 'aria-selected', isActive ? 'true' : 'false');
         });
 
         pages.forEach((page) => {
             const isActive = page.dataset.panel === panelName;
-            page.classList.toggle('active', isActive);
+            safeInvokeMethod(page?.classList, 'toggle', 'active', isActive);
             if (page.id === 'panel-observation') {
-                page.setAttribute('aria-hidden', isActive ? 'false' : 'true');
+                safeInvokeMethod(page, 'setAttribute', 'aria-hidden', isActive ? 'false' : 'true');
             }
         });
     };
 
     tabButtons.forEach((btn) => {
-        btn.addEventListener('click', () => {
+        safeInvokeMethod(btn, 'addEventListener', 'click', () => {
             const panelName = btn.dataset.panel;
             if (panelName) activate(panelName);
         });

@@ -73,4 +73,118 @@ describe('PropertyDialogActions.applyDialogChanges', () => {
 
         expect(ctx.updateStatus).toHaveBeenCalledWith('更新失败：boom');
     });
+
+    it('does not throw when resistor field is missing', () => {
+        vi.stubGlobal('document', {
+            getElementById: vi.fn((id) => {
+                if (id === 'edit-resistance') return null;
+                return { value: '' };
+            })
+        });
+
+        const comp = { id: 'R1', type: 'Resistor', resistance: 330 };
+        const ctx = {
+            editingComponent: comp,
+            safeParseFloat: vi.fn((value, fallback) => {
+                const parsed = Number.parseFloat(value);
+                return Number.isFinite(parsed) ? parsed : fallback;
+            }),
+            runWithHistory: vi.fn((_, action) => action()),
+            circuit: { markSolverCircuitDirty: vi.fn() },
+            renderer: {
+                refreshComponent: vi.fn(),
+                setSelected: vi.fn(),
+                updateConnectedWires: vi.fn()
+            },
+            updatePropertyPanel: vi.fn(),
+            hideDialog: vi.fn(),
+            updateStatus: vi.fn(),
+            selectComponent: vi.fn(),
+            recomputeParallelPlateCapacitance: vi.fn()
+        };
+
+        expect(() => PropertyDialogActions.applyDialogChanges.call(ctx)).not.toThrow();
+        expect(comp.resistance).toBe(100);
+        expect(ctx.circuit.markSolverCircuitDirty).toHaveBeenCalledTimes(1);
+        expect(ctx.hideDialog).toHaveBeenCalledTimes(1);
+        expect(ctx.updateStatus).toHaveBeenCalledWith('属性已更新');
+    });
+
+    it('does not throw when voltmeter fields are missing', () => {
+        vi.stubGlobal('document', {
+            getElementById: vi.fn((id) => {
+                if (id === 'edit-resistance' || id === 'edit-range') return null;
+                return { value: '' };
+            })
+        });
+
+        const comp = { id: 'V1', type: 'Voltmeter', resistance: 1000, range: 5 };
+        const ctx = {
+            editingComponent: comp,
+            safeParseFloat: vi.fn((value, fallback) => {
+                const parsed = Number.parseFloat(value);
+                return Number.isFinite(parsed) ? parsed : fallback;
+            }),
+            runWithHistory: vi.fn((_, action) => action()),
+            circuit: { markSolverCircuitDirty: vi.fn() },
+            renderer: {
+                refreshComponent: vi.fn(),
+                setSelected: vi.fn(),
+                updateConnectedWires: vi.fn()
+            },
+            updatePropertyPanel: vi.fn(),
+            hideDialog: vi.fn(),
+            updateStatus: vi.fn(),
+            selectComponent: vi.fn(),
+            recomputeParallelPlateCapacitance: vi.fn()
+        };
+
+        expect(() => PropertyDialogActions.applyDialogChanges.call(ctx)).not.toThrow();
+        expect(comp.resistance).toBe(Infinity);
+        expect(comp.range).toBe(15);
+        expect(ctx.circuit.markSolverCircuitDirty).toHaveBeenCalledTimes(1);
+        expect(ctx.hideDialog).toHaveBeenCalledTimes(1);
+        expect(ctx.updateStatus).toHaveBeenCalledWith('属性已更新');
+    });
+
+    it('does not throw when switch-close classList contains is non-callable', () => {
+        vi.stubGlobal('document', {
+            getElementById: vi.fn((id) => {
+                if (id === 'switch-close') {
+                    return {
+                        classList: {
+                            contains: {}
+                        }
+                    };
+                }
+                return { value: '' };
+            })
+        });
+
+        const comp = { id: 'S1', type: 'Switch', closed: true };
+        const ctx = {
+            editingComponent: comp,
+            safeParseFloat: vi.fn((value, fallback) => {
+                const parsed = Number.parseFloat(value);
+                return Number.isFinite(parsed) ? parsed : fallback;
+            }),
+            runWithHistory: vi.fn((_, action) => action()),
+            circuit: { markSolverCircuitDirty: vi.fn() },
+            renderer: {
+                refreshComponent: vi.fn(),
+                setSelected: vi.fn(),
+                updateConnectedWires: vi.fn()
+            },
+            updatePropertyPanel: vi.fn(),
+            hideDialog: vi.fn(),
+            updateStatus: vi.fn(),
+            selectComponent: vi.fn(),
+            recomputeParallelPlateCapacitance: vi.fn()
+        };
+
+        expect(() => PropertyDialogActions.applyDialogChanges.call(ctx)).not.toThrow();
+        expect(comp.closed).toBe(false);
+        expect(ctx.circuit.markSolverCircuitDirty).toHaveBeenCalledTimes(1);
+        expect(ctx.hideDialog).toHaveBeenCalledTimes(1);
+    });
 });

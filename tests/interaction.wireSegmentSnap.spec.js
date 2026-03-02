@@ -30,6 +30,27 @@ describe('Interaction wire segment snap/split helpers', () => {
         expect(updateTempWire).toHaveBeenCalledWith('TEMP', 20, 30, 40, 30);
     });
 
+    it('syncs interaction mode store when starting wiring', () => {
+        const ctx = {
+            hideAlignmentGuides: vi.fn(),
+            renderer: {
+                clearTerminalHighlight: vi.fn(),
+                createTempWire: vi.fn(() => 'TEMP'),
+                updateTempWire: vi.fn()
+            },
+            snapPoint: vi.fn(() => ({ x: 30, y: 30, snap: { type: 'grid' } })),
+            resolvePointerType: vi.fn(() => 'touch'),
+            screenToCanvas: vi.fn(() => ({ x: 31, y: 33 })),
+            syncInteractionModeStore: vi.fn()
+        };
+
+        InteractionManager.prototype.startWiringFromPoint.call(ctx, { x: 30, y: 30 }, { clientX: 31, clientY: 33 });
+
+        expect(ctx.syncInteractionModeStore).toHaveBeenCalledWith(expect.objectContaining({
+            mode: 'wire'
+        }));
+    });
+
     it('finds projected snap point on nearby wire segment', () => {
         const ctx = {
             circuit: {
@@ -263,6 +284,41 @@ describe('Interaction wire segment snap/split helpers', () => {
         expect(commitHistoryTransaction).toHaveBeenCalledTimes(1);
     });
 
+    it('clears suspended pinch wiring session when wiring is canceled explicitly', () => {
+        const removeTempWire = vi.fn();
+        const clearTerminalHighlight = vi.fn();
+        const hideAlignmentGuides = vi.fn();
+        const ctx = {
+            isWiring: true,
+            wireStart: { x: 20, y: 30, snap: { type: 'terminal', componentId: 'R1', terminalIndex: 0 } },
+            tempWire: 'TEMP-2',
+            ignoreNextWireMouseUp: true,
+            suspendedWiringSession: {
+                wireStart: { x: 11, y: 22, snap: { type: 'terminal', componentId: 'R2', terminalIndex: 1 } },
+                pendingToolType: 'Wire',
+                pendingToolItem: null,
+                mobileInteractionMode: 'wire',
+                stickyWireTool: true
+            },
+            renderer: {
+                removeTempWire,
+                clearTerminalHighlight
+            },
+            hideAlignmentGuides
+        };
+
+        InteractionManager.prototype.cancelWiring.call(ctx);
+
+        expect(ctx.isWiring).toBe(false);
+        expect(ctx.wireStart).toBeNull();
+        expect(ctx.tempWire).toBeNull();
+        expect(ctx.ignoreNextWireMouseUp).toBe(false);
+        expect(ctx.suspendedWiringSession).toBeNull();
+        expect(removeTempWire).toHaveBeenCalledWith('TEMP-2');
+        expect(clearTerminalHighlight).toHaveBeenCalledTimes(1);
+        expect(hideAlignmentGuides).toHaveBeenCalledTimes(1);
+    });
+
     it('renames observation probe and refreshes wire/probe views', () => {
         const circuit = new Circuit();
         circuit.addWire({ id: 'W1', a: { x: 0, y: 0 }, b: { x: 40, y: 0 } });
@@ -381,6 +437,38 @@ describe('Interaction wire segment snap/split helpers', () => {
         expect(event.preventDefault).toHaveBeenCalledTimes(1);
         expect(event.stopPropagation).toHaveBeenCalledTimes(1);
         expect(selectWire).toHaveBeenCalledWith('W1');
+    });
+
+    it('does not open endpoint-drag history transaction when target endpoint is missing', () => {
+        const beginHistoryTransaction = vi.fn();
+        const selectWire = vi.fn();
+        const wire = { id: 'W1', a: null, b: { x: 100, y: 20 } };
+        const ctx = {
+            beginHistoryTransaction,
+            circuit: {
+                getWire: (id) => (id === 'W1' ? wire : null),
+                getAllWires: () => [wire]
+            },
+            selectWire
+        };
+
+        const event = {
+            shiftKey: false,
+            clientX: 140,
+            clientY: 160,
+            timeStamp: 12,
+            preventDefault: vi.fn(),
+            stopPropagation: vi.fn()
+        };
+
+        InteractionManager.prototype.startWireEndpointDrag.call(ctx, 'W1', 'a', event);
+
+        expect(beginHistoryTransaction).not.toHaveBeenCalled();
+        expect(ctx.isDraggingWireEndpoint).not.toBe(true);
+        expect(ctx.wireEndpointDrag).toBeUndefined();
+        expect(event.preventDefault).not.toHaveBeenCalled();
+        expect(event.stopPropagation).not.toHaveBeenCalled();
+        expect(selectWire).not.toHaveBeenCalled();
     });
 
     it('splits wire on ctrl/cmd click instead of dragging', () => {
@@ -532,6 +620,90 @@ describe('Interaction wire segment snap/split helpers', () => {
         expect(compactWiresAndRefresh).toHaveBeenCalledTimes(1);
         expect(cancelWiring).toHaveBeenCalledTimes(1);
         expect(endTopologyBatch).toHaveBeenCalledTimes(1);
+    });
+
+    it('uses live terminal position as wiring start when finish is invoked', () => {
+        const addWire = vi.fn();
+        const ctx = {
+            wireStart: {
+                x: 10,
+                y: 20,
+                snap: { type: 'terminal', componentId: 'R1', terminalIndex: 1 }
+            },
+            runWithHistory: (_label, action) => action(),
+            circuit: {
+                beginTopologyBatch: vi.fn(),
+                endTopologyBatch: vi.fn(),
+                getWire: vi.fn(() => null),
+                addWire
+            },
+            renderer: {
+                getTerminalPosition: vi.fn(() => ({ x: 42, y: 20 })),
+                addWire: vi.fn()
+            },
+            compactWiresAndRefresh: vi.fn(() => ({ resolvedWireId: null })),
+            cancelWiring: vi.fn(),
+            selectWire: vi.fn(),
+            updateStatus: vi.fn()
+        };
+
+        InteractionManager.prototype.finishWiringToPoint.call(ctx, {
+            x: 90,
+            y: 20,
+            snap: { type: 'grid' }
+        }, { pointerType: 'touch' });
+
+        expect(addWire).toHaveBeenCalledTimes(1);
+        const createdWire = addWire.mock.calls[0][0];
+        expect(createdWire.a).toEqual({ x: 42, y: 20 });
+        expect(createdWire.b).toEqual({ x: 90, y: 20 });
+        expect(createdWire.aRef).toEqual({ componentId: 'R1', terminalIndex: 1 });
+        expect(ctx.wireStart.x).toBe(42);
+        expect(ctx.wireStart.y).toBe(20);
+    });
+
+    it('uses live endpoint position as wiring start when finish is invoked', () => {
+        const addWire = vi.fn();
+        const anchorWire = {
+            id: 'W_ANCHOR',
+            a: { x: 20, y: 65 },
+            b: { x: 55, y: 65 }
+        };
+        const ctx = {
+            wireStart: {
+                x: 10,
+                y: 20,
+                snap: { type: 'wire-endpoint', wireId: 'W_ANCHOR', end: 'b' }
+            },
+            runWithHistory: (_label, action) => action(),
+            circuit: {
+                beginTopologyBatch: vi.fn(),
+                endTopologyBatch: vi.fn(),
+                getWire: vi.fn((wireId) => (wireId === 'W_ANCHOR' ? anchorWire : null)),
+                addWire
+            },
+            renderer: {
+                addWire: vi.fn()
+            },
+            compactWiresAndRefresh: vi.fn(() => ({ resolvedWireId: null })),
+            cancelWiring: vi.fn(),
+            selectWire: vi.fn(),
+            updateStatus: vi.fn()
+        };
+
+        InteractionManager.prototype.finishWiringToPoint.call(ctx, {
+            x: 120,
+            y: 65,
+            snap: { type: 'grid' }
+        }, { pointerType: 'touch' });
+
+        expect(addWire).toHaveBeenCalledTimes(1);
+        const createdWire = addWire.mock.calls[0][0];
+        expect(createdWire.a).toEqual({ x: 55, y: 65 });
+        expect(createdWire.b).toEqual({ x: 120, y: 65 });
+        expect(createdWire.aRef).toBeUndefined();
+        expect(ctx.wireStart.x).toBe(55);
+        expect(ctx.wireStart.y).toBe(65);
     });
 
     it('drags full junction when Shift is held', () => {

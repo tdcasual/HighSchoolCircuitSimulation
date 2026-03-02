@@ -64,4 +64,60 @@ describe('HistoryFacadeController', () => {
         expect(ctx.historyManager.undo).toHaveBeenCalledTimes(1);
         expect(ctx.historyManager.redo).toHaveBeenCalledTimes(1);
     });
+
+    it('stabilizes transient interactions before undo navigation', () => {
+        const ctx = {
+            historyManager: {
+                undo: vi.fn(),
+                commitTransaction: vi.fn(),
+                transaction: { label: 'drag' }
+            },
+            isWiring: true,
+            cancelWiring: vi.fn(),
+            suspendedWiringSession: { wireStart: { x: 10, y: 20 } },
+            wireModeGesture: { kind: 'wire-endpoint' },
+            pointerDownInfo: { moved: true },
+            isDraggingWireEndpoint: true,
+            isTerminalExtending: true,
+            isRheostatDragging: true,
+            onMouseLeave: vi.fn(),
+            commitHistoryTransaction: vi.fn()
+        };
+
+        HistoryFacadeController.undo.call(ctx);
+
+        expect(ctx.cancelWiring).toHaveBeenCalledTimes(1);
+        expect(ctx.onMouseLeave).toHaveBeenCalledTimes(1);
+        expect(ctx.commitHistoryTransaction).toHaveBeenCalledTimes(1);
+        expect(ctx.historyManager.undo).toHaveBeenCalledTimes(1);
+        expect(ctx.suspendedWiringSession).toBeNull();
+        expect(ctx.wireModeGesture).toBeNull();
+        expect(ctx.pointerDownInfo).toBeNull();
+        expect(ctx.isTerminalExtending).toBe(false);
+        expect(ctx.isRheostatDragging).toBe(false);
+    });
+
+    it('commits open transaction via history manager before redo when facade delegate is absent', () => {
+        const ctx = {
+            historyManager: {
+                redo: vi.fn(),
+                commitTransaction: vi.fn(),
+                transaction: { label: 'tx' }
+            },
+            isDragging: false,
+            isDraggingWire: false,
+            isDraggingWireEndpoint: false,
+            isTerminalExtending: false,
+            isRheostatDragging: false,
+            isWiring: false,
+            suspendedWiringSession: null,
+            wireModeGesture: null,
+            pointerDownInfo: null
+        };
+
+        HistoryFacadeController.redo.call(ctx);
+
+        expect(ctx.historyManager.commitTransaction).toHaveBeenCalledTimes(1);
+        expect(ctx.historyManager.redo).toHaveBeenCalledTimes(1);
+    });
 });

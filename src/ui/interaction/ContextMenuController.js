@@ -1,6 +1,16 @@
 import { normalizeCanvasPoint, toCanvasInt } from '../../utils/CanvasCoords.js';
 import { isIntentionalDestructiveTap } from './PointerSessionManager.js';
 
+function safeInvokeMethod(target, methodName, ...args) {
+    const fn = target?.[methodName];
+    if (typeof fn !== 'function') return undefined;
+    try {
+        return fn.apply(target, args);
+    } catch (_) {
+        return undefined;
+    }
+}
+
 function isOrthogonalWire(wire) {
     if (!wire || !wire.a || !wire.b) return false;
     const a = normalizeCanvasPoint(wire.a);
@@ -23,15 +33,15 @@ function attachMenuAction(context, menuItem, item) {
     let pointerDownSample = null;
     let pointerUpSample = null;
 
-    menuItem.addEventListener('pointerdown', (event) => {
+    safeInvokeMethod(menuItem, 'addEventListener', 'pointerdown', (event) => {
         pointerDownSample = toPointerSample(event);
     });
 
-    menuItem.addEventListener('pointerup', (event) => {
+    safeInvokeMethod(menuItem, 'addEventListener', 'pointerup', (event) => {
         pointerUpSample = toPointerSample(event, pointerDownSample);
     });
 
-    menuItem.addEventListener('click', (event) => {
+    safeInvokeMethod(menuItem, 'addEventListener', 'click', (event) => {
         if (item.requireIntentGuard) {
             const endSample = toPointerSample(event, pointerUpSample || pointerDownSample);
             const startSample = pointerDownSample || pointerUpSample || endSample;
@@ -112,7 +122,7 @@ export function showContextMenu(e, componentId) {
 
     // 点击其他地方关闭菜单
     setTimeout(() => {
-        document.addEventListener('click', this.hideContextMenuHandler);
+        safeInvokeMethod(document, 'addEventListener', 'click', this.hideContextMenuHandler);
     }, 0);
 }
 
@@ -192,7 +202,7 @@ export function showWireContextMenu(e, wireId) {
     document.body.appendChild(menu);
 
     setTimeout(() => {
-        document.addEventListener('click', this.hideContextMenuHandler);
+        safeInvokeMethod(document, 'addEventListener', 'click', this.hideContextMenuHandler);
     }, 0);
 }
 
@@ -200,7 +210,7 @@ export function hideContextMenu() {
     const menu = document.getElementById('context-menu');
     if (menu) {
         menu.remove();
-        document.removeEventListener('click', this.hideContextMenuHandler);
+        safeInvokeMethod(document, 'removeEventListener', 'click', this.hideContextMenuHandler);
     }
 }
 
@@ -235,6 +245,6 @@ export function showProbeContextMenu(e, probeId, wireId) {
 
     document.body.appendChild(menu);
     setTimeout(() => {
-        document.addEventListener('click', this.hideContextMenuHandler);
+        safeInvokeMethod(document, 'addEventListener', 'click', this.hideContextMenuHandler);
     }, 0);
 }

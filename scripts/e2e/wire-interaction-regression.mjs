@@ -182,6 +182,12 @@ async function runWireInteractionRegression(browser, baseUrl) {
                     b: { x: wire.b?.x, y: wire.b?.y }
                 }));
             };
+            const captureModeSnapshot = () => {
+                if (typeof interaction.getInteractionModeSnapshot === 'function') {
+                    return interaction.getInteractionModeSnapshot();
+                }
+                return null;
+            };
 
             const result = {
                 terminalSnapMatrix: [],
@@ -193,7 +199,8 @@ async function runWireInteractionRegression(browser, baseUrl) {
                 segmentHighlight: null,
                 endpointAutoSplit: null,
                 touchEndpointSnapAssist: null,
-                endpointEndpointAutoBridge: null
+                endpointEndpointAutoBridge: null,
+                interactionModeSnapshots: {}
             };
 
             const scales = [0.5, 1, 2, 4];
@@ -313,12 +320,14 @@ async function runWireInteractionRegression(browser, baseUrl) {
             }
             interaction.setMobileInteractionMode?.('select', { silentStatus: true });
             mobileModeWireButton.click();
+            const modeSnapshotAfterWireToggle = captureModeSnapshot();
             const wireModeArmed = interaction.mobileInteractionMode === 'wire'
                 && interaction.pendingToolType === 'Wire'
                 && interaction.stickyWireTool === true
                 && mobileModeWireButton.getAttribute('aria-pressed') === 'true'
                 && mobileModeSelectButton.getAttribute('aria-pressed') === 'false';
             mobileModeSelectButton.click();
+            const modeSnapshotAfterSelectToggle = captureModeSnapshot();
             const selectModeArmed = interaction.mobileInteractionMode === 'select'
                 && interaction.pendingToolType === null
                 && interaction.stickyWireTool === false
@@ -328,7 +337,13 @@ async function runWireInteractionRegression(browser, baseUrl) {
             result.mobileModeToggle = {
                 wireModeArmed,
                 selectModeArmed,
+                modeSnapshotAfterWireToggle,
+                modeSnapshotAfterSelectToggle,
                 pass: wireModeArmed && selectModeArmed
+            };
+            result.interactionModeSnapshots.mobileModeToggle = {
+                wireMode: modeSnapshotAfterWireToggle,
+                selectMode: modeSnapshotAfterSelectToggle
             };
 
             // MOB-003: classroom mode should lock endpoint auto-bridge controls on phone entry points.
@@ -581,6 +596,7 @@ async function runWireInteractionRegression(browser, baseUrl) {
                 splitPointConnections,
                 pass: lastSnapType === 'wire-segment' && lastSnapWireId === 'W2' && hasSplitResult
             };
+            result.interactionModeSnapshots.final = captureModeSnapshot();
 
             const allPass = result.terminalSnapMatrix.every((row) => row.pass)
                 && result.zoomEndpointMatrix.every((row) => row.pass)

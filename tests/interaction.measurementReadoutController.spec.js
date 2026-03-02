@@ -92,6 +92,89 @@ describe('MeasurementReadoutController.createMeterSelfReadingControl', () => {
         expect(refreshComponentOptions).toHaveBeenCalled();
         expect(requestRender).toHaveBeenCalledWith({ onlyIfActive: false });
     });
+
+    it('toggle click does not throw when toggle button classList/setAttribute are non-callable', () => {
+        vi.stubGlobal('document', {
+            createElement: vi.fn((tag) => createFakeElement(tag)),
+            createTextNode: vi.fn((text) => ({ textContent: text }))
+        });
+
+        const comp = { type: 'Ammeter', selfReading: false };
+        const ctx = {
+            runWithHistory: vi.fn((_, action) => action()),
+            app: {
+                updateStatus: vi.fn(),
+                observationPanel: {
+                    refreshDialGauges: vi.fn(),
+                    refreshComponentOptions: vi.fn(),
+                    requestRender: vi.fn()
+                }
+            }
+        };
+
+        const group = MeasurementReadoutController.createMeterSelfReadingControl.call(ctx, comp);
+        const row = group.children[1];
+        const toggleButton = row.children[0];
+        toggleButton.classList.toggle = {};
+        toggleButton.setAttribute = {};
+
+        expect(() => toggleButton.trigger('click')).not.toThrow();
+    });
+
+    it('toggle click does not throw when app.updateStatus is non-callable', () => {
+        vi.stubGlobal('document', {
+            createElement: vi.fn((tag) => createFakeElement(tag)),
+            createTextNode: vi.fn((text) => ({ textContent: text }))
+        });
+
+        const comp = { type: 'Ammeter', selfReading: false };
+        const ctx = {
+            runWithHistory: vi.fn((_, action) => action()),
+            app: {
+                updateStatus: {},
+                observationPanel: {
+                    refreshDialGauges: vi.fn(),
+                    refreshComponentOptions: vi.fn(),
+                    requestRender: vi.fn()
+                }
+            }
+        };
+
+        const group = MeasurementReadoutController.createMeterSelfReadingControl.call(ctx, comp);
+        const row = group.children[1];
+        const toggleButton = row.children[0];
+
+        expect(() => toggleButton.trigger('click')).not.toThrow();
+    });
+
+    it('does not throw when button addEventListener is non-callable', () => {
+        const createElement = vi.fn((tag) => {
+            const el = createFakeElement(tag);
+            if (tag === 'button') {
+                el.addEventListener = {};
+            }
+            return el;
+        });
+        vi.stubGlobal('document', {
+            createElement,
+            createTextNode: vi.fn((text) => ({ textContent: text }))
+        });
+
+        const comp = { type: 'Ammeter', selfReading: false };
+        const ctx = {
+            runWithHistory: vi.fn((_, action) => action()),
+            app: {
+                updateStatus: vi.fn(),
+                observationPanel: {
+                    refreshDialGauges: vi.fn(),
+                    refreshComponentOptions: vi.fn(),
+                    requestRender: vi.fn()
+                }
+            }
+        };
+
+        expect(() => MeasurementReadoutController.createMeterSelfReadingControl.call(ctx, comp)).not.toThrow();
+    });
 });
 
 describe('MeasurementReadoutController.updateSelectedComponentReadouts', () => {

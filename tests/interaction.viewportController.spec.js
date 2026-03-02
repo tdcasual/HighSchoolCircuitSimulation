@@ -73,4 +73,46 @@ describe('ViewportController', () => {
         expect(context.updateViewTransform).toHaveBeenCalledTimes(1);
         expect(context.updateStatus).toHaveBeenCalledWith('视图已重置');
     });
+
+    it('updateViewTransform does not throw when layer setAttribute is non-callable', () => {
+        const grid = { setAttribute: {}, parentElement: {} };
+        const wires = { setAttribute: {} };
+        const components = { setAttribute: {} };
+        const ui = { setAttribute: {} };
+        const guides = { setAttribute: {} };
+        const zoomLevel = { textContent: '' };
+
+        global.document = {
+            getElementById: vi.fn((id) => (id === 'zoom-level' ? zoomLevel : null))
+        };
+
+        const context = {
+            svg: {
+                querySelector: vi.fn((selector) => {
+                    if (selector === '#layer-grid') return grid;
+                    if (selector === '#layer-wires') return wires;
+                    if (selector === '#layer-components') return components;
+                    if (selector === '#layer-ui') return ui;
+                    if (selector === '#alignment-guides') return guides;
+                    return null;
+                })
+            },
+            viewOffset: { x: 12, y: 34 },
+            scale: 1.5
+        };
+
+        expect(() => ViewportController.updateViewTransform.call(context)).not.toThrow();
+    });
+
+    it('screenToCanvas does not throw when getBoundingClientRect is non-callable', () => {
+        const context = {
+            svg: {
+                getBoundingClientRect: {}
+            },
+            viewOffset: { x: 100, y: 50 },
+            scale: 2
+        };
+
+        expect(() => ViewportController.screenToCanvas.call(context, 220, 130)).not.toThrow();
+    });
 });

@@ -63,6 +63,20 @@ describe('ContextMenuController.hideContextMenu', () => {
 
         expect(removeEventListener).not.toHaveBeenCalled();
     });
+
+    it('does not throw when removeEventListener is non-callable', () => {
+        const menu = { remove: vi.fn() };
+        vi.stubGlobal('document', {
+            getElementById: vi.fn((id) => (id === 'context-menu' ? menu : null)),
+            removeEventListener: {}
+        });
+        const context = {
+            hideContextMenuHandler: vi.fn()
+        };
+
+        expect(() => ContextMenuController.hideContextMenu.call(context)).not.toThrow();
+        expect(menu.remove).toHaveBeenCalledTimes(1);
+    });
 });
 
 describe('ContextMenuController.showContextMenu', () => {
@@ -95,6 +109,33 @@ describe('ContextMenuController.showContextMenu', () => {
         expect(appended).toHaveLength(1);
         const labels = appended[0].children.map((item) => item.textContent);
         expect(labels).toEqual(['关闭菜单', '编辑属性', '旋转 (R)', '复制', '删除 (Del)']);
+    });
+
+    it('does not throw when document.addEventListener is non-callable in delayed outside-click bind', () => {
+        const appended = [];
+        const body = { appendChild: vi.fn((el) => appended.push(el)) };
+        vi.stubGlobal('document', {
+            getElementById: vi.fn(() => null),
+            createElement: vi.fn(() => createFakeElement()),
+            body,
+            addEventListener: {},
+            removeEventListener: vi.fn()
+        });
+        vi.stubGlobal('setTimeout', vi.fn((fn) => fn()));
+
+        const context = {
+            hideContextMenu: vi.fn(),
+            hideContextMenuHandler: vi.fn(),
+            circuit: { getComponent: vi.fn(() => ({ id: 'R1', type: 'Resistor' })) },
+            showPropertyDialog: vi.fn(),
+            rotateComponent: vi.fn(),
+            duplicateComponent: vi.fn(),
+            deleteComponent: vi.fn()
+        };
+        const event = { clientX: 12, clientY: 34 };
+
+        expect(() => ContextMenuController.showContextMenu.call(context, event, 'R1')).not.toThrow();
+        expect(appended).toHaveLength(1);
     });
 });
 

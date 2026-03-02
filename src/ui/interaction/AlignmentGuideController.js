@@ -1,3 +1,13 @@
+function safeInvokeMethod(target, methodName, ...args) {
+    const fn = target?.[methodName];
+    if (typeof fn !== 'function') return undefined;
+    try {
+        return fn.apply(target, args);
+    } catch (_) {
+        return undefined;
+    }
+}
+
 export function detectAlignment(draggedId, x, y) {
     const result = {
         snapX: null,
@@ -55,7 +65,7 @@ export function showAlignmentGuides(alignment) {
         guidesGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
         guidesGroup.id = 'alignment-guides';
         // 应用与其他图层相同的变换
-        guidesGroup.setAttribute('transform',
+        safeInvokeMethod(guidesGroup, 'setAttribute', 'transform',
             `translate(${this.viewOffset.x}, ${this.viewOffset.y}) scale(${this.scale})`
         );
         this.svg.appendChild(guidesGroup);
@@ -67,18 +77,18 @@ export function showAlignmentGuides(alignment) {
     // 绘制新的辅助线
     for (const guide of alignment.guideLines) {
         const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-        line.setAttribute('class', 'alignment-guide');
+        safeInvokeMethod(line, 'setAttribute', 'class', 'alignment-guide');
 
         if (guide.type === 'horizontal') {
-            line.setAttribute('x1', guide.x1);
-            line.setAttribute('y1', guide.y);
-            line.setAttribute('x2', guide.x2);
-            line.setAttribute('y2', guide.y);
+            safeInvokeMethod(line, 'setAttribute', 'x1', guide.x1);
+            safeInvokeMethod(line, 'setAttribute', 'y1', guide.y);
+            safeInvokeMethod(line, 'setAttribute', 'x2', guide.x2);
+            safeInvokeMethod(line, 'setAttribute', 'y2', guide.y);
         } else {
-            line.setAttribute('x1', guide.x);
-            line.setAttribute('y1', guide.y1);
-            line.setAttribute('x2', guide.x);
-            line.setAttribute('y2', guide.y2);
+            safeInvokeMethod(line, 'setAttribute', 'x1', guide.x);
+            safeInvokeMethod(line, 'setAttribute', 'y1', guide.y1);
+            safeInvokeMethod(line, 'setAttribute', 'x2', guide.x);
+            safeInvokeMethod(line, 'setAttribute', 'y2', guide.y2);
         }
 
         guidesGroup.appendChild(line);

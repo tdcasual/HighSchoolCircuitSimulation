@@ -37,6 +37,24 @@ function logWarn(context, ...args) {
     }
 }
 
+function safeInvokeMethod(target, methodName, ...args) {
+    const fn = target?.[methodName];
+    if (typeof fn !== 'function') return undefined;
+    try {
+        return fn.apply(target, args);
+    } catch (_) {
+        return undefined;
+    }
+}
+
+function safeAddClass(node, className) {
+    safeInvokeMethod(node?.classList, 'add', className);
+}
+
+function safeRemoveClass(node, className) {
+    safeInvokeMethod(node?.classList, 'remove', className);
+}
+
 /**
  * 工具箱拖放事件
  */
@@ -48,7 +66,7 @@ export function bindToolboxEvents() {
 
     toolItems.forEach((item) => {
         // 开始拖动
-        item.addEventListener('dragstart', (e) => {
+        safeInvokeMethod(item, 'addEventListener', 'dragstart', (e) => {
             const type = item.dataset.type;
             if (!type || !VALID_TOOL_TYPES.includes(type)) {
                 logWarn(this, 'Invalid component type:', type);
@@ -58,19 +76,19 @@ export function bindToolboxEvents() {
             // 使用特定的 MIME 类型避免与其他拖放混淆
             e.dataTransfer.setData('application/x-circuit-component', type);
             e.dataTransfer.effectAllowed = 'copy';
-            item.classList.add('dragging');
+            safeAddClass(item, 'dragging');
             this.isToolboxDrag = true;
             logDebug(this, 'Toolbox drag started:', type);
         });
 
         // 结束拖动
-        item.addEventListener('dragend', () => {
-            item.classList.remove('dragging');
+        safeInvokeMethod(item, 'addEventListener', 'dragend', () => {
+            safeRemoveClass(item, 'dragging');
             this.isToolboxDrag = false;
         });
 
         // 触屏/笔记本平板模式：点击工具后在画布点击放置
-        item.addEventListener('click', (e) => {
+        safeInvokeMethod(item, 'addEventListener', 'click', (e) => {
             const type = item.dataset.type;
             if (!type || !VALID_TOOL_TYPES.includes(type)) return;
             e.preventDefault();
@@ -110,9 +128,11 @@ export function bindToolboxEvents() {
         }
 
         // 计算相对于SVG的位置（考虑缩放和平移）
-        const rect = this.svg.getBoundingClientRect();
-        const screenX = e.clientX - rect.left;
-        const screenY = e.clientY - rect.top;
+        const rect = safeInvokeMethod(this.svg, 'getBoundingClientRect') || {};
+        const left = Number.isFinite(rect?.left) ? rect.left : 0;
+        const top = Number.isFinite(rect?.top) ? rect.top : 0;
+        const screenX = e.clientX - left;
+        const screenY = e.clientY - top;
         // 转换为画布坐标
         const canvasX = (screenX - this.viewOffset.x) / this.scale;
         const canvasY = (screenY - this.viewOffset.y) / this.scale;
@@ -141,6 +161,6 @@ export function bindToolboxEvents() {
     };
 
     // 只绑定到 SVG 元素
-    this.svg.addEventListener('dragover', handleDragOver);
-    this.svg.addEventListener('drop', handleDrop);
+    safeInvokeMethod(this.svg, 'addEventListener', 'dragover', handleDragOver);
+    safeInvokeMethod(this.svg, 'addEventListener', 'drop', handleDrop);
 }

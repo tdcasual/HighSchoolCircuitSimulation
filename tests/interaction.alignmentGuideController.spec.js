@@ -75,6 +75,41 @@ describe('AlignmentGuideController.showAlignmentGuides', () => {
         expect(setAttr).toHaveBeenCalledWith('transform', 'translate(10, 20) scale(1.5)');
         expect(appendedLines.length).toBe(2);
     });
+
+    it('does not throw when setAttribute is non-callable', () => {
+        let guidesGroup = null;
+
+        const svg = {
+            querySelector: vi.fn(() => guidesGroup),
+            appendChild: vi.fn((node) => {
+                guidesGroup = node;
+            })
+        };
+
+        const makeNode = (tag) => ({
+            tagName: tag,
+            id: '',
+            innerHTML: '',
+            setAttribute: {},
+            appendChild: vi.fn()
+        });
+
+        vi.stubGlobal('document', {
+            createElementNS: vi.fn((_, tag) => makeNode(tag))
+        });
+
+        const context = {
+            svg,
+            viewOffset: { x: 10, y: 20 },
+            scale: 1.5
+        };
+
+        expect(() => AlignmentGuideController.showAlignmentGuides.call(context, {
+            guideLines: [
+                { type: 'horizontal', x1: 0, y: 10, x2: 100 }
+            ]
+        })).not.toThrow();
+    });
 });
 
 describe('AlignmentGuideController.hideAlignmentGuides', () => {

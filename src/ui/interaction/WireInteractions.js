@@ -6,6 +6,48 @@ function resolveScaledThreshold(context, screenPx) {
     return screenPx / scale;
 }
 
+function resolveLiveWireStart(context) {
+    const wireStart = context?.wireStart;
+    if (!wireStart) return null;
+
+    const snap = wireStart.snap || null;
+    if (snap?.type === 'terminal') {
+        const componentId = snap.componentId;
+        const terminalIndex = Number(snap.terminalIndex);
+        if (componentId && Number.isInteger(terminalIndex) && terminalIndex >= 0) {
+            const pos = context?.renderer?.getTerminalPosition?.(componentId, terminalIndex);
+            if (pos && Number.isFinite(pos.x) && Number.isFinite(pos.y)) {
+                return {
+                    x: toCanvasInt(pos.x),
+                    y: toCanvasInt(pos.y),
+                    snap
+                };
+            }
+        }
+    } else if (snap?.type === 'wire-endpoint') {
+        const wireId = snap.wireId;
+        const end = snap.end;
+        const wire = wireId ? context?.circuit?.getWire?.(wireId) : null;
+        const point = wire && (end === 'a' || end === 'b') ? wire[end] : null;
+        if (point && Number.isFinite(point.x) && Number.isFinite(point.y)) {
+            return {
+                x: toCanvasInt(point.x),
+                y: toCanvasInt(point.y),
+                snap
+            };
+        }
+    }
+
+    if (Number.isFinite(wireStart.x) && Number.isFinite(wireStart.y)) {
+        return {
+            x: toCanvasInt(wireStart.x),
+            y: toCanvasInt(wireStart.y),
+            snap
+        };
+    }
+    return null;
+}
+
 export function addWireAt(x, y) {
     this.runWithHistory('添加导线', () => {
         const cy = toCanvasInt(y);
@@ -40,6 +82,11 @@ export function startWiringFromPoint(point, e = null, armMouseUpGuard = false) {
 
     this.isWiring = true;
     this.wireStart = { x: start.x, y: start.y, snap: start.snap || null };
+    this.syncInteractionModeStore?.({
+        mode: 'wire',
+        source: 'wire.startWiringFromPoint',
+        context: { isWiring: true }
+    });
 
     // 创建临时导线
     this.tempWire = this.renderer.createTempWire();
@@ -58,10 +105,18 @@ export function finishWiringToPoint(point, options = {}) {
         return;
     }
 
+    const liveStart = resolveLiveWireStart(this);
+    if (liveStart && this.wireStart) {
+        this.wireStart.x = liveStart.x;
+        this.wireStart.y = liveStart.y;
+        this.wireStart.snap = liveStart.snap || this.wireStart.snap || null;
+    }
+
+    const startSource = liveStart || this.wireStart;
     const start = {
-        x: toCanvasInt(this.wireStart.x),
-        y: toCanvasInt(this.wireStart.y),
-        snap: this.wireStart.snap || null
+        x: toCanvasInt(startSource.x),
+        y: toCanvasInt(startSource.y),
+        snap: startSource.snap || null
     };
     const end = point && point.snap
         ? { x: toCanvasInt(point.x), y: toCanvasInt(point.y), snap: point.snap || null }
@@ -216,10 +271,10 @@ export function startWireEndpointDrag(wireId, end, e) {
     const wire = this.circuit.getWire(wireId);
     if (!wire || (end !== 'a' && end !== 'b')) return;
 
-    this.beginHistoryTransaction('移动导线端点');
-
     const origin = wire[end];
     if (!origin) return;
+
+    this.beginHistoryTransaction('移动导线端点');
 
     // Touch-first behavior: dragging a wire endpoint moves this endpoint by default.
     // Hold Shift to drag the whole junction (all endpoints sharing the same coordinate).
@@ -284,6 +339,11 @@ export function startWireEndpointDrag(wireId, end, e) {
         lastMoveTimeStamp: startTimeStamp,
         lastDragSpeedPxPerMs: null
     };
+    this.syncInteractionModeStore?.({
+        mode: 'endpoint-edit',
+        source: 'wire.startWireEndpointDrag',
+        context: { isDraggingWireEndpoint: true }
+    });
     this.selectWire(wireId);
     e.preventDefault();
     e.stopPropagation();
@@ -485,6 +545,8 @@ export function cancelWiring() {
     this.isWiring = false;
     this.wireStart = null;
     this.ignoreNextWireMouseUp = false;
+    this.suspendedWiringSession = null;
+    this.syncInteractionModeStore?.({ source: 'wire.cancelWiring' });
     if (this.tempWire) {
         this.renderer.removeTempWire(this.tempWire);
         this.tempWire = null;

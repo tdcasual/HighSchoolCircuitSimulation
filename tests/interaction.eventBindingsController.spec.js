@@ -39,6 +39,18 @@ describe('EventBindingsController.bindZoomEvents', () => {
         expect(ctx.resetView).toHaveBeenCalledTimes(1);
         expect(zoomLevel.title).toContain('点击重置视图');
     });
+
+    it('does not throw when zoom level addEventListener is non-callable', () => {
+        vi.stubGlobal('document', {
+            getElementById: vi.fn(() => ({
+                addEventListener: {},
+                title: ''
+            }))
+        });
+
+        const ctx = { resetView: vi.fn() };
+        expect(() => EventBindingsController.bindZoomEvents.call(ctx)).not.toThrow();
+    });
 });
 
 describe('EventBindingsController.bindEvents', () => {
@@ -82,9 +94,56 @@ describe('EventBindingsController.bindKeyboardEvents', () => {
 
         expect(orchestratorSpy).toHaveBeenCalledWith(event);
     });
+
+    it('does not throw when document addEventListener is non-callable', () => {
+        vi.stubGlobal('document', {
+            addEventListener: {}
+        });
+        const ctx = {};
+
+        expect(() => EventBindingsController.bindKeyboardEvents.call(ctx)).not.toThrow();
+    });
 });
 
 describe('EventBindingsController.bindCanvasEvents', () => {
+    it('does not throw when svg root is missing', () => {
+        vi.stubGlobal('window', { PointerEvent: function PointerEvent() {} });
+        const context = {
+            svg: null,
+            onPointerDown: vi.fn(),
+            onPointerMove: vi.fn(),
+            onPointerUp: vi.fn(),
+            onPointerCancel: vi.fn(),
+            onPointerLeave: vi.fn(),
+            onContextMenu: vi.fn(),
+            onDoubleClick: vi.fn(),
+            onWheel: vi.fn()
+        };
+
+        expect(() => EventBindingsController.bindCanvasEvents.call(context)).not.toThrow();
+    });
+
+    it('does not throw when svg addEventListener throws', () => {
+        vi.stubGlobal('window', { PointerEvent: function PointerEvent() {} });
+        const context = {
+            svg: {
+                addEventListener: vi.fn(() => {
+                    throw new TypeError('broken add');
+                })
+            },
+            onPointerDown: vi.fn(),
+            onPointerMove: vi.fn(),
+            onPointerUp: vi.fn(),
+            onPointerCancel: vi.fn(),
+            onPointerLeave: vi.fn(),
+            onContextMenu: vi.fn(),
+            onDoubleClick: vi.fn(),
+            onWheel: vi.fn()
+        };
+
+        expect(() => EventBindingsController.bindCanvasEvents.call(context)).not.toThrow();
+    });
+
     it('binds pointer listeners when PointerEvent is available', () => {
         vi.stubGlobal('window', { PointerEvent: function PointerEvent() {} });
         const svg = createEventTarget();

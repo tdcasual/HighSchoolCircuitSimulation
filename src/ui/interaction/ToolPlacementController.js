@@ -20,8 +20,53 @@ function isClassroomModeActive(context) {
     return level !== '' && level !== 'off';
 }
 
+function isEmbedRuntimeActive(context) {
+    return !!context?.app?.embedRuntimeBridge?.enabled;
+}
+
 function hasDocument() {
     return typeof document !== 'undefined';
+}
+
+function safeClassListContains(classList, className) {
+    const contains = classList?.contains;
+    if (typeof contains !== 'function') return false;
+    try {
+        return !!contains.call(classList, className);
+    } catch (_) {
+        return false;
+    }
+}
+
+function isPhoneLikeLayout() {
+    if (!hasDocument()) return false;
+    const bodyClassList = document.body?.classList;
+    if (!bodyClassList) return false;
+    return safeClassListContains(bodyClassList, 'layout-mode-phone')
+        || safeClassListContains(bodyClassList, 'layout-mode-compact');
+}
+
+function safeInvokeMethod(target, methodName, ...args) {
+    const fn = target?.[methodName];
+    if (typeof fn !== 'function') return undefined;
+    try {
+        return fn.apply(target, args);
+    } catch (_) {
+        return undefined;
+    }
+}
+
+function safeAddClass(node, className) {
+    safeInvokeMethod(node?.classList, 'add', className);
+}
+
+function safeRemoveClass(node, className) {
+    safeInvokeMethod(node?.classList, 'remove', className);
+}
+
+function clearSuspendedWiringSession(context) {
+    if (!context) return;
+    context.suspendedWiringSession = null;
 }
 
 function resolveStorage() {
@@ -58,10 +103,8 @@ function getEndpointAutoBridgeButtonLabel(mode) {
 
 function setTogglePressedState(button, pressed) {
     if (!button) return;
-    button.setAttribute('aria-pressed', pressed ? 'true' : 'false');
-    if (button.classList && typeof button.classList.toggle === 'function') {
-        button.classList.toggle('active', !!pressed);
-    }
+    safeInvokeMethod(button, 'setAttribute', 'aria-pressed', pressed ? 'true' : 'false');
+    safeInvokeMethod(button?.classList, 'toggle', 'active', !!pressed);
 }
 
 export function syncMobileModeButtons() {
@@ -93,6 +136,65 @@ export function syncEndpointAutoBridgeButton() {
         note.hidden = !classroomActive;
         note.textContent = ENDPOINT_AUTO_BRIDGE_CLASSROOM_LOCK_NOTE;
     }
+}
+
+export function getInteractionModeSnapshot() {
+    const mobileInteractionMode = normalizeMobileInteractionMode(this.mobileInteractionMode);
+    const endpointAutoBridgeMode = normalizeEndpointAutoBridgeMode(this.endpointAutoBridgeMode);
+
+    const wireSignals = {
+        pendingWireTool: this.pendingToolType === 'Wire',
+        wireModeSelected: mobileInteractionMode === 'wire',
+        stickyWireTool: !!this.stickyWireTool,
+        activeWiringSession: !!this.isWiring
+    };
+    const endpointSignals = {
+        draggingWireEndpoint: !!this.isDraggingWireEndpoint,
+        terminalExtending: !!this.isTerminalExtending,
+        rheostatDragging: !!this.isRheostatDragging
+    };
+
+    const activeModes = [];
+    if (
+        wireSignals.pendingWireTool
+        || wireSignals.wireModeSelected
+        || wireSignals.stickyWireTool
+        || wireSignals.activeWiringSession
+    ) {
+        activeModes.push('wire');
+    }
+    if (
+        endpointSignals.draggingWireEndpoint
+        || endpointSignals.terminalExtending
+        || endpointSignals.rheostatDragging
+    ) {
+        activeModes.push('endpoint-edit');
+    }
+    if (activeModes.length === 0) {
+        activeModes.push('select');
+    }
+
+    const uniqueActiveModes = Array.from(new Set(activeModes));
+    const hasConflict = uniqueActiveModes.length > 1;
+
+    return {
+        mode: hasConflict ? 'conflict' : uniqueActiveModes[0],
+        activeModes: uniqueActiveModes,
+        hasConflict,
+        pendingToolType: this.pendingToolType || null,
+        wireSignals,
+        endpointSignals,
+        mobile: {
+            interactionMode: mobileInteractionMode,
+            stickyWireTool: !!this.stickyWireTool,
+            endpointAutoBridgeMode
+        },
+        runtime: {
+            phoneLikeLayout: isPhoneLikeLayout(),
+            classroomModeActive: isClassroomModeActive(this),
+            embedRuntimeActive: isEmbedRuntimeActive(this)
+        }
+    };
 }
 
 export function setEndpointAutoBridgeMode(mode = 'auto', options = {}) {
@@ -138,6 +240,7 @@ export function restoreEndpointAutoBridgeMode(options = {}) {
 }
 
 export function setMobileInteractionMode(mode = 'select', options = {}) {
+    clearSuspendedWiringSession(this);
     const nextMode = normalizeMobileInteractionMode(mode);
     const isWireMode = nextMode === 'wire';
 
@@ -170,6 +273,7 @@ export function setMobileInteractionMode(mode = 'select', options = {}) {
 }
 
 export function setPendingToolType(type, item = null, options = {}) {
+    clearSuspendedWiringSession(this);
     if (!type) return;
     const allowToggleOff = options.allowToggleOff !== false;
     if (this.pendingToolType === type) {
@@ -193,9 +297,9 @@ export function setPendingToolType(type, item = null, options = {}) {
     this.pendingToolType = type;
     this.pendingToolItem = item;
     if (hasDocument()) {
-        document.querySelectorAll('.tool-item.tool-item-pending').forEach((el) => el.classList.remove('tool-item-pending'));
+        document.querySelectorAll('.tool-item.tool-item-pending').forEach((el) => safeRemoveClass(el, 'tool-item-pending'));
     }
-    if (item) item.classList.add('tool-item-pending');
+    if (item) safeAddClass(item, 'tool-item-pending');
 
     if (type === 'Wire') {
         const fromMobileMode = options.source === 'mobile-mode';
@@ -220,14 +324,15 @@ export function setPendingToolType(type, item = null, options = {}) {
 }
 
 export function clearPendingToolType(options = {}) {
+    clearSuspendedWiringSession(this);
     this.pendingToolType = null;
     if (this.pendingToolItem) {
-        this.pendingToolItem.classList.remove('tool-item-pending');
+        safeRemoveClass(this.pendingToolItem, 'tool-item-pending');
         this.pendingToolItem = null;
     }
     if (!options.silent) {
         if (hasDocument()) {
-            document.querySelectorAll('.tool-item.tool-item-pending').forEach((el) => el.classList.remove('tool-item-pending'));
+            document.querySelectorAll('.tool-item.tool-item-pending').forEach((el) => safeRemoveClass(el, 'tool-item-pending'));
         }
     }
     if (!options.preserveMobileMode) {
