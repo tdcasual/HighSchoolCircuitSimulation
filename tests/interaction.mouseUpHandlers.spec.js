@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
     handleActiveWiringMouseUp,
+    handlePointerDownSelectionToggleMouseUp,
     handlePanningMouseUp,
     handleWireModeGestureMouseUp
 } from '../src/app/interaction/InteractionOrchestratorMouseUpHandlers.js';
@@ -183,5 +184,76 @@ describe('InteractionOrchestratorMouseUpHandlers.handleActiveWiringMouseUp', () 
         expect(context.finishWiringToPoint).not.toHaveBeenCalled();
         expect(context.cancelWiring).toHaveBeenCalledTimes(1);
         expect(context.updateStatus).toHaveBeenCalledWith('未连接到端子/端点，已取消连线');
+    });
+});
+
+describe('InteractionOrchestratorMouseUpHandlers.handlePointerDownSelectionToggleMouseUp', () => {
+    it('returns false when there is no pointer-down selection context', () => {
+        const context = {
+            clearSelection: vi.fn()
+        };
+        const event = {
+            target: {}
+        };
+
+        const handled = handlePointerDownSelectionToggleMouseUp.call(context, event, null);
+
+        expect(handled).toBe(false);
+        expect(context.clearSelection).not.toHaveBeenCalled();
+    });
+
+    it('clears selection when tapping selected component without movement', () => {
+        const pointerDownInfo = {
+            componentId: 'R1',
+            wasSelected: true,
+            moved: false,
+            screenX: 100,
+            screenY: 80,
+            pointerType: 'touch'
+        };
+        const context = {
+            resolvePointerType: vi.fn(() => 'touch'),
+            clearSelection: vi.fn()
+        };
+        const event = {
+            clientX: 104,
+            clientY: 83,
+            target: {
+                closest: (selector) => (selector === '.component' ? { dataset: { id: 'R1' } } : null)
+            }
+        };
+
+        const handled = handlePointerDownSelectionToggleMouseUp.call(context, event, pointerDownInfo);
+
+        expect(handled).toBe(true);
+        expect(context.clearSelection).toHaveBeenCalledTimes(1);
+        expect(context.pointerDownInfo).toBeNull();
+    });
+
+    it('returns false when pointer moved beyond threshold', () => {
+        const pointerDownInfo = {
+            componentId: 'R1',
+            wasSelected: true,
+            moved: false,
+            screenX: 100,
+            screenY: 80,
+            pointerType: 'mouse'
+        };
+        const context = {
+            resolvePointerType: vi.fn(() => 'mouse'),
+            clearSelection: vi.fn()
+        };
+        const event = {
+            clientX: 140,
+            clientY: 120,
+            target: {
+                closest: (selector) => (selector === '.component' ? { dataset: { id: 'R1' } } : null)
+            }
+        };
+
+        const handled = handlePointerDownSelectionToggleMouseUp.call(context, event, pointerDownInfo);
+
+        expect(handled).toBe(false);
+        expect(context.clearSelection).not.toHaveBeenCalled();
     });
 });

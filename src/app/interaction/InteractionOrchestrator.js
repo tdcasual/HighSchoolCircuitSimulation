@@ -17,6 +17,7 @@ import {
 } from './InteractionOrchestratorMouseDownHandlers.js';
 import {
     handleActiveWiringMouseUp as handleActiveWiringMouseUpViaHandlers,
+    handlePointerDownSelectionToggleMouseUp as handlePointerDownSelectionToggleMouseUpViaHandlers,
     handlePanningMouseUp as handlePanningMouseUpViaHandlers,
     handleWireModeGestureMouseUp as handleWireModeGestureMouseUpViaHandlers
 } from './InteractionOrchestratorMouseUpHandlers.js';
@@ -612,22 +613,8 @@ export function onMouseUp(e) {
         this.commitHistoryTransaction();
     }
 
-    if (pointerDownInfo?.componentId && pointerDownInfo.wasSelected && !pointerDownInfo.moved) {
-        const pointerType = pointerDownInfo.pointerType || this.resolvePointerType(e);
-        const threshold = pointerType === 'touch' ? 12 : pointerType === 'pen' ? 10 : 6;
-        const moved = Math.hypot(
-            (e.clientX || 0) - (pointerDownInfo.screenX || 0),
-            (e.clientY || 0) - (pointerDownInfo.screenY || 0)
-        );
-        if (moved <= threshold) {
-            const componentG = safeClosest(e.target, '.component');
-            const componentId = componentG?.dataset?.id;
-            if (componentId && componentId === pointerDownInfo.componentId) {
-                this.clearSelection();
-                this.pointerDownInfo = null;
-                return;
-            }
-        }
+    if (handlePointerDownSelectionToggleMouseUpViaHandlers.call(this, e, pointerDownInfo)) {
+        return;
     }
 
     if (handleActiveWiringMouseUpViaHandlers.call(this, e)) {
