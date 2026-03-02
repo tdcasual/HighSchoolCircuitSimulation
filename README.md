@@ -50,7 +50,7 @@
 - Observation 配置可直接沿用旧存档，加载时会自动归一化到 v2 schema。
 - 场景包导入路径更新为：
   - `src/engine/scenarios/ClassroomScenarioPack.js`
-- 嵌入打包脚本对 `examples/` 目录改为可选；缺失时不会阻塞 `build:frontend / package:embed`。
+- 嵌入打包脚本对 `examples/` 目录改为可选；缺失时不会阻塞 `build:frontend / package:embed / docker build`。
 
 ## 🚀 快速开始
 

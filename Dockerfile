@@ -14,7 +14,6 @@ COPY embed.js ./
 COPY deploycircuit.js ./
 COPY css ./css
 COPY src ./src
-COPY examples ./examples
 
 EXPOSE 80
 
