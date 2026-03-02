@@ -1,4 +1,5 @@
 import {
+    consumeActionResult,
     hasClass,
     isTouchLikePointer,
     resolveWireModeGestureThreshold,
@@ -188,4 +189,99 @@ export function handleWireTargetMouseDown(e, resolvedTargets = {}) {
 
     this.startWireDrag(wireId, e);
     return true;
+}
+
+export function handleSurfaceTargetMouseDown(e, resolvedTargets = {}) {
+    const target = resolvedTargets.target ?? e.target;
+    const probeMarker = resolvedTargets.probeMarker ?? null;
+    const terminalTarget = resolvedTargets.terminalTarget !== undefined
+        ? resolvedTargets.terminalTarget
+        : (typeof this.resolveTerminalTarget === 'function' ? this.resolveTerminalTarget(target) : null);
+    const componentGroup = resolvedTargets.componentGroup !== undefined
+        ? resolvedTargets.componentGroup
+        : safeClosest(target, '.component');
+
+    if (probeMarker && e.button === 0) {
+        const wireId = probeMarker.dataset.wireId;
+        if (wireId) this.selectWire(wireId);
+        return true;
+    }
+
+    // 端子交互：默认用于选中元器件；Ctrl/Cmd + 拖动用于延长/缩短引脚。
+    // 连线动作通过显式导线工具触发，避免选择与起线语义冲突。
+    if (terminalTarget) {
+        if (componentGroup) {
+            const componentId = componentGroup.dataset.id;
+            const terminalIndex = parseInt(terminalTarget.dataset.terminal, 10);
+            if (!Number.isNaN(terminalIndex) && terminalIndex >= 0) {
+                if (this.selectedComponent !== componentId) {
+                    this.selectComponent(componentId);
+                }
+                if (e.ctrlKey || e.metaKey) {
+                    this.startTerminalExtend(componentId, terminalIndex, e);
+                    return true;
+                }
+            }
+            return true;
+        }
+    }
+
+    // 检查是否点击了滑动变阻器的滑块
+    if (hasClass(target, 'rheostat-slider')) {
+        if (componentGroup) {
+            this.startRheostatDrag(componentGroup.dataset.id, e);
+            return true;
+        }
+    }
+
+    // 检查是否点击了开关（切换开关状态）
+    if (hasClass(target, 'switch-blade') || hasClass(target, 'switch-touch')) {
+        if (componentGroup) {
+            consumeActionResult(this, this.toggleSwitch(componentGroup.dataset.id));
+            return true;
+        }
+    }
+
+    // 平行板电容探索模式：拖动可动极板
+    if (hasClass(target, 'plate-movable') && target.dataset.role === 'plate-movable') {
+        if (componentGroup) {
+            const compId = componentGroup.dataset.id;
+            const comp = this.circuit.getComponent(compId);
+            if (comp && comp.type === 'ParallelPlateCapacitor' && comp.explorationMode) {
+                this.startParallelPlateCapacitorDrag(compId, e);
+                return true;
+            }
+        }
+    }
+
+    // 检查是否点击了导线端点（拖动移动）
+    if (typeof this.isWireEndpointTarget === 'function' && this.isWireEndpointTarget(target)) {
+        const wireGroup = safeClosest(target, '.wire-group');
+        if (wireGroup) {
+            const wireId = wireGroup.dataset.id;
+            const end = target.dataset.end;
+            if (end === 'a' || end === 'b') {
+                this.startWireEndpointDrag(wireId, end, e);
+                return true;
+            }
+        }
+    }
+
+    // 检查是否点击了元器件
+    if (componentGroup) {
+        const componentId = componentGroup.dataset.id;
+        const wasSelected = this.selectedComponent === componentId;
+        this.pointerDownInfo = {
+            componentId,
+            wasSelected,
+            screenX: e.clientX,
+            screenY: e.clientY,
+            pointerType: this.resolvePointerType(e),
+            moved: false
+        };
+        this.startDragging(componentGroup, e);
+        return true;
+    }
+
+    return false;
 }
