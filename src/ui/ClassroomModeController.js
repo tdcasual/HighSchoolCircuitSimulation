@@ -1,3 +1,5 @@
+import { recordLegacyPathUsage } from '../app/legacy/LegacyPathUsageTracker.js';
+
 const CLASSROOM_MODE_STORAGE_KEY = 'ui.classroom_mode_level';
 const CLASSROOM_MODE_LEGACY_STORAGE_KEY = 'ui.classroom_mode_enabled';
 const CLASSROOM_MODE_CLASS = 'classroom-mode';
@@ -20,7 +22,7 @@ function normalizeLevel(value) {
     return CLASSROOM_LEVEL_OFF;
 }
 
-function readStoredPreference(storageKey) {
+function readStoredPreference(storageKey, options = {}) {
     if (typeof localStorage === 'undefined') return CLASSROOM_LEVEL_OFF;
     try {
         const raw = localStorage.getItem(storageKey);
@@ -32,6 +34,10 @@ function readStoredPreference(storageKey) {
         // Backward compatibility: legacy bool storage.
         const legacy = localStorage.getItem(CLASSROOM_MODE_LEGACY_STORAGE_KEY);
         if (legacy === '1' || legacy === 'true') {
+            const onLegacyRead = options.onLegacyRead;
+            if (typeof onLegacyRead === 'function') {
+                onLegacyRead({ key: CLASSROOM_MODE_LEGACY_STORAGE_KEY, value: legacy });
+            }
             return CLASSROOM_LEVEL_STANDARD;
         }
         return CLASSROOM_LEVEL_OFF;
@@ -83,7 +89,13 @@ export class ClassroomModeController {
     }
 
     initialize() {
-        this.preferredLevel = readStoredPreference(this.storageKey);
+        this.preferredLevel = readStoredPreference(this.storageKey, {
+            onLegacyRead: () => {
+                recordLegacyPathUsage(this.app, 'classroom.mode.legacy-bool-read', {
+                    storageKey: CLASSROOM_MODE_LEGACY_STORAGE_KEY
+                });
+            }
+        });
         if (this.button) {
             safeInvokeMethod(this.button, 'addEventListener', 'click', this.boundToggle);
         }

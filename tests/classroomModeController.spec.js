@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ClassroomModeController } from '../src/ui/ClassroomModeController.js';
+import { getLegacyPathUsageSnapshot } from '../src/app/legacy/LegacyPathUsageTracker.js';
 
 function createClassList() {
     const values = new Set();
@@ -132,14 +133,19 @@ describe('ClassroomModeController', () => {
 
     it('restores legacy boolean storage to standard mode for backward compatibility', () => {
         const { body, button } = setupFixture({ width: 1366, storedLevel: null, storedLegacy: '1' });
-        new ClassroomModeController({
+        const app = {
             responsiveLayout: { isOverlayMode: () => false },
             updateStatus: vi.fn()
-        });
+        };
+        new ClassroomModeController(app);
 
         expect(body.classList.contains('classroom-mode')).toBe(true);
         expect(body.classList.contains('classroom-mode-enhanced')).toBe(false);
         expect(button.textContent).toBe('课堂模式: 标准');
+        const snapshot = getLegacyPathUsageSnapshot(app);
+        expect(snapshot).toHaveLength(1);
+        expect(snapshot[0].key).toBe('classroom.mode.legacy-bool-read');
+        expect(snapshot[0].count).toBe(1);
     });
 
     it('suspends preferred level in compact viewport and restores after resize', () => {

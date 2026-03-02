@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as UIStateController from '../src/ui/interaction/UIStateController.js';
+import { getLegacyPathUsageSnapshot } from '../src/app/legacy/LegacyPathUsageTracker.js';
 
 afterEach(() => {
     vi.useRealTimers();
@@ -102,6 +103,11 @@ describe('UIStateController.getActiveInteractionMode', () => {
         };
 
         expect(UIStateController.getActiveInteractionMode.call(context)).toBe('wire');
+        const snapshot = getLegacyPathUsageSnapshot(context);
+        expect(snapshot).toHaveLength(1);
+        expect(snapshot[0].key).toBe('interaction.mode.legacy-fallback');
+        expect(snapshot[0].count).toBe(1);
+        expect(snapshot[0].lastDetails?.reason).toBe('store-missing');
     });
 });
 
