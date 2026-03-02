@@ -95,6 +95,7 @@ describe('DragBehaviors auxiliary edit drags', () => {
             hideAlignmentGuides: vi.fn(),
             commitHistoryTransaction: vi.fn(),
             updateStatus: vi.fn(),
+            syncInteractionModeStore: vi.fn(),
             isTerminalExtending: false
         };
         const event = {
@@ -106,10 +107,18 @@ describe('DragBehaviors auxiliary edit drags', () => {
 
         DragBehaviors.startTerminalExtend.call(context, 'R1', 0, event);
         expect(context.isTerminalExtending).toBe(true);
+        expect(context.syncInteractionModeStore).toHaveBeenCalledWith({
+            source: 'dragBehaviors.startTerminalExtend:start',
+            context: { isTerminalExtending: true }
+        });
         expect(typeof onUpHandler).toBe('function');
 
         onUpHandler();
         expect(context.isTerminalExtending).toBe(false);
+        expect(context.syncInteractionModeStore).toHaveBeenCalledWith({
+            source: 'dragBehaviors.startTerminalExtend:end',
+            context: { isTerminalExtending: false }
+        });
     });
 
     it('tracks rheostat slider drag lifecycle for pointer-cancel guards', () => {
@@ -132,6 +141,7 @@ describe('DragBehaviors auxiliary edit drags', () => {
             },
             updateRheostatPanelValues: vi.fn(),
             updatePropertyPanel: vi.fn(),
+            syncInteractionModeStore: vi.fn(),
             isRheostatDragging: false
         };
         const event = {
@@ -143,11 +153,19 @@ describe('DragBehaviors auxiliary edit drags', () => {
 
         DragBehaviors.startRheostatDrag.call(context, 'RH1', event);
         expect(context.isRheostatDragging).toBe(true);
+        expect(context.syncInteractionModeStore).toHaveBeenCalledWith({
+            source: 'dragBehaviors.startRheostatDrag:start',
+            context: { isRheostatDragging: true }
+        });
         expect(context.beginHistoryTransaction).toHaveBeenCalledTimes(1);
         expect(typeof onUpHandler).toBe('function');
 
         onUpHandler();
         expect(context.isRheostatDragging).toBe(false);
+        expect(context.syncInteractionModeStore).toHaveBeenCalledWith({
+            source: 'dragBehaviors.startRheostatDrag:end',
+            context: { isRheostatDragging: false }
+        });
         expect(context.commitHistoryTransaction).toHaveBeenCalledTimes(1);
     });
 

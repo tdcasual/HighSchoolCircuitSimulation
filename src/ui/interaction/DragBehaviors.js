@@ -1,5 +1,6 @@
 import { GRID_SIZE, snapToGrid, toCanvasInt } from '../../utils/CanvasCoords.js';
 import { getTerminalLocalPosition } from '../../utils/TerminalGeometry.js';
+import { setInteractionModeContext } from '../../app/interaction/InteractionModeBridge.js';
 
 function safeInvokeMethod(target, methodName, ...args) {
     const fn = target?.[methodName];
@@ -138,7 +139,11 @@ export function startTerminalExtend(componentId, terminalIndex, e) {
     if (!comp) return;
 
     this.beginHistoryTransaction('调整端子长度');
-    this.isTerminalExtending = true;
+    setInteractionModeContext(this, {
+        isTerminalExtending: true
+    }, {
+        source: 'dragBehaviors.startTerminalExtend:start'
+    });
 
     // 初始化端子延长数据
     if (!comp.terminalExtensions) {
@@ -194,7 +199,11 @@ export function startTerminalExtend(componentId, terminalIndex, e) {
 
     const onUp = () => {
         if (typeof cleanupDrag === 'function') cleanupDrag();
-        this.isTerminalExtending = false;
+        setInteractionModeContext(this, {
+            isTerminalExtending: false
+        }, {
+            source: 'dragBehaviors.startTerminalExtend:end'
+        });
         this.hideAlignmentGuides();
         // 端子位置会影响坐标拓扑，需重建节点
         this.circuit.rebuildNodes();
@@ -215,7 +224,11 @@ export function startRheostatDrag(componentId, e) {
     const comp = this.circuit.getComponent(componentId);
     if (!comp || comp.type !== 'Rheostat') return;
     this.beginHistoryTransaction?.('调节滑动变阻器');
-    this.isRheostatDragging = true;
+    setInteractionModeContext(this, {
+        isRheostatDragging: true
+    }, {
+        source: 'dragBehaviors.startRheostatDrag:start'
+    });
 
     // 记录初始位置和初始position
     const startX = e.clientX;
@@ -255,7 +268,11 @@ export function startRheostatDrag(componentId, e) {
 
     const onUp = () => {
         if (typeof cleanupDrag === 'function') cleanupDrag();
-        this.isRheostatDragging = false;
+        setInteractionModeContext(this, {
+            isRheostatDragging: false
+        }, {
+            source: 'dragBehaviors.startRheostatDrag:end'
+        });
         // 拖动结束后完整刷新一次属性面板
         this.updatePropertyPanel(comp);
         this.commitHistoryTransaction?.();
