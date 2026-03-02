@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { handleWireModeGestureMouseMove } from '../src/app/interaction/InteractionOrchestratorMouseMoveHandlers.js';
+import {
+    handlePanningMouseMove,
+    handlePointerDownInfoMouseMove,
+    handleWireModeGestureMouseMove
+} from '../src/app/interaction/InteractionOrchestratorMouseMoveHandlers.js';
 
 describe('InteractionOrchestratorMouseMoveHandlers.handleWireModeGestureMouseMove', () => {
     it('returns false when no deferred wire-mode gesture exists', () => {
@@ -94,5 +98,67 @@ describe('InteractionOrchestratorMouseMoveHandlers.handleWireModeGestureMouseMov
         });
         expect(context.ignoreNextWireMouseUp).not.toBe(true);
         expect(context.wireModeGesture).toBeNull();
+    });
+});
+
+describe('InteractionOrchestratorMouseMoveHandlers.handlePointerDownInfoMouseMove', () => {
+    it('returns false when pointerDownInfo is absent', () => {
+        const context = {
+            pointerDownInfo: null
+        };
+
+        const handled = handlePointerDownInfoMouseMove.call(context, { clientX: 0, clientY: 0 });
+
+        expect(handled).toBe(false);
+    });
+
+    it('marks pointerDownInfo as moved after threshold and cancels long-press on touch', () => {
+        const context = {
+            pointerDownInfo: {
+                pointerType: 'touch',
+                moved: false,
+                screenX: 100,
+                screenY: 100
+            },
+            touchActionController: {
+                cancel: vi.fn()
+            }
+        };
+
+        const handled = handlePointerDownInfoMouseMove.call(context, {
+            clientX: 120,
+            clientY: 100
+        });
+
+        expect(handled).toBe(true);
+        expect(context.pointerDownInfo.moved).toBe(true);
+        expect(context.touchActionController.cancel).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('InteractionOrchestratorMouseMoveHandlers.handlePanningMouseMove', () => {
+    it('returns false when panning is inactive', () => {
+        const context = {
+            isPanning: false
+        };
+
+        const handled = handlePanningMouseMove.call(context, { clientX: 10, clientY: 20 });
+
+        expect(handled).toBe(false);
+    });
+
+    it('updates view offset and transform while panning', () => {
+        const context = {
+            isPanning: true,
+            panStart: { x: 10, y: 20 },
+            viewOffset: { x: 0, y: 0 },
+            updateViewTransform: vi.fn()
+        };
+
+        const handled = handlePanningMouseMove.call(context, { clientX: 35, clientY: 65 });
+
+        expect(handled).toBe(true);
+        expect(context.viewOffset).toEqual({ x: 25, y: 45 });
+        expect(context.updateViewTransform).toHaveBeenCalledTimes(1);
     });
 });

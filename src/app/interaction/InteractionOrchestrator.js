@@ -21,7 +21,11 @@ import {
     handleWireEndpointDragMouseUp as handleWireEndpointDragMouseUpViaHandlers,
     handleWireModeGestureMouseUp as handleWireModeGestureMouseUpViaHandlers
 } from './InteractionOrchestratorMouseUpHandlers.js';
-import { handleWireModeGestureMouseMove as handleWireModeGestureMouseMoveViaHandlers } from './InteractionOrchestratorMouseMoveHandlers.js';
+import {
+    handlePanningMouseMove as handlePanningMouseMoveViaHandlers,
+    handlePointerDownInfoMouseMove as handlePointerDownInfoMouseMoveViaHandlers,
+    handleWireModeGestureMouseMove as handleWireModeGestureMouseMoveViaHandlers
+} from './InteractionOrchestratorMouseMoveHandlers.js';
 import { handleMouseLeave as handleMouseLeaveViaHandlers } from './InteractionOrchestratorMouseLeaveHandlers.js';
 import {
     onContextMenu as onContextMenuViaTail,
@@ -105,32 +109,14 @@ export function onMouseDown(e) {
 
 export function onMouseMove(e) {
     this.quickActionBar?.notifyActivity?.();
-    if (this.pointerDownInfo && !this.pointerDownInfo.moved) {
-        const pointerType = this.pointerDownInfo.pointerType || this.resolvePointerType(e);
-        const threshold = pointerType === 'touch' ? 12 : pointerType === 'pen' ? 10 : 6;
-        const moved = Math.hypot(
-            (e.clientX || 0) - (this.pointerDownInfo.screenX || 0),
-            (e.clientY || 0) - (this.pointerDownInfo.screenY || 0)
-        );
-        if (moved > threshold) {
-            this.pointerDownInfo.moved = true;
-            if ((pointerType === 'touch' || pointerType === 'pen') && this.touchActionController?.cancel) {
-                this.touchActionController.cancel();
-            }
-        }
-    }
+    handlePointerDownInfoMouseMoveViaHandlers.call(this, e);
 
     if (handleWireModeGestureMouseMoveViaHandlers.call(this, e)) {
         return;
     }
 
     // 画布平移（使用屏幕坐标）
-    if (this.isPanning) {
-        this.viewOffset = {
-            x: e.clientX - this.panStart.x,
-            y: e.clientY - this.panStart.y
-        };
-        this.updateViewTransform();
+    if (handlePanningMouseMoveViaHandlers.call(this, e)) {
         return;
     }
 
