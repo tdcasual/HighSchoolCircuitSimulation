@@ -160,8 +160,8 @@ export function updatePropertyPanel(comp) {
         const newLabel = labelInput.value.trim();
         comp.label = newLabel || null;
         this.renderer.render();
-        this.app.observationPanel?.refreshComponentOptions();
-        this.app.observationPanel?.refreshDialGauges();
+        this.app.chartWorkspace?.refreshComponentOptions();
+        this.app.chartWorkspace?.refreshDialGauges();
         this.app.updateStatus(`已更新标签: ${newLabel || '（空）'}`);
     });
     content.appendChild(labelGroup);

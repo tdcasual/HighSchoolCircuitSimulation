@@ -494,6 +494,209 @@ body.layout-mode-phone .toolbox-close-btn {
     -ms-touch-action: none;
 }
 
+#chart-workspace-root {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 30px;
+    z-index: 140;
+    pointer-events: none;
+}
+
+.chart-workspace-toolbar {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px;
+    border-radius: 12px;
+    border: 1px solid rgba(148, 163, 184, 0.3);
+    background: rgba(255, 255, 255, 0.92);
+    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.12);
+    pointer-events: auto;
+    backdrop-filter: blur(2px);
+}
+
+.chart-workspace-btn {
+    border: 1px solid rgba(37, 99, 235, 0.3);
+    background: rgba(37, 99, 235, 0.1);
+    color: #0f3c8a;
+    border-radius: 999px;
+    padding: 8px 12px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    touch-action: manipulation;
+}
+
+.chart-workspace-btn:hover {
+    background: rgba(37, 99, 235, 0.18);
+}
+
+.chart-workspace-sample-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: #334155;
+    font-weight: 600;
+}
+
+.chart-workspace-sample-input {
+    width: 72px;
+    border: 1px solid rgba(148, 163, 184, 0.4);
+    border-radius: 8px;
+    padding: 6px 8px;
+    background: #ffffff;
+    color: #0f172a;
+    font-size: 12px;
+}
+
+.chart-workspace-runtime-status {
+    position: absolute;
+    top: 62px;
+    right: 12px;
+    max-width: 340px;
+    border-radius: 10px;
+    border: 1px solid rgba(185, 28, 28, 0.26);
+    background: rgba(254, 242, 242, 0.94);
+    color: #991b1b;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.4;
+    padding: 8px 10px;
+    pointer-events: auto;
+}
+
+.chart-workspace-window-layer {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+
+.chart-window {
+    position: absolute;
+    display: grid;
+    grid-template-rows: auto minmax(120px, 1fr) auto auto;
+    border: 1px solid rgba(15, 23, 42, 0.18);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.96);
+    box-shadow: 0 16px 30px rgba(15, 23, 42, 0.16);
+    overflow: hidden;
+    pointer-events: auto;
+    min-width: 280px;
+    min-height: 200px;
+}
+
+.chart-window-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: linear-gradient(180deg, rgba(248, 250, 252, 0.95) 0%, rgba(241, 245, 249, 0.95) 100%);
+    border-bottom: 1px solid rgba(148, 163, 184, 0.3);
+    padding: 8px;
+    cursor: move;
+    touch-action: none;
+}
+
+.chart-window-title {
+    flex: 1;
+    min-width: 0;
+    border: 1px solid rgba(148, 163, 184, 0.45);
+    border-radius: 8px;
+    padding: 6px 8px;
+    background: #ffffff;
+    font-size: 12px;
+    color: #0f172a;
+    font-weight: 600;
+}
+
+.chart-window-btn {
+    border: 1px solid rgba(148, 163, 184, 0.4);
+    border-radius: 8px;
+    padding: 6px 8px;
+    background: #f8fafc;
+    color: #334155;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.chart-window-btn:hover {
+    background: #eef2f7;
+}
+
+.chart-window-btn-danger {
+    border-color: rgba(239, 68, 68, 0.35);
+    background: rgba(254, 242, 242, 0.9);
+    color: #991b1b;
+}
+
+.chart-window-btn-danger:hover {
+    background: rgba(254, 226, 226, 0.96);
+}
+
+.chart-window-canvas-wrap {
+    background: #ffffff;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.24);
+}
+
+.chart-window-canvas {
+    width: 100%;
+    height: 100%;
+    min-height: 120px;
+    display: block;
+}
+
+.chart-window-latest {
+    font-size: 12px;
+    color: #475569;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.24);
+    padding: 6px 10px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.chart-window-controls {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    padding: 8px;
+    background: rgba(248, 250, 252, 0.94);
+}
+
+.chart-window-control-group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 11px;
+    color: #475569;
+    font-weight: 700;
+}
+
+.chart-window-control-group select {
+    width: 100%;
+    min-width: 0;
+    border: 1px solid rgba(148, 163, 184, 0.4);
+    border-radius: 8px;
+    padding: 6px 8px;
+    background: #ffffff;
+    font-size: 12px;
+    color: #0f172a;
+}
+
+.chart-window.chart-window-collapsed .chart-window-controls {
+    display: none;
+}
+
+.chart-window.chart-window-dragging {
+    box-shadow: 0 20px 36px rgba(15, 23, 42, 0.28);
+}
+
 #status-bar {
     position: absolute;
     bottom: 0;
@@ -2083,6 +2286,39 @@ body.layout-mode-phone #canvas-mobile-controls {
     pointer-events: auto;
     transition: opacity 0.16s ease, transform 0.16s ease;
     justify-content: flex-end;
+}
+
+body.layout-mode-compact #chart-workspace-root,
+body.layout-mode-phone #chart-workspace-root {
+    top: 0;
+    bottom: 34px;
+}
+
+body.layout-mode-phone .chart-workspace-toolbar {
+    top: 10px;
+    right: 8px;
+    padding: 6px;
+    gap: 6px;
+}
+
+body.layout-mode-phone .chart-workspace-sample-label {
+    display: none;
+}
+
+body.layout-mode-phone .chart-workspace-runtime-status {
+    top: 56px;
+    left: 8px;
+    right: 8px;
+    max-width: none;
+}
+
+body.layout-mode-phone .chart-window {
+    min-width: 240px;
+    min-height: 180px;
+}
+
+body.layout-mode-phone .chart-window-controls {
+    grid-template-columns: 1fr;
 }
 
 body.layout-mode-phone.ai-input-active #canvas-mobile-controls,

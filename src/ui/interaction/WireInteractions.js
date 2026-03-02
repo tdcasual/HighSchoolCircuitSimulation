@@ -372,7 +372,7 @@ export function compactWiresAndRefresh(options = {}) {
         } else if (preferredWireId && !this.circuit.getWire(preferredWireId)) {
             this.selectedWire = null;
         }
-        this.app.observationPanel?.refreshComponentOptions();
+        this.app.chartWorkspace?.refreshComponentOptions();
     }
 
     return { ...result, resolvedWireId };

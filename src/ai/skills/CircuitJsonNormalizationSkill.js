@@ -397,8 +397,8 @@ function normalizeCircuitJson(rawJson) {
     if (rawJson.meta?.exerciseBoard) {
         normalized.meta.exerciseBoard = rawJson.meta.exerciseBoard;
     }
-    if (rawJson.meta?.observation) {
-        normalized.meta.observation = rawJson.meta.observation;
+    if (rawJson.meta?.chartWorkspace) {
+        normalized.meta.chartWorkspace = rawJson.meta.chartWorkspace;
     }
 
     return normalized;

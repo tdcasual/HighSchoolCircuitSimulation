@@ -141,8 +141,8 @@ export class HistoryManager {
             updateIdCounterFromExisting(allIds);
 
             safeInvokeMethod(this.interaction?.renderer, 'render');
-            safeInvokeMethod(app?.observationPanel, 'refreshComponentOptions');
-            safeInvokeMethod(app?.observationPanel, 'refreshDialGauges');
+            safeInvokeMethod(app?.chartWorkspace, 'refreshComponentOptions');
+            safeInvokeMethod(app?.chartWorkspace, 'refreshDialGauges');
 
             this.restoreSelectionSnapshot(selection);
         } finally {

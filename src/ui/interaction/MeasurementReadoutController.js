@@ -28,7 +28,7 @@ export function createMeterSelfReadingControl(comp) {
     });
     const openObservationBtn = createElement('button', {
         className: 'plot-clear-btn',
-        textContent: '打开观察页',
+        textContent: '打开图表',
         attrs: { type: 'button' }
     });
 
@@ -42,19 +42,16 @@ export function createMeterSelfReadingControl(comp) {
     safeInvokeMethod(toggleBtn, 'addEventListener', 'click', () => {
         this.runWithHistory('切换自主读数', () => {
             comp.selfReading = !comp.selfReading;
-            this.app.observationPanel?.refreshDialGauges();
+            this.app.chartWorkspace?.refreshDialGauges();
             syncToggleState();
-            safeInvokeMethod(this.app, 'updateStatus', comp.selfReading ? '已开启自主读数：请在右侧“观察”查看表盘' : '已关闭自主读数');
+            safeInvokeMethod(this.app, 'updateStatus', comp.selfReading ? '已开启自主读数' : '已关闭自主读数');
         });
     });
 
     safeInvokeMethod(openObservationBtn, 'addEventListener', 'click', () => {
-        if (typeof this.activateSidePanelTab === 'function') {
-            this.activateSidePanelTab('observation');
-        }
-        this.app.observationPanel?.refreshComponentOptions?.();
-        this.app.observationPanel?.refreshDialGauges?.();
-        this.app.observationPanel?.requestRender?.({ onlyIfActive: false });
+        this.app.chartWorkspace?.refreshComponentOptions?.();
+        this.app.chartWorkspace?.refreshDialGauges?.();
+        this.app.chartWorkspace?.requestRender?.({ onlyIfActive: false });
     });
 
     row.appendChild(toggleBtn);
@@ -62,7 +59,7 @@ export function createMeterSelfReadingControl(comp) {
     group.appendChild(row);
     group.appendChild(createElement('p', {
         className: 'hint',
-        textContent: '开启后会在“观察”页显示独立指针表盘。'
+        textContent: '开启后会在图表工作区显示读数。'
     }));
     return group;
 }

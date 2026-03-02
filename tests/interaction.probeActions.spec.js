@@ -11,7 +11,7 @@ describe('ProbeActions.renameObservationProbe', () => {
             runWithHistory: vi.fn((_, action) => action()),
             renderer: { renderWires: vi.fn() },
             app: {
-                observationPanel: {
+                chartWorkspace: {
                     refreshComponentOptions: vi.fn(),
                     requestRender: vi.fn()
                 }
@@ -25,8 +25,8 @@ describe('ProbeActions.renameObservationProbe', () => {
         expect(probe.label).toBe('New Label');
         expect(context.runWithHistory).toHaveBeenCalledWith('重命名探针', expect.any(Function));
         expect(context.renderer.renderWires).toHaveBeenCalledTimes(1);
-        expect(context.app.observationPanel.refreshComponentOptions).toHaveBeenCalledTimes(1);
-        expect(context.app.observationPanel.requestRender).toHaveBeenCalledWith({ onlyIfActive: false });
+        expect(context.app.chartWorkspace.refreshComponentOptions).toHaveBeenCalledTimes(1);
+        expect(context.app.chartWorkspace.requestRender).toHaveBeenCalledWith({ onlyIfActive: false });
         expect(context.updateStatus).toHaveBeenCalledWith('探针名称已更新');
     });
 });
@@ -41,7 +41,7 @@ describe('ProbeActions.deleteObservationProbe', () => {
             runWithHistory: vi.fn((_, action) => action()),
             renderer: { renderWires: vi.fn() },
             app: {
-                observationPanel: {
+                chartWorkspace: {
                     refreshComponentOptions: vi.fn(),
                     requestRender: vi.fn()
                 }
@@ -55,22 +55,20 @@ describe('ProbeActions.deleteObservationProbe', () => {
         expect(context.runWithHistory).toHaveBeenCalledWith('删除探针', expect.any(Function));
         expect(context.circuit.removeObservationProbe).toHaveBeenCalledWith('P1');
         expect(context.renderer.renderWires).toHaveBeenCalledTimes(1);
-        expect(context.app.observationPanel.refreshComponentOptions).toHaveBeenCalledTimes(1);
-        expect(context.app.observationPanel.requestRender).toHaveBeenCalledWith({ onlyIfActive: false });
+        expect(context.app.chartWorkspace.refreshComponentOptions).toHaveBeenCalledTimes(1);
+        expect(context.app.chartWorkspace.requestRender).toHaveBeenCalledWith({ onlyIfActive: false });
         expect(context.updateStatus).toHaveBeenCalledWith('已删除探针');
     });
 });
 
 describe('ProbeActions.addProbePlot', () => {
-    it('activates observation tab and adds plot source', () => {
+    it('adds plot source in chart workspace', () => {
         const context = {
             circuit: {
                 getObservationProbe: vi.fn(() => ({ id: 'P1' }))
             },
-            activateSidePanelTab: vi.fn(),
-            isObservationTabActive: vi.fn(() => false),
             app: {
-                observationPanel: {
+                chartWorkspace: {
                     addPlotForSource: vi.fn(),
                     requestRender: vi.fn()
                 }
@@ -81,15 +79,14 @@ describe('ProbeActions.addProbePlot', () => {
         const ok = ProbeActions.addProbePlot.call(context, 'P1');
 
         expect(ok).toBe(true);
-        expect(context.activateSidePanelTab).toHaveBeenCalledWith('observation');
-        expect(context.app.observationPanel.addPlotForSource).toHaveBeenCalledWith('P1');
-        expect(context.app.observationPanel.requestRender).toHaveBeenCalledWith({ onlyIfActive: false });
+        expect(context.app.chartWorkspace.addPlotForSource).toHaveBeenCalledWith('P1');
+        expect(context.app.chartWorkspace.requestRender).toHaveBeenCalledWith({ onlyIfActive: false });
         expect(context.updateStatus).toHaveBeenCalledWith('已添加探针观察图像');
     });
 });
 
 describe('ProbeActions.addObservationProbeForWire', () => {
-    it('creates wire probe and refreshes observation panel', () => {
+    it('creates wire probe and refreshes chart workspace', () => {
         const context = {
             circuit: {
                 getWire: vi.fn(() => ({ id: 'W1' })),
@@ -99,10 +96,8 @@ describe('ProbeActions.addObservationProbeForWire', () => {
             },
             runWithHistory: vi.fn((_, action) => action()),
             renderer: { renderWires: vi.fn() },
-            activateSidePanelTab: vi.fn(),
-            isObservationTabActive: vi.fn(() => false),
             app: {
-                observationPanel: {
+                chartWorkspace: {
                     refreshComponentOptions: vi.fn(),
                     requestRender: vi.fn()
                 }
@@ -119,9 +114,8 @@ describe('ProbeActions.addObservationProbeForWire', () => {
             wireId: 'W1'
         }));
         expect(context.renderer.renderWires).toHaveBeenCalledTimes(1);
-        expect(context.app.observationPanel.refreshComponentOptions).toHaveBeenCalledTimes(1);
-        expect(context.activateSidePanelTab).toHaveBeenCalledWith('observation');
-        expect(context.app.observationPanel.requestRender).toHaveBeenCalledWith({ onlyIfActive: false });
+        expect(context.app.chartWorkspace.refreshComponentOptions).toHaveBeenCalledTimes(1);
+        expect(context.app.chartWorkspace.requestRender).toHaveBeenCalledWith({ onlyIfActive: false });
         expect(context.updateStatus).toHaveBeenCalledWith('已添加节点电压探针');
     });
 
@@ -136,10 +130,8 @@ describe('ProbeActions.addObservationProbeForWire', () => {
             },
             runWithHistory: vi.fn((_, action) => action()),
             renderer: { renderWires: vi.fn() },
-            activateSidePanelTab: vi.fn(),
-            isObservationTabActive: vi.fn(() => false),
             app: {
-                observationPanel: {
+                chartWorkspace: {
                     addPlotForSource: vi.fn(),
                     refreshComponentOptions: vi.fn(),
                     requestRender: vi.fn()
@@ -156,7 +148,7 @@ describe('ProbeActions.addObservationProbeForWire', () => {
         );
 
         expect(result).toBe('probe_1');
-        expect(context.app.observationPanel.addPlotForSource).toHaveBeenCalledWith('probe_1');
+        expect(context.app.chartWorkspace.addPlotForSource).toHaveBeenCalledWith('probe_1');
         expect(context.updateStatus).toHaveBeenCalledWith('已添加支路电流探针并加入观察图像');
     });
 });

@@ -248,9 +248,14 @@ export function bindSidePanelEvents() {
 
     const tabButtons = Array.from(document.querySelectorAll('.panel-tab-btn'));
     const pages = Array.from(document.querySelectorAll('.panel-page'));
-    if (tabButtons.length === 0 || pages.length === 0) return;
 
     const activate = (panelName) => {
+        if (tabButtons.length === 0 || pages.length === 0) {
+            const propertiesPage = document.getElementById('panel-properties');
+            safeInvokeMethod(propertiesPage?.classList, 'add', 'active');
+            return;
+        }
+
         tabButtons.forEach((btn) => {
             const isActive = btn.dataset.panel === panelName;
             safeInvokeMethod(btn?.classList, 'toggle', 'active', isActive);
@@ -260,9 +265,6 @@ export function bindSidePanelEvents() {
         pages.forEach((page) => {
             const isActive = page.dataset.panel === panelName;
             safeInvokeMethod(page?.classList, 'toggle', 'active', isActive);
-            if (page.id === 'panel-observation') {
-                safeInvokeMethod(page, 'setAttribute', 'aria-hidden', isActive ? 'false' : 'true');
-            }
         });
     };
 

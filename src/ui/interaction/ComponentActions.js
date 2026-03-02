@@ -57,8 +57,8 @@ export function addComponent(type, x, y) {
             const svgElement = this.renderer.addComponent(comp);
             logDebug(this, 'Rendered SVG element:', svgElement);
             this.selectComponent(comp.id);
-            this.app.observationPanel?.refreshComponentOptions();
-            this.app.observationPanel?.refreshDialGauges();
+            this.app.chartWorkspace?.refreshComponentOptions();
+            this.app.chartWorkspace?.refreshDialGauges();
             this.updateStatus(`已添加 ${ComponentNames[type]}`);
         });
         return createSuccessResult(
@@ -86,8 +86,8 @@ export function deleteComponent(id) {
             // Model C: wires are independent segments; deleting a component does not delete wires.
             this.renderer.renderWires();
             this.clearSelection();
-            this.app.observationPanel?.refreshComponentOptions();
-            this.app.observationPanel?.refreshDialGauges();
+            this.app.chartWorkspace?.refreshComponentOptions();
+            this.app.chartWorkspace?.refreshDialGauges();
             this.updateStatus('已删除元器件');
             this.showStatusAction?.({
                 label: '撤销',
@@ -110,7 +110,7 @@ export function deleteWire(id) {
             this.circuit.removeWire(id);
             this.renderer.removeWire(id);
             this.clearSelection();
-            this.app.observationPanel?.refreshComponentOptions();
+            this.app.chartWorkspace?.refreshComponentOptions();
             this.updateStatus('已删除导线');
             this.showStatusAction?.({
                 label: '撤销',

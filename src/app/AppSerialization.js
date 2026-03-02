@@ -15,7 +15,7 @@ export function safeInvokeMethod(target, methodName, ...args) {
 export function buildAppSaveData({
     circuit = null,
     exerciseBoard = null,
-    observationPanel = null
+    chartWorkspace = null
 } = {}) {
     const serialized = safeInvokeMethod(circuit, 'toJSON');
     const data = isPlainObject(serialized)
@@ -32,9 +32,9 @@ export function buildAppSaveData({
         data.meta.exerciseBoard = exerciseBoardData;
     }
 
-    const observationData = safeInvokeMethod(observationPanel, 'toJSON');
-    if (observationData !== undefined) {
-        data.meta.observation = observationData;
+    const chartWorkspaceData = safeInvokeMethod(chartWorkspace, 'toJSON');
+    if (chartWorkspaceData !== undefined) {
+        data.meta.chartWorkspace = chartWorkspaceData;
     }
 
     return data;
@@ -42,10 +42,10 @@ export function buildAppSaveData({
 
 export function restoreAppMetaFromSaveData({
     exerciseBoard = null,
-    observationPanel = null,
+    chartWorkspace = null,
     data = null
 } = {}) {
     const meta = isPlainObject(data?.meta) ? data.meta : {};
     safeInvokeMethod(exerciseBoard, 'fromJSON', meta.exerciseBoard);
-    safeInvokeMethod(observationPanel, 'fromJSON', meta.observation);
+    safeInvokeMethod(chartWorkspace, 'fromJSON', meta.chartWorkspace);
 }

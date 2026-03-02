@@ -155,7 +155,7 @@ describe('PropertyPanelController.updatePropertyPanel', () => {
                 updateValues: vi.fn()
             },
             app: {
-                observationPanel: {
+                chartWorkspace: {
                     refreshComponentOptions: vi.fn(),
                     refreshDialGauges: vi.fn()
                 },
@@ -194,7 +194,7 @@ describe('PropertyPanelController.updatePropertyPanel', () => {
                 updateValues: vi.fn()
             },
             app: {
-                observationPanel: {
+                chartWorkspace: {
                     refreshComponentOptions: vi.fn(),
                     refreshDialGauges: vi.fn()
                 },
@@ -251,7 +251,7 @@ describe('PropertyPanelController.updatePropertyPanel', () => {
                 updateValues: vi.fn()
             },
             app: {
-                observationPanel: {
+                chartWorkspace: {
                     refreshComponentOptions: vi.fn(),
                     refreshDialGauges: vi.fn()
                 },
