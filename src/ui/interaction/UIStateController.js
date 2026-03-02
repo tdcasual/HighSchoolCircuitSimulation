@@ -56,18 +56,6 @@ export function getActiveInteractionMode() {
             reason: 'store-missing'
         });
     }
-
-    if (context.isDraggingWireEndpoint || context.isTerminalExtending || context.isRheostatDragging) {
-        return 'endpoint-edit';
-    }
-    if (
-        context.pendingToolType === 'Wire'
-        || context.mobileInteractionMode === 'wire'
-        || context.stickyWireTool
-        || context.isWiring
-    ) {
-        return 'wire';
-    }
     return 'select';
 }
 

@@ -93,7 +93,7 @@ describe('UIStateController.getActiveInteractionMode', () => {
         expect(UIStateController.getActiveInteractionMode.call(context)).toBe('endpoint-edit');
     });
 
-    it('falls back to legacy flags when mode store is unavailable', () => {
+    it('defaults to select when mode store is unavailable and ignores legacy flags', () => {
         const context = {
             pendingToolType: 'Wire',
             isWiring: false,
@@ -102,12 +102,30 @@ describe('UIStateController.getActiveInteractionMode', () => {
             isRheostatDragging: false
         };
 
-        expect(UIStateController.getActiveInteractionMode.call(context)).toBe('wire');
+        expect(UIStateController.getActiveInteractionMode.call(context)).toBe('select');
         const snapshot = getLegacyPathUsageSnapshot(context);
         expect(snapshot).toHaveLength(1);
         expect(snapshot[0].key).toBe('interaction.mode.legacy-fallback');
         expect(snapshot[0].count).toBe(1);
         expect(snapshot[0].lastDetails?.reason).toBe('store-missing');
+    });
+
+    it('defaults to select when mode store returns unsupported mode', () => {
+        const context = {
+            interactionModeStore: {
+                getState: vi.fn(() => ({
+                    mode: 'unsupported-mode'
+                }))
+            },
+            pendingToolType: 'Wire',
+            isWiring: true
+        };
+
+        expect(UIStateController.getActiveInteractionMode.call(context)).toBe('select');
+        const snapshot = getLegacyPathUsageSnapshot(context);
+        expect(snapshot).toHaveLength(1);
+        expect(snapshot[0].key).toBe('interaction.mode.legacy-fallback');
+        expect(snapshot[0].lastDetails?.reason).toBe('invalid-store-mode');
     });
 });
 
