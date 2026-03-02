@@ -69,6 +69,6 @@
 ## 当前状态
 
 - Batch A：已完成第 1 轮（commit: `ec3ee3a`，删无引用 script alias）。
-- Batch A：已完成第 2 轮（本地待提交，删 Toolbox wire legacy fallback）。
+- Batch A：已完成第 2 轮（commit: `c89dbdb`，删 Toolbox wire legacy fallback）。
 - Batch B：预审计已完成，结论为“暂缓删除（阻塞中）”。
 - Batch C/D：未开始。
