@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+    handleActiveWiringMouseUp,
     handlePanningMouseUp,
     handleWireModeGestureMouseUp
 } from '../src/app/interaction/InteractionOrchestratorMouseUpHandlers.js';
@@ -88,5 +89,99 @@ describe('InteractionOrchestratorMouseUpHandlers.handlePanningMouseUp', () => {
         expect(context.isPanning).toBe(false);
         expect(context.svg.style.cursor).toBe('');
         expect(context.pointerDownInfo).toBeNull();
+    });
+});
+
+describe('InteractionOrchestratorMouseUpHandlers.handleActiveWiringMouseUp', () => {
+    it('returns false when wiring mode is inactive', () => {
+        const context = {
+            isWiring: false
+        };
+        const event = {
+            target: {}
+        };
+
+        const handled = handleActiveWiringMouseUp.call(context, event);
+
+        expect(handled).toBe(false);
+    });
+
+    it('consumes guarded mouseup without finishing or canceling wiring', () => {
+        const context = {
+            isWiring: true,
+            ignoreNextWireMouseUp: true,
+            finishWiringToPoint: vi.fn(),
+            cancelWiring: vi.fn()
+        };
+        const event = {
+            target: {}
+        };
+
+        const handled = handleActiveWiringMouseUp.call(context, event);
+
+        expect(handled).toBe(true);
+        expect(context.ignoreNextWireMouseUp).toBe(false);
+        expect(context.finishWiringToPoint).not.toHaveBeenCalled();
+        expect(context.cancelWiring).not.toHaveBeenCalled();
+    });
+
+    it('finishes wiring when mouseup lands on terminal', () => {
+        const componentGroup = { dataset: { id: 'R1' } };
+        const target = {
+            dataset: {},
+            closest: (selector) => (selector === '.component' ? componentGroup : null)
+        };
+        const context = {
+            isWiring: true,
+            ignoreNextWireMouseUp: false,
+            resolvePointerType: vi.fn(() => 'mouse'),
+            resolveTerminalTarget: vi.fn(() => ({ dataset: { terminal: '1' } })),
+            renderer: {
+                getTerminalPosition: vi.fn(() => ({ x: 200, y: 80 }))
+            },
+            finishWiringToPoint: vi.fn(),
+            cancelWiring: vi.fn()
+        };
+        const event = {
+            target,
+            clientX: 120,
+            clientY: 90
+        };
+
+        const handled = handleActiveWiringMouseUp.call(context, event);
+
+        expect(handled).toBe(true);
+        expect(context.finishWiringToPoint).toHaveBeenCalledWith({ x: 200, y: 80 }, { pointerType: 'mouse' });
+        expect(context.cancelWiring).not.toHaveBeenCalled();
+    });
+
+    it('cancels wiring when no terminal/endpoint/snap target is found', () => {
+        const context = {
+            isWiring: true,
+            ignoreNextWireMouseUp: false,
+            resolvePointerType: vi.fn(() => 'touch'),
+            resolveTerminalTarget: vi.fn(() => null),
+            isWireEndpointTarget: vi.fn(() => false),
+            screenToCanvas: vi.fn(() => ({ x: 300, y: 180 })),
+            snapPoint: vi.fn(() => ({ x: 300, y: 180, snap: { type: 'grid' } })),
+            finishWiringToPoint: vi.fn(),
+            cancelWiring: vi.fn(),
+            updateStatus: vi.fn()
+        };
+        const event = {
+            target: {
+                dataset: {},
+                closest: () => null
+            },
+            clientX: 300,
+            clientY: 180
+        };
+
+        const handled = handleActiveWiringMouseUp.call(context, event);
+
+        expect(handled).toBe(true);
+        expect(context.finishWiringToPoint).not.toHaveBeenCalled();
+        expect(context.cancelWiring).toHaveBeenCalledTimes(1);
+        expect(context.updateStatus).toHaveBeenCalledWith('未连接到端子/端点，已取消连线');
     });
 });

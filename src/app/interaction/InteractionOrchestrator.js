@@ -16,6 +16,7 @@ import {
     handleWireTargetMouseDown as handleWireTargetMouseDownViaHandlers
 } from './InteractionOrchestratorMouseDownHandlers.js';
 import {
+    handleActiveWiringMouseUp as handleActiveWiringMouseUpViaHandlers,
     handlePanningMouseUp as handlePanningMouseUpViaHandlers,
     handleWireModeGestureMouseUp as handleWireModeGestureMouseUpViaHandlers
 } from './InteractionOrchestratorMouseUpHandlers.js';
@@ -628,56 +629,7 @@ export function onMouseUp(e) {
         }
     }
 
-    // 结束连线
-    if (this.isWiring) {
-        if (this.ignoreNextWireMouseUp) {
-            this.ignoreNextWireMouseUp = false;
-            return;
-        }
-        const target = e.target;
-        const pointerType = this.resolvePointerType(e);
-        const terminalTarget = this.resolveTerminalTarget(target);
-        if (terminalTarget) {
-            const componentG = safeClosest(target, '.component');
-            if (componentG) {
-                const componentId = componentG.dataset.id;
-                const terminalIndex = parseInt(terminalTarget.dataset.terminal);
-                const pos = this.renderer.getTerminalPosition(componentId, terminalIndex);
-                if (pos) {
-                    this.finishWiringToPoint(pos, { pointerType });
-                } else {
-                    this.cancelWiring();
-                }
-            }
-            return;
-        } else if (this.isWireEndpointTarget(target)) {
-            const wireGroup = safeClosest(target, '.wire-group');
-            if (wireGroup) {
-                const wireId = wireGroup.dataset.id;
-                const end = target.dataset.end;
-                const wire = this.circuit.getWire(wireId);
-                const pos = wire && (end === 'a' || end === 'b') ? wire[end] : null;
-                if (pos) {
-                    this.finishWiringToPoint(pos, { pointerType });
-                    return;
-                }
-            }
-        }
-
-        const canvasCoords = this.screenToCanvas(e.clientX, e.clientY);
-        const snapped = this.snapPoint(canvasCoords.x, canvasCoords.y, {
-            allowWireSegmentSnap: true,
-            pointerType
-        });
-        if (snapped?.snap?.type && snapped.snap.type !== 'grid') {
-            this.finishWiringToPoint(snapped, { pointerType });
-            return;
-        }
-
-        this.cancelWiring();
-        if (typeof this.updateStatus === 'function') {
-            this.updateStatus('未连接到端子/端点，已取消连线');
-        }
+    if (handleActiveWiringMouseUpViaHandlers.call(this, e)) {
         return;
     }
 
