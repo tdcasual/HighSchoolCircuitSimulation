@@ -555,7 +555,6 @@ describe('PanelBindingsController.bindSidePanelEvents', () => {
         expect(btnObservation.classList.toggle).toHaveBeenCalledWith('active', true);
         expect(btnProperty.classList.toggle).toHaveBeenCalledWith('active', false);
         expect(pageObservation.classList.toggle).toHaveBeenCalledWith('active', true);
-        expect(pageObservation.setAttribute).toHaveBeenCalledWith('aria-hidden', 'false');
         expect(typeof context.activateSidePanelTab).toBe('function');
     });
 

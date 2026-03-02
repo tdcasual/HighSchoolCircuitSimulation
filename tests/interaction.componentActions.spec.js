@@ -144,7 +144,7 @@ describe('ComponentActions.addComponent', () => {
             },
             selectComponent: vi.fn(),
             app: {
-                observationPanel: {
+                chartWorkspace: {
                     refreshComponentOptions: vi.fn(),
                     refreshDialGauges: vi.fn()
                 }
@@ -166,8 +166,8 @@ describe('ComponentActions.addComponent', () => {
         expect(context.runWithHistory).toHaveBeenCalledWith(expect.stringContaining('添加'), expect.any(Function));
         expect(context.renderer.addComponent).toHaveBeenCalledWith(added);
         expect(context.selectComponent).toHaveBeenCalledWith(added.id);
-        expect(context.app.observationPanel.refreshComponentOptions).toHaveBeenCalledTimes(1);
-        expect(context.app.observationPanel.refreshDialGauges).toHaveBeenCalledTimes(1);
+        expect(context.app.chartWorkspace.refreshComponentOptions).toHaveBeenCalledTimes(1);
+        expect(context.app.chartWorkspace.refreshDialGauges).toHaveBeenCalledTimes(1);
         expect(context.updateStatus).toHaveBeenCalledWith(expect.stringContaining('已添加'));
     });
 
@@ -182,7 +182,7 @@ describe('ComponentActions.addComponent', () => {
             },
             selectComponent: vi.fn(),
             app: {
-                observationPanel: {
+                chartWorkspace: {
                     refreshComponentOptions: vi.fn(),
                     refreshDialGauges: vi.fn()
                 }
@@ -242,7 +242,7 @@ describe('ComponentActions.deleteComponent', () => {
             },
             clearSelection: vi.fn(),
             app: {
-                observationPanel: {
+                chartWorkspace: {
                     refreshComponentOptions: vi.fn(),
                     refreshDialGauges: vi.fn()
                 }
@@ -265,8 +265,8 @@ describe('ComponentActions.deleteComponent', () => {
         expect(context.renderer.removeComponent).toHaveBeenCalledWith('R1');
         expect(context.renderer.renderWires).toHaveBeenCalledTimes(1);
         expect(context.clearSelection).toHaveBeenCalledTimes(1);
-        expect(context.app.observationPanel.refreshComponentOptions).toHaveBeenCalledTimes(1);
-        expect(context.app.observationPanel.refreshDialGauges).toHaveBeenCalledTimes(1);
+        expect(context.app.chartWorkspace.refreshComponentOptions).toHaveBeenCalledTimes(1);
+        expect(context.app.chartWorkspace.refreshDialGauges).toHaveBeenCalledTimes(1);
         expect(context.updateStatus).toHaveBeenCalledWith('已删除元器件');
         expect(context.showStatusAction).toHaveBeenCalledWith(expect.objectContaining({
             label: '撤销',
@@ -288,7 +288,7 @@ describe('ComponentActions.deleteWire', () => {
             renderer: { removeWire: vi.fn() },
             clearSelection: vi.fn(),
             app: {
-                observationPanel: {
+                chartWorkspace: {
                     refreshComponentOptions: vi.fn()
                 }
             },
@@ -309,7 +309,7 @@ describe('ComponentActions.deleteWire', () => {
         expect(context.circuit.removeWire).toHaveBeenCalledWith('W1');
         expect(context.renderer.removeWire).toHaveBeenCalledWith('W1');
         expect(context.clearSelection).toHaveBeenCalledTimes(1);
-        expect(context.app.observationPanel.refreshComponentOptions).toHaveBeenCalledTimes(1);
+        expect(context.app.chartWorkspace.refreshComponentOptions).toHaveBeenCalledTimes(1);
         expect(context.updateStatus).toHaveBeenCalledWith('已删除导线');
         expect(context.showStatusAction).toHaveBeenCalledWith(expect.objectContaining({
             label: '撤销',

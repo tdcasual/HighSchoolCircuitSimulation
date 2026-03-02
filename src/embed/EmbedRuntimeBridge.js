@@ -3,8 +3,7 @@ import {
     safeAddEventListener,
     safeClassListAdd,
     safeClassListToggle,
-    safeRemoveEventListener,
-    safeSetAttribute
+    safeRemoveEventListener
 } from '../utils/RuntimeSafety.js';
 
 const EMBED_CHANNEL = 'HSCS_EMBED_V1';
@@ -58,7 +57,6 @@ function getDefaultFeatureFlags(mode) {
         return {
             toolbox: false,
             sidePanel: false,
-            observation: false,
             ai: false,
             exerciseBoard: false,
             statusBar: true
@@ -68,7 +66,6 @@ function getDefaultFeatureFlags(mode) {
         return {
             toolbox: true,
             sidePanel: true,
-            observation: true,
             ai: false,
             exerciseBoard: false,
             statusBar: true
@@ -77,7 +74,6 @@ function getDefaultFeatureFlags(mode) {
     return {
         toolbox: true,
         sidePanel: true,
-        observation: true,
         ai: true,
         exerciseBoard: true,
         statusBar: true
@@ -115,7 +111,6 @@ export function parseEmbedRuntimeOptionsFromSearch(search = '') {
     [
         ['toolbox', 'toolbox'],
         ['sidePanel', 'sidePanel'],
-        ['observation', 'observation'],
         ['ai', 'ai'],
         ['exerciseBoard', 'exerciseBoard'],
         ['statusBar', 'statusBar']
@@ -240,24 +235,6 @@ export class EmbedRuntimeBridge {
         safeClassListToggle(body, 'embed-hide-status', !this.featureFlags.statusBar);
         safeClassListToggle(body, 'embed-hide-ai', !this.featureFlags.ai);
         safeClassListToggle(body, 'embed-hide-exercise', !this.featureFlags.exerciseBoard);
-        safeClassListToggle(body, 'embed-hide-observation', !this.featureFlags.observation);
-
-        const observationTab = this.document.querySelector?.('.panel-tab-btn[data-panel="observation"]');
-        if (observationTab) {
-            observationTab.hidden = !this.featureFlags.observation;
-        }
-        const observationPanel = this.document.getElementById?.('panel-observation');
-        if (observationPanel) {
-            observationPanel.hidden = !this.featureFlags.observation;
-            safeSetAttribute(
-                observationPanel,
-                'aria-hidden',
-                !this.featureFlags.observation ? 'true' : 'false'
-            );
-        }
-        if (!this.featureFlags.observation && typeof this.app?.interaction?.activateSidePanelTab === 'function') {
-            this.app.interaction.activateSidePanelTab('properties');
-        }
     }
 
     applyClassroomLevel(level, options = {}) {

@@ -10,7 +10,6 @@ const EMBED_API_VERSION = 1;
 const DEFAULT_FEATURE_FLAGS = Object.freeze({
     toolbox: true,
     sidePanel: true,
-    observation: true,
     ai: false,
     exerciseBoard: false,
     statusBar: true

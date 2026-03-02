@@ -302,6 +302,7 @@
                 <!-- UI覆盖层 -->
                 <g id="layer-ui"></g>
             </svg>
+            <div id="chart-workspace-root" aria-label="图表工作区"></div>
             <!-- 状态栏 -->
             <div id="status-bar">
                 <span id="status-text">就绪</span>
@@ -319,22 +320,12 @@
                     <h2>面板</h2>
                     <button id="btn-close-side-panel" class="panel-close-btn" type="button" aria-label="关闭面板">关闭</button>
                 </div>
-                <div class="side-panel-tabs" role="tablist" aria-label="右侧面板">
-                    <button class="panel-tab-btn active" data-panel="properties" role="tab" aria-selected="true">属性</button>
-                    <button class="panel-tab-btn" data-panel="observation" role="tab" aria-selected="false">观察</button>
-                </div>
             </div>
 
             <div class="side-panel-body">
                 <section id="panel-properties" class="panel-page active" data-panel="properties" role="tabpanel">
                     <div id="property-content">
                         <p class="hint">选择一个元器件查看和编辑属性</p>
-                    </div>
-                </section>
-
-                <section id="panel-observation" class="panel-page" data-panel="observation" role="tabpanel" aria-hidden="true">
-                    <div id="observation-root">
-                        <p class="hint">观察面板加载中…</p>
                     </div>
                 </section>
             </div>

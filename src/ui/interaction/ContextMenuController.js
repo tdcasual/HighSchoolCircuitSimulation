@@ -87,8 +87,8 @@ export function showContextMenu(e, componentId) {
             action: () => {
                 this.runWithHistory('切换自主读数', () => {
                     comp.selfReading = !enabled;
-                    this.app.observationPanel?.refreshDialGauges();
-                    this.app.updateStatus(comp.selfReading ? '已开启自主读数：请在右侧“观察”查看表盘' : '已关闭自主读数');
+                    this.app.chartWorkspace?.refreshDialGauges();
+                    this.app.updateStatus(comp.selfReading ? '已开启自主读数' : '已关闭自主读数');
                 });
             }
         });

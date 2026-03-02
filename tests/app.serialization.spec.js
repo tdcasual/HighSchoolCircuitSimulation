@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { buildAppSaveData, restoreAppMetaFromSaveData } from '../src/app/AppSerialization.js';
 
 describe('AppSerialization', () => {
-    it('buildAppSaveData writes exercise board and observation meta via callable toJSON', () => {
+    it('buildAppSaveData writes exercise board and chart workspace meta via callable toJSON', () => {
         const circuit = {
             toJSON: vi.fn(() => ({
                 components: [],
@@ -12,20 +12,21 @@ describe('AppSerialization', () => {
         const exerciseBoard = {
             toJSON: vi.fn(() => ({ mode: 'quiz' }))
         };
-        const observationPanel = {
-            toJSON: vi.fn(() => ({ probes: ['p1'] }))
+        const chartWorkspace = {
+            toJSON: vi.fn(() => ({ windows: ['w1'] }))
         };
 
         const result = buildAppSaveData({
             circuit,
             exerciseBoard,
-            observationPanel
+            chartWorkspace
         });
 
         expect(result.meta?.exerciseBoard).toEqual({ mode: 'quiz' });
-        expect(result.meta?.observation).toEqual({ probes: ['p1'] });
+        expect(result.meta?.chartWorkspace).toEqual({ windows: ['w1'] });
+        expect(result.meta?.observation).toBeUndefined();
         expect(exerciseBoard.toJSON).toHaveBeenCalledTimes(1);
-        expect(observationPanel.toJSON).toHaveBeenCalledTimes(1);
+        expect(chartWorkspace.toJSON).toHaveBeenCalledTimes(1);
     });
 
     it('buildAppSaveData ignores non-callable panel serializers', () => {
@@ -40,16 +41,17 @@ describe('AppSerialization', () => {
         expect(() => buildAppSaveData({
             circuit,
             exerciseBoard: { toJSON: {} },
-            observationPanel: { toJSON: 'invalid' }
+            chartWorkspace: { toJSON: 'invalid' }
         })).not.toThrow();
 
         const result = buildAppSaveData({
             circuit,
             exerciseBoard: { toJSON: {} },
-            observationPanel: { toJSON: 'invalid' }
+            chartWorkspace: { toJSON: 'invalid' }
         });
 
         expect(result.meta?.exerciseBoard).toBeUndefined();
+        expect(result.meta?.chartWorkspace).toBeUndefined();
         expect(result.meta?.observation).toBeUndefined();
     });
 
@@ -57,51 +59,51 @@ describe('AppSerialization', () => {
         const exerciseBoard = {
             fromJSON: vi.fn()
         };
-        const observationPanel = {
+        const chartWorkspace = {
             fromJSON: vi.fn()
         };
 
         expect(() => restoreAppMetaFromSaveData({
             exerciseBoard,
-            observationPanel,
+            chartWorkspace,
             data: {
                 meta: {
                     exerciseBoard: { chapter: 2 },
-                    observation: { plots: [] }
+                    chartWorkspace: { windows: [] }
                 }
             }
         })).not.toThrow();
 
         restoreAppMetaFromSaveData({
             exerciseBoard,
-            observationPanel,
+            chartWorkspace,
             data: {
                 meta: {
                     exerciseBoard: { chapter: 2 },
-                    observation: { plots: [] }
+                    chartWorkspace: { windows: [] }
                 }
             }
         });
 
         expect(exerciseBoard.fromJSON).toHaveBeenCalledWith({ chapter: 2 });
-        expect(observationPanel.fromJSON).toHaveBeenCalledWith({ plots: [] });
+        expect(chartWorkspace.fromJSON).toHaveBeenCalledWith({ windows: [] });
     });
 
     it('restoreAppMetaFromSaveData ignores non-callable fromJSON methods', () => {
         const exerciseBoard = {
             fromJSON: {}
         };
-        const observationPanel = {
+        const chartWorkspace = {
             fromJSON: null
         };
 
         expect(() => restoreAppMetaFromSaveData({
             exerciseBoard,
-            observationPanel,
+            chartWorkspace,
             data: {
                 meta: {
                     exerciseBoard: { chapter: 1 },
-                    observation: { plots: ['x'] }
+                    chartWorkspace: { windows: ['x'] }
                 }
             }
         })).not.toThrow();

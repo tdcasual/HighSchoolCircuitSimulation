@@ -339,7 +339,7 @@ export class ResponsiveLayoutController {
         const changed = nextMode !== this.mode;
         if (!force && !changed) {
             this.syncLayoutUI();
-            this.app?.observationPanel?.onLayoutModeChanged?.(this.mode);
+            this.app?.chartWorkspace?.onLayoutModeChanged?.(this.mode);
             this.app?.aiPanel?.constrainPanelToViewport?.();
             return;
         }
@@ -356,7 +356,7 @@ export class ResponsiveLayoutController {
         }
 
         this.syncLayoutUI();
-        this.app?.observationPanel?.onLayoutModeChanged?.(nextMode);
+        this.app?.chartWorkspace?.onLayoutModeChanged?.(nextMode);
         this.app?.aiPanel?.constrainPanelToViewport?.();
     }
 

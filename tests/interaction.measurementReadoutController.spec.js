@@ -50,7 +50,7 @@ afterEach(() => {
 });
 
 describe('MeasurementReadoutController.createMeterSelfReadingControl', () => {
-    it('toggles self reading and opens observation tab', () => {
+    it('toggles self reading and opens chart workspace actions', () => {
         vi.stubGlobal('document', {
             createElement: vi.fn((tag) => createFakeElement(tag)),
             createTextNode: vi.fn((text) => ({ textContent: text }))
@@ -60,15 +60,13 @@ describe('MeasurementReadoutController.createMeterSelfReadingControl', () => {
         const refreshComponentOptions = vi.fn();
         const requestRender = vi.fn();
         const updateStatus = vi.fn();
-        const activateSidePanelTab = vi.fn();
 
         const comp = { type: 'Ammeter', selfReading: false };
         const ctx = {
             runWithHistory: vi.fn((_, action) => action()),
-            activateSidePanelTab,
             app: {
                 updateStatus,
-                observationPanel: {
+                chartWorkspace: {
                     refreshDialGauges,
                     refreshComponentOptions,
                     requestRender
@@ -88,7 +86,6 @@ describe('MeasurementReadoutController.createMeterSelfReadingControl', () => {
         expect(ctx.runWithHistory).toHaveBeenCalledWith('切换自主读数', expect.any(Function));
         expect(refreshDialGauges).toHaveBeenCalled();
         expect(updateStatus).toHaveBeenCalledWith(expect.stringContaining('已开启自主读数'));
-        expect(activateSidePanelTab).toHaveBeenCalledWith('observation');
         expect(refreshComponentOptions).toHaveBeenCalled();
         expect(requestRender).toHaveBeenCalledWith({ onlyIfActive: false });
     });
@@ -104,7 +101,7 @@ describe('MeasurementReadoutController.createMeterSelfReadingControl', () => {
             runWithHistory: vi.fn((_, action) => action()),
             app: {
                 updateStatus: vi.fn(),
-                observationPanel: {
+                chartWorkspace: {
                     refreshDialGauges: vi.fn(),
                     refreshComponentOptions: vi.fn(),
                     requestRender: vi.fn()
@@ -132,7 +129,7 @@ describe('MeasurementReadoutController.createMeterSelfReadingControl', () => {
             runWithHistory: vi.fn((_, action) => action()),
             app: {
                 updateStatus: {},
-                observationPanel: {
+                chartWorkspace: {
                     refreshDialGauges: vi.fn(),
                     refreshComponentOptions: vi.fn(),
                     requestRender: vi.fn()
@@ -165,7 +162,7 @@ describe('MeasurementReadoutController.createMeterSelfReadingControl', () => {
             runWithHistory: vi.fn((_, action) => action()),
             app: {
                 updateStatus: vi.fn(),
-                observationPanel: {
+                chartWorkspace: {
                     refreshDialGauges: vi.fn(),
                     refreshComponentOptions: vi.fn(),
                     requestRender: vi.fn()

@@ -13,8 +13,8 @@ export function renameObservationProbe(probeId, nextLabel = null) {
     this.runWithHistory('重命名探针', () => {
         probe.label = normalized || null;
         this.renderer.renderWires();
-        this.app.observationPanel?.refreshComponentOptions();
-        this.app.observationPanel?.requestRender?.({ onlyIfActive: false });
+        this.app.chartWorkspace?.refreshComponentOptions();
+        this.app.chartWorkspace?.requestRender?.({ onlyIfActive: false });
         this.updateStatus('探针名称已更新');
     });
     return true;
@@ -27,8 +27,8 @@ export function deleteObservationProbe(probeId) {
     this.runWithHistory('删除探针', () => {
         this.circuit.removeObservationProbe(probeId);
         this.renderer.renderWires();
-        this.app.observationPanel?.refreshComponentOptions();
-        this.app.observationPanel?.requestRender?.({ onlyIfActive: false });
+        this.app.chartWorkspace?.refreshComponentOptions();
+        this.app.chartWorkspace?.requestRender?.({ onlyIfActive: false });
         this.updateStatus('已删除探针');
     });
     return true;
@@ -37,17 +37,14 @@ export function deleteObservationProbe(probeId) {
 export function addProbePlot(probeId) {
     const probe = this.circuit.getObservationProbe(probeId);
     if (!probe) return false;
-    const panel = this.app.observationPanel;
-    if (!panel || typeof panel.addPlotForSource !== 'function') {
-        this.updateStatus('观察面板不可用');
+    const workspace = this.app.chartWorkspace;
+    if (!workspace || typeof workspace.addPlotForSource !== 'function') {
+        this.updateStatus('图表工作区不可用');
         return false;
     }
 
-    if (typeof this.activateSidePanelTab === 'function' && !this.isObservationTabActive()) {
-        this.activateSidePanelTab('observation');
-    }
-    panel.addPlotForSource(probeId);
-    panel.requestRender?.({ onlyIfActive: false });
+    workspace.addPlotForSource(probeId);
+    workspace.requestRender?.({ onlyIfActive: false });
     this.updateStatus('已添加探针观察图像');
     return true;
 }
@@ -79,18 +76,15 @@ export function addObservationProbeForWire(wireId, probeType, options = {}) {
         createdProbeId = probe.id;
 
         this.renderer.renderWires();
-        const panel = this.app.observationPanel;
-        panel?.refreshComponentOptions();
-        if (typeof this.activateSidePanelTab === 'function' && !this.isObservationTabActive()) {
-            this.activateSidePanelTab('observation');
-        }
-        if (autoAddPlot && typeof panel?.addPlotForSource === 'function') {
-            panel.addPlotForSource(probe.id);
+        const workspace = this.app.chartWorkspace;
+        workspace?.refreshComponentOptions();
+        if (autoAddPlot && typeof workspace?.addPlotForSource === 'function') {
+            workspace.addPlotForSource(probe.id);
             this.updateStatus(`已添加${typeLabel}并加入观察图像`);
         } else {
             this.updateStatus(`已添加${typeLabel}`);
         }
-        panel?.requestRender?.({ onlyIfActive: false });
+        workspace?.requestRender?.({ onlyIfActive: false });
     });
 
     return createdProbeId;

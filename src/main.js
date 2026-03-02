@@ -7,7 +7,7 @@ import { Circuit } from './engine/Circuit.js';
 import { Renderer } from './ui/Renderer.js';
 import { InteractionManager } from './ui/Interaction.js';
 import { AIPanel } from './ui/AIPanel.js';
-import { ObservationPanel } from './ui/ObservationPanel.js';
+import { ChartWorkspaceController } from './ui/charts/ChartWorkspaceController.js';
 import { ExerciseBoard } from './ui/ExerciseBoard.js';
 import { ResponsiveLayoutController } from './ui/ResponsiveLayoutController.js';
 import { ClassroomModeController } from './ui/ClassroomModeController.js';
@@ -44,8 +44,8 @@ class CircuitSimulatorApp {
         // 初始化交互管理器
         this.interaction = new InteractionManager(this);
 
-        // 初始化观察面板
-        this.observationPanel = new ObservationPanel(this);
+        // 初始化图表工作区（画布悬浮窗）
+        this.chartWorkspace = new ChartWorkspaceController(this);
         
         // 初始化 AI 助手面板
         this.aiPanel = new AIPanel(this);
@@ -190,13 +190,13 @@ class CircuitSimulatorApp {
         // Update wire animations; short-circuit warnings can show even when solve is invalid.
         this.renderer.updateWireAnimations(this.circuit.isRunning, results);
 
-        // 更新观察面板（采样、绘制与无效解提示）
-        this.observationPanel?.onCircuitUpdate(results);
+        // 更新图表工作区（采样、绘制与无效解提示）
+        this.chartWorkspace?.onCircuitUpdate(results);
 
         if (runtimeDiagnostics.summary) {
             const shouldShow = !results?.valid || runtimeDiagnostics.code === 'SHORT_CIRCUIT';
             if (shouldShow) {
-                this.observationPanel?.setRuntimeStatus?.(runtimeDiagnostics.summary);
+                this.chartWorkspace?.setRuntimeStatus?.(runtimeDiagnostics.summary);
                 this.updateStatus(runtimeDiagnostics.summary);
             }
         }
@@ -244,7 +244,7 @@ class CircuitSimulatorApp {
             const message = topologyDiagnostics.summary
                 || topologyReport.error?.message
                 || '电路拓扑校验失败，无法开始模拟';
-            this.observationPanel?.setRuntimeStatus?.(message);
+            this.chartWorkspace?.setRuntimeStatus?.(message);
             this.updateStatus(message);
             return;
         }
@@ -259,7 +259,7 @@ class CircuitSimulatorApp {
         setSimulationControlsRunning(true);
         
         this.renderer.updateWireAnimations(true);
-        this.observationPanel?.setRuntimeStatus?.(topologyWarning || '');
+        this.chartWorkspace?.setRuntimeStatus?.(topologyWarning || '');
         this.updateStatus(topologyWarning ? `模拟运行中（${topologyWarning}）` : '模拟运行中');
     }
 
@@ -273,7 +273,7 @@ class CircuitSimulatorApp {
         setSimulationControlsRunning(false);
         
         this.renderer.updateWireAnimations(false);
-        this.observationPanel?.setRuntimeStatus?.('');
+        this.chartWorkspace?.setRuntimeStatus?.('');
         this.updateStatus('模拟已停止');
     }
 
@@ -286,8 +286,8 @@ class CircuitSimulatorApp {
         this.renderer.clear();
         resetIdCounter();
         this.interaction.clearSelection();
-        this.observationPanel?.clearAllPlots();
-        this.observationPanel?.refreshDialGauges();
+        this.chartWorkspace?.clearAllPlots();
+        this.chartWorkspace?.refreshDialGauges();
         this.exerciseBoard?.reset();
             
         // 清除缓存
@@ -320,9 +320,9 @@ class CircuitSimulatorApp {
 
         this.renderer.render();
         this.interaction.clearSelection();
-        this.observationPanel?.refreshComponentOptions();
-        this.observationPanel?.refreshDialGauges();
-        safeInvokeMethod(this.observationPanel, 'fromJSON', data.meta?.observation);
+        this.chartWorkspace?.refreshComponentOptions();
+        this.chartWorkspace?.refreshDialGauges();
+        safeInvokeMethod(this.chartWorkspace, 'fromJSON', data.meta?.chartWorkspace);
 
         if (!silent) {
             this.updateStatus(statusText || `已加载电路 (${data.components.length} 个元器件)`);
@@ -421,7 +421,7 @@ class CircuitSimulatorApp {
         return buildAppSaveData({
             circuit: this.circuit,
             exerciseBoard: this.exerciseBoard,
-            observationPanel: this.observationPanel
+            chartWorkspace: this.chartWorkspace
         });
     }
     

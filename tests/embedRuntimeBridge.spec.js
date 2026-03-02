@@ -29,22 +29,10 @@ function createClassList() {
 
 function createBridgeFixture() {
     const body = { classList: createClassList() };
-    const observationTab = { hidden: false };
-    const observationPanel = {
-        hidden: false,
-        setAttribute: vi.fn()
-    };
-
     const doc = {
         body,
-        querySelector: vi.fn((selector) => {
-            if (selector === '.panel-tab-btn[data-panel="observation"]') return observationTab;
-            return null;
-        }),
-        getElementById: vi.fn((id) => {
-            if (id === 'panel-observation') return observationPanel;
-            return null;
-        })
+        querySelector: vi.fn(() => null),
+        getElementById: vi.fn(() => null)
     };
 
     const listeners = new Map();
@@ -99,8 +87,6 @@ function createBridgeFixture() {
 
     return {
         body,
-        observationTab,
-        observationPanel,
         doc,
         win,
         parentWindow,
@@ -160,7 +146,6 @@ describe('EmbedRuntimeBridge', () => {
         expect(fixture.body.classList.contains('embed-mode-readonly')).toBe(true);
         expect(fixture.body.classList.contains('embed-hide-toolbox')).toBe(true);
         expect(fixture.body.classList.contains('embed-hide-side-panel')).toBe(true);
-        expect(fixture.observationTab.hidden).toBe(true);
 
         const exportResult = bridge.handleRequest('exportCircuit');
         expect(exportResult).toEqual({
@@ -234,18 +219,15 @@ describe('EmbedRuntimeBridge', () => {
         expect(bridge.mode).toBe('readonly');
     });
 
-    it('applyFeatures ignores observation aria attribute failures', () => {
+    it('applyFeatures keeps unknown flags harmless', () => {
         const fixture = createBridgeFixture();
-        fixture.observationPanel.setAttribute = vi.fn(() => {
-            throw new Error('setAttribute failed');
-        });
         const bridge = new EmbedRuntimeBridge(
             fixture.app,
             { enabled: false },
             { window: fixture.win, document: fixture.doc }
         );
 
-        expect(() => bridge.applyFeatures({ observation: false })).not.toThrow();
-        expect(fixture.observationPanel.hidden).toBe(true);
+        expect(() => bridge.applyFeatures({ sidePanel: false, unknownFeature: true })).not.toThrow();
+        expect(fixture.body.classList.contains('embed-hide-side-panel')).toBe(true);
     });
 });

@@ -26,7 +26,7 @@ describe('HistoryManager safety', () => {
                 render: vi.fn()
             },
             app: {
-                observationPanel: {
+                chartWorkspace: {
                     refreshComponentOptions: vi.fn(),
                     refreshDialGauges: vi.fn()
                 }
@@ -42,7 +42,7 @@ describe('HistoryManager safety', () => {
         }, null)).not.toThrow();
 
         expect(interaction.renderer.render).toHaveBeenCalledTimes(1);
-        expect(interaction.app.observationPanel.refreshComponentOptions).toHaveBeenCalledTimes(1);
-        expect(interaction.app.observationPanel.refreshDialGauges).toHaveBeenCalledTimes(1);
+        expect(interaction.app.chartWorkspace.refreshComponentOptions).toHaveBeenCalledTimes(1);
+        expect(interaction.app.chartWorkspace.refreshDialGauges).toHaveBeenCalledTimes(1);
     });
 });
