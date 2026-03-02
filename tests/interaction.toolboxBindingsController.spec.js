@@ -156,4 +156,82 @@ describe('ToolboxBindingsController.bindToolboxEvents', () => {
         expect(dragOverEvent.dataTransfer.dropEffect).toBe('copy');
         expect(addWireAt).toHaveBeenCalledWith(20, 20);
     });
+
+    it('does not throw when item classList add/remove are non-callable', () => {
+        const resistor = createToolItem('Resistor');
+        resistor.classList.add = {};
+        resistor.classList.remove = {};
+        const svg = createSvgNode();
+        vi.stubGlobal('document', {
+            querySelectorAll: vi.fn(() => [resistor])
+        });
+
+        const ctx = {
+            svg,
+            setPendingToolType: vi.fn(),
+            viewOffset: { x: 0, y: 0 },
+            scale: 1
+        };
+
+        expect(() => ToolboxBindingsController.bindToolboxEvents.call(ctx)).not.toThrow();
+        expect(() => resistor.trigger('dragstart', {
+            preventDefault: vi.fn(),
+            dataTransfer: {
+                setData: vi.fn(),
+                effectAllowed: ''
+            }
+        })).not.toThrow();
+        expect(() => resistor.trigger('dragend', {})).not.toThrow();
+    });
+
+    it('does not throw when svg addEventListener is non-callable', () => {
+        const resistor = createToolItem('Resistor');
+        const svg = createSvgNode();
+        svg.addEventListener = {};
+        vi.stubGlobal('document', {
+            querySelectorAll: vi.fn(() => [resistor])
+        });
+
+        const ctx = {
+            svg,
+            setPendingToolType: vi.fn(),
+            viewOffset: { x: 0, y: 0 },
+            scale: 1
+        };
+
+        expect(() => ToolboxBindingsController.bindToolboxEvents.call(ctx)).not.toThrow();
+    });
+
+    it('does not throw when svg getBoundingClientRect throws during drop', () => {
+        const resistor = createToolItem('Resistor');
+        const svg = createSvgNode();
+        svg.getBoundingClientRect = vi.fn(() => {
+            throw new TypeError('broken rect');
+        });
+        vi.stubGlobal('document', {
+            querySelectorAll: vi.fn(() => [resistor])
+        });
+
+        const addComponent = vi.fn();
+        const ctx = {
+            svg,
+            viewOffset: { x: 0, y: 0 },
+            scale: 1,
+            isDraggingComponent: false,
+            addComponent,
+            clearPendingToolType: vi.fn()
+        };
+
+        ToolboxBindingsController.bindToolboxEvents.call(ctx);
+        expect(() => svg.trigger('drop', {
+            preventDefault: vi.fn(),
+            stopPropagation: vi.fn(),
+            clientX: 10,
+            clientY: 10,
+            dataTransfer: {
+                getData: vi.fn(() => 'Resistor')
+            }
+        })).not.toThrow();
+        expect(addComponent).toHaveBeenCalledTimes(1);
+    });
 });

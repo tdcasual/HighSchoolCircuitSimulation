@@ -1,5 +1,25 @@
+function safeInvokeMethod(target, methodName, ...args) {
+    const fn = target?.[methodName];
+    if (typeof fn !== 'function') return undefined;
+    try {
+        return fn.apply(target, args);
+    } catch (_) {
+        return undefined;
+    }
+}
+
+function safeGetBoundingClientRect(node) {
+    const rect = safeInvokeMethod(node, 'getBoundingClientRect');
+    return {
+        left: Number(rect?.left) || 0,
+        top: Number(rect?.top) || 0,
+        width: Number(rect?.width) || 0,
+        height: Number(rect?.height) || 0
+    };
+}
+
 export function screenToCanvas(clientX, clientY) {
-    const rect = this.svg.getBoundingClientRect();
+    const rect = safeGetBoundingClientRect(this.svg);
     const screenX = clientX - rect.left;
     const screenY = clientY - rect.top;
 
@@ -26,7 +46,7 @@ export function updateViewTransform() {
     layers.forEach(selector => {
         const layer = this.svg.querySelector(selector);
         if (layer) {
-            layer.setAttribute('transform',
+            safeInvokeMethod(layer, 'setAttribute', 'transform',
                 `translate(${this.viewOffset.x}, ${this.viewOffset.y}) scale(${this.scale})`
             );
         }
@@ -35,7 +55,7 @@ export function updateViewTransform() {
     // 更新对齐辅助线组的变换
     const guidesGroup = this.svg.querySelector('#alignment-guides');
     if (guidesGroup) {
-        guidesGroup.setAttribute('transform',
+        safeInvokeMethod(guidesGroup, 'setAttribute', 'transform',
             `translate(${this.viewOffset.x}, ${this.viewOffset.y}) scale(${this.scale})`
         );
     }
@@ -54,7 +74,7 @@ export function resetView() {
     if (bounds) {
         const centerX = (bounds.minX + bounds.maxX) / 2;
         const centerY = (bounds.minY + bounds.maxY) / 2;
-        const rect = this.svg.getBoundingClientRect();
+        const rect = safeGetBoundingClientRect(this.svg);
         const screenCenterX = rect.width / 2;
         const screenCenterY = rect.height / 2;
         this.viewOffset = {
@@ -110,7 +130,7 @@ export function onWheel(e) {
     e.preventDefault();
     this.quickActionBar?.notifyActivity?.();
 
-    const rect = this.svg.getBoundingClientRect();
+    const rect = safeGetBoundingClientRect(this.svg);
     // 鼠标在SVG中的位置
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;

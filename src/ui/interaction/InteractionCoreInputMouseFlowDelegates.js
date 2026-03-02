@@ -2,6 +2,10 @@ import * as InteractionOrchestrator from '../../app/interaction/InteractionOrche
 
 export function installInteractionCoreInputMouseFlowDelegates(InteractionManagerClass) {
     Object.assign(InteractionManagerClass.prototype, {
+        syncInteractionModeStore(options = {}) {
+            return InteractionOrchestrator.syncInteractionModeStore(this, options);
+        },
+
         onMouseDown(e) {
             return InteractionOrchestrator.onMouseDown.call(this, e);
         },

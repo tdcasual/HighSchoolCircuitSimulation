@@ -34,6 +34,10 @@ export function installInteractionCoreInputPlacementDelegates(InteractionManager
             return ToolPlacementController.syncEndpointAutoBridgeButton.call(this);
         },
 
+        getInteractionModeSnapshot() {
+            return ToolPlacementController.getInteractionModeSnapshot.call(this);
+        },
+
         placePendingToolAt(clientX, clientY) {
             return ToolPlacementController.placePendingToolAt.call(this, clientX, clientY);
         }

@@ -31,6 +31,37 @@ function ensurePositiveFinite(value, fallback = 0) {
     return Number.isFinite(value) ? value : fallback;
 }
 
+function safeHasClass(node, className) {
+    if (!node || !node.classList || typeof node.classList.contains !== 'function') return false;
+    try {
+        return node.classList.contains(className);
+    } catch (_) {
+        return false;
+    }
+}
+
+function safeInvokeMethod(target, methodName, ...args) {
+    const fn = target?.[methodName];
+    if (typeof fn !== 'function') return undefined;
+    try {
+        return fn.apply(target, args);
+    } catch (_) {
+        return undefined;
+    }
+}
+
+function safeAddClass(node, className) {
+    safeInvokeMethod(node?.classList, 'add', className);
+}
+
+function safeRemoveClass(node, className) {
+    safeInvokeMethod(node?.classList, 'remove', className);
+}
+
+function safeToggleClass(node, className, force) {
+    safeInvokeMethod(node?.classList, 'toggle', className, force);
+}
+
 function projectPointToSegment(a, b, point) {
     if (!a || !b || !point) return null;
     const dx = b.x - a.x;
@@ -103,7 +134,7 @@ export class QuickActionBarController {
 
         const actions = document.createElement('div');
         actions.className = 'quick-action-actions';
-        actions.addEventListener('click', this.boundClick);
+        safeInvokeMethod(actions, 'addEventListener', 'click', this.boundClick);
         root.appendChild(actions);
 
         this.container.appendChild(root);
@@ -124,7 +155,7 @@ export class QuickActionBarController {
     isTouchPreferredMode() {
         if (typeof document === 'undefined') return false;
         const body = document.body;
-        if (body?.classList?.contains('layout-mode-compact') || body?.classList?.contains('layout-mode-phone')) {
+        if (safeHasClass(body, 'layout-mode-compact') || safeHasClass(body, 'layout-mode-phone')) {
             return true;
         }
         if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
@@ -160,7 +191,7 @@ export class QuickActionBarController {
         if (!this.hint) return;
         this.clearHintTimer();
         this.hint.hidden = true;
-        this.hint.classList.remove('show');
+        safeRemoveClass(this.hint, 'show');
         this.hint.textContent = '';
     }
 
@@ -169,7 +200,7 @@ export class QuickActionBarController {
         this.clearHintTimer();
         this.hint.textContent = message;
         this.hint.hidden = false;
-        this.hint.classList.add('show');
+        safeAddClass(this.hint, 'show');
         this.hintTimer = setTimeout(() => {
             this.hideHint();
         }, durationMs);
@@ -243,20 +274,20 @@ export class QuickActionBarController {
     getMobileControlsHeight() {
         if (typeof document === 'undefined') return 0;
         const body = document.body;
-        if (!body?.classList?.contains?.('layout-mode-phone')) return 0;
+        if (!safeHasClass(body, 'layout-mode-phone')) return 0;
         if (this.mobileControls?.hidden) return 0;
         const height = Number(this.mobileControls?.getBoundingClientRect?.().height);
         return Number.isFinite(height) && height > 0 ? height : 0;
     }
 
     applyBottomOffset() {
-        if (!this.root?.style?.setProperty) return;
+        if (!this.root?.style) return;
         const statusBarHeight = this.getStatusBarHeight();
         const mobileControlsHeight = this.getMobileControlsHeight();
         const offset = Math.max(44, Math.ceil(statusBarHeight) + Math.ceil(mobileControlsHeight) + 8);
-        this.root.style.setProperty('--quick-action-bottom-offset', `${offset}px`);
-        if (this.container?.style?.setProperty) {
-            this.container.style.setProperty('--quick-action-bottom-offset', `${offset}px`);
+        safeInvokeMethod(this.root.style, 'setProperty', '--quick-action-bottom-offset', `${offset}px`);
+        if (this.container?.style) {
+            safeInvokeMethod(this.container.style, 'setProperty', '--quick-action-bottom-offset', `${offset}px`);
         }
     }
 
@@ -266,8 +297,8 @@ export class QuickActionBarController {
 
         if (layout.toolboxOpen || layout.sidePanelOpen) return true;
 
-        const toolboxOpen = !!this.toolbox?.classList?.contains?.('layout-open');
-        const sidePanelOpen = !!this.sidePanel?.classList?.contains?.('layout-open');
+        const toolboxOpen = safeHasClass(this.toolbox, 'layout-open');
+        const sidePanelOpen = safeHasClass(this.sidePanel, 'layout-open');
         return toolboxOpen || sidePanelOpen;
     }
 
@@ -384,8 +415,7 @@ export class QuickActionBarController {
     setMobileControlsCondensed(active) {
         if (typeof document === 'undefined') return;
         const body = document.body;
-        if (!body?.classList) return;
-        body.classList.toggle('mobile-controls-condensed', !!active);
+        safeToggleClass(body, 'mobile-controls-condensed', !!active);
     }
 
     getLastPointerCanvas() {
@@ -459,9 +489,12 @@ export class QuickActionBarController {
     }
 
     onActionClick(event) {
-        const button = event?.target?.closest?.('button[data-action]');
+        const button = typeof event?.target?.closest === 'function'
+            ? event.target.closest('button[data-action]')
+            : null;
         if (!button) return;
-        const actionId = button.dataset.action;
+        const actionId = button?.dataset?.action;
+        if (typeof actionId !== 'string' || actionId.length === 0) return;
         const selection = this.resolveSelectionState();
         const mode = selection.mode;
         const componentId = selection.componentId;

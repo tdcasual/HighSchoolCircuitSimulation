@@ -1,6 +1,16 @@
 import { GRID_SIZE, snapToGrid, toCanvasInt } from '../../utils/CanvasCoords.js';
 import { getTerminalLocalPosition } from '../../utils/TerminalGeometry.js';
 
+function safeInvokeMethod(target, methodName, ...args) {
+    const fn = target?.[methodName];
+    if (typeof fn !== 'function') return undefined;
+    try {
+        return fn.apply(target, args);
+    } catch (_) {
+        return undefined;
+    }
+}
+
 function resolveTerminalDragAxis(comp, terminalIndex) {
     if (!comp) return { x: 1, y: 0 };
 
@@ -45,14 +55,14 @@ export function registerDragListeners(startEvent, onMove, onUp) {
             onUp(event);
         };
         const cleanup = () => {
-            document.removeEventListener('pointermove', moveHandler);
-            document.removeEventListener('pointerup', upHandler);
-            document.removeEventListener('pointercancel', cancelHandler);
+            safeInvokeMethod(document, 'removeEventListener', 'pointermove', moveHandler);
+            safeInvokeMethod(document, 'removeEventListener', 'pointerup', upHandler);
+            safeInvokeMethod(document, 'removeEventListener', 'pointercancel', cancelHandler);
         };
 
-        document.addEventListener('pointermove', moveHandler, { passive: false });
-        document.addEventListener('pointerup', upHandler);
-        document.addEventListener('pointercancel', cancelHandler);
+        safeInvokeMethod(document, 'addEventListener', 'pointermove', moveHandler, { passive: false });
+        safeInvokeMethod(document, 'addEventListener', 'pointerup', upHandler);
+        safeInvokeMethod(document, 'addEventListener', 'pointercancel', cancelHandler);
         return cleanup;
     }
 
@@ -62,12 +72,12 @@ export function registerDragListeners(startEvent, onMove, onUp) {
         onUp(event);
     };
     const cleanup = () => {
-        document.removeEventListener('mousemove', moveHandler);
-        document.removeEventListener('mouseup', upHandler);
+        safeInvokeMethod(document, 'removeEventListener', 'mousemove', moveHandler);
+        safeInvokeMethod(document, 'removeEventListener', 'mouseup', upHandler);
     };
 
-    document.addEventListener('mousemove', moveHandler);
-    document.addEventListener('mouseup', upHandler);
+    safeInvokeMethod(document, 'addEventListener', 'mousemove', moveHandler);
+    safeInvokeMethod(document, 'addEventListener', 'mouseup', upHandler);
     return cleanup;
 }
 
@@ -128,6 +138,7 @@ export function startTerminalExtend(componentId, terminalIndex, e) {
     if (!comp) return;
 
     this.beginHistoryTransaction('调整端子长度');
+    this.isTerminalExtending = true;
 
     // 初始化端子延长数据
     if (!comp.terminalExtensions) {
@@ -147,6 +158,7 @@ export function startTerminalExtend(componentId, terminalIndex, e) {
     let cleanupDrag = null;
 
     const onMove = (moveE) => {
+        if (!this.isTerminalExtending) return;
         // 计算鼠标移动向量（屏幕坐标，考虑缩放）
         const dx = (moveE.clientX - startX) / this.scale;
         const dy = (moveE.clientY - startY) / this.scale;
@@ -182,6 +194,7 @@ export function startTerminalExtend(componentId, terminalIndex, e) {
 
     const onUp = () => {
         if (typeof cleanupDrag === 'function') cleanupDrag();
+        this.isTerminalExtending = false;
         this.hideAlignmentGuides();
         // 端子位置会影响坐标拓扑，需重建节点
         this.circuit.rebuildNodes();
@@ -201,6 +214,8 @@ export function startTerminalExtend(componentId, terminalIndex, e) {
 export function startRheostatDrag(componentId, e) {
     const comp = this.circuit.getComponent(componentId);
     if (!comp || comp.type !== 'Rheostat') return;
+    this.beginHistoryTransaction?.('调节滑动变阻器');
+    this.isRheostatDragging = true;
 
     // 记录初始位置和初始position
     const startX = e.clientX;
@@ -210,6 +225,7 @@ export function startRheostatDrag(componentId, e) {
     let cleanupDrag = null;
 
     const onMove = (moveE) => {
+        if (!this.isRheostatDragging) return;
         // 计算鼠标移动向量
         const dx = moveE.clientX - startX;
         const dy = moveE.clientY - startY;
@@ -239,8 +255,10 @@ export function startRheostatDrag(componentId, e) {
 
     const onUp = () => {
         if (typeof cleanupDrag === 'function') cleanupDrag();
+        this.isRheostatDragging = false;
         // 拖动结束后完整刷新一次属性面板
         this.updatePropertyPanel(comp);
+        this.commitHistoryTransaction?.();
     };
 
     cleanupDrag = this.registerDragListeners(e, onMove, onUp);

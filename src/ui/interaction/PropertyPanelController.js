@@ -25,6 +25,48 @@ function hasCardPayload(card) {
     return !!card && card.children && card.children.length > 1;
 }
 
+function safeHasClass(element, className) {
+    if (!element || !element.classList || typeof element.classList.contains !== 'function') return false;
+    try {
+        return element.classList.contains(className);
+    } catch (_) {
+        return false;
+    }
+}
+
+function safeAddClass(element, className) {
+    if (!element || !element.classList || typeof element.classList.add !== 'function') return;
+    try {
+        element.classList.add(className);
+    } catch (_) {}
+}
+
+function safeToggleClass(element, className, force) {
+    if (!element || !element.classList || typeof element.classList.toggle !== 'function') return false;
+    try {
+        return !!element.classList.toggle(className, force);
+    } catch (_) {
+        return false;
+    }
+}
+
+function safeSetAttribute(element, name, value) {
+    if (!element || typeof element.setAttribute !== 'function') return;
+    try {
+        element.setAttribute(name, value);
+    } catch (_) {}
+}
+
+function safeInvokeMethod(target, methodName, ...args) {
+    const fn = target?.[methodName];
+    if (typeof fn !== 'function') return undefined;
+    try {
+        return fn.apply(target, args);
+    } catch (_) {
+        return undefined;
+    }
+}
+
 function rebalancePropertyContentIntoCards(content) {
     if (!content) return;
     const children = Array.from(content.children || []);
@@ -36,13 +78,13 @@ function rebalancePropertyContentIntoCards(content) {
     const guideCard = createPropertyCard('快捷提示', 'property-card-guide');
 
     const isBaseRow = (element) => {
-        if (!element?.classList?.contains?.('prop-row')) return false;
+        if (!safeHasClass(element, 'prop-row')) return false;
         const label = element.querySelector?.('.label')?.textContent?.trim();
         return label === '类型' || label === 'ID';
     };
 
     const isMeasurementRow = (element) => {
-        if (!element?.classList?.contains?.('prop-row')) return false;
+        if (!safeHasClass(element, 'prop-row')) return false;
         return !!element.querySelector?.('#measure-current, #measure-voltage, #measure-power');
     };
 
@@ -56,8 +98,8 @@ function rebalancePropertyContentIntoCards(content) {
         const text = (element?.textContent || '').trim();
         const isDisplayHeader = tag === 'h3' && text.includes('数值显示');
         const isRealtimeHeader = tag === 'h3' && text.includes('实时测量');
-        const isDisplayChips = element?.classList?.contains?.('display-chip-row');
-        const isLabelGroup = element?.classList?.contains?.('form-group')
+        const isDisplayChips = safeHasClass(element, 'display-chip-row');
+        const isLabelGroup = safeHasClass(element, 'form-group')
             && !!element.querySelector?.('#comp-label');
 
         if (isRealtimeHeader) {
@@ -76,7 +118,7 @@ function rebalancePropertyContentIntoCards(content) {
 
         if (isBaseRow(element) || isLabelGroup || isDisplayHeader || isDisplayChips) {
             if (isDisplayHeader) {
-                element.classList.add('property-card-subtitle');
+                safeAddClass(element, 'property-card-subtitle');
             }
             summaryCard.appendChild(element);
             continue;
@@ -100,7 +142,7 @@ export function updatePropertyPanel(comp) {
     const content = document.getElementById('property-content');
     if (!content) return;
     clearElement(content);
-    content.classList.add('property-content-cards');
+    safeAddClass(content, 'property-content-cards');
 
     // 基础属性
     content.appendChild(createPropertyRow('类型', ComponentNames[comp.type]));
@@ -114,7 +156,7 @@ export function updatePropertyPanel(comp) {
         placeholder: '输入标签名称'
     }, '自定义标签将显示在元器件上');
     const labelInput = labelGroup.querySelector('#comp-label');
-    labelInput.addEventListener('change', () => {
+    safeInvokeMethod(labelInput, 'addEventListener', 'change', () => {
         const newLabel = labelInput.value.trim();
         comp.label = newLabel || null;
         this.renderer.render();
@@ -169,11 +211,11 @@ export function updatePropertyPanel(comp) {
                 }
             });
 
-            btn.addEventListener('click', () => {
+            safeInvokeMethod(btn, 'addEventListener', 'click', () => {
                 const next = !comp.display[key];
                 comp.display[key] = next;
-                btn.classList.toggle('active', next);
-                btn.setAttribute('aria-pressed', next ? 'true' : 'false');
+                safeToggleClass(btn, 'active', next);
+                safeSetAttribute(btn, 'aria-pressed', next ? 'true' : 'false');
                 this.renderer.updateValues();
             });
 
@@ -304,7 +346,7 @@ export function updatePropertyPanel(comp) {
                 attrs: { type: 'checkbox' }
             });
             exploreToggle.checked = !!comp.explorationMode;
-            exploreToggle.addEventListener('change', () => {
+            safeInvokeMethod(exploreToggle, 'addEventListener', 'change', () => {
                 comp.explorationMode = !!exploreToggle.checked;
                 this.recomputeParallelPlateCapacitance(comp, { updateVisual: true, updatePanel: true });
             });
@@ -340,7 +382,7 @@ export function updatePropertyPanel(comp) {
 
             const distanceInput = distanceGroup.querySelector('#ppc-input-distance');
             if (distanceInput) {
-                distanceInput.addEventListener('change', () => {
+                safeInvokeMethod(distanceInput, 'addEventListener', 'change', () => {
                     const distanceMm = this.safeParseFloat(distanceInput.value, (comp.plateDistance || 0.001) * 1000, 0.001, 1e9);
                     comp.plateDistance = distanceMm / 1000;
                     this.recomputeParallelPlateCapacitance(comp, { updateVisual: true, updatePanel: true });
@@ -349,7 +391,7 @@ export function updatePropertyPanel(comp) {
 
             const areaInput = areaGroup.querySelector('#ppc-input-area');
             if (areaInput) {
-                areaInput.addEventListener('change', () => {
+                safeInvokeMethod(areaInput, 'addEventListener', 'change', () => {
                     const areaCm2 = this.safeParseFloat(areaInput.value, (comp.plateArea || 0.01) * 10000, 0.01, 1e12);
                     comp.plateArea = areaCm2 / 10000;
                     this.recomputeParallelPlateCapacitance(comp, { updateVisual: true, updatePanel: true });
@@ -358,7 +400,7 @@ export function updatePropertyPanel(comp) {
 
             const erInput = erGroup.querySelector('#ppc-input-er');
             if (erInput) {
-                erInput.addEventListener('change', () => {
+                safeInvokeMethod(erInput, 'addEventListener', 'change', () => {
                     comp.dielectricConstant = this.safeParseFloat(erInput.value, comp.dielectricConstant ?? 1, 1, 1e9);
                     this.recomputeParallelPlateCapacitance(comp, { updateVisual: true, updatePanel: true });
                 });
@@ -441,7 +483,7 @@ export function updatePropertyPanel(comp) {
             modeSelect.appendChild(createElement('option', { textContent: '透明（观察内部）', attrs: { value: 'transparent' } }));
             modeSelect.appendChild(createElement('option', { textContent: '隐藏（黑箱）', attrs: { value: 'opaque' } }));
             modeSelect.value = comp.viewMode === 'opaque' ? 'opaque' : 'transparent';
-            modeSelect.addEventListener('change', () => {
+            safeInvokeMethod(modeSelect, 'addEventListener', 'change', () => {
                 comp.viewMode = modeSelect.value === 'opaque' ? 'opaque' : 'transparent';
                 this.renderer.render();
                 this.selectComponent(comp.id);
@@ -467,14 +509,14 @@ export function updatePropertyPanel(comp) {
             const widthInput = widthGroup.querySelector('#blackbox-width');
             const heightInput = heightGroup.querySelector('#blackbox-height');
             if (widthInput) {
-                widthInput.addEventListener('change', () => {
+                safeInvokeMethod(widthInput, 'addEventListener', 'change', () => {
                     comp.boxWidth = Math.round(this.safeParseFloat(widthInput.value, w, 80, 5000));
                     this.renderer.render();
                     this.selectComponent(comp.id);
                 });
             }
             if (heightInput) {
-                heightInput.addEventListener('change', () => {
+                safeInvokeMethod(heightInput, 'addEventListener', 'change', () => {
                     comp.boxHeight = Math.round(this.safeParseFloat(heightInput.value, h, 60, 5000));
                     this.renderer.render();
                     this.selectComponent(comp.id);

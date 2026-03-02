@@ -17,6 +17,17 @@ describe('UIStateController.isObservationTabActive', () => {
 
         expect(UIStateController.isObservationTabActive()).toBe(true);
     });
+
+    it('returns false when observation page classList contains is non-callable', () => {
+        vi.stubGlobal('document', {
+            getElementById: vi.fn(() => ({
+                classList: { contains: {} }
+            }))
+        });
+
+        expect(() => UIStateController.isObservationTabActive()).not.toThrow();
+        expect(UIStateController.isObservationTabActive()).toBe(false);
+    });
 });
 
 describe('UIStateController.hideDialog', () => {
@@ -34,6 +45,28 @@ describe('UIStateController.hideDialog', () => {
         expect(add).toHaveBeenCalledWith('hidden');
         expect(ctx.editingComponent).toBe(null);
     });
+
+    it('does not throw when dialog overlay is missing', () => {
+        vi.stubGlobal('document', {
+            getElementById: vi.fn(() => null)
+        });
+        const ctx = { editingComponent: { id: 'R1' } };
+
+        expect(() => UIStateController.hideDialog.call(ctx)).not.toThrow();
+        expect(ctx.editingComponent).toBe(null);
+    });
+
+    it('does not throw when dialog classList add is non-callable', () => {
+        vi.stubGlobal('document', {
+            getElementById: vi.fn(() => ({
+                classList: { add: {} }
+            }))
+        });
+        const ctx = { editingComponent: { id: 'R1' } };
+
+        expect(() => UIStateController.hideDialog.call(ctx)).not.toThrow();
+        expect(ctx.editingComponent).toBe(null);
+    });
 });
 
 describe('UIStateController.safeParseFloat', () => {
@@ -41,6 +74,34 @@ describe('UIStateController.safeParseFloat', () => {
         expect(UIStateController.safeParseFloat('abc', 12, 0, 20)).toBe(12);
         expect(UIStateController.safeParseFloat('-5', 1, 0, 20)).toBe(0);
         expect(UIStateController.safeParseFloat('50', 1, 0, 20)).toBe(20);
+    });
+});
+
+describe('UIStateController.getActiveInteractionMode', () => {
+    it('prefers interaction mode store state over legacy flags', () => {
+        const context = {
+            interactionModeStore: {
+                getState: vi.fn(() => ({
+                    mode: 'endpoint-edit'
+                }))
+            },
+            pendingToolType: 'Wire',
+            isWiring: true
+        };
+
+        expect(UIStateController.getActiveInteractionMode.call(context)).toBe('endpoint-edit');
+    });
+
+    it('falls back to legacy flags when mode store is unavailable', () => {
+        const context = {
+            pendingToolType: 'Wire',
+            isWiring: false,
+            isDraggingWireEndpoint: false,
+            isTerminalExtending: false,
+            isRheostatDragging: false
+        };
+
+        expect(UIStateController.getActiveInteractionMode.call(context)).toBe('wire');
     });
 });
 

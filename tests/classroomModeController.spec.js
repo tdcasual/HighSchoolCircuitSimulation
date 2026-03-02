@@ -250,4 +250,28 @@ describe('ClassroomModeController', () => {
         expect(interaction.restoreEndpointAutoBridgeMode).toHaveBeenCalledWith({ silentStatus: true });
         expect(interaction.endpointAutoBridgeMode).toBe('on');
     });
+
+    it('does not throw when button setAttribute and body classList.toggle are non-callable', () => {
+        const { body, button } = setupFixture({ width: 1366, storedLevel: 'standard' });
+        body.classList.toggle = {};
+        button.setAttribute = {};
+
+        expect(() => new ClassroomModeController({
+            responsiveLayout: { isOverlayMode: () => false },
+            updateStatus: vi.fn()
+        })).not.toThrow();
+    });
+
+    it('does not throw when updateStatus is non-callable while announce is true', () => {
+        setupFixture({ width: 1366, storedLevel: 'off' });
+        const controller = new ClassroomModeController({
+            responsiveLayout: { isOverlayMode: () => false },
+            updateStatus: {}
+        });
+
+        expect(() => controller.setPreferredLevel('standard', {
+            persist: false,
+            announce: true
+        })).not.toThrow();
+    });
 });

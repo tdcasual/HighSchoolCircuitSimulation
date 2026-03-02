@@ -1,5 +1,15 @@
 import { updateIdCounterFromExisting } from '../../components/Component.js';
 
+function safeInvokeMethod(target, methodName, ...args) {
+    const fn = target?.[methodName];
+    if (typeof fn !== 'function') return undefined;
+    try {
+        return fn.apply(target, args);
+    } catch (_) {
+        return undefined;
+    }
+}
+
 export class HistoryManager {
     constructor(interaction, options = {}) {
         this.interaction = interaction;
@@ -11,7 +21,7 @@ export class HistoryManager {
     }
 
     captureState() {
-        const json = this.interaction?.circuit?.toJSON?.() ?? {};
+        const json = safeInvokeMethod(this.interaction?.circuit, 'toJSON') ?? {};
         const components = Array.isArray(json.components) ? [...json.components] : [];
         const wires = Array.isArray(json.wires) ? [...json.wires] : [];
         const probes = Array.isArray(json.probes) ? [...json.probes] : [];
@@ -35,15 +45,15 @@ export class HistoryManager {
     restoreSelectionSnapshot(snapshot) {
         const compId = snapshot?.componentId;
         const wireId = snapshot?.wireId;
-        if (compId && this.interaction?.circuit?.getComponent?.(compId)) {
-            this.interaction.selectComponent(compId);
+        if (compId && safeInvokeMethod(this.interaction?.circuit, 'getComponent', compId)) {
+            safeInvokeMethod(this.interaction, 'selectComponent', compId);
             return;
         }
-        if (wireId && this.interaction?.circuit?.getWire?.(wireId)) {
-            this.interaction.selectWire(wireId);
+        if (wireId && safeInvokeMethod(this.interaction?.circuit, 'getWire', wireId)) {
+            safeInvokeMethod(this.interaction, 'selectWire', wireId);
             return;
         }
-        this.interaction?.clearSelection?.();
+        safeInvokeMethod(this.interaction, 'clearSelection');
     }
 
     pushEntry(entry) {
@@ -113,12 +123,12 @@ export class HistoryManager {
 
         // Editing during simulation is error-prone; keep semantics simple.
         if (app?.circuit?.isRunning) {
-            app.stopSimulation();
+            safeInvokeMethod(app, 'stopSimulation');
         }
 
         this.isRestoring = true;
         try {
-            this.interaction?.circuit?.fromJSON?.({
+            safeInvokeMethod(this.interaction?.circuit, 'fromJSON', {
                 components: state.components || [],
                 wires: state.wires || [],
                 probes: state.probes || []
@@ -130,9 +140,9 @@ export class HistoryManager {
             ].filter(Boolean);
             updateIdCounterFromExisting(allIds);
 
-            this.interaction?.renderer?.render?.();
-            app?.observationPanel?.refreshComponentOptions?.();
-            app?.observationPanel?.refreshDialGauges?.();
+            safeInvokeMethod(this.interaction?.renderer, 'render');
+            safeInvokeMethod(app?.observationPanel, 'refreshComponentOptions');
+            safeInvokeMethod(app?.observationPanel, 'refreshDialGauges');
 
             this.restoreSelectionSnapshot(selection);
         } finally {
@@ -145,7 +155,7 @@ export class HistoryManager {
         if (!entry) return;
         this.redoStack.push(entry);
         this.applyState(entry.before, entry.selectionBefore);
-        this.interaction?.updateStatus?.(entry.label ? `撤销：${entry.label}` : '已撤销');
+        safeInvokeMethod(this.interaction, 'updateStatus', entry.label ? `撤销：${entry.label}` : '已撤销');
     }
 
     redo() {
@@ -153,6 +163,6 @@ export class HistoryManager {
         if (!entry) return;
         this.undoStack.push(entry);
         this.applyState(entry.after, entry.selectionAfter);
-        this.interaction?.updateStatus?.(entry.label ? `重做：${entry.label}` : '已重做');
+        safeInvokeMethod(this.interaction, 'updateStatus', entry.label ? `重做：${entry.label}` : '已重做');
     }
 }

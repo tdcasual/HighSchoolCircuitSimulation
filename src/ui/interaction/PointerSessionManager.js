@@ -13,6 +13,150 @@ function normalizePointerSample(sample = {}) {
     };
 }
 
+function cloneWireStartSnapshot(wireStart) {
+    if (!wireStart || !Number.isFinite(wireStart.x) || !Number.isFinite(wireStart.y)) {
+        return null;
+    }
+    return {
+        x: Number(wireStart.x),
+        y: Number(wireStart.y),
+        snap: wireStart.snap ? { ...wireStart.snap } : null
+    };
+}
+
+function resolveSuspendedWireStartPoint(context, wireStartSnapshot) {
+    if (!wireStartSnapshot) return null;
+    const snap = wireStartSnapshot.snap || null;
+
+    if (snap?.type === 'terminal') {
+        const componentId = snap.componentId;
+        const terminalIndex = Number(snap.terminalIndex);
+        if (typeof componentId === 'string' && Number.isInteger(terminalIndex) && terminalIndex >= 0) {
+            const pos = context?.renderer?.getTerminalPosition?.(componentId, terminalIndex);
+            if (pos && Number.isFinite(pos.x) && Number.isFinite(pos.y)) {
+                return { x: Number(pos.x), y: Number(pos.y), snap };
+            }
+        }
+        return null;
+    }
+
+    if (snap?.type === 'wire-endpoint') {
+        const wireId = snap.wireId;
+        const end = snap.end;
+        const wire = wireId ? context?.circuit?.getWire?.(wireId) : null;
+        const point = wire && (end === 'a' || end === 'b') ? wire[end] : null;
+        if (point && Number.isFinite(point.x) && Number.isFinite(point.y)) {
+            return { x: Number(point.x), y: Number(point.y), snap };
+        }
+        return null;
+    }
+
+    if (Number.isFinite(wireStartSnapshot.x) && Number.isFinite(wireStartSnapshot.y)) {
+        return {
+            x: Number(wireStartSnapshot.x),
+            y: Number(wireStartSnapshot.y),
+            snap
+        };
+    }
+
+    return null;
+}
+
+function syncInteractionModeStore(context, options = {}) {
+    const sync = context?.syncInteractionModeStore;
+    if (typeof sync !== 'function') return null;
+    try {
+        return sync.call(context, options);
+    } catch (_) {
+        return null;
+    }
+}
+
+function readInteractionModeStoreState(context) {
+    const getter = context?.interactionModeStore?.getState;
+    if (typeof getter !== 'function') return null;
+    try {
+        return getter.call(context.interactionModeStore);
+    } catch (_) {
+        return null;
+    }
+}
+
+function suspendWiringForPinch(context) {
+    if (!context?.isWiring) return;
+    const wireStartSnapshot = cloneWireStartSnapshot(context.wireStart);
+    if (!wireStartSnapshot) {
+        context.cancelWiring?.();
+        return;
+    }
+
+    context.suspendedWiringSession = {
+        wireStart: wireStartSnapshot,
+        pendingToolType: context.pendingToolType ?? null,
+        pendingToolItem: context.pendingToolItem ?? null,
+        mobileInteractionMode: context.mobileInteractionMode ?? 'select',
+        stickyWireTool: !!context.stickyWireTool
+    };
+
+    context.isWiring = false;
+    context.wireStart = null;
+    context.ignoreNextWireMouseUp = false;
+
+    if (context.tempWire) {
+        context.renderer?.removeTempWire?.(context.tempWire);
+        context.tempWire = null;
+    }
+
+    context.hideAlignmentGuides?.();
+    context.renderer?.clearTerminalHighlight?.();
+    syncInteractionModeStore(context, {
+        source: 'pointerSession.suspendWiringForPinch',
+        context: { isWiring: false }
+    });
+}
+
+function restoreWiringAfterPinch(context) {
+    const session = context?.suspendedWiringSession;
+    if (!session || !session.wireStart) return;
+    context.suspendedWiringSession = null;
+
+    context.pendingToolType = session.pendingToolType ?? null;
+    context.pendingToolItem = session.pendingToolItem ?? null;
+    context.mobileInteractionMode = session.mobileInteractionMode || context.mobileInteractionMode || 'select';
+    context.stickyWireTool = !!session.stickyWireTool;
+    context.syncMobileModeButtons?.();
+    syncInteractionModeStore(context, {
+        mode: 'wire',
+        source: 'pointerSession.restoreWiringAfterPinch',
+        context: {
+            pendingToolType: context.pendingToolType,
+            mobileInteractionMode: context.mobileInteractionMode,
+            stickyWireTool: context.stickyWireTool
+        }
+    });
+
+    const startPoint = resolveSuspendedWireStartPoint(context, session.wireStart);
+    if (!startPoint) {
+        context.cancelWiring?.();
+        context.updateStatus?.('双指缩放后起点已失效，已取消连线');
+        return;
+    }
+
+    if (typeof context.startWiringFromPoint === 'function') {
+        context.startWiringFromPoint(startPoint, null, false);
+    } else {
+        context.isWiring = true;
+        context.wireStart = { x: startPoint.x, y: startPoint.y, snap: startPoint.snap || null };
+        context.ignoreNextWireMouseUp = false;
+    }
+    syncInteractionModeStore(context, {
+        mode: 'wire',
+        source: 'pointerSession.restoreWiringAfterPinch:start-wiring',
+        context: { isWiring: true }
+    });
+    context.updateStatus?.('导线模式：选择终点');
+}
+
 export function isIntentionalDestructiveTap(pointerStart = null, pointerEnd = null, options = {}) {
     const start = normalizePointerSample(pointerStart || pointerEnd || {});
     const end = normalizePointerSample(pointerEnd || pointerStart || {});
@@ -43,8 +187,9 @@ export function onPointerDown(e) {
         clientY: e.clientY,
         pointerType
     });
-    if (typeof this.svg.setPointerCapture === 'function') {
-        try { this.svg.setPointerCapture(e.pointerId); } catch (_) {}
+    const setPointerCapture = this?.svg?.setPointerCapture;
+    if (typeof setPointerCapture === 'function') {
+        try { setPointerCapture.call(this.svg, e.pointerId); } catch (_) {}
     }
 
     this.touchActionController?.onPointerDown?.(e);
@@ -139,8 +284,43 @@ export function onPointerCancel(e) {
         this.activePointers.delete(e.pointerId);
         this.endPinchGestureIfNeeded();
     } else if (!this.blockSinglePointerInteraction && this.primaryPointerId === e.pointerId) {
-        this.cancelWiring();
+        const hadTerminalExtending = !!this.isTerminalExtending;
+        const hadRheostatDragging = !!this.isRheostatDragging;
+        const modeStoreState = readInteractionModeStoreState(this);
+        const modeStoreContext = modeStoreState?.context || null;
+        const storeReportsEditLikeDrag = !!(
+            modeStoreState?.mode === 'endpoint-edit'
+            || modeStoreContext?.isDraggingWireEndpoint
+            || modeStoreContext?.isTerminalExtending
+            || modeStoreContext?.isRheostatDragging
+        );
+        const hasEditLikeDrag = !!(
+            this.isDraggingWireEndpoint
+            || this.isDraggingWire
+            || this.isDragging
+            || hadTerminalExtending
+            || hadRheostatDragging
+            || this.wireModeGesture
+            || storeReportsEditLikeDrag
+        );
+        if (this.isWiring && !hasEditLikeDrag) {
+            this.cancelWiring();
+        }
         this.onMouseLeave(e);
+        if (hadTerminalExtending) {
+            this.hideAlignmentGuides?.();
+            this.circuit?.rebuildNodes?.();
+            this.commitHistoryTransaction?.();
+        } else if (hadRheostatDragging) {
+            this.hideAlignmentGuides?.();
+            this.commitHistoryTransaction?.();
+        }
+        if (this.isWiring) {
+            this.ignoreNextWireMouseUp = false;
+        }
+        this.isTerminalExtending = false;
+        this.isRheostatDragging = false;
+        syncInteractionModeStore(this, { source: 'pointerSession.onPointerCancel' });
         this.primaryPointerId = null;
     }
 
@@ -155,20 +335,53 @@ export function onPointerCancel(e) {
 export function onPointerLeave(e) {
     this.touchActionController?.onPointerCancel?.(e);
     // 使用 pointer capture 时，不在离开画布瞬间终止拖动。
-    if (this.pinchGesture) return;
-    if ((e.buttons || 0) !== 0) return;
+    if (this.pinchGesture) {
+        let hasCapture = false;
+        try {
+            hasCapture = !!this.svg?.hasPointerCapture?.(e.pointerId);
+        } catch (_) {
+            hasCapture = false;
+        }
+        if (hasCapture) return;
+
+        this.activePointers.delete(e.pointerId);
+        this.endPinchGestureIfNeeded();
+        this.releasePointerCaptureSafe(e.pointerId);
+        if (this.activePointers.size === 0) {
+            this.blockSinglePointerInteraction = false;
+            this.lastPrimaryPointerType = 'mouse';
+        }
+        return;
+    }
+    if ((e.buttons || 0) !== 0) {
+        let hasCapture = false;
+        try {
+            hasCapture = !!this.svg?.hasPointerCapture?.(e.pointerId);
+        } catch (_) {
+            hasCapture = false;
+        }
+        if (hasCapture) return;
+    }
     if (this.primaryPointerId === e.pointerId) {
         this.onMouseLeave(e);
         this.primaryPointerId = null;
     }
     this.activePointers.delete(e.pointerId);
+    if (this.activePointers.size === 0) {
+        this.primaryPointerId = null;
+        this.blockSinglePointerInteraction = false;
+        this.lastPrimaryPointerType = 'mouse';
+    }
 }
 
 export function releasePointerCaptureSafe(pointerId) {
-    if (typeof this.svg.releasePointerCapture !== 'function') return;
+    const svg = this?.svg;
+    const releasePointerCapture = svg?.releasePointerCapture;
+    if (typeof releasePointerCapture !== 'function') return;
     try {
-        if (this.svg.hasPointerCapture && this.svg.hasPointerCapture(pointerId)) {
-            this.svg.releasePointerCapture(pointerId);
+        const hasPointerCapture = svg?.hasPointerCapture;
+        if (typeof hasPointerCapture === 'function' && hasPointerCapture.call(svg, pointerId)) {
+            releasePointerCapture.call(svg, pointerId);
         }
     } catch (_) {}
 }
@@ -195,7 +408,22 @@ export function getGesturePointers() {
 export function endPrimaryInteractionForGesture() {
     if (this.isPanning) {
         this.isPanning = false;
-        this.svg.style.cursor = '';
+        if (this?.svg?.style) {
+            this.svg.style.cursor = '';
+        }
+    }
+
+    const hadTerminalExtending = !!this.isTerminalExtending;
+    const hadRheostatDragging = !!this.isRheostatDragging;
+    this.isTerminalExtending = false;
+    this.isRheostatDragging = false;
+    if (hadTerminalExtending) {
+        this.hideAlignmentGuides?.();
+        this.circuit?.rebuildNodes?.();
+        this.commitHistoryTransaction?.();
+    } else if (hadRheostatDragging) {
+        this.hideAlignmentGuides?.();
+        this.commitHistoryTransaction?.();
     }
 
     if (this.isDraggingWireEndpoint) {
@@ -235,9 +463,8 @@ export function endPrimaryInteractionForGesture() {
         this.commitHistoryTransaction();
     }
 
-    if (this.isWiring) {
-        this.cancelWiring();
-    }
+    suspendWiringForPinch(this);
+    syncInteractionModeStore(this, { source: 'pointerSession.endPrimaryInteractionForGesture' });
 }
 
 export function startPinchGesture() {
@@ -287,7 +514,7 @@ export function updatePinchGesture() {
     const maxScale = 4;
     const nextScale = Math.min(Math.max(this.pinchGesture.startScale * ratio, minScale), maxScale);
 
-    const rect = this.svg.getBoundingClientRect();
+    const rect = this?.svg?.getBoundingClientRect?.() || { left: 0, top: 0 };
     const midX = midClientX - rect.left;
     const midY = midClientY - rect.top;
 
@@ -303,4 +530,5 @@ export function endPinchGestureIfNeeded() {
     const p2 = this.activePointers.has(this.pinchGesture.pointerBId);
     if (p1 && p2) return;
     this.pinchGesture = null;
+    restoreWiringAfterPinch(this);
 }

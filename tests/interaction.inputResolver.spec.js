@@ -19,6 +19,22 @@ describe('InputResolver.resolveTerminalTarget', () => {
         const target = makeTarget(['component']);
         expect(InputResolver.resolveTerminalTarget(target)).toBe(null);
     });
+
+    it('returns null when classList has no contains method', () => {
+        const target = { classList: {} };
+        expect(InputResolver.resolveTerminalTarget(target)).toBe(null);
+    });
+
+    it('returns null when classList.contains throws', () => {
+        const target = {
+            classList: {
+                contains: () => {
+                    throw new TypeError('boom');
+                }
+            }
+        };
+        expect(InputResolver.resolveTerminalTarget(target)).toBe(null);
+    });
 });
 
 describe('InputResolver.resolveProbeMarkerTarget', () => {
@@ -55,5 +71,20 @@ describe('InputResolver.isWireEndpointTarget', () => {
 
     it('returns false for non-endpoint classes', () => {
         expect(InputResolver.isWireEndpointTarget(makeTarget(['wire']))).toBe(false);
+    });
+
+    it('returns false when classList has no contains method', () => {
+        expect(InputResolver.isWireEndpointTarget({ classList: {} })).toBe(false);
+    });
+
+    it('returns false when classList.contains throws', () => {
+        const target = {
+            classList: {
+                contains: () => {
+                    throw new TypeError('boom');
+                }
+            }
+        };
+        expect(InputResolver.isWireEndpointTarget(target)).toBe(false);
     });
 });

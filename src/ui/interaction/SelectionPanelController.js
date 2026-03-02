@@ -5,11 +5,32 @@ import {
     clearElement
 } from '../../utils/SafeDOM.js';
 
+function safeInvokeMethod(target, methodName, ...args) {
+    const fn = target?.[methodName];
+    if (typeof fn !== 'function') return undefined;
+    try {
+        return fn.apply(target, args);
+    } catch (_) {
+        return undefined;
+    }
+}
+
+function safeHasClass(node, className) {
+    const classList = node?.classList;
+    if (!classList) return false;
+    const result = safeInvokeMethod(classList, 'contains', className);
+    return result === true;
+}
+
+function safeRemoveClass(node, className) {
+    safeInvokeMethod(node?.classList, 'remove', className);
+}
+
 function renderDefaultPropertyHint() {
     const content = document.getElementById('property-content');
     if (!content) return;
     clearElement(content);
-    content.classList.remove('property-content-cards');
+    safeRemoveClass(content, 'property-content-cards');
     const hint = createElement('p', { className: 'hint', textContent: '选择一个元器件查看和编辑属性' });
     content.appendChild(hint);
 }
@@ -17,7 +38,7 @@ function renderDefaultPropertyHint() {
 function isTouchPreferredMode() {
     if (typeof document === 'undefined') return false;
     const body = document.body;
-    if (body?.classList?.contains('layout-mode-compact') || body?.classList?.contains('layout-mode-phone')) {
+    if (safeHasClass(body, 'layout-mode-compact') || safeHasClass(body, 'layout-mode-phone')) {
         return true;
     }
     if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
@@ -108,7 +129,7 @@ export function selectWire(id) {
     const content = document.getElementById('property-content');
     if (!content) return;
     clearElement(content);
-    content.classList.remove('property-content-cards');
+    safeRemoveClass(content, 'property-content-cards');
 
     content.appendChild(createPropertyRow('类型', '导线'));
     content.appendChild(createPropertyRow('端点 A', fmtEnd('a')));

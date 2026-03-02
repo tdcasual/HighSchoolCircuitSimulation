@@ -1,5 +1,21 @@
 export const FIRST_RUN_GUIDE_DISMISSED_STORAGE_KEY = 'ui.first_run_guide_dismissed';
 
+function safeHasClass(node, className) {
+    if (!node || !node.classList || typeof node.classList.contains !== 'function') return false;
+    try {
+        return node.classList.contains(className);
+    } catch (_) {
+        return false;
+    }
+}
+
+function safeAddClass(node, className) {
+    if (!node || !node.classList || typeof node.classList.add !== 'function') return;
+    try {
+        node.classList.add(className);
+    } catch (_) {}
+}
+
 function resolveStorage(storage) {
     if (storage && typeof storage.getItem === 'function' && typeof storage.setItem === 'function') {
         return storage;
@@ -12,7 +28,35 @@ function resolveStorage(storage) {
 
 export function isObservationTabActive() {
     const observationPage = document.getElementById('panel-observation');
-    return !!(observationPage && observationPage.classList.contains('active'));
+    return safeHasClass(observationPage, 'active');
+}
+
+export function getActiveInteractionMode() {
+    const context = this || {};
+    const getModeState = context?.interactionModeStore?.getState;
+    if (typeof getModeState === 'function') {
+        try {
+            const mode = getModeState.call(context.interactionModeStore)?.mode;
+            if (mode === 'select' || mode === 'wire' || mode === 'endpoint-edit') {
+                return mode;
+            }
+        } catch (_) {
+            // Ignore store read failures and fall back to legacy runtime flags.
+        }
+    }
+
+    if (context.isDraggingWireEndpoint || context.isTerminalExtending || context.isRheostatDragging) {
+        return 'endpoint-edit';
+    }
+    if (
+        context.pendingToolType === 'Wire'
+        || context.mobileInteractionMode === 'wire'
+        || context.stickyWireTool
+        || context.isWiring
+    ) {
+        return 'wire';
+    }
+    return 'select';
 }
 
 export function isFirstRunGuideDismissed(options = {}) {
@@ -46,7 +90,8 @@ export function shouldShowFirstRunGuide(options = {}) {
 }
 
 export function hideDialog() {
-    document.getElementById('dialog-overlay').classList.add('hidden');
+    const dialogOverlay = document.getElementById('dialog-overlay');
+    safeAddClass(dialogOverlay, 'hidden');
     this.editingComponent = null;
 }
 
@@ -96,6 +141,9 @@ export function updateStatus(text) {
     const statusNode = document.getElementById('status-text');
     if (statusNode) {
         statusNode.textContent = text;
+        if (statusNode.dataset) {
+            statusNode.dataset.interactionMode = getActiveInteractionMode.call(this);
+        }
     }
 }
 

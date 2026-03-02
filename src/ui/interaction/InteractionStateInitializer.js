@@ -47,6 +47,9 @@ export function initializeInteractionState(context, app, options = {}) {
     context.wireEndpointDrag = null; // {wireId,end}
     context.isDraggingWire = false;
     context.wireDrag = null; // {wireId,startCanvas,startClient,startA,startB,detached,lastDx,lastDy}
+    context.isTerminalExtending = false;
+    context.isRheostatDragging = false;
+    context.suspendedWiringSession = null;
 
     // 画布平移状态
     context.isPanning = false;

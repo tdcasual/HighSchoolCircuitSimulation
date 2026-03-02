@@ -146,6 +146,54 @@ describe('QuickActionBarController', () => {
         expect(controller.hint.style.pointerEvents).toBe('none');
     });
 
+    it('does not throw when actions addEventListener throws during initialize', () => {
+        const container = createMockElement('main');
+        const statusBar = createMockElement('div');
+        const toolbox = createMockElement('aside');
+        const sidePanel = createMockElement('aside');
+        const body = { classList: createClassList(['layout-mode-compact']) };
+        let createCount = 0;
+        vi.stubGlobal('document', {
+            body,
+            getElementById: vi.fn((id) => {
+                if (id === 'canvas-container') return container;
+                if (id === 'status-bar') return statusBar;
+                if (id === 'toolbox') return toolbox;
+                if (id === 'side-panel') return sidePanel;
+                return null;
+            }),
+            createElement: vi.fn((tag) => {
+                createCount += 1;
+                const node = createMockElement(tag);
+                if (createCount === 3) {
+                    node.addEventListener = vi.fn(() => {
+                        throw new TypeError('broken add');
+                    });
+                }
+                return node;
+            })
+        });
+        vi.stubGlobal('window', {
+            matchMedia: vi.fn(() => ({ matches: true }))
+        });
+
+        const interaction = {
+            selectedComponent: null,
+            selectedWire: null,
+            app: {
+                responsiveLayout: {
+                    isOverlayMode: () => false
+                }
+            },
+            circuit: {
+                getComponent: vi.fn(() => null),
+                getWire: vi.fn(() => null)
+            }
+        };
+
+        expect(() => new QuickActionBarController(interaction)).not.toThrow();
+    });
+
     it('renders component quick actions and dispatches rotate action', () => {
         setupEnvironment();
         const interaction = {
@@ -393,5 +441,138 @@ describe('QuickActionBarController', () => {
         interaction.circuit.getWire = vi.fn(() => ({ id: 'W1', a: { x: 0, y: 0 }, b: { x: 20, y: 0 } }));
         controller.update();
         expect(setSelectionMode).toHaveBeenCalledWith('wire');
+    });
+
+    it('onActionClick does not throw when target.closest is not callable', () => {
+        setupEnvironment();
+        const interaction = {
+            selectedComponent: null,
+            selectedWire: null,
+            app: {
+                responsiveLayout: {
+                    isOverlayMode: () => false
+                }
+            },
+            circuit: {
+                getComponent: vi.fn(() => null),
+                getWire: vi.fn(() => null)
+            }
+        };
+        const controller = new QuickActionBarController(interaction);
+
+        expect(() => controller.onActionClick({ target: { closest: {} } })).not.toThrow();
+    });
+
+    it('onActionClick does not throw when action button has no action id', () => {
+        setupEnvironment();
+        const interaction = {
+            selectedComponent: 'R1',
+            selectedWire: null,
+            app: {
+                responsiveLayout: {
+                    isOverlayMode: () => false
+                }
+            },
+            circuit: {
+                getComponent: vi.fn(() => ({ id: 'R1', label: '电阻R1' }))
+            }
+        };
+        const controller = new QuickActionBarController(interaction);
+        controller.update();
+
+        expect(() => controller.onActionClick({
+            target: {
+                closest: () => ({ dataset: {} })
+            }
+        })).not.toThrow();
+    });
+
+    it('update does not throw when body classList contains is non-callable', () => {
+        setupEnvironment({ bodyClasses: [] });
+        document.body.classList.contains = {};
+        const interaction = {
+            selectedComponent: null,
+            selectedWire: null,
+            app: {
+                responsiveLayout: {
+                    isOverlayMode: () => false
+                }
+            },
+            circuit: {
+                getComponent: vi.fn(() => null),
+                getWire: vi.fn(() => null)
+            }
+        };
+        const controller = new QuickActionBarController(interaction);
+
+        expect(() => controller.update()).not.toThrow();
+        expect(window.matchMedia).toHaveBeenCalledWith('(pointer: coarse)');
+        expect(controller.root.hidden).toBe(true);
+    });
+
+    it('applyBottomOffset does not throw when style.setProperty is non-callable', () => {
+        setupEnvironment({ statusBarHeight: 20 });
+        const interaction = {
+            selectedComponent: null,
+            selectedWire: null,
+            app: {
+                responsiveLayout: {
+                    isOverlayMode: () => false
+                }
+            },
+            circuit: {
+                getComponent: vi.fn(() => null),
+                getWire: vi.fn(() => null)
+            }
+        };
+        const controller = new QuickActionBarController(interaction);
+        controller.root.style.setProperty = {};
+        controller.container.style.setProperty = {};
+
+        expect(() => controller.applyBottomOffset()).not.toThrow();
+    });
+
+    it('setMobileControlsCondensed does not throw when body classList.toggle is non-callable', () => {
+        setupEnvironment();
+        document.body.classList.toggle = {};
+        const interaction = {
+            selectedComponent: null,
+            selectedWire: null,
+            app: {
+                responsiveLayout: {
+                    isOverlayMode: () => false
+                }
+            },
+            circuit: {
+                getComponent: vi.fn(() => null),
+                getWire: vi.fn(() => null)
+            }
+        };
+        const controller = new QuickActionBarController(interaction);
+
+        expect(() => controller.setMobileControlsCondensed(true)).not.toThrow();
+    });
+
+    it('showHint and hideHint do not throw when hint classList methods are non-callable', () => {
+        setupEnvironment();
+        const interaction = {
+            selectedComponent: null,
+            selectedWire: null,
+            app: {
+                responsiveLayout: {
+                    isOverlayMode: () => false
+                }
+            },
+            circuit: {
+                getComponent: vi.fn(() => null),
+                getWire: vi.fn(() => null)
+            }
+        };
+        const controller = new QuickActionBarController(interaction);
+        controller.hint.classList.add = {};
+        controller.hint.classList.remove = {};
+
+        expect(() => controller.showHint('test')).not.toThrow();
+        expect(() => controller.hideHint()).not.toThrow();
     });
 });

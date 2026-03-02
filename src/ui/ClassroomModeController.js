@@ -53,6 +53,20 @@ function writeStoredPreference(storageKey, level) {
     }
 }
 
+function safeInvokeMethod(target, methodName, ...args) {
+    const fn = target?.[methodName];
+    if (typeof fn !== 'function') return undefined;
+    try {
+        return fn.apply(target, args);
+    } catch (_) {
+        return undefined;
+    }
+}
+
+function safeToggleClass(node, className, force) {
+    safeInvokeMethod(node?.classList, 'toggle', className, force);
+}
+
 export class ClassroomModeController {
     constructor(app, options = {}) {
         this.app = app;
@@ -71,20 +85,20 @@ export class ClassroomModeController {
     initialize() {
         this.preferredLevel = readStoredPreference(this.storageKey);
         if (this.button) {
-            this.button.addEventListener('click', this.boundToggle);
+            safeInvokeMethod(this.button, 'addEventListener', 'click', this.boundToggle);
         }
         if (typeof window !== 'undefined') {
-            window.addEventListener('resize', this.boundResize);
+            safeInvokeMethod(window, 'addEventListener', 'resize', this.boundResize);
         }
         this.sync({ persist: false, announce: false });
     }
 
     destroy() {
         if (this.button) {
-            this.button.removeEventListener('click', this.boundToggle);
+            safeInvokeMethod(this.button, 'removeEventListener', 'click', this.boundToggle);
         }
         if (typeof window !== 'undefined') {
-            window.removeEventListener('resize', this.boundResize);
+            safeInvokeMethod(window, 'removeEventListener', 'resize', this.boundResize);
         }
     }
 
@@ -106,8 +120,8 @@ export class ClassroomModeController {
         const supported = this.isSupported();
         this.button.hidden = !supported;
         this.button.disabled = !supported;
-        this.button.setAttribute('aria-pressed', this.preferredLevel === CLASSROOM_LEVEL_OFF ? 'false' : 'true');
-        this.button.setAttribute('data-classroom-level', this.preferredLevel);
+        safeInvokeMethod(this.button, 'setAttribute', 'aria-pressed', this.preferredLevel === CLASSROOM_LEVEL_OFF ? 'false' : 'true');
+        safeInvokeMethod(this.button, 'setAttribute', 'data-classroom-level', this.preferredLevel);
         if (this.preferredLevel === CLASSROOM_LEVEL_STANDARD) {
             this.button.textContent = '课堂模式: 标准';
             this.button.title = '课堂模式标准（点击切换到增强）';
@@ -123,12 +137,8 @@ export class ClassroomModeController {
     }
 
     applyBodyClass() {
-        if (!this.body?.classList) return;
-        this.body.classList.toggle(CLASSROOM_MODE_CLASS, this.activeLevel !== CLASSROOM_LEVEL_OFF);
-        this.body.classList.toggle(
-            CLASSROOM_MODE_ENHANCED_CLASS,
-            this.activeLevel === CLASSROOM_LEVEL_ENHANCED
-        );
+        safeToggleClass(this.body, CLASSROOM_MODE_CLASS, this.activeLevel !== CLASSROOM_LEVEL_OFF);
+        safeToggleClass(this.body, CLASSROOM_MODE_ENHANCED_CLASS, this.activeLevel === CLASSROOM_LEVEL_ENHANCED);
     }
 
     syncInteractionBridgeMode() {
@@ -188,20 +198,20 @@ export class ClassroomModeController {
             writeStoredPreference(this.storageKey, this.preferredLevel);
         }
 
-        if (announce && this.app?.updateStatus) {
+        if (announce) {
             if (this.preferredLevel !== CLASSROOM_LEVEL_OFF && !supported) {
-                this.app.updateStatus('课堂模式在当前分辨率下暂不可用');
+                safeInvokeMethod(this.app, 'updateStatus', '课堂模式在当前分辨率下暂不可用');
                 return;
             }
             if (this.preferredLevel === CLASSROOM_LEVEL_STANDARD) {
-                this.app.updateStatus('已开启课堂模式（标准）');
+                safeInvokeMethod(this.app, 'updateStatus', '已开启课堂模式（标准）');
                 return;
             }
             if (this.preferredLevel === CLASSROOM_LEVEL_ENHANCED) {
-                this.app.updateStatus('已开启课堂模式（增强）');
+                safeInvokeMethod(this.app, 'updateStatus', '已开启课堂模式（增强）');
                 return;
             }
-            this.app.updateStatus('已关闭课堂模式');
+            safeInvokeMethod(this.app, 'updateStatus', '已关闭课堂模式');
         }
     }
 

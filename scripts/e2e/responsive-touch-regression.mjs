@@ -843,6 +843,12 @@ async function verifyPhoneTouchFlow(browser, baseUrl, collector) {
                 if (!result?.ok || !result?.payload?.componentId) return null;
                 return result.payload.componentId;
             };
+            const captureModeSnapshot = () => {
+                if (typeof interaction.getInteractionModeSnapshot === 'function') {
+                    return interaction.getInteractionModeSnapshot();
+                }
+                return null;
+            };
             const getTerminalTarget = (componentId, terminalIndex) =>
                 document.querySelector(
                     `g.component[data-id="${componentId}"] .terminal-hit-area[data-terminal="${terminalIndex}"]`
@@ -853,6 +859,7 @@ async function verifyPhoneTouchFlow(browser, baseUrl, collector) {
             interaction.viewOffset = { x: 0, y: 0 };
             interaction.updateViewTransform?.();
             interaction.setMobileInteractionMode?.('wire', { silentStatus: true });
+            const modeSnapshotAtWireEntry = captureModeSnapshot();
 
             const resistorA = add('Resistor', 120, 220);
             const resistorB = add('Resistor', 300, 220);
@@ -947,9 +954,34 @@ async function verifyPhoneTouchFlow(browser, baseUrl, collector) {
             const rheostatAfter = Number(rheostatComp.position) || 0;
             const sliderDragAdjustsRheostat = Math.abs(rheostatAfter - rheostatBefore) > 1e-6;
 
+            const rearmTarget = getTerminalTarget(resistorA, 1);
+            const rearmPos = renderer.getTerminalPosition(resistorA, 1);
+            const extendRetarget = getTerminalTarget(resistorA, 0);
+            const extendRePos = renderer.getTerminalPosition(resistorA, 0);
+            if (!rearmTarget || !rearmPos || !extendRetarget || !extendRePos) {
+                return { ok: false, error: 'weak_merge_rearm_terminal_target_missing' };
+            }
+            const rearmClient = toClient(rearmPos.x, rearmPos.y);
+            const extendReClient = toClient(extendRePos.x, extendRePos.y);
+            dispatchTap(rearmTarget, 506, rearmClient.x, rearmClient.y);
+            const wiringArmedBeforeEditDrag = interaction.isWiring === true;
+            dispatchPointer(extendRetarget, 'pointerdown', 507, extendReClient.x, extendReClient.y);
+            dispatchPointer(svg, 'pointermove', 507, extendReClient.x - 28, extendReClient.y);
+            dispatchPointer(svg, 'pointerup', 507, extendReClient.x - 28, extendReClient.y, { buttons: 0 });
+            const wiringPreservedAfterEditDrag = interaction.isWiring === true;
+            const modeSnapshotDuringEditDrag = captureModeSnapshot();
+            dispatchPointer(sliderTarget, 'pointerdown', 508, sliderClient.x, sliderClient.y);
+            dispatchPointer(svg, 'pointermove', 508, sliderClient.x + 22, sliderClient.y);
+            dispatchPointer(svg, 'pointerup', 508, sliderClient.x + 22, sliderClient.y, { buttons: 0 });
+            const wiringPreservedAfterSliderShapeDrag = interaction.isWiring === true;
+            if (interaction.isWiring) {
+                interaction.cancelWiring?.();
+            }
+
             const wireModeStillArmed = interaction.pendingToolType === 'Wire'
                 && interaction.mobileInteractionMode === 'wire'
                 && interaction.stickyWireTool === true;
+            const modeSnapshotAtFlowEnd = captureModeSnapshot();
 
             return {
                 ok: true,
@@ -958,7 +990,13 @@ async function verifyPhoneTouchFlow(browser, baseUrl, collector) {
                 terminalDragExtendsLead,
                 endpointDragMovesWire,
                 sliderDragAdjustsRheostat,
-                wireModeStillArmed
+                wiringArmedBeforeEditDrag,
+                wiringPreservedAfterEditDrag,
+                wiringPreservedAfterSliderShapeDrag,
+                wireModeStillArmed,
+                modeSnapshotAtWireEntry,
+                modeSnapshotDuringEditDrag,
+                modeSnapshotAtFlowEnd
             };
         });
         assertCondition(weakMergeState.ok, `weak merge mobile flow setup failed: ${weakMergeState.error || 'unknown_error'}`);
@@ -967,6 +1005,9 @@ async function verifyPhoneTouchFlow(browser, baseUrl, collector) {
         assertCondition(weakMergeState.terminalDragExtendsLead, 'wire mode terminal drag should extend terminal lead');
         assertCondition(weakMergeState.endpointDragMovesWire, 'wire mode endpoint drag should move wire endpoint');
         assertCondition(weakMergeState.sliderDragAdjustsRheostat, 'wire mode slider drag should adjust rheostat position');
+        assertCondition(weakMergeState.wiringArmedBeforeEditDrag, 'wire mode tap should arm wiring before edit-drag conflict check');
+        assertCondition(weakMergeState.wiringPreservedAfterEditDrag, 'edit-drag during active wiring should not cancel wiring');
+        assertCondition(weakMergeState.wiringPreservedAfterSliderShapeDrag, 'slider-shape drag during active wiring should not cancel wiring');
         assertCondition(weakMergeState.wireModeStillArmed, 'wire mode should remain armed after weak-merge edit gestures');
 
         const editMeasureSetup = await page.evaluate(() => {
@@ -1043,6 +1084,13 @@ async function verifyPhoneTouchFlow(browser, baseUrl, collector) {
 
         await collectMobileTaskBaselines(page, collector);
         await capture(page, 'phone-390x844-touch-flow.png');
+        return {
+            weakMergeModeSnapshots: {
+                atWireEntry: weakMergeState.modeSnapshotAtWireEntry || null,
+                duringEditDrag: weakMergeState.modeSnapshotDuringEditDrag || null,
+                atFlowEnd: weakMergeState.modeSnapshotAtFlowEnd || null
+            }
+        };
     } catch (error) {
         await recordFailureArtifact('phone-touch-flow', page, error);
         throw error;
@@ -1064,7 +1112,7 @@ async function main() {
         await verifyDesktopLayout(browser, server.baseUrl);
         await verifyTabletLayout(browser, server.baseUrl);
         await verifyCompactDrawerBehavior(browser, server.baseUrl);
-        await verifyPhoneTouchFlow(browser, server.baseUrl, metricsCollector);
+        const phoneDiagnostics = await verifyPhoneTouchFlow(browser, server.baseUrl, metricsCollector);
 
         const metricsReport = metricsCollector.toJSON();
         const metricsSummary = summarizeMobileFlowMetrics(metricsReport);
@@ -1078,7 +1126,13 @@ async function main() {
         const baselinePath = path.join(outputDir, 'mobile-flow-baseline.json');
         await writeFile(
             baselinePath,
-            `${JSON.stringify({ report: metricsReport, summary: metricsSummary }, null, 2)}\n`,
+            `${JSON.stringify({
+                report: metricsReport,
+                summary: metricsSummary,
+                diagnostics: {
+                    phone: phoneDiagnostics || null
+                }
+            }, null, 2)}\n`,
             'utf8'
         );
         await writeDiffNotes([], {

@@ -1,7 +1,16 @@
+function safeClassContains(target, className) {
+    const contains = target?.classList?.contains;
+    if (typeof contains !== 'function') return false;
+    try {
+        return !!contains.call(target.classList, className);
+    } catch (_) {
+        return false;
+    }
+}
+
 export function resolveTerminalTarget(target) {
-    if (!target || !target.classList) return null;
-    if (target.classList.contains('terminal')) return target;
-    if (target.classList.contains('terminal-hit-area')) return target;
+    if (safeClassContains(target, 'terminal')) return target;
+    if (safeClassContains(target, 'terminal-hit-area')) return target;
     return null;
 }
 
@@ -19,6 +28,5 @@ export function resolvePointerType(event) {
 }
 
 export function isWireEndpointTarget(target) {
-    if (!target || !target.classList) return false;
-    return target.classList.contains('wire-endpoint') || target.classList.contains('wire-endpoint-hit');
+    return safeClassContains(target, 'wire-endpoint') || safeClassContains(target, 'wire-endpoint-hit');
 }

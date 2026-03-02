@@ -71,3 +71,198 @@ describe('DragBehaviors.startDragging', () => {
         expect(context.selectComponent).toHaveBeenCalledWith('B1');
     });
 });
+
+describe('DragBehaviors auxiliary edit drags', () => {
+    it('tracks terminal extension drag lifecycle for pointer-cancel guards', () => {
+        const comp = { id: 'R1', type: 'Resistor', rotation: 0 };
+        let onUpHandler = null;
+        const context = {
+            circuit: {
+                getComponent: vi.fn(() => comp),
+                rebuildNodes: vi.fn()
+            },
+            beginHistoryTransaction: vi.fn(),
+            scale: 1,
+            registerDragListeners: vi.fn((_event, _onMove, onUp) => {
+                onUpHandler = onUp;
+                return vi.fn();
+            }),
+            renderer: {
+                refreshComponent: vi.fn(),
+                setSelected: vi.fn(),
+                updateConnectedWires: vi.fn()
+            },
+            hideAlignmentGuides: vi.fn(),
+            commitHistoryTransaction: vi.fn(),
+            updateStatus: vi.fn(),
+            isTerminalExtending: false
+        };
+        const event = {
+            clientX: 100,
+            clientY: 120,
+            preventDefault: vi.fn(),
+            stopPropagation: vi.fn()
+        };
+
+        DragBehaviors.startTerminalExtend.call(context, 'R1', 0, event);
+        expect(context.isTerminalExtending).toBe(true);
+        expect(typeof onUpHandler).toBe('function');
+
+        onUpHandler();
+        expect(context.isTerminalExtending).toBe(false);
+    });
+
+    it('tracks rheostat slider drag lifecycle for pointer-cancel guards', () => {
+        const comp = { id: 'RH1', type: 'Rheostat', rotation: 0, position: 0.5 };
+        let onUpHandler = null;
+        const context = {
+            circuit: {
+                getComponent: vi.fn(() => comp)
+            },
+            beginHistoryTransaction: vi.fn(),
+            commitHistoryTransaction: vi.fn(),
+            registerDragListeners: vi.fn((_event, _onMove, onUp) => {
+                onUpHandler = onUp;
+                return vi.fn();
+            }),
+            renderer: {
+                refreshComponent: vi.fn(),
+                setSelected: vi.fn(),
+                updateConnectedWires: vi.fn()
+            },
+            updateRheostatPanelValues: vi.fn(),
+            updatePropertyPanel: vi.fn(),
+            isRheostatDragging: false
+        };
+        const event = {
+            clientX: 50,
+            clientY: 60,
+            preventDefault: vi.fn(),
+            stopPropagation: vi.fn()
+        };
+
+        DragBehaviors.startRheostatDrag.call(context, 'RH1', event);
+        expect(context.isRheostatDragging).toBe(true);
+        expect(context.beginHistoryTransaction).toHaveBeenCalledTimes(1);
+        expect(typeof onUpHandler).toBe('function');
+
+        onUpHandler();
+        expect(context.isRheostatDragging).toBe(false);
+        expect(context.commitHistoryTransaction).toHaveBeenCalledTimes(1);
+    });
+
+    it('stops applying terminal extension move updates once drag is externally suspended', () => {
+        const comp = {
+            id: 'R1',
+            type: 'Resistor',
+            rotation: 0,
+            terminalExtensions: { 0: { x: 0, y: 0 } }
+        };
+        let onMoveHandler = null;
+        const context = {
+            circuit: {
+                getComponent: vi.fn(() => comp),
+                rebuildNodes: vi.fn()
+            },
+            beginHistoryTransaction: vi.fn(),
+            scale: 1,
+            registerDragListeners: vi.fn((_event, onMove) => {
+                onMoveHandler = onMove;
+                return vi.fn();
+            }),
+            renderer: {
+                refreshComponent: vi.fn(),
+                setSelected: vi.fn(),
+                updateConnectedWires: vi.fn()
+            },
+            hideAlignmentGuides: vi.fn(),
+            commitHistoryTransaction: vi.fn(),
+            updateStatus: vi.fn(),
+            isTerminalExtending: false
+        };
+        const startEvent = {
+            clientX: 100,
+            clientY: 100,
+            preventDefault: vi.fn(),
+            stopPropagation: vi.fn()
+        };
+
+        DragBehaviors.startTerminalExtend.call(context, 'R1', 0, startEvent);
+        expect(context.isTerminalExtending).toBe(true);
+        expect(typeof onMoveHandler).toBe('function');
+
+        context.isTerminalExtending = false;
+        onMoveHandler({ clientX: 140, clientY: 100 });
+
+        expect(comp.terminalExtensions[0]).toEqual({ x: 0, y: 0 });
+        expect(context.renderer.refreshComponent).not.toHaveBeenCalled();
+    });
+
+    it('stops applying rheostat slider move updates once drag is externally suspended', () => {
+        const comp = { id: 'RH2', type: 'Rheostat', rotation: 0, position: 0.5 };
+        let onMoveHandler = null;
+        const context = {
+            circuit: {
+                getComponent: vi.fn(() => comp)
+            },
+            registerDragListeners: vi.fn((_event, onMove) => {
+                onMoveHandler = onMove;
+                return vi.fn();
+            }),
+            renderer: {
+                refreshComponent: vi.fn(),
+                setSelected: vi.fn(),
+                updateConnectedWires: vi.fn()
+            },
+            updateRheostatPanelValues: vi.fn(),
+            updatePropertyPanel: vi.fn(),
+            isRheostatDragging: false
+        };
+        const startEvent = {
+            clientX: 60,
+            clientY: 60,
+            preventDefault: vi.fn(),
+            stopPropagation: vi.fn()
+        };
+
+        DragBehaviors.startRheostatDrag.call(context, 'RH2', startEvent);
+        expect(context.isRheostatDragging).toBe(true);
+        expect(typeof onMoveHandler).toBe('function');
+
+        context.isRheostatDragging = false;
+        onMoveHandler({ clientX: 120, clientY: 60 });
+
+        expect(comp.position).toBe(0.5);
+        expect(context.renderer.refreshComponent).not.toHaveBeenCalled();
+    });
+});
+
+describe('DragBehaviors.registerDragListeners', () => {
+    it('does not throw in pointer path when document add/removeEventListener are non-callable', () => {
+        vi.stubGlobal('window', { PointerEvent: function PointerEvent() {} });
+        vi.stubGlobal('document', {
+            addEventListener: {},
+            removeEventListener: {}
+        });
+
+        expect(() => DragBehaviors.registerDragListeners(
+            { pointerId: 3 },
+            vi.fn(),
+            vi.fn()
+        )).not.toThrow();
+    });
+
+    it('does not throw in mouse fallback path when document add/removeEventListener are non-callable', () => {
+        vi.stubGlobal('window', {});
+        vi.stubGlobal('document', {
+            addEventListener: {},
+            removeEventListener: {}
+        });
+
+        expect(() => DragBehaviors.registerDragListeners(
+            {},
+            vi.fn(),
+            vi.fn()
+        )).not.toThrow();
+    });
+});

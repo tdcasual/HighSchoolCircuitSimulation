@@ -295,6 +295,220 @@ describe('PanelBindingsController.bindButtonEvents', () => {
         expect(context.app.clearCircuit).toHaveBeenCalledTimes(1);
         expect(confirmMock).not.toHaveBeenCalled();
     });
+
+    it('does not throw when optional file import and dialog overlay nodes are absent', () => {
+        const runButton = makeClickableElement();
+        vi.stubGlobal('document', {
+            getElementById: vi.fn((id) => ({
+                'btn-run': runButton
+            }[id] || null))
+        });
+        vi.stubGlobal('confirm', vi.fn(() => false));
+
+        const context = {
+            app: {
+                startSimulation: vi.fn(),
+                stopSimulation: vi.fn(),
+                clearCircuit: vi.fn(),
+                exportCircuit: vi.fn(),
+                importCircuit: vi.fn()
+            },
+            hideDialog: vi.fn(),
+            applyDialogChanges: vi.fn()
+        };
+
+        expect(() => PanelBindingsController.bindButtonEvents.call(context)).not.toThrow();
+        runButton.triggerClick();
+        expect(context.app.startSimulation).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not throw when file-import or exercise-board click is non-callable', () => {
+        const mobileImportButton = makeClickableElement();
+        const mobileExerciseButton = makeClickableElement();
+        const fileImport = {
+            addEventListener: vi.fn(),
+            click: {}
+        };
+        const desktopExerciseButton = {
+            addEventListener: vi.fn(),
+            click: {}
+        };
+
+        vi.stubGlobal('document', {
+            getElementById: vi.fn((id) => ({
+                'btn-mobile-import': mobileImportButton,
+                'btn-mobile-exercise-board': mobileExerciseButton,
+                'file-import': fileImport,
+                'btn-exercise-board': desktopExerciseButton
+            }[id] || null))
+        });
+        vi.stubGlobal('confirm', vi.fn(() => false));
+
+        const context = {
+            app: {
+                startSimulation: vi.fn(),
+                stopSimulation: vi.fn(),
+                clearCircuit: vi.fn(),
+                exportCircuit: vi.fn(),
+                importCircuit: vi.fn()
+            },
+            hideDialog: vi.fn(),
+            applyDialogChanges: vi.fn()
+        };
+
+        PanelBindingsController.bindButtonEvents.call(context);
+        expect(() => mobileImportButton.triggerClick()).not.toThrow();
+        expect(() => mobileExerciseButton.triggerClick()).not.toThrow();
+    });
+
+    it('touch clear hold does not throw when classList add/remove throw', () => {
+        const clearButton = makeClickableElement();
+        clearButton.classList.add = vi.fn(() => {
+            throw new TypeError('broken add');
+        });
+        clearButton.classList.remove = vi.fn(() => {
+            throw new TypeError('broken remove');
+        });
+        const fileImport = {
+            addEventListener: vi.fn(),
+            click: vi.fn()
+        };
+
+        vi.stubGlobal('document', {
+            getElementById: vi.fn((id) => ({
+                'btn-run': makeClickableElement(),
+                'btn-stop': makeClickableElement(),
+                'btn-clear': clearButton,
+                'btn-export': makeClickableElement(),
+                'btn-import': makeClickableElement(),
+                'file-import': fileImport,
+                'dialog-cancel': makeClickableElement(),
+                'dialog-ok': makeClickableElement(),
+                'dialog-overlay': { addEventListener: vi.fn() }
+            }[id]))
+        });
+        vi.stubGlobal('confirm', vi.fn(() => false));
+
+        const context = {
+            app: {
+                startSimulation: vi.fn(),
+                stopSimulation: vi.fn(),
+                clearCircuit: vi.fn(),
+                exportCircuit: vi.fn(),
+                importCircuit: vi.fn()
+            },
+            updateStatus: vi.fn(),
+            hideDialog: vi.fn(),
+            applyDialogChanges: vi.fn()
+        };
+
+        PanelBindingsController.bindButtonEvents.call(context);
+        expect(() => clearButton.trigger('pointerdown', {
+            pointerType: 'touch',
+            pointerId: 21,
+            clientX: 20,
+            clientY: 20
+        })).not.toThrow();
+        expect(() => clearButton.trigger('pointerup', {
+            pointerType: 'touch',
+            pointerId: 21,
+            clientX: 20,
+            clientY: 20
+        })).not.toThrow();
+    });
+
+    it('does not throw when button addEventListener throws during bindClick wiring', () => {
+        const runButton = {
+            addEventListener: vi.fn(() => {
+                throw new TypeError('broken add');
+            })
+        };
+        vi.stubGlobal('document', {
+            getElementById: vi.fn((id) => ({
+                'btn-run': runButton
+            }[id] || null))
+        });
+        vi.stubGlobal('confirm', vi.fn(() => false));
+
+        const context = {
+            app: {
+                startSimulation: vi.fn(),
+                stopSimulation: vi.fn(),
+                clearCircuit: vi.fn(),
+                exportCircuit: vi.fn(),
+                importCircuit: vi.fn()
+            },
+            hideDialog: vi.fn(),
+            applyDialogChanges: vi.fn()
+        };
+
+        expect(() => PanelBindingsController.bindButtonEvents.call(context)).not.toThrow();
+    });
+
+    it('does not throw when clear button addEventListener throws during hold-gesture wiring', () => {
+        const clearButton = {
+            addEventListener: vi.fn(() => {
+                throw new TypeError('broken add');
+            })
+        };
+        vi.stubGlobal('document', {
+            getElementById: vi.fn((id) => ({
+                'btn-run': makeClickableElement(),
+                'btn-clear': clearButton
+            }[id] || null))
+        });
+        vi.stubGlobal('confirm', vi.fn(() => false));
+
+        const context = {
+            app: {
+                startSimulation: vi.fn(),
+                stopSimulation: vi.fn(),
+                clearCircuit: vi.fn(),
+                exportCircuit: vi.fn(),
+                importCircuit: vi.fn()
+            },
+            hideDialog: vi.fn(),
+            applyDialogChanges: vi.fn()
+        };
+
+        expect(() => PanelBindingsController.bindButtonEvents.call(context)).not.toThrow();
+    });
+
+    it('does not throw when file import and dialog overlay addEventListener throw', () => {
+        const fileImport = {
+            addEventListener: vi.fn(() => {
+                throw new TypeError('broken add');
+            }),
+            click: vi.fn()
+        };
+        const dialogOverlay = {
+            addEventListener: vi.fn(() => {
+                throw new TypeError('broken add');
+            })
+        };
+        vi.stubGlobal('document', {
+            getElementById: vi.fn((id) => ({
+                'btn-run': makeClickableElement(),
+                'file-import': fileImport,
+                'dialog-overlay': dialogOverlay
+            }[id] || null))
+        });
+        vi.stubGlobal('confirm', vi.fn(() => false));
+
+        const context = {
+            app: {
+                startSimulation: vi.fn(),
+                stopSimulation: vi.fn(),
+                clearCircuit: vi.fn(),
+                exportCircuit: vi.fn(),
+                importCircuit: vi.fn()
+            },
+            hideDialog: vi.fn(),
+            applyDialogChanges: vi.fn()
+        };
+
+        expect(() => PanelBindingsController.bindButtonEvents.call(context)).not.toThrow();
+    });
 });
 
 describe('PanelBindingsController.bindSidePanelEvents', () => {
@@ -343,5 +557,45 @@ describe('PanelBindingsController.bindSidePanelEvents', () => {
         expect(pageObservation.classList.toggle).toHaveBeenCalledWith('active', true);
         expect(pageObservation.setAttribute).toHaveBeenCalledWith('aria-hidden', 'false');
         expect(typeof context.activateSidePanelTab).toBe('function');
+    });
+
+    it('does not throw when tab/page methods are non-callable', () => {
+        const btnProperty = {
+            dataset: { panel: 'property' },
+            classList: { toggle: {} },
+            setAttribute: {},
+            addEventListener: {}
+        };
+        const btnObservation = {
+            dataset: { panel: 'observation' },
+            classList: { toggle: {} },
+            setAttribute: {},
+            addEventListener: {}
+        };
+        const pageProperty = {
+            dataset: { panel: 'property' },
+            id: 'panel-property',
+            classList: { toggle: {} },
+            setAttribute: {}
+        };
+        const pageObservation = {
+            dataset: { panel: 'observation' },
+            id: 'panel-observation',
+            classList: { toggle: {} },
+            setAttribute: {}
+        };
+
+        vi.stubGlobal('document', {
+            querySelectorAll: vi.fn((selector) => {
+                if (selector === '.panel-tab-btn') return [btnProperty, btnObservation];
+                if (selector === '.panel-page') return [pageProperty, pageObservation];
+                return [];
+            })
+        });
+
+        const context = {};
+        expect(() => PanelBindingsController.bindSidePanelEvents.call(context)).not.toThrow();
+        expect(typeof context.activateSidePanelTab).toBe('function');
+        expect(() => context.activateSidePanelTab('observation')).not.toThrow();
     });
 });

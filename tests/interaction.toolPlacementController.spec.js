@@ -81,6 +81,52 @@ describe('ToolPlacementController.setPendingToolType', () => {
         expect(closeDrawers).toHaveBeenCalledTimes(1);
         expect(context.updateStatus).toHaveBeenCalledWith(expect.stringContaining('已选择'));
     });
+
+    it('clears suspended pinch wiring session when tool selection changes', () => {
+        vi.stubGlobal('document', {
+            querySelectorAll: vi.fn(() => [])
+        });
+
+        const context = {
+            pendingToolType: 'Wire',
+            pendingToolItem: null,
+            isWiring: false,
+            clearPendingToolType: vi.fn(),
+            cancelWiring: vi.fn(),
+            updateStatus: vi.fn(),
+            suspendedWiringSession: {
+                wireStart: { x: 10, y: 20, snap: { type: 'terminal', componentId: 'R1', terminalIndex: 0 } },
+                pendingToolType: 'Wire',
+                pendingToolItem: null,
+                mobileInteractionMode: 'wire',
+                stickyWireTool: true
+            }
+        };
+
+        ToolPlacementController.setPendingToolType.call(context, 'Resistor', null);
+
+        expect(context.suspendedWiringSession).toBeNull();
+    });
+
+    it('does not throw when pending class add/remove methods are non-callable', () => {
+        vi.stubGlobal('document', {
+            querySelectorAll: vi.fn(() => [{ classList: { remove: {} } }])
+        });
+
+        const item = { classList: { add: {} } };
+        const context = {
+            pendingToolType: null,
+            pendingToolItem: null,
+            isWiring: false,
+            clearPendingToolType: vi.fn(),
+            cancelWiring: vi.fn(),
+            updateStatus: vi.fn()
+        };
+
+        expect(() => {
+            ToolPlacementController.setPendingToolType.call(context, 'Resistor', item);
+        }).not.toThrow();
+    });
 });
 
 describe('ToolPlacementController.clearPendingToolType', () => {
@@ -100,6 +146,43 @@ describe('ToolPlacementController.clearPendingToolType', () => {
         expect(context.pendingToolType).toBe(null);
         expect(context.pendingToolItem).toBe(null);
         expect(remove).toHaveBeenCalledWith('tool-item-pending');
+    });
+
+    it('clears suspended pinch wiring session', () => {
+        vi.stubGlobal('document', {
+            querySelectorAll: vi.fn(() => [])
+        });
+
+        const context = {
+            pendingToolType: 'Wire',
+            pendingToolItem: null,
+            suspendedWiringSession: {
+                wireStart: { x: 11, y: 21, snap: { type: 'terminal', componentId: 'R2', terminalIndex: 1 } },
+                pendingToolType: 'Wire',
+                pendingToolItem: null,
+                mobileInteractionMode: 'wire',
+                stickyWireTool: true
+            }
+        };
+
+        ToolPlacementController.clearPendingToolType.call(context);
+
+        expect(context.suspendedWiringSession).toBeNull();
+    });
+
+    it('does not throw when pending item classList.remove is non-callable', () => {
+        vi.stubGlobal('document', {
+            querySelectorAll: vi.fn(() => [])
+        });
+
+        const context = {
+            pendingToolType: 'Resistor',
+            pendingToolItem: { classList: { remove: {} } }
+        };
+
+        expect(() => ToolPlacementController.clearPendingToolType.call(context)).not.toThrow();
+        expect(context.pendingToolType).toBe(null);
+        expect(context.pendingToolItem).toBe(null);
     });
 });
 
@@ -193,6 +276,36 @@ describe('ToolPlacementController.setMobileInteractionMode', () => {
             silent: true,
             preserveMobileMode: true
         }));
+    });
+
+    it('clears suspended pinch wiring session when switching interaction mode', () => {
+        vi.stubGlobal('document', {
+            getElementById: vi.fn(() => null),
+            querySelectorAll: vi.fn(() => [])
+        });
+
+        const context = {
+            pendingToolType: 'Wire',
+            isWiring: false,
+            mobileInteractionMode: 'wire',
+            stickyWireTool: true,
+            setPendingToolType: vi.fn(),
+            clearPendingToolType: vi.fn(),
+            cancelWiring: vi.fn(),
+            updateStatus: vi.fn(),
+            quickActionBar: { update: vi.fn() },
+            suspendedWiringSession: {
+                wireStart: { x: 10, y: 20, snap: { type: 'terminal', componentId: 'R1', terminalIndex: 0 } },
+                pendingToolType: 'Wire',
+                pendingToolItem: null,
+                mobileInteractionMode: 'wire',
+                stickyWireTool: true
+            }
+        };
+
+        ToolPlacementController.setMobileInteractionMode.call(context, 'select');
+
+        expect(context.suspendedWiringSession).toBeNull();
     });
 });
 
@@ -324,5 +437,24 @@ describe('ToolPlacementController endpoint auto-bridge mode controls', () => {
         expect(modeButton.textContent).toBe('端点补线: 手机自动');
         expect(modeButton.disabled).toBe(false);
         expect(modeNote.hidden).toBe(true);
+    });
+
+    it('syncMobileModeButtons does not throw when setAttribute is non-callable', () => {
+        const selectButton = { setAttribute: {}, classList: { toggle: vi.fn() } };
+        const wireButton = { setAttribute: {}, classList: { toggle: vi.fn() } };
+        const modeButton = { textContent: '', dataset: {}, disabled: false, title: '' };
+        vi.stubGlobal('document', {
+            getElementById: vi.fn((id) => {
+                if (id === 'btn-mobile-mode-select') return selectButton;
+                if (id === 'btn-mobile-mode-wire') return wireButton;
+                if (id === 'btn-mobile-endpoint-bridge-mode') return modeButton;
+                return null;
+            })
+        });
+
+        expect(() => ToolPlacementController.syncMobileModeButtons.call({
+            mobileInteractionMode: 'wire',
+            endpointAutoBridgeMode: 'auto'
+        })).not.toThrow();
     });
 });

@@ -2,6 +2,16 @@ import { SVGRenderer } from '../../components/Component.js';
 import { computeOverlapFractionFromOffsetPx, computeParallelPlateCapacitance } from '../../utils/Physics.js';
 import { createElement, clearElement } from '../../utils/SafeDOM.js';
 
+function safeInvokeMethod(target, methodName, ...args) {
+    const fn = target?.[methodName];
+    if (typeof fn !== 'function') return undefined;
+    try {
+        return fn.apply(target, args);
+    } catch (_) {
+        return undefined;
+    }
+}
+
 export function createMeterSelfReadingControl(comp) {
     const group = createElement('div', { className: 'form-group meter-self-reading-group' });
     group.appendChild(createElement('label', { textContent: '自主读数（右侧表盘）' }));
@@ -24,21 +34,21 @@ export function createMeterSelfReadingControl(comp) {
 
     const syncToggleState = () => {
         const isEnabled = !!comp.selfReading;
-        toggleBtn.classList.toggle('active', isEnabled);
-        toggleBtn.setAttribute('aria-pressed', isEnabled ? 'true' : 'false');
+        safeInvokeMethod(toggleBtn.classList, 'toggle', 'active', isEnabled);
+        safeInvokeMethod(toggleBtn, 'setAttribute', 'aria-pressed', isEnabled ? 'true' : 'false');
         toggleBtn.textContent = isEnabled ? '已开启' : '已关闭';
     };
 
-    toggleBtn.addEventListener('click', () => {
+    safeInvokeMethod(toggleBtn, 'addEventListener', 'click', () => {
         this.runWithHistory('切换自主读数', () => {
             comp.selfReading = !comp.selfReading;
             this.app.observationPanel?.refreshDialGauges();
             syncToggleState();
-            this.app.updateStatus(comp.selfReading ? '已开启自主读数：请在右侧“观察”查看表盘' : '已关闭自主读数');
+            safeInvokeMethod(this.app, 'updateStatus', comp.selfReading ? '已开启自主读数：请在右侧“观察”查看表盘' : '已关闭自主读数');
         });
     });
 
-    openObservationBtn.addEventListener('click', () => {
+    safeInvokeMethod(openObservationBtn, 'addEventListener', 'click', () => {
         if (typeof this.activateSidePanelTab === 'function') {
             this.activateSidePanelTab('observation');
         }
