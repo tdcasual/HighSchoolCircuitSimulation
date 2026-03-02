@@ -46,7 +46,8 @@ export function createElement(tag, options = {}) {
     
     if (options.attrs) {
         for (const [key, value] of Object.entries(options.attrs)) {
-            el.setAttribute(key, value);
+            if (value === undefined || value === null) continue;
+            el.setAttribute(key, String(value));
         }
     }
     
@@ -57,8 +58,12 @@ export function createElement(tag, options = {}) {
     }
     
     if (options.children) {
+        const canUseNodeCtor = typeof Node !== 'undefined';
         for (const child of options.children) {
-            if (child instanceof Node) {
+            const isNodeLike = canUseNodeCtor
+                ? child instanceof Node
+                : !!child && typeof child === 'object' && typeof child.nodeType === 'number';
+            if (isNodeLike) {
                 el.appendChild(child);
             } else if (typeof child === 'string') {
                 el.appendChild(document.createTextNode(child));

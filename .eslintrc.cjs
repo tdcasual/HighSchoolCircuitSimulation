@@ -28,6 +28,39 @@ module.exports = {
     },
     overrides: [
         {
+            files: [
+                'src/ui/AIPanel.js',
+                'src/ui/ai/ChatController.js',
+                'src/ui/ExerciseBoard.js',
+                'src/embed/EmbedClient.js',
+                'src/embed/EmbedRuntimeBridge.js'
+            ],
+            rules: {
+                'no-restricted-syntax': ['error',
+                    {
+                        selector: "CallExpression[callee.type='MemberExpression'][callee.property.name='addEventListener']",
+                        message: 'Use RuntimeSafety.safeAddEventListener instead of direct addEventListener.'
+                    },
+                    {
+                        selector: "CallExpression[callee.type='MemberExpression'][callee.property.name='removeEventListener']",
+                        message: 'Use RuntimeSafety.safeRemoveEventListener instead of direct removeEventListener.'
+                    },
+                    {
+                        selector: "CallExpression[callee.type='MemberExpression'][callee.property.name='setAttribute']",
+                        message: 'Use RuntimeSafety.safeSetAttribute instead of direct setAttribute.'
+                    },
+                    {
+                        selector: "CallExpression[callee.type='MemberExpression'][callee.property.name='focus']",
+                        message: 'Use RuntimeSafety.safeFocus instead of direct focus.'
+                    },
+                    {
+                        selector: "CallExpression[callee.type='MemberExpression'][callee.object.type='MemberExpression'][callee.object.property.name='classList'][callee.property.name=/^(add|remove|toggle)$/]",
+                        message: 'Use RuntimeSafety classList helpers instead of direct classList mutations.'
+                    }
+                ]
+            }
+        },
+        {
             files: ['tests/**/*.js'],
             globals: {
                 afterAll: 'readonly',

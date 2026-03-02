@@ -1,3 +1,9 @@
+import {
+    safeAddEventListener,
+    safeRemoveEventListener,
+    safeSetAttribute
+} from '../utils/RuntimeSafety.js';
+
 const EMBED_CHANNEL = 'HSCS_EMBED_V1';
 const EMBED_API_VERSION = 1;
 
@@ -132,7 +138,7 @@ export class HSCSApplet {
         }
         this.destroy();
         this.container = container;
-        this.window.addEventListener('message', this.boundMessage);
+        safeAddEventListener(this.window, 'message', this.boundMessage);
 
         this.readyPromise = new Promise((resolve, reject) => {
             this.readyResolve = resolve;
@@ -145,8 +151,8 @@ export class HSCSApplet {
 
         const iframe = this.document.createElement('iframe');
         iframe.className = 'hscs-embed-frame';
-        iframe.setAttribute('frameborder', '0');
-        iframe.setAttribute('allowfullscreen', 'true');
+        safeSetAttribute(iframe, 'frameborder', '0');
+        safeSetAttribute(iframe, 'allowfullscreen', 'true');
         iframe.style.width = typeof this.options.width === 'number' ? `${this.options.width}px` : String(this.options.width);
         iframe.style.height = typeof this.options.height === 'number' ? `${this.options.height}px` : String(this.options.height);
         iframe.style.border = '0';
@@ -325,7 +331,7 @@ export class HSCSApplet {
 
     destroy() {
         if (this.window) {
-            this.window.removeEventListener('message', this.boundMessage);
+            safeRemoveEventListener(this.window, 'message', this.boundMessage);
         }
         this.clearReadyTimer();
         if (this.iframe?.parentNode) {

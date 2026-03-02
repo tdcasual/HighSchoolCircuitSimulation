@@ -3,6 +3,56 @@
  * 可拖动/可缩放/可显示隐藏，内容与布局随电路一起保存。
  */
 
+import {
+    safeAddEventListener,
+    safeClassListAdd,
+    safeClassListRemove,
+    safeClassListToggle,
+    safeFocus,
+    safeInvoke,
+    safeRemoveEventListener
+} from '../utils/RuntimeSafety.js';
+
+function safeNodeContains(node, target) {
+    return !!safeInvoke(node, 'contains', [target], false);
+}
+
+function safeHasClass(node, className) {
+    return !!safeInvoke(node?.classList, 'contains', [className], false);
+}
+
+function safeToggleClass(node, className, force) {
+    return safeClassListToggle(node, className, force);
+}
+
+function safeAddClass(node, ...classNames) {
+    if (!classNames.length) return false;
+    let allApplied = true;
+    classNames.forEach((className) => {
+        allApplied = safeClassListAdd(node, className) && allApplied;
+    });
+    return allApplied;
+}
+
+function safeRemoveClass(node, ...classNames) {
+    if (!classNames.length) return false;
+    let allRemoved = true;
+    classNames.forEach((className) => {
+        allRemoved = safeClassListRemove(node, className) && allRemoved;
+    });
+    return allRemoved;
+}
+
+function safeGetBoundingClientRect(node, fallback = null) {
+    const rect = safeInvoke(node, 'getBoundingClientRect');
+    const fb = fallback && typeof fallback === 'object' ? fallback : {};
+    const left = Number.isFinite(rect?.left) ? rect.left : (Number.isFinite(fb.left) ? fb.left : 0);
+    const top = Number.isFinite(rect?.top) ? rect.top : (Number.isFinite(fb.top) ? fb.top : 0);
+    const width = Number.isFinite(rect?.width) ? rect.width : (Number.isFinite(fb.width) ? fb.width : 0);
+    const height = Number.isFinite(rect?.height) ? rect.height : (Number.isFinite(fb.height) ? fb.height : 0);
+    return { left, top, width, height };
+}
+
 export class ExerciseBoard {
     constructor(app) {
         this.app = app;
@@ -62,11 +112,11 @@ export class ExerciseBoard {
 
     initializeContentControls() {
         if (this.toolboxToggleBtn) {
-            this.toolboxToggleBtn.addEventListener('click', () => this.toggleVisible());
+            safeAddEventListener(this.toolboxToggleBtn, 'click', () => this.toggleVisible());
         }
 
         if (this.hideBtn) {
-            this.hideBtn.addEventListener('click', (e) => {
+            safeAddEventListener(this.hideBtn, 'click', (e) => {
                 e.preventDefault();
                 e.stopPropagation();
                 this.setVisible(false);
@@ -74,7 +124,7 @@ export class ExerciseBoard {
         }
 
         if (this.modeBtn) {
-            this.modeBtn.addEventListener('click', (e) => {
+            safeAddEventListener(this.modeBtn, 'click', (e) => {
                 e.preventDefault();
                 e.stopPropagation();
                 this.toggleMode();
@@ -82,7 +132,7 @@ export class ExerciseBoard {
         }
 
         if (this.settingsBtn) {
-            this.settingsBtn.addEventListener('click', (e) => {
+            safeAddEventListener(this.settingsBtn, 'click', (e) => {
                 e.preventDefault();
                 e.stopPropagation();
                 this.toggleSettings();
@@ -91,46 +141,46 @@ export class ExerciseBoard {
 
         if (this.settingsPanel) {
             // Prevent drag gesture / outside click close from firing when interacting inside settings.
-            this.settingsPanel.addEventListener('pointerdown', (e) => {
+            safeAddEventListener(this.settingsPanel, 'pointerdown', (e) => {
                 e.stopPropagation();
             });
         }
 
         // Typography controls
         if (this.fontSizeInput) {
-            this.fontSizeInput.addEventListener('input', () => {
+            safeAddEventListener(this.fontSizeInput, 'input', () => {
                 const next = Math.floor(Number(this.fontSizeInput.value));
                 if (!Number.isFinite(next)) return;
                 this.setTypography({ fontSizePx: Math.max(10, Math.min(next, 40)) });
             });
         }
         if (this.lineHeightInput) {
-            this.lineHeightInput.addEventListener('input', () => {
+            safeAddEventListener(this.lineHeightInput, 'input', () => {
                 const next = Number(this.lineHeightInput.value);
                 if (!Number.isFinite(next)) return;
                 this.setTypography({ lineHeight: Math.max(1.0, Math.min(next, 3.0)) });
             });
         }
         if (this.editorFontSelect) {
-            this.editorFontSelect.addEventListener('change', () => {
+            safeAddEventListener(this.editorFontSelect, 'change', () => {
                 const val = this.editorFontSelect.value === 'prose' ? 'prose' : 'mono';
                 this.setTypography({ editorFont: val });
             });
         }
         if (this.proseWidthToggle) {
-            this.proseWidthToggle.addEventListener('change', () => {
+            safeAddEventListener(this.proseWidthToggle, 'change', () => {
                 this.setTypography({ proseWidth: !!this.proseWidthToggle.checked });
             });
         }
         if (this.settingsResetBtn) {
-            this.settingsResetBtn.addEventListener('click', (e) => {
+            safeAddEventListener(this.settingsResetBtn, 'click', (e) => {
                 e.preventDefault();
                 this.setTypography({ ...this.defaultTypography });
             });
         }
 
         if (this.editor) {
-            this.editor.addEventListener('input', () => {
+            safeAddEventListener(this.editor, 'input', () => {
                 this.state.markdown = this.editor.value || '';
                 if (this.state.mode === 'preview' || this.state.mode === 'split') {
                     this.scheduleRender();
@@ -138,11 +188,11 @@ export class ExerciseBoard {
                 this.app?.scheduleSave?.();
             });
 
-            this.editor.addEventListener('keydown', (e) => this.handleEditorKeyDown(e));
+            safeAddEventListener(this.editor, 'keydown', (e) => this.handleEditorKeyDown(e));
         }
 
         if (this.toolbar) {
-            this.toolbar.addEventListener('click', (e) => this.handleToolbarClick(e));
+            safeAddEventListener(this.toolbar, 'click', (e) => this.handleToolbarClick(e));
         }
     }
 
@@ -156,20 +206,23 @@ export class ExerciseBoard {
         this.applyPanelLayout(this.state.layout);
 
         if (this.panelHeader) {
-            this.panelHeader.addEventListener('pointerdown', (e) => this.tryStartPanelDrag(e));
+            safeAddEventListener(this.panelHeader, 'pointerdown', (e) => this.tryStartPanelDrag(e));
         }
 
         if (this.resizeHandle) {
-            this.resizeHandle.addEventListener('pointerdown', (e) => this.tryStartPanelResize(e));
+            safeAddEventListener(this.resizeHandle, 'pointerdown', (e) => this.tryStartPanelResize(e));
         }
 
-        window.addEventListener('resize', () => this.constrainPanelToViewport());
+        safeAddEventListener(window, 'resize', () => this.constrainPanelToViewport());
     }
 
     tryStartPanelDrag(event) {
         if (!this.panel) return;
         if (event.pointerType === 'mouse' && event.button !== 0) return;
-        if (event.target.closest('#exercise-board-actions')) return;
+        const hitActions = typeof event?.target?.closest === 'function'
+            ? event.target.closest('#exercise-board-actions')
+            : null;
+        if (hitActions) return;
 
         event.preventDefault();
         this.startPanelGesture('drag', event);
@@ -187,7 +240,12 @@ export class ExerciseBoard {
     startPanelGesture(type, event) {
         if (!this.panel) return;
 
-        const rect = this.panel.getBoundingClientRect();
+        const rect = safeGetBoundingClientRect(this.panel, {
+            left: parseFloat(this.panel.style?.left),
+            top: parseFloat(this.panel.style?.top),
+            width: parseFloat(this.panel.style?.width),
+            height: parseFloat(this.panel.style?.height)
+        });
         this.setPanelAbsolutePosition(rect.left, rect.top);
         const left = parseFloat(this.panel.style.left);
         const top = parseFloat(this.panel.style.top);
@@ -203,10 +261,10 @@ export class ExerciseBoard {
             startHeight: rect.height
         };
 
-        this.panel.classList.add(type === 'drag' ? 'dragging' : 'resizing');
-        window.addEventListener('pointermove', this.boundPanelPointerMove, { passive: false });
-        window.addEventListener('pointerup', this.boundPanelPointerUp);
-        window.addEventListener('pointercancel', this.boundPanelPointerUp);
+        safeAddClass(this.panel, type === 'drag' ? 'dragging' : 'resizing');
+        safeAddEventListener(window, 'pointermove', this.boundPanelPointerMove, { passive: false });
+        safeAddEventListener(window, 'pointerup', this.boundPanelPointerUp);
+        safeAddEventListener(window, 'pointercancel', this.boundPanelPointerUp);
     }
 
     handlePanelPointerMove(event) {
@@ -223,12 +281,12 @@ export class ExerciseBoard {
     handlePanelPointerUp(event) {
         if (!this.panelGesture || event.pointerId !== this.panelGesture.pointerId) return;
 
-        window.removeEventListener('pointermove', this.boundPanelPointerMove);
-        window.removeEventListener('pointerup', this.boundPanelPointerUp);
-        window.removeEventListener('pointercancel', this.boundPanelPointerUp);
+        safeRemoveEventListener(window, 'pointermove', this.boundPanelPointerMove);
+        safeRemoveEventListener(window, 'pointerup', this.boundPanelPointerUp);
+        safeRemoveEventListener(window, 'pointercancel', this.boundPanelPointerUp);
 
         if (this.panel) {
-            this.panel.classList.remove('dragging', 'resizing');
+            safeRemoveClass(this.panel, 'dragging', 'resizing');
         }
 
         this.panelGesture = null;
@@ -304,7 +362,7 @@ export class ExerciseBoard {
         let reservedLeft = 0;
         const toolbox = document.getElementById('toolbox');
         if (toolbox) {
-            const rect = toolbox.getBoundingClientRect();
+            const rect = safeGetBoundingClientRect(toolbox);
             if (rect.width > 0) {
                 reservedLeft = rect.width + 12;
             }
@@ -313,7 +371,7 @@ export class ExerciseBoard {
         let reservedRight = 0;
         const sidePanel = document.getElementById('side-panel');
         if (sidePanel) {
-            const rect = sidePanel.getBoundingClientRect();
+            const rect = safeGetBoundingClientRect(sidePanel);
             if (rect.width > 0) {
                 reservedRight = rect.width + 12;
             }
@@ -369,7 +427,7 @@ export class ExerciseBoard {
     capturePanelLayout() {
         if (!this.panel) return;
 
-        const rect = this.panel.getBoundingClientRect();
+        const rect = safeGetBoundingClientRect(this.panel);
         const styleLeft = parseFloat(this.panel.style.left);
         const styleTop = parseFloat(this.panel.style.top);
         const styleWidth = parseFloat(this.panel.style.width);
@@ -415,7 +473,7 @@ export class ExerciseBoard {
 
     applyStateToUI() {
         if (this.panel) {
-            this.panel.classList.toggle('hidden', !this.state.visible);
+            safeToggleClass(this.panel, 'hidden', !this.state.visible);
         }
 
         if (this.toolboxToggleBtn) {
@@ -431,19 +489,19 @@ export class ExerciseBoard {
 
         if (this.editor) {
             this.editor.value = this.state.markdown || '';
-            this.editor.classList.toggle('hidden', mode === 'preview');
+            safeToggleClass(this.editor, 'hidden', mode === 'preview');
         }
 
         if (this.preview) {
-            this.preview.classList.toggle('hidden', mode === 'edit');
+            safeToggleClass(this.preview, 'hidden', mode === 'edit');
         }
 
         if (this.toolbar) {
-            this.toolbar.classList.toggle('hidden', mode === 'preview');
+            safeToggleClass(this.toolbar, 'hidden', mode === 'preview');
         }
 
         if (this.panel) {
-            this.panel.classList.toggle('split', mode === 'split');
+            safeToggleClass(this.panel, 'split', mode === 'split');
         }
 
         this.applyTypographyToUI();
@@ -466,26 +524,27 @@ export class ExerciseBoard {
      * 显示/排版设置面板
      */
     toggleSettings() {
-        const isOpen = !!(this.settingsPanel && !this.settingsPanel.classList.contains('hidden'));
+        const canInspectOpen = typeof this.settingsPanel?.classList?.contains === 'function';
+        const isOpen = !!(this.settingsPanel && canInspectOpen && !safeHasClass(this.settingsPanel, 'hidden'));
         this.setSettingsOpen(!isOpen);
     }
 
     setSettingsOpen(open) {
         if (!this.settingsPanel) return;
-        this.settingsPanel.classList.toggle('hidden', !open);
+        safeToggleClass(this.settingsPanel, 'hidden', !open);
         if (open) {
-            document.addEventListener('pointerdown', this.boundDocumentPointerDown);
+            safeAddEventListener(document, 'pointerdown', this.boundDocumentPointerDown);
         } else {
-            document.removeEventListener('pointerdown', this.boundDocumentPointerDown);
+            safeRemoveEventListener(document, 'pointerdown', this.boundDocumentPointerDown);
         }
     }
 
     handleDocumentPointerDown(event) {
-        if (!this.settingsPanel || this.settingsPanel.classList.contains('hidden')) return;
+        if (!this.settingsPanel || safeHasClass(this.settingsPanel, 'hidden')) return;
         const target = event.target;
         if (!target) return;
-        if (this.settingsPanel.contains(target)) return;
-        if (this.settingsBtn && this.settingsBtn.contains(target)) return;
+        if (safeNodeContains(this.settingsPanel, target)) return;
+        if (safeNodeContains(this.settingsBtn, target)) return;
         this.setSettingsOpen(false);
     }
 
@@ -516,9 +575,9 @@ export class ExerciseBoard {
         this.panel.style.setProperty('--ex-font-size', `${t.fontSizePx || this.defaultTypography.fontSizePx}px`);
         this.panel.style.setProperty('--ex-line-height', String(t.lineHeight || this.defaultTypography.lineHeight));
 
-        this.panel.classList.toggle('prose-width-off', !t.proseWidth);
-        this.panel.classList.toggle('editor-font-prose', t.editorFont === 'prose');
-        this.panel.classList.toggle('editor-font-mono', t.editorFont !== 'prose');
+        safeToggleClass(this.panel, 'prose-width-off', !t.proseWidth);
+        safeToggleClass(this.panel, 'editor-font-prose', t.editorFont === 'prose');
+        safeToggleClass(this.panel, 'editor-font-mono', t.editorFont !== 'prose');
 
         if (this.fontSizeInput) this.fontSizeInput.value = String(t.fontSizePx || this.defaultTypography.fontSizePx);
         if (this.fontSizeValue) this.fontSizeValue.textContent = `${t.fontSizePx || this.defaultTypography.fontSizePx}px`;
@@ -541,8 +600,10 @@ export class ExerciseBoard {
         const text = this.state.markdown || '';
         let html = '';
 
-        if (window.marked?.parse) {
-            html = window.marked.parse(text, { breaks: true });
+        const markedApi = typeof window !== 'undefined' ? window.marked : null;
+        const parsedHtml = safeInvoke(markedApi, 'parse', [text, { breaks: true }]);
+        if (typeof parsedHtml === 'string') {
+            html = parsedHtml;
         } else {
             html = this.escapeHtml(text).replace(/\n/g, '<br>');
         }
@@ -553,10 +614,11 @@ export class ExerciseBoard {
             this.preview.innerHTML = html;
         }
 
-        if (window.MathJax?.typesetPromise) {
+        const mathJax = typeof window !== 'undefined' ? window.MathJax : null;
+        if (typeof mathJax?.typesetPromise === 'function') {
             const target = this.preview;
             this._typesetQueue = this._typesetQueue
-                .then(() => window.MathJax.typesetPromise([target]))
+                .then(() => safeInvoke(mathJax, 'typesetPromise', [[target]]))
                 .catch(() => {});
         }
     }
@@ -663,7 +725,9 @@ export class ExerciseBoard {
      * Toolbar action dispatcher (edit-time helpers).
      */
     handleToolbarClick(event) {
-        const btn = event?.target?.closest?.('button[data-ex-action]');
+        const btn = typeof event?.target?.closest === 'function'
+            ? event.target.closest('button[data-ex-action]')
+            : null;
         const action = btn?.dataset?.exAction;
         if (!action) return;
         event.preventDefault();
@@ -767,7 +831,7 @@ export class ExerciseBoard {
         const innerEnd = innerStart + content.length;
         el.selectionStart = innerStart;
         el.selectionEnd = innerEnd;
-        el.focus();
+        safeFocus(el);
 
         this.onEditorProgrammaticChange();
     }
@@ -791,7 +855,7 @@ export class ExerciseBoard {
         el.value = value.slice(0, lineStart) + nextBlock + value.slice(blockEnd);
         el.selectionStart = start + prefix.length;
         el.selectionEnd = end + prefix.length * lines.length;
-        el.focus();
+        safeFocus(el);
 
         this.onEditorProgrammaticChange();
     }
@@ -836,7 +900,7 @@ export class ExerciseBoard {
         el.value = value.slice(0, lineStart) + nextBlock + value.slice(blockEnd);
         el.selectionStart = Math.max(lineStart, start - removedFirstLine);
         el.selectionEnd = Math.max(el.selectionStart, end - removedTotal);
-        el.focus();
+        safeFocus(el);
 
         this.onEditorProgrammaticChange();
     }
@@ -857,7 +921,7 @@ export class ExerciseBoard {
         const innerEnd = innerStart + content.length;
         el.selectionStart = innerStart;
         el.selectionEnd = innerEnd;
-        el.focus();
+        safeFocus(el);
 
         this.onEditorProgrammaticChange();
     }
@@ -881,7 +945,7 @@ export class ExerciseBoard {
         const urlEnd = urlStart + url.length;
         el.selectionStart = urlStart;
         el.selectionEnd = urlEnd;
-        el.focus();
+        safeFocus(el);
 
         this.onEditorProgrammaticChange();
     }
