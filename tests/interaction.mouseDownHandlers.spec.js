@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { handlePendingToolMouseDown } from '../src/app/interaction/InteractionOrchestratorMouseDownHandlers.js';
+import {
+    handleFallbackSurfaceMouseDown,
+    handlePendingToolMouseDown
+} from '../src/app/interaction/InteractionOrchestratorMouseDownHandlers.js';
 
 describe('InteractionOrchestratorMouseDownHandlers.handlePendingToolMouseDown', () => {
     it('returns false when no pending tool is armed', () => {
@@ -121,5 +124,58 @@ describe('InteractionOrchestratorMouseDownHandlers.handlePendingToolMouseDown', 
 
         expect(handled).toBe(true);
         expect(context.placePendingToolAt).toHaveBeenCalledWith(44, 55);
+    });
+});
+
+describe('InteractionOrchestratorMouseDownHandlers.handleFallbackSurfaceMouseDown', () => {
+    it('starts wiring from blank point when shift is held', () => {
+        const context = {
+            screenToCanvas: vi.fn(() => ({ x: 140, y: 160 })),
+            startWiringFromPoint: vi.fn(),
+            clearSelection: vi.fn(),
+            app: {
+                responsiveLayout: {
+                    closeDrawers: vi.fn()
+                }
+            }
+        };
+        const event = {
+            shiftKey: true,
+            clientX: 300,
+            clientY: 220
+        };
+
+        const handled = handleFallbackSurfaceMouseDown.call(context, event);
+
+        expect(handled).toBe(true);
+        expect(context.screenToCanvas).toHaveBeenCalledWith(300, 220);
+        expect(context.startWiringFromPoint).toHaveBeenCalledWith({ x: 140, y: 160 }, event, false);
+        expect(context.clearSelection).not.toHaveBeenCalled();
+        expect(context.app.responsiveLayout.closeDrawers).not.toHaveBeenCalled();
+    });
+
+    it('clears selection and closes drawers on plain blank click', () => {
+        const context = {
+            screenToCanvas: vi.fn(),
+            startWiringFromPoint: vi.fn(),
+            clearSelection: vi.fn(),
+            app: {
+                responsiveLayout: {
+                    closeDrawers: vi.fn()
+                }
+            }
+        };
+        const event = {
+            shiftKey: false,
+            clientX: 100,
+            clientY: 120
+        };
+
+        const handled = handleFallbackSurfaceMouseDown.call(context, event);
+
+        expect(handled).toBe(true);
+        expect(context.startWiringFromPoint).not.toHaveBeenCalled();
+        expect(context.clearSelection).toHaveBeenCalledTimes(1);
+        expect(context.app.responsiveLayout.closeDrawers).toHaveBeenCalledTimes(1);
     });
 });

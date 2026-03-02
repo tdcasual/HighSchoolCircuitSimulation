@@ -6,6 +6,7 @@ import {
     safeClosest,
 } from './InteractionOrchestratorHelpers.js';
 import {
+    handleFallbackSurfaceMouseDown as handleFallbackSurfaceMouseDownViaHandlers,
     handlePendingToolMouseDown as handlePendingToolMouseDownViaHandlers,
     handleSurfaceTargetMouseDown as handleSurfaceTargetMouseDownViaHandlers,
     handleWireTargetMouseDown as handleWireTargetMouseDownViaHandlers
@@ -97,16 +98,7 @@ export function onMouseDown(e) {
         return;
     }
 
-    // Shift + 点击空白处：从任意点开始画导线（允许独立导线）
-    if (e.shiftKey) {
-        const canvasCoords = this.screenToCanvas(e.clientX, e.clientY);
-        this.startWiringFromPoint(canvasCoords, e, false);
-        return;
-    }
-
-    // 左键点击空白处取消选择，并关闭可能打开的抽屉（移动端）
-    this.clearSelection();
-    this.app?.responsiveLayout?.closeDrawers?.();
+    handleFallbackSurfaceMouseDownViaHandlers.call(this, e);
 }
 
 export function onMouseMove(e) {
