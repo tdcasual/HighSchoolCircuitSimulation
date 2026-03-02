@@ -1,4 +1,3 @@
-import { toCanvasInt } from '../../utils/CanvasCoords.js';
 import {
     initializeInteractionModeStore as initializeInteractionModeStoreViaStateMachine,
     syncInteractionModeStore as syncInteractionModeStoreViaStateMachine
@@ -22,6 +21,7 @@ import {
     handleWireModeGestureMouseUp as handleWireModeGestureMouseUpViaHandlers
 } from './InteractionOrchestratorMouseUpHandlers.js';
 import {
+    handleComponentDragMouseMove as handleComponentDragMouseMoveViaHandlers,
     handlePanningMouseMove as handlePanningMouseMoveViaHandlers,
     handleWireDragMouseMove as handleWireDragMouseMoveViaHandlers,
     handlePointerDownInfoMouseMove as handlePointerDownInfoMouseMoveViaHandlers,
@@ -137,83 +137,7 @@ export function onMouseMove(e) {
         return;
     }
 
-    // 拖动元器件（平滑移动 + 对齐辅助）
-    if (this.isDragging && this.dragTarget) {
-        const comp = this.circuit.getComponent(this.dragTarget);
-        if (comp) {
-            // 计算新位置（不强制对齐网格，实现平滑移动）
-            let newX = canvasX - this.dragOffset.x;
-            let newY = canvasY - this.dragOffset.y;
-
-            // 检测与其他元器件的对齐
-            const alignment = this.detectAlignment(comp.id, newX, newY);
-
-            // 应用吸附
-            if (alignment.snapX !== null) {
-                newX = alignment.snapX;
-            }
-            if (alignment.snapY !== null) {
-                newY = alignment.snapY;
-            }
-
-            // Normalize to integer pixels to avoid hidden rounding in node connectivity.
-            newX = toCanvasInt(newX);
-            newY = toCanvasInt(newY);
-
-            // 黑箱：整体移动（包含盒内元件与盒内导线端点）
-            if (comp.type === 'BlackBox' && this.dragGroup && this.dragGroup.boxId === comp.id) {
-                const dx = newX - (comp.x || 0);
-                const dy = newY - (comp.y || 0);
-
-                comp.x = newX;
-                comp.y = newY;
-
-                // 移动盒内元件
-                for (const id of this.dragGroup.componentIds) {
-                    const inner = this.circuit.getComponent(id);
-                    if (!inner) continue;
-                    inner.x = toCanvasInt((inner.x || 0) + dx);
-                    inner.y = toCanvasInt((inner.y || 0) + dy);
-                    this.renderer.updateComponentTransform(inner);
-                }
-
-                // 移动与黑箱组相关的导线端点（按拖动开始时的 inside mask）
-                for (const wireId of this.dragGroup.connectedWireIds) {
-                    const wire = this.circuit.getWire(wireId);
-                    const mask = this.dragGroup.wireEndpointMask?.get(wireId);
-                    if (!wire || !mask) continue;
-                    if (mask.aInside && wire.a) {
-                        wire.a = {
-                            x: toCanvasInt((wire.a.x || 0) + dx),
-                            y: toCanvasInt((wire.a.y || 0) + dy)
-                        };
-                    }
-                    if (mask.bInside && wire.b) {
-                        wire.b = {
-                            x: toCanvasInt((wire.b.x || 0) + dx),
-                            y: toCanvasInt((wire.b.y || 0) + dy)
-                        };
-                    }
-                }
-
-                // 更新黑箱自身 transform
-                this.renderer.updateComponentTransform(comp);
-
-                // 刷新与组相关的导线（含外部连接）
-                for (const wireId of this.dragGroup.connectedWireIds) {
-                    this.renderer.refreshWire(wireId);
-                }
-            } else {
-                // 普通元器件：更新位置
-                comp.x = newX;
-                comp.y = newY;
-                this.renderer.updateComponentPosition(comp);
-            }
-
-            // 显示对齐辅助线
-            this.showAlignmentGuides(alignment);
-        }
-    }
+    handleComponentDragMouseMoveViaHandlers.call(this, e, canvasX, canvasY);
 
     // 连线预览
     if (this.isWiring && this.wireStart && this.tempWire) {

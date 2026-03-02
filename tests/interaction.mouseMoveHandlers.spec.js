@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+    handleComponentDragMouseMove,
     handleWireDragMouseMove,
     handleWireEndpointDragMouseMove,
     handlePanningMouseMove,
@@ -372,5 +373,93 @@ describe('InteractionOrchestratorMouseMoveHandlers.handleWireDragMouseMove', () 
         expect(wire.a).toEqual({ x: 58, y: 66 });
         expect(wire.b).toEqual({ x: 138, y: 66 });
         expect(context.renderer.refreshWire).toHaveBeenCalledWith('W1');
+    });
+});
+
+describe('InteractionOrchestratorMouseMoveHandlers.handleComponentDragMouseMove', () => {
+    it('returns false when component dragging is inactive', () => {
+        const context = {
+            isDragging: false
+        };
+
+        const handled = handleComponentDragMouseMove.call(context, { clientX: 10, clientY: 10 }, 20, 30);
+
+        expect(handled).toBe(false);
+    });
+
+    it('updates normal component position with alignment snap and guide rendering', () => {
+        const component = { id: 'R1', type: 'Resistor', x: 10, y: 20 };
+        const context = {
+            isDragging: true,
+            dragTarget: 'R1',
+            dragOffset: { x: 5, y: 7 },
+            circuit: {
+                getComponent: vi.fn(() => component)
+            },
+            detectAlignment: vi.fn(() => ({ snapX: null, snapY: 50 })),
+            renderer: {
+                updateComponentPosition: vi.fn()
+            },
+            showAlignmentGuides: vi.fn()
+        };
+
+        const handled = handleComponentDragMouseMove.call(context, { clientX: 30, clientY: 40 }, 25.4, 35.2);
+
+        expect(handled).toBe(true);
+        expect(component.x).toBe(20);
+        expect(component.y).toBe(50);
+        expect(context.renderer.updateComponentPosition).toHaveBeenCalledWith(component);
+        expect(context.showAlignmentGuides).toHaveBeenCalledWith({ snapX: null, snapY: 50 });
+    });
+
+    it('moves blackbox group components and masked wire endpoints together', () => {
+        const box = { id: 'B1', type: 'BlackBox', x: 40, y: 20 };
+        const inner = { id: 'R2', type: 'Resistor', x: 60, y: 40 };
+        const wire = {
+            id: 'W1',
+            a: { x: 70, y: 80 },
+            b: { x: 140, y: 80 }
+        };
+        const context = {
+            isDragging: true,
+            dragTarget: 'B1',
+            dragOffset: { x: 20, y: 10 },
+            dragGroup: {
+                boxId: 'B1',
+                componentIds: ['R2'],
+                connectedWireIds: ['W1'],
+                wireEndpointMask: new Map([['W1', { aInside: true, bInside: false }]])
+            },
+            circuit: {
+                getComponent: vi.fn((id) => {
+                    if (id === 'B1') return box;
+                    if (id === 'R2') return inner;
+                    return null;
+                }),
+                getWire: vi.fn((id) => (id === 'W1' ? wire : null))
+            },
+            detectAlignment: vi.fn(() => ({ snapX: null, snapY: null })),
+            renderer: {
+                updateComponentTransform: vi.fn(),
+                updateComponentPosition: vi.fn(),
+                refreshWire: vi.fn()
+            },
+            showAlignmentGuides: vi.fn()
+        };
+
+        const handled = handleComponentDragMouseMove.call(context, { clientX: 200, clientY: 120 }, 100, 70);
+
+        expect(handled).toBe(true);
+        expect(box.x).toBe(80);
+        expect(box.y).toBe(60);
+        expect(inner.x).toBe(100);
+        expect(inner.y).toBe(80);
+        expect(wire.a).toEqual({ x: 110, y: 120 });
+        expect(wire.b).toEqual({ x: 140, y: 80 });
+        expect(context.renderer.updateComponentTransform).toHaveBeenCalledWith(inner);
+        expect(context.renderer.updateComponentTransform).toHaveBeenCalledWith(box);
+        expect(context.renderer.refreshWire).toHaveBeenCalledWith('W1');
+        expect(context.renderer.updateComponentPosition).not.toHaveBeenCalled();
+        expect(context.showAlignmentGuides).toHaveBeenCalledWith({ snapX: null, snapY: null });
     });
 });
