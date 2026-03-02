@@ -7,6 +7,47 @@ import { SVGRenderer } from '../components/Component.js';
 import { getTerminalWorldPosition } from '../utils/TerminalGeometry.js';
 import { normalizeCanvasPoint } from '../utils/CanvasCoords.js';
 
+function safeHasClass(node, className) {
+    if (!node || !node.classList || typeof node.classList.contains !== 'function') return false;
+    try {
+        return node.classList.contains(className);
+    } catch (_) {
+        return false;
+    }
+}
+
+function safeClassListInvoke(node, methodName, ...args) {
+    const fn = node?.classList?.[methodName];
+    if (typeof fn !== 'function') return undefined;
+    try {
+        return fn.call(node.classList, ...args);
+    } catch (_) {
+        return undefined;
+    }
+}
+
+function safeAddClass(node, className) {
+    safeClassListInvoke(node, 'add', className);
+}
+
+function safeRemoveClass(node, ...classNames) {
+    safeClassListInvoke(node, 'remove', ...classNames);
+}
+
+function safeInvokeMethod(target, methodName, ...args) {
+    const fn = target?.[methodName];
+    if (typeof fn !== 'function') return undefined;
+    try {
+        return fn.apply(target, args);
+    } catch (_) {
+        return undefined;
+    }
+}
+
+function safeSetAttribute(node, name, value) {
+    safeInvokeMethod(node, 'setAttribute', name, value);
+}
+
 export class Renderer {
     constructor(svgCanvas, circuit) {
         this.svg = svgCanvas;
@@ -181,7 +222,7 @@ export class Renderer {
     updateComponentPosition(comp) {
         const g = this.componentElements.get(comp.id);
         if (g) {
-            g.setAttribute('transform', `translate(${comp.x}, ${comp.y}) rotate(${comp.rotation || 0})`);
+            safeSetAttribute(g, 'transform', `translate(${comp.x}, ${comp.y}) rotate(${comp.rotation || 0})`);
         }
 
         // If wire endpoints are bound to this component's terminals, keep them attached visually.
@@ -194,7 +235,7 @@ export class Renderer {
     updateComponentTransform(comp) {
         const g = this.componentElements.get(comp.id);
         if (g) {
-            g.setAttribute('transform', `translate(${comp.x}, ${comp.y}) rotate(${comp.rotation || 0})`);
+            safeSetAttribute(g, 'transform', `translate(${comp.x}, ${comp.y}) rotate(${comp.rotation || 0})`);
         }
     }
 
@@ -327,9 +368,9 @@ export class Renderer {
         const g = this.componentElements.get(id);
         if (g) {
             if (selected) {
-                g.classList.add('selected');
+                safeAddClass(g, 'selected');
             } else {
-                g.classList.remove('selected');
+                safeRemoveClass(g, 'selected');
             }
         }
     }
@@ -339,10 +380,10 @@ export class Renderer {
      */
     clearSelection() {
         for (const g of this.componentElements.values()) {
-            g.classList.remove('selected');
+            safeRemoveClass(g, 'selected');
         }
         for (const [wireId, wireGroup] of this.wireElements.entries()) {
-            wireGroup.classList.remove('selected');
+            safeRemoveClass(wireGroup, 'selected');
             const wire = this.circuit.getWire(wireId);
             if (wire) {
                 SVGRenderer.updateWirePath(wireGroup, wire, this.getWireEndpointPosition.bind(this));
@@ -358,9 +399,9 @@ export class Renderer {
         const wire = this.circuit.getWire(id);
         if (wireGroup && wire) {
             if (selected) {
-                wireGroup.classList.add('selected');
+                safeAddClass(wireGroup, 'selected');
             } else {
-                wireGroup.classList.remove('selected');
+                safeRemoveClass(wireGroup, 'selected');
             }
             // 刷新导线以显示/隐藏端点
             SVGRenderer.updateWirePath(wireGroup, wire, this.getWireEndpointPosition.bind(this));
@@ -423,22 +464,22 @@ export class Renderer {
             const y = midY + ny * offset;
 
             const marker = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-            marker.setAttribute('class', `wire-probe-marker probe-${probe.type}`);
-            marker.setAttribute('data-probe-id', probe.id);
-            marker.setAttribute('data-wire-id', wire.id);
-            marker.setAttribute('data-probe-type', probe.type);
-            marker.setAttribute('transform', `translate(${x}, ${y})`);
+            safeSetAttribute(marker, 'class', `wire-probe-marker probe-${probe.type}`);
+            safeSetAttribute(marker, 'data-probe-id', probe.id);
+            safeSetAttribute(marker, 'data-wire-id', wire.id);
+            safeSetAttribute(marker, 'data-probe-type', probe.type);
+            safeSetAttribute(marker, 'transform', `translate(${x}, ${y})`);
 
             const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-            circle.setAttribute('class', 'wire-probe-body');
-            circle.setAttribute('r', 8);
+            safeSetAttribute(circle, 'class', 'wire-probe-body');
+            safeSetAttribute(circle, 'r', 8);
             marker.appendChild(circle);
 
             const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-            text.setAttribute('class', 'wire-probe-glyph');
-            text.setAttribute('x', 0);
-            text.setAttribute('y', 3);
-            text.setAttribute('text-anchor', 'middle');
+            safeSetAttribute(text, 'class', 'wire-probe-glyph');
+            safeSetAttribute(text, 'x', 0);
+            safeSetAttribute(text, 'y', 3);
+            safeSetAttribute(text, 'text-anchor', 'middle');
             text.textContent = this.getProbeTypeGlyph(probe.type);
             marker.appendChild(text);
 
@@ -458,7 +499,7 @@ export class Renderer {
         const oldG = this.componentElements.get(comp.id);
         if (oldG) {
             // 在替换前保存选中状态
-            const wasSelected = oldG.classList.contains('selected');
+            const wasSelected = safeHasClass(oldG, 'selected');
             
             const newG = SVGRenderer.createComponentGroup(comp);
             oldG.replaceWith(newG);
@@ -466,7 +507,7 @@ export class Renderer {
             
             // 如果之前是选中状态，保持选中
             if (wasSelected) {
-                newG.classList.add('selected');
+                safeAddClass(newG, 'selected');
             }
             const display = comp.display || {};
             const showCurrent = display.current ?? this.defaultDisplay.current;
@@ -492,7 +533,7 @@ export class Renderer {
             if (!wirePath) continue;
             
             // 清除所有动画类
-            wirePath.classList.remove('flowing', 'flowing-forward', 'flowing-reverse', 
+            safeRemoveClass(wirePath, 'flowing', 'flowing-forward', 'flowing-reverse',
                 'current-low', 'current-medium', 'current-high', 'short-circuit');
             
             if (!isRunning || !wire) {
@@ -501,7 +542,7 @@ export class Renderer {
 
             // Short-circuit warning should still show even if the solver cannot provide a valid solution.
             if (this.circuit.isWireInShortCircuit(wire)) {
-                wirePath.classList.add('short-circuit');
+                safeAddClass(wirePath, 'short-circuit');
                 continue;
             }
 
@@ -517,31 +558,31 @@ export class Renderer {
             
             // 如果是短路
             if (isShorted) {
-                wirePath.classList.add('short-circuit');
+                safeAddClass(wirePath, 'short-circuit');
                 continue;
             }
             
             // 如果有电流流过
             if (Math.abs(current) > 1e-9 && flowDirection !== 0) {
-                wirePath.classList.add('flowing');
+                safeAddClass(wirePath, 'flowing');
                 
                 // 根据电流强度设置样式
                 const absCurrent = Math.abs(current);
                 if (absCurrent < 0.1) {
-                    wirePath.classList.add('current-low');
+                    safeAddClass(wirePath, 'current-low');
                 } else if (absCurrent < 0.5) {
-                    wirePath.classList.add('current-medium');
+                    safeAddClass(wirePath, 'current-medium');
                 } else {
-                    wirePath.classList.add('current-high');
+                    safeAddClass(wirePath, 'current-high');
                 }
                 
                 // 根据 flowDirection 决定动画方向
                 // flowDirection > 0: 从导线起点流向终点
                 // flowDirection < 0: 从导线终点流向起点
                 if (flowDirection > 0) {
-                    wirePath.classList.add('flowing-forward');
+                    safeAddClass(wirePath, 'flowing-forward');
                 } else {
-                    wirePath.classList.add('flowing-reverse');
+                    safeAddClass(wirePath, 'flowing-reverse');
                 }
             }
         }
@@ -552,7 +593,7 @@ export class Renderer {
      */
     createTempWire() {
         const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-        line.setAttribute('class', 'wire-temp');
+        safeSetAttribute(line, 'class', 'wire-temp');
         this.uiLayer.appendChild(line);
         return line;
     }
@@ -561,10 +602,10 @@ export class Renderer {
      * 更新临时导线
      */
     updateTempWire(line, x1, y1, x2, y2) {
-        line.setAttribute('x1', x1);
-        line.setAttribute('y1', y1);
-        line.setAttribute('x2', x2);
-        line.setAttribute('y2', y2);
+        safeSetAttribute(line, 'x1', x1);
+        safeSetAttribute(line, 'y1', y1);
+        safeSetAttribute(line, 'x2', x2);
+        safeSetAttribute(line, 'y2', y2);
     }
 
     /**
@@ -588,13 +629,13 @@ export class Renderer {
         const isTouch = pointerType === 'touch';
         
         const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        circle.setAttribute('cx', pos.x);
-        circle.setAttribute('cy', pos.y);
-        circle.setAttribute('r', isTouch ? 16 : 12);
-        circle.setAttribute('class', isTouch ? 'terminal-highlight touch-snap-highlight' : 'terminal-highlight');
-        circle.setAttribute('id', 'terminal-highlight');
+        safeSetAttribute(circle, 'cx', pos.x);
+        safeSetAttribute(circle, 'cy', pos.y);
+        safeSetAttribute(circle, 'r', isTouch ? 16 : 12);
+        safeSetAttribute(circle, 'class', isTouch ? 'terminal-highlight touch-snap-highlight' : 'terminal-highlight');
+        safeSetAttribute(circle, 'id', 'terminal-highlight');
         if (isTouch) {
-            circle.setAttribute('data-pointer-type', 'touch');
+            safeSetAttribute(circle, 'data-pointer-type', 'touch');
         }
         this.uiLayer.appendChild(circle);
     }
@@ -608,13 +649,13 @@ export class Renderer {
         const isTouch = pointerType === 'touch';
         
         const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        circle.setAttribute('cx', x);
-        circle.setAttribute('cy', y);
-        circle.setAttribute('r', isTouch ? 14 : 10);
-        circle.setAttribute('class', isTouch ? 'wire-node-highlight touch-snap-highlight' : 'wire-node-highlight');
-        circle.setAttribute('id', 'terminal-highlight');
+        safeSetAttribute(circle, 'cx', x);
+        safeSetAttribute(circle, 'cy', y);
+        safeSetAttribute(circle, 'r', isTouch ? 14 : 10);
+        safeSetAttribute(circle, 'class', isTouch ? 'wire-node-highlight touch-snap-highlight' : 'wire-node-highlight');
+        safeSetAttribute(circle, 'id', 'terminal-highlight');
         if (isTouch) {
-            circle.setAttribute('data-pointer-type', 'touch');
+            safeSetAttribute(circle, 'data-pointer-type', 'touch');
         }
         this.uiLayer.appendChild(circle);
     }

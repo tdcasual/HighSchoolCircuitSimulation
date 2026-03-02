@@ -4,6 +4,11 @@
  */
 
 import { clamp, computeOverlapFractionFromOffsetPx, computeParallelPlateCapacitance } from '../utils/Physics.js';
+import { createValueDisplayShape, readValueDisplayElements } from './render/ComponentShapeFactory.js';
+import {
+    updateParallelPlateCapacitorVisualRuntime,
+    updateValueDisplayRuntime
+} from './render/ComponentVisualUpdater.js';
 
 // 元器件ID计数器
 let componentIdCounter = 0;
@@ -41,6 +46,24 @@ export function updateIdCounterFromExisting(existingIds) {
         }
     }
     componentIdCounter = maxNum;
+}
+
+function safeHasClass(node, className) {
+    if (!node || !node.classList || typeof node.classList.contains !== 'function') return false;
+    try {
+        return node.classList.contains(className);
+    } catch (_) {
+        return false;
+    }
+}
+
+function safeToggleClass(node, className, force) {
+    if (!node || !node.classList || typeof node.classList.toggle !== 'function') return false;
+    try {
+        return !!node.classList.toggle(className, force);
+    } catch (_) {
+        return false;
+    }
 }
 
 /**
@@ -1352,70 +1375,16 @@ export const SVGRenderer = {
      * 添加数值显示
      */
     addValueDisplay(g, comp) {
-        const valueGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-        valueGroup.setAttribute('class', 'value-display-group');
-        const anchor = resolveValueDisplayAnchor(comp);
-        valueGroup.setAttribute('transform', `translate(${anchor.x}, ${anchor.y})`);
-        
-        // 电流显示（最下方）
-        const currentText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        currentText.setAttribute('class', 'value-display current-display');
-        currentText.setAttribute('x', 0);
-        currentText.setAttribute('y', 0);
-        currentText.setAttribute('text-anchor', 'middle');
-        currentText.setAttribute('font-size', '13');
-        currentText.setAttribute('font-weight', '600');
-        currentText.textContent = '';
-        valueGroup.appendChild(currentText);
-        
-        // 电压显示（中间）
-        const voltageText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        voltageText.setAttribute('class', 'value-display voltage-display');
-        voltageText.setAttribute('x', 0);
-        voltageText.setAttribute('y', 0);
-        voltageText.setAttribute('text-anchor', 'middle');
-        voltageText.setAttribute('font-size', '13');
-        voltageText.setAttribute('font-weight', '600');
-        voltageText.textContent = '';
-        valueGroup.appendChild(voltageText);
-        
-        // 功率显示（最上方）
-        const powerText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        powerText.setAttribute('class', 'value-display power-display');
-        powerText.setAttribute('x', 0);
-        powerText.setAttribute('y', 0);
-        powerText.setAttribute('text-anchor', 'middle');
-        powerText.setAttribute('font-size', '13');
-        powerText.setAttribute('font-weight', '600');
-        powerText.textContent = '';
-        valueGroup.appendChild(powerText);
-        
-        g.appendChild(valueGroup);
-        g.__valueDisplayElements = {
-            valueGroup,
-            currentDisplay: currentText,
-            voltageDisplay: voltageText,
-            powerDisplay: powerText
-        };
-        valueGroup.__layoutSignature = '';
-        this.layoutValueDisplay(g, comp);
+        return createValueDisplayShape({
+            g,
+            comp,
+            resolveValueDisplayAnchor,
+            layoutValueDisplay: (target, targetComp) => this.layoutValueDisplay(target, targetComp)
+        });
     },
 
     getValueDisplayElements(g) {
-        if (!g) return null;
-        const cached = g.__valueDisplayElements;
-        if (cached?.valueGroup && cached.currentDisplay && cached.voltageDisplay && cached.powerDisplay) {
-            return cached;
-        }
-        const valueGroup = g.querySelector('.value-display-group');
-        const elements = {
-            valueGroup,
-            currentDisplay: g.querySelector('.current-display'),
-            voltageDisplay: g.querySelector('.voltage-display'),
-            powerDisplay: g.querySelector('.power-display')
-        };
-        g.__valueDisplayElements = elements;
-        return elements;
+        return readValueDisplayElements(g);
     },
 
     setElementTextIfChanged(element, nextText) {
@@ -1429,9 +1398,22 @@ export const SVGRenderer = {
     setElementAttributeIfChanged(element, name, value) {
         if (!element) return false;
         const normalizedValue = value == null ? '' : String(value);
-        if (element.getAttribute(name) === normalizedValue) return false;
-        element.setAttribute(name, normalizedValue);
-        return true;
+        let currentValue = null;
+        try {
+            currentValue = typeof element.getAttribute === 'function'
+                ? element.getAttribute(name)
+                : null;
+        } catch (_) {
+            currentValue = null;
+        }
+        if (currentValue === normalizedValue) return false;
+        if (typeof element.setAttribute !== 'function') return false;
+        try {
+            element.setAttribute(name, normalizedValue);
+            return true;
+        } catch (_) {
+            return false;
+        }
     },
 
     setDisplayTextAndStyle(element, text, fontSize = null, fontWeight = null) {
@@ -1500,189 +1482,34 @@ export const SVGRenderer = {
      * 更新元器件的数值显示
      */
     updateValueDisplay(g, comp, showCurrent, showVoltage, showPower) {
-        const elements = this.getValueDisplayElements(g);
-        const currentDisplay = elements?.currentDisplay;
-        const voltageDisplay = elements?.voltageDisplay;
-        const powerDisplay = elements?.powerDisplay;
-        
-        // 电表显示读数而非 I/U/P 格式
-        if (comp.type === 'Ammeter') {
-            // 电流表：显示电流读数，更大更醒目
-            if (currentDisplay) {
-                if (showCurrent) {
-                    const reading = Math.abs(comp.currentValue || 0);
-                    this.setDisplayTextAndStyle(currentDisplay, `${reading.toFixed(3)} A`, '14', '700');
-                } else {
-                    this.setDisplayTextAndStyle(currentDisplay, '', '13', '600');
-                }
+        return updateValueDisplayRuntime({
+            g,
+            comp,
+            showCurrent,
+            showVoltage,
+            showPower,
+            helpers: {
+                getValueDisplayElements: (node) => this.getValueDisplayElements(node),
+                setDisplayTextAndStyle: (...args) => this.setDisplayTextAndStyle(...args),
+                layoutValueDisplay: (target, targetComp) => this.layoutValueDisplay(target, targetComp),
+                formatValue: (value, unit) => this.formatValue(value, unit),
+                setElementAttributeIfChanged: (...args) => this.setElementAttributeIfChanged(...args),
+                safeToggleClass
             }
-            this.setDisplayTextAndStyle(voltageDisplay, '');
-            this.setDisplayTextAndStyle(powerDisplay, '');
-            this.layoutValueDisplay(g, comp);
-            return;
-        }
-        
-        if (comp.type === 'Voltmeter') {
-            // 电压表：显示电压读数，更大更醒目
-            if (voltageDisplay) {
-                if (showVoltage) {
-                    const reading = Math.abs(comp.voltageValue || 0);
-                    this.setDisplayTextAndStyle(voltageDisplay, `${reading.toFixed(3)} V`, '14', '700');
-                } else {
-                    this.setDisplayTextAndStyle(voltageDisplay, '', '13', '600');
-                }
-            }
-            // 理想电压表不显示电流，强制清空
-            this.setDisplayTextAndStyle(currentDisplay, '', '13', '600');
-            this.setDisplayTextAndStyle(powerDisplay, '');
-            this.layoutValueDisplay(g, comp);
-            return;
-        }
-        
-        // 开关不需要显示电压电流
-        if (comp.type === 'Switch' || comp.type === 'SPDTSwitch' || comp.type === 'Ground') {
-            this.setDisplayTextAndStyle(currentDisplay, '');
-            this.setDisplayTextAndStyle(voltageDisplay, '');
-            this.setDisplayTextAndStyle(powerDisplay, '');
-            this.layoutValueDisplay(g, comp);
-            return;
-        }
-        
-        // 其他元器件正常显示
-        if (currentDisplay) {
-            this.setDisplayTextAndStyle(
-                currentDisplay,
-                showCurrent ? `I = ${this.formatValue(comp.currentValue, 'A')}` : ''
-            );
-        }
-        
-        if (voltageDisplay) {
-            if (comp.type === 'Rheostat' && showVoltage) {
-                // 当滑动变阻器两端与滑块同时接入时，显示左右两段电压
-                const parts = [];
-                if (comp.voltageSegLeft !== undefined && comp.voltageSegLeft !== null) {
-                    parts.push(`U₁=${this.formatValue(comp.voltageSegLeft, 'V')}`);
-                }
-                if (comp.voltageSegRight !== undefined && comp.voltageSegRight !== null) {
-                    parts.push(`U₂=${this.formatValue(comp.voltageSegRight, 'V')}`);
-                }
-                if (parts.length > 0) {
-                    this.setDisplayTextAndStyle(voltageDisplay, parts.join('  '));
-                } else {
-                    this.setDisplayTextAndStyle(voltageDisplay, `U = ${this.formatValue(comp.voltageValue, 'V')}`);
-                }
-            } else {
-                this.setDisplayTextAndStyle(
-                    voltageDisplay,
-                    showVoltage ? `U = ${this.formatValue(comp.voltageValue, 'V')}` : ''
-                );
-            }
-        }
-        
-        if (powerDisplay) {
-            this.setDisplayTextAndStyle(
-                powerDisplay,
-                showPower ? `P = ${this.formatValue(comp.powerValue, 'W')}` : ''
-            );
-        }
-        this.layoutValueDisplay(g, comp);
-        
-        // 更新灯泡亮度
-        if (comp.type === 'Bulb') {
-            const glow = g.querySelector('.glow');
-            if (glow) {
-                const brightness = Math.min(1, comp.powerValue / comp.ratedPower);
-                this.setElementAttributeIfChanged(glow, 'fill', `rgba(255, 235, 59, ${brightness * 0.8})`);
-                g.classList.toggle('on', brightness > 0.1);
-            }
-        }
-
-        if (comp.type === 'LED') {
-            const glow = g.querySelector('.led-glow');
-            if (glow) {
-                const color = comp.color || '#ff4d6d';
-                const brightness = Math.max(0, Math.min(1, Number(comp.brightness) || 0));
-                this.setElementAttributeIfChanged(glow, 'fill', color);
-                this.setElementAttributeIfChanged(glow, 'fill-opacity', String(brightness * 0.85));
-                g.classList.toggle('on', brightness > 0.05);
-            }
-        }
-        
-        // 更新电容器充电状态视觉指示
-        if (comp.type === 'Capacitor') {
-            const plates = g.querySelectorAll('.capacitor-plate');
-            const isCharged = Math.abs(comp.currentValue || 0) < 1e-6; // 电流极小，认为充电完成
-            
-            plates.forEach(plate => {
-                plate.classList.toggle('charged', isCharged);
-            });
-        }
+        });
     },
 
     /**
      * 更新平行板电容的极板位置与标签（用于拖动探索模式，避免整组重绘导致闪烁）
      */
     updateParallelPlateCapacitorVisual(g, comp) {
-        if (!g || !comp) return;
-
-        const plateLengthPx = 24;
-        const halfLen = plateLengthPx / 2;
-        const plateWidth = 4;
-        const pxPerMm = 10;
-        const minGapPx = 6;
-        const maxGapPx = 30;
-
-        const distanceMm = (comp.plateDistance ?? 0.001) * 1000;
-        const gapPx = clamp(distanceMm * pxPerMm, minGapPx, maxGapPx);
-        const offsetY = clamp(comp.plateOffsetYPx ?? 0, -plateLengthPx, plateLengthPx);
-
-        const leftX = -gapPx / 2;
-        const rightX = gapPx / 2;
-
-        const leftConn = g.querySelector('.ppc-connector-left');
-        if (leftConn) {
-            leftConn.setAttribute('x2', String(leftX));
-        }
-        const rightConn = g.querySelector('.ppc-connector-right');
-        if (rightConn) {
-            rightConn.setAttribute('x1', String(rightX));
-        }
-
-        const leftPlate = g.querySelector('.ppc-plate-left');
-        if (leftPlate) {
-            leftPlate.setAttribute('x', String(leftX - plateWidth / 2));
-            leftPlate.setAttribute('y', String(-halfLen));
-        }
-
-        const rightPlate = g.querySelector('.ppc-plate-right');
-        if (rightPlate) {
-            rightPlate.setAttribute('x', String(rightX - plateWidth / 2));
-            rightPlate.setAttribute('y', String(-halfLen + offsetY));
-            if (comp.explorationMode) {
-                rightPlate.style.pointerEvents = 'all';
-                rightPlate.style.cursor = 'grab';
-            } else {
-                rightPlate.style.pointerEvents = 'none';
-                rightPlate.style.cursor = '';
+        return updateParallelPlateCapacitorVisualRuntime({
+            g,
+            comp,
+            helpers: {
+                setElementAttributeIfChanged: (...args) => this.setElementAttributeIfChanged(...args)
             }
-        }
-
-        // 标签（无自定义标签时显示电容值）
-        const label = g.querySelector('.ppc-label');
-        if (label && !comp.label) {
-            const C = comp.capacitance || 0;
-            let text;
-            if (Math.abs(C) >= 1e-3) {
-                text = `${(C * 1e3).toFixed(0)}mF`;
-            } else if (Math.abs(C) >= 1e-6) {
-                text = `${(C * 1e6).toFixed(1)}μF`;
-            } else if (Math.abs(C) >= 1e-9) {
-                text = `${(C * 1e9).toFixed(1)}nF`;
-            } else {
-                text = `${(C * 1e12).toFixed(1)}pF`;
-            }
-            label.textContent = text;
-        }
+        });
     },
 
     /**
@@ -1770,7 +1597,7 @@ export const SVGRenderer = {
 
         const shouldShowEndpointHints = (() => {
             const body = typeof document !== 'undefined' ? document.body : null;
-            if (body?.classList?.contains('layout-mode-phone') || body?.classList?.contains('layout-mode-compact')) {
+            if (safeHasClass(body, 'layout-mode-phone') || safeHasClass(body, 'layout-mode-compact')) {
                 return true;
             }
             if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
@@ -1784,7 +1611,7 @@ export const SVGRenderer = {
         })();
         
         // 如果导线被选中，显示端点（可拖动）
-        if (g.classList.contains('selected')) {
+        if (safeHasClass(g, 'selected')) {
             const makeEndpoint = (pt, which) => {
                 const hitCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
                 hitCircle.setAttribute('cx', pt.x);

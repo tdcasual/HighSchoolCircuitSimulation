@@ -34,4 +34,33 @@ describe('ObservationPlotCardController', () => {
             value: 'abs'
         }));
     });
+
+    it('dispose does not throw when removeEventListener throws', () => {
+        const onChange = vi.fn();
+        const controller = new ObservationPlotCardController({ onChange });
+        const ySelect = {
+            value: 'identity',
+            addEventListener: vi.fn(),
+            removeEventListener: vi.fn(() => {
+                throw new TypeError('broken remove');
+            })
+        };
+
+        controller.mount({ yTransformSelect: ySelect });
+        expect(() => controller.dispose()).not.toThrow();
+    });
+
+    it('mount does not throw when addEventListener throws', () => {
+        const onChange = vi.fn();
+        const controller = new ObservationPlotCardController({ onChange });
+        const ySelect = {
+            value: 'identity',
+            addEventListener: vi.fn(() => {
+                throw new TypeError('broken add');
+            }),
+            removeEventListener: vi.fn()
+        };
+
+        expect(() => controller.mount({ yTransformSelect: ySelect })).not.toThrow();
+    });
 });

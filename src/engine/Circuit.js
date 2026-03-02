@@ -13,12 +13,13 @@ import { ConnectivityCache } from '../core/topology/ConnectivityCache.js';
 import { CircuitSerializer } from '../core/io/CircuitSerializer.js';
 import { CircuitDeserializer } from '../core/io/CircuitDeserializer.js';
 import { SimulationState } from '../core/simulation/SimulationState.js';
-import { buildRuntimeDiagnostics } from '../core/simulation/RuntimeDiagnostics.js';
 import { NetlistBuilder } from '../core/simulation/NetlistBuilder.js';
 import { createRuntimeLogger } from '../utils/Logger.js';
+import { CircuitPersistenceAdapter } from './runtime/CircuitPersistenceAdapter.js';
+import { CircuitDiagnosticsAdapter } from './runtime/CircuitDiagnosticsAdapter.js';
 
 export class Circuit {
-    constructor() {
+    constructor(options = {}) {
         this.components = new Map();  // id -> component
         this.wires = new Map();       // id -> wire
         this.observationProbes = new Map(); // id -> probe
@@ -61,6 +62,10 @@ export class Circuit {
         this.netlist = null;
         this.debugMode = false;
         this.logger = createRuntimeLogger({ scope: 'circuit' });
+        this.persistenceAdapter = options.persistenceAdapter || new CircuitPersistenceAdapter({
+            storage: options.storage || null
+        });
+        this.diagnosticsAdapter = options.diagnosticsAdapter || new CircuitDiagnosticsAdapter();
         this.solver.setLogger?.(this.logger.child?.('solver') || this.logger);
         this.loadDebugFlag();
         this.solver.debugMode = this.debugMode;
@@ -1061,7 +1066,7 @@ export class Circuit {
         const topologyReport = normalizedResults.valid
             ? null
             : this.validateSimulationTopology(simTime);
-        return buildRuntimeDiagnostics({
+        return this.diagnosticsAdapter.build({
             topologyReport,
             results: normalizedResults,
             solverShortCircuitDetected: !!this.solver?.shortCircuitDetected,
@@ -1075,9 +1080,9 @@ export class Circuit {
         const target = (results && typeof results === 'object')
             ? results
             : (this.lastResults && typeof this.lastResults === 'object' ? this.lastResults : null);
-        if (!target) return buildRuntimeDiagnostics();
+        if (!target) return this.diagnosticsAdapter.build();
         const diagnostics = this.collectRuntimeDiagnostics(target, simTime);
-        target.runtimeDiagnostics = diagnostics;
+        this.diagnosticsAdapter.attach(target, { diagnostics });
         if (target === this.lastResults) {
             this.lastResults.runtimeDiagnostics = diagnostics;
         }
@@ -1908,25 +1913,12 @@ export class Circuit {
      * 加载/保存调试开关
      */
     loadDebugFlag() {
-        try {
-            if (typeof localStorage !== 'undefined') {
-                const flag = localStorage.getItem('solver_debug');
-                if (flag === 'true') this.debugMode = true;
-            }
-        } catch (e) {
-            // ignore in non-browser env
-        }
+        this.debugMode = !!this.persistenceAdapter.loadSolverDebugFlag();
     }
 
     setDebugMode(flag) {
         this.debugMode = !!flag;
-        try {
-            if (typeof localStorage !== 'undefined') {
-                localStorage.setItem('solver_debug', this.debugMode ? 'true' : 'false');
-            }
-        } catch (e) {
-            // ignore
-        }
+        this.persistenceAdapter.saveSolverDebugFlag(this.debugMode);
         this.solver.debugMode = this.debugMode;
     }
 
