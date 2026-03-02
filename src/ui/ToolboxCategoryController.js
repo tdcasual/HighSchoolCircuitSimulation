@@ -31,6 +31,30 @@ function isToggleKey(key) {
     return key === 'Enter' || key === ' ' || key === 'Spacebar';
 }
 
+function safeInvokeMethod(target, methodName, ...args) {
+    const fn = target?.[methodName];
+    if (typeof fn !== 'function') return undefined;
+    try {
+        return fn.apply(target, args);
+    } catch (_) {
+        return undefined;
+    }
+}
+
+function safeToggleClass(node, className, force) {
+    const toggle = node?.classList?.toggle;
+    if (typeof toggle !== 'function') return false;
+    try {
+        return !!toggle.call(node.classList, className, force);
+    } catch (_) {
+        return false;
+    }
+}
+
+function safeSetAttribute(node, name, value) {
+    return safeInvokeMethod(node, 'setAttribute', name, value);
+}
+
 export class ToolboxCategoryController {
     constructor(app, options = {}) {
         this.app = app;
@@ -71,37 +95,44 @@ export class ToolboxCategoryController {
                 event?.stopPropagation?.();
                 this.toggleCategory(key);
             };
-            toggleButton.addEventListener('click', clickHandler);
-            this.boundListeners.push({
-                target: toggleButton,
-                clickHandler
-            });
+            safeInvokeMethod(toggleButton, 'addEventListener', 'click', clickHandler);
+            if (typeof toggleButton?.removeEventListener === 'function') {
+                this.boundListeners.push({
+                    target: toggleButton,
+                    clickHandler
+                });
+            }
 
             const headingClickHandler = () => this.toggleCategory(key);
-            heading.addEventListener('click', headingClickHandler);
-            this.boundListeners.push({
-                target: heading,
-                clickHandler: headingClickHandler
-            });
+            safeInvokeMethod(heading, 'addEventListener', 'click', headingClickHandler);
+            if (typeof heading?.removeEventListener === 'function') {
+                this.boundListeners.push({
+                    target: heading,
+                    clickHandler: headingClickHandler
+                });
+            }
             return;
         }
 
         // Fallback for environments without full DOM APIs (tests/mocks).
-        heading.setAttribute('role', 'button');
-        heading.setAttribute('tabindex', '0');
+        safeSetAttribute(heading, 'role', 'button');
+        safeSetAttribute(heading, 'tabindex', '0');
         const fallbackClickHandler = () => this.toggleCategory(key);
         const fallbackKeydownHandler = (event) => {
             if (!isToggleKey(event?.key)) return;
             event.preventDefault?.();
             this.toggleCategory(key);
         };
-        heading.addEventListener('click', fallbackClickHandler);
-        heading.addEventListener('keydown', fallbackKeydownHandler);
-        this.boundListeners.push({
-            target: heading,
-            clickHandler: fallbackClickHandler,
-            keydownHandler: fallbackKeydownHandler
-        });
+        const canRemove = typeof heading?.removeEventListener === 'function';
+        safeInvokeMethod(heading, 'addEventListener', 'click', fallbackClickHandler);
+        safeInvokeMethod(heading, 'addEventListener', 'keydown', fallbackKeydownHandler);
+        if (canRemove) {
+            this.boundListeners.push({
+                target: heading,
+                clickHandler: fallbackClickHandler,
+                keydownHandler: fallbackKeydownHandler
+            });
+        }
     }
 
     ensureToggleButton(category, key, heading) {
@@ -127,7 +158,7 @@ export class ToolboxCategoryController {
         }
 
         const text = String(heading.textContent || '').trim();
-        button.setAttribute('aria-label', text ? `切换${text}` : `切换${key}`);
+        safeSetAttribute(button, 'aria-label', text ? `切换${text}` : `切换${key}`);
         return button;
     }
 
@@ -142,14 +173,14 @@ export class ToolboxCategoryController {
                 : null;
             const collapsed = !!this.state[key];
 
-            category.classList.toggle('collapsed', collapsible && collapsed);
+            safeToggleClass(category, 'collapsed', collapsible && collapsed);
             if (heading && collapsible) {
-                heading.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+                safeSetAttribute(heading, 'aria-expanded', collapsed ? 'false' : 'true');
             }
             if (button && collapsible) {
                 const label = collapsed ? '展开' : '收起';
                 button.textContent = label;
-                button.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+                safeSetAttribute(button, 'aria-expanded', collapsed ? 'false' : 'true');
             }
         });
 
@@ -166,9 +197,9 @@ export class ToolboxCategoryController {
 
     destroy() {
         this.boundListeners.forEach(({ target, clickHandler, keydownHandler }) => {
-            target?.removeEventListener?.('click', clickHandler);
+            safeInvokeMethod(target, 'removeEventListener', 'click', clickHandler);
             if (keydownHandler) {
-                target?.removeEventListener?.('keydown', keydownHandler);
+                safeInvokeMethod(target, 'removeEventListener', 'keydown', keydownHandler);
             }
         });
         this.boundListeners = [];

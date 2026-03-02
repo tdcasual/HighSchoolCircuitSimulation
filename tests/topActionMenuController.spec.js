@@ -153,4 +153,61 @@ describe('TopActionMenuController', () => {
         controller.setSelectionMode('wire');
         expect(controller.selectionMode).toBe('wire');
     });
+
+    it('ignores menu click target when closest is not a function', () => {
+        const { button, menu } = setupFixture();
+        const controller = new TopActionMenuController({});
+
+        button.trigger('click', { preventDefault: vi.fn(), stopPropagation: vi.fn() });
+        expect(controller.isOpen).toBe(true);
+
+        expect(() => {
+            menu.trigger('click', { target: { closest: {} } });
+        }).not.toThrow();
+        expect(controller.isOpen).toBe(true);
+    });
+
+    it('handles outside pointerdown when contains throws on invalid target', () => {
+        const { button, menu, documentMock } = setupFixture();
+        const controller = new TopActionMenuController({});
+        menu.contains.mockImplementation(() => {
+            throw new TypeError('contains target type mismatch');
+        });
+        button.contains.mockImplementation(() => {
+            throw new TypeError('contains target type mismatch');
+        });
+
+        button.trigger('click', { preventDefault: vi.fn(), stopPropagation: vi.fn() });
+        expect(controller.isOpen).toBe(true);
+
+        expect(() => {
+            documentMock.trigger('pointerdown', { target: { foo: 'bar' } });
+        }).not.toThrow();
+        expect(controller.isOpen).toBe(false);
+    });
+
+    it('treats phone mode as disabled when body classList contains is non-callable', () => {
+        const { documentMock } = setupFixture();
+        documentMock.body.classList.contains = {};
+        const controller = new TopActionMenuController({});
+
+        expect(() => controller.isPhoneMode()).not.toThrow();
+        expect(controller.isPhoneMode()).toBe(false);
+    });
+
+    it('does not throw when button.setAttribute is non-callable during initialization', () => {
+        const { button } = setupFixture();
+        button.setAttribute = {};
+
+        expect(() => new TopActionMenuController({})).not.toThrow();
+    });
+
+    it('does not throw when menu.classList.toggle is non-callable in setOpen', () => {
+        const { menu } = setupFixture();
+        menu.classList.toggle = {};
+        const controller = new TopActionMenuController({});
+
+        expect(() => controller.setOpen(true)).not.toThrow();
+        expect(() => controller.setOpen(false)).not.toThrow();
+    });
 });

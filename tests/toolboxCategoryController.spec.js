@@ -138,4 +138,53 @@ describe('ToolboxCategoryController', () => {
         expect(spaceEvent.preventDefault).toHaveBeenCalledTimes(1);
         expect(power.classList.contains('collapsed')).toBe(false);
     });
+
+    it('destroy does not throw when removeEventListener is non-callable', () => {
+        const { power } = setupFixture();
+        const controller = new ToolboxCategoryController({});
+        power.heading.removeEventListener = {};
+
+        expect(() => controller.destroy()).not.toThrow();
+    });
+
+    it('setupCategory does not throw when addEventListener is non-callable in fallback mode', () => {
+        const heading = {
+            setAttribute: vi.fn(),
+            removeAttribute: vi.fn(),
+            addEventListener: {}
+        };
+        const category = {
+            dataset: { category: 'power' },
+            querySelector: vi.fn((selector) => (selector === 'h3' ? heading : null))
+        };
+        const ctx = {
+            ensureToggleButton: vi.fn(() => null),
+            toggleCategory: vi.fn(),
+            boundListeners: []
+        };
+
+        expect(() => ToolboxCategoryController.prototype.setupCategory.call(ctx, category)).not.toThrow();
+        expect(ctx.boundListeners).toHaveLength(0);
+    });
+
+    it('applyState does not throw when classList.toggle and setAttribute are non-callable', () => {
+        const heading = { setAttribute: {} };
+        const button = { setAttribute: {}, textContent: '' };
+        const category = {
+            dataset: { category: 'power' },
+            classList: { toggle: {} },
+            querySelector: vi.fn((selector) => {
+                if (selector === 'h3') return heading;
+                if (selector === '.tool-category-toggle') return button;
+                return null;
+            })
+        };
+        const ctx = {
+            categories: [category],
+            state: { power: true },
+            storageKey: 'ui.toolbox_category_collapsed_v1'
+        };
+
+        expect(() => ToolboxCategoryController.prototype.applyState.call(ctx)).not.toThrow();
+    });
 });
