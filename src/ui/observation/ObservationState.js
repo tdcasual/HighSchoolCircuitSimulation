@@ -10,6 +10,20 @@ export const MIN_MAX_POINTS = 100;
 export const MAX_MAX_POINTS = 200000;
 export const OBSERVATION_TEMPLATE_SCHEMA_VERSION = 1;
 export const DEFAULT_OBSERVATION_TEMPLATE_NAME = '未命名模板';
+export const OBSERVATION_LEGACY_SCHEMA_AUDIT = Object.freeze({
+    mustKeep: Object.freeze([
+        'templateName',
+        'plotBindings',
+        'mode/collapsedCards/showGaugeSection'
+    ]),
+    removable: Object.freeze([
+        'title',
+        'presetName',
+        'bindingMap',
+        'plot/plotId',
+        'target/source/quantity'
+    ])
+});
 
 const VALID_TRANSFORM_IDS = new Set(Object.values(TransformIds));
 export const ObservationDisplayModes = /** @type {const} */ ({

@@ -8,6 +8,7 @@ import {
     normalizePlotState,
     normalizeSampleIntervalMs,
     ObservationDisplayModes,
+    OBSERVATION_LEGACY_SCHEMA_AUDIT,
     OBSERVATION_TEMPLATE_SCHEMA_VERSION,
     shouldSampleAtTime
 } from '../src/ui/observation/ObservationState.js';
@@ -193,5 +194,20 @@ describe('ObservationState', () => {
         expect(template.bindings).toEqual([
             { plotIndex: 0, axis: 'y', sourceId: 'R2', quantityId: QuantityIds.Current }
         ]);
+    });
+
+    it('provides legacy schema audit classification for week9 prune', () => {
+        expect(OBSERVATION_LEGACY_SCHEMA_AUDIT.mustKeep).toEqual(expect.arrayContaining([
+            'templateName',
+            'plotBindings',
+            'mode/collapsedCards/showGaugeSection'
+        ]));
+        expect(OBSERVATION_LEGACY_SCHEMA_AUDIT.removable).toEqual(expect.arrayContaining([
+            'title',
+            'presetName',
+            'bindingMap',
+            'plot/plotId',
+            'target/source/quantity'
+        ]));
     });
 });
