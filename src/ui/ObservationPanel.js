@@ -4,7 +4,7 @@
  */
 
 import { createElement, clearElement } from '../utils/SafeDOM.js';
-import { applyTransform, computeNiceTicks, computeRangeFromBuffer, formatNumberCompact, RingBuffer2D, stabilizeAutoRangeWindow, TransformOptions } from './observation/ObservationMath.js';
+import { applyTransform, computeNiceTicks, formatNumberCompact, RingBuffer2D, TransformOptions } from './observation/ObservationMath.js';
 import { evaluateSourceQuantity, getQuantitiesForSource, getSourceOptions, PROBE_SOURCE_PREFIX, QuantityIds, TIME_SOURCE_ID } from './observation/ObservationSources.js';
 import {
     createDefaultPlotState,
@@ -19,6 +19,9 @@ import {
 import { ObservationUIModes, normalizeObservationUI } from './observation/ObservationPreferences.js';
 import { ObservationPlotCardController } from './observation/ObservationPlotCardController.js';
 import { ObservationChartInteraction } from './observation/ObservationChartInteraction.js';
+import { ObservationLayoutController } from './observation/ObservationLayoutController.js';
+import { ObservationInteractionController } from './observation/ObservationInteractionController.js';
+import { ObservationRenderController } from './observation/ObservationRenderController.js';
 
 function setSelectOptions(selectEl, options, selectedId) {
     if (!selectEl) return null;
@@ -53,6 +56,61 @@ function parseOptionalNumber(inputValue) {
     if (!trimmed) return null;
     const v = Number(trimmed);
     return Number.isFinite(v) ? v : null;
+}
+
+function safeHasClass(node, className) {
+    if (!node || !node.classList || typeof node.classList.contains !== 'function') return false;
+    try {
+        return node.classList.contains(className);
+    } catch (_) {
+        return false;
+    }
+}
+
+function safeAppendToBody(node) {
+    if (typeof document === 'undefined') return false;
+    const body = document.body;
+    if (!body || typeof body.appendChild !== 'function') return false;
+    try {
+        body.appendChild(node);
+        return true;
+    } catch (_) {
+        return false;
+    }
+}
+
+function safeInvokeMethod(target, methodName, ...args) {
+    const method = target?.[methodName];
+    if (typeof method !== 'function') return undefined;
+    try {
+        return method.apply(target, args);
+    } catch (_) {
+        return undefined;
+    }
+}
+
+function getLayoutController(panel, methodName = '') {
+    const controller = panel?.layoutController;
+    if (controller && (!methodName || typeof controller[methodName] === 'function')) {
+        return controller;
+    }
+    return new ObservationLayoutController(panel);
+}
+
+function getInteractionController(panel, methodName = '') {
+    const controller = panel?.interactionController;
+    if (controller && (!methodName || typeof controller[methodName] === 'function')) {
+        return controller;
+    }
+    return new ObservationInteractionController(panel);
+}
+
+function getRenderController(panel, methodName = '') {
+    const controller = panel?.renderController;
+    if (controller && (!methodName || typeof controller[methodName] === 'function')) {
+        return controller;
+    }
+    return new ObservationRenderController(panel);
 }
 
 const ObservationPresetMeta = Object.freeze({
@@ -149,13 +207,16 @@ export class ObservationPanel {
         this._lastSimTime = 0;
         this._lastSampleTime = Number.NEGATIVE_INFINITY;
         this._runtimeStatusTimer = null;
+        this.layoutController = new ObservationLayoutController(this);
+        this.interactionController = new ObservationInteractionController(this);
+        this.renderController = new ObservationRenderController(this);
 
         if (!this.root) return;
 
         this.initializeUI();
         this.bindTabRefresh();
 
-        window.addEventListener('resize', () => {
+        safeInvokeMethod(window, 'addEventListener', 'resize', () => {
             for (const plot of this.plots) {
                 plot._needsRedraw = true;
             }
@@ -239,8 +300,8 @@ export class ObservationPanel {
             [ObservationUIModes.Basic]: basicModeBtn,
             [ObservationUIModes.Advanced]: advancedModeBtn
         };
-        basicModeBtn.addEventListener('click', () => this.setUIMode(ObservationUIModes.Basic));
-        advancedModeBtn.addEventListener('click', () => this.setUIMode(ObservationUIModes.Advanced));
+        safeInvokeMethod(basicModeBtn, 'addEventListener', 'click', () => this.setUIMode(ObservationUIModes.Basic));
+        safeInvokeMethod(advancedModeBtn, 'addEventListener', 'click', () => this.setUIMode(ObservationUIModes.Advanced));
         this.updateModeToggleUI();
 
         const presetBar = createElement('div', { className: 'observation-preset-bar' });
@@ -262,7 +323,7 @@ export class ObservationPanel {
                     title: presetHint
                 }
             });
-            btn.addEventListener('click', () => this.applyQuickPreset(preset.id));
+            safeInvokeMethod(btn, 'addEventListener', 'click', () => this.applyQuickPreset(preset.id));
             this.presetButtons[preset.id] = btn;
             presetBar.appendChild(btn);
         });
@@ -321,16 +382,16 @@ export class ObservationPanel {
             deleteBtn: deleteTemplateBtn,
             lastSelectedName: ''
         };
-        templateSelect.addEventListener('change', () => {
+        safeInvokeMethod(templateSelect, 'addEventListener', 'change', () => {
             this.templateControls.lastSelectedName = String(templateSelect.value || '').trim();
         });
-        saveTemplateBtn.addEventListener('click', () => {
+        safeInvokeMethod(saveTemplateBtn, 'addEventListener', 'click', () => {
             this.saveCurrentAsTemplate(templateNameInput.value);
         });
-        applyTemplateBtn.addEventListener('click', () => {
+        safeInvokeMethod(applyTemplateBtn, 'addEventListener', 'click', () => {
             this.applySelectedTemplate();
         });
-        deleteTemplateBtn.addEventListener('click', () => {
+        safeInvokeMethod(deleteTemplateBtn, 'addEventListener', 'click', () => {
             this.deleteSelectedTemplate();
         });
         this.refreshTemplateControls();
@@ -365,7 +426,7 @@ export class ObservationPanel {
         stickyControls.appendChild(sampleGroup);
         this.root.appendChild(stickyControls);
         this.sampleIntervalInput = sampleInput;
-        sampleInput.addEventListener('change', () => {
+        safeInvokeMethod(sampleInput, 'addEventListener', 'change', () => {
             const normalized = normalizeSampleIntervalMs(sampleInput.value, this.sampleIntervalMs);
             this.sampleIntervalMs = normalized;
             sampleInput.value = String(normalized);
@@ -387,10 +448,10 @@ export class ObservationPanel {
         this.plotListEl = createElement('div', { className: 'observation-plot-list' });
         this.root.appendChild(this.plotListEl);
 
-        addBtn.addEventListener('click', () => this.addPlot());
-        clearBtn.addEventListener('click', () => this.clearAllPlots());
-        exportBtn.addEventListener('click', () => this.exportObservationSnapshot());
-        removeAllBtn.addEventListener('click', () => this.deleteAllPlots());
+        safeInvokeMethod(addBtn, 'addEventListener', 'click', () => this.addPlot());
+        safeInvokeMethod(clearBtn, 'addEventListener', 'click', () => this.clearAllPlots());
+        safeInvokeMethod(exportBtn, 'addEventListener', 'click', () => this.exportObservationSnapshot());
+        safeInvokeMethod(removeAllBtn, 'addEventListener', 'click', () => this.deleteAllPlots());
 
         // 默认添加一张图，便于上手
         this.addPlot();
@@ -400,19 +461,12 @@ export class ObservationPanel {
     }
 
     bindTabRefresh() {
-        const tabBtn = document.querySelector('.panel-tab-btn[data-panel="observation"]');
-        if (!tabBtn) return;
-        tabBtn.addEventListener('click', () => {
-            this.refreshComponentOptions();
-            this.refreshDialGauges();
-            this.updatePresetButtonHints();
-            this.requestRender({ onlyIfActive: false });
-        });
+        return getInteractionController(this, 'bindTabRefresh').bindTabRefresh();
     }
 
     isObservationActive() {
         const page = document.getElementById('panel-observation');
-        return !!(page && page.classList.contains('active'));
+        return safeHasClass(page, 'active');
     }
 
     getDefaultComponentId() {
@@ -809,9 +863,9 @@ export class ObservationPanel {
         const anchor = document.createElement('a');
         anchor.href = dataUrl;
         anchor.download = fileName;
-        document.body?.appendChild?.(anchor);
-        anchor.click?.();
-        anchor.remove?.();
+        safeAppendToBody(anchor);
+        safeInvokeMethod(anchor, 'click');
+        safeInvokeMethod(anchor, 'remove');
         return true;
     }
 
@@ -1001,59 +1055,23 @@ export class ObservationPanel {
     }
 
     updateModeToggleUI() {
-        const mode = this.ui?.mode === ObservationUIModes.Advanced
-            ? ObservationUIModes.Advanced
-            : ObservationUIModes.Basic;
-        Object.entries(this.modeButtons || {}).forEach(([key, button]) => {
-            if (!button) return;
-            button.classList?.toggle?.('active', key === mode);
-        });
+        return getLayoutController(this, 'updateModeToggleUI').updateModeToggleUI();
     }
 
     isPhoneLayout() {
-        if (typeof document !== 'undefined' && document.body?.classList?.contains('layout-mode-phone')) {
-            return true;
-        }
-        return this.app?.responsiveLayout?.mode === 'phone';
+        return getLayoutController(this, 'isPhoneLayout').isPhoneLayout();
     }
 
     applyMobileModeForPlotCard(plot) {
-        const card = plot?.elements?.card;
-        if (!card?.classList) return;
-
-        const autoCollapse = this.ui?.mode !== ObservationUIModes.Advanced && this.isPhoneLayout();
-        const forcedExpanded = plot?.controlsOverride === 'expanded';
-        const forcedCollapsed = plot?.controlsOverride === 'collapsed';
-        const shouldCollapse = forcedCollapsed || (!forcedExpanded && autoCollapse);
-
-        card.classList.toggle('observation-card-collapsed', shouldCollapse);
-        plot.elements.controls?.classList?.toggle?.('observation-controls-collapsed', shouldCollapse);
-
-        const collapseBtn = plot?.elements?.collapseBtn;
-        if (collapseBtn) {
-            collapseBtn.textContent = shouldCollapse ? '展开设置' : '收起设置';
-            collapseBtn.setAttribute?.('aria-expanded', shouldCollapse ? 'false' : 'true');
-            collapseBtn.setAttribute?.('title', shouldCollapse ? '展开参数设置' : '收起参数设置');
-        }
+        return getLayoutController(this, 'applyMobileModeForPlotCard').applyMobileModeForPlotCard(plot);
     }
 
     applyLayoutModeToAllPlotCards() {
-        for (const plot of this.plots) {
-            this.applyMobileModeForPlotCard(plot);
-            plot._needsRedraw = true;
-        }
+        return getLayoutController(this, 'applyLayoutModeToAllPlotCards').applyLayoutModeToAllPlotCards();
     }
 
     onLayoutModeChanged() {
-        if (typeof this.applyLayoutModeToAllPlotCards === 'function') {
-            this.applyLayoutModeToAllPlotCards();
-        } else {
-            for (const plot of this.plots || []) {
-                this.applyMobileModeForPlotCard?.(plot);
-            }
-        }
-        this.updatePresetButtonHints?.();
-        this.requestRender({ onlyIfActive: true });
+        return getLayoutController(this, 'onLayoutModeChanged').onLayoutModeChanged();
     }
 
     resolveSourceLabel(sourceId, probeType = '') {
@@ -1079,8 +1097,8 @@ export class ObservationPanel {
         for (const [presetId, button] of Object.entries(this.presetButtons || {})) {
             if (!button || typeof button.setAttribute !== 'function') continue;
             const hint = buildObservationPresetHint(presetId, context);
-            button.setAttribute('aria-label', hint);
-            button.setAttribute('title', hint);
+            safeInvokeMethod(button, 'setAttribute', 'aria-label', hint);
+            safeInvokeMethod(button, 'setAttribute', 'title', hint);
         }
     }
 
@@ -1295,12 +1313,12 @@ export class ObservationPanel {
             yDisplaySelect: plot.elements.yDisplaySelect
         });
 
-        titleInput.addEventListener('change', () => {
+        safeInvokeMethod(titleInput, 'addEventListener', 'change', () => {
             plot.name = String(titleInput.value || '').trim() || plot.name;
             this.schedulePersist(0);
         });
-        collapseBtn.addEventListener('click', () => {
-            const isCollapsed = plot.elements.card?.classList?.contains?.('observation-card-collapsed');
+        safeInvokeMethod(collapseBtn, 'addEventListener', 'click', () => {
+            const isCollapsed = safeHasClass(plot.elements.card, 'observation-card-collapsed');
             if (isCollapsed) {
                 plot.controlsOverride = 'expanded';
             } else {
@@ -1309,8 +1327,8 @@ export class ObservationPanel {
             this.applyMobileModeForPlotCard(plot);
             this.schedulePersist(0);
         });
-        removeBtn.addEventListener('click', () => this.removePlot(plot.id));
-        clearBtn.addEventListener('click', () => {
+        safeInvokeMethod(removeBtn, 'addEventListener', 'click', () => this.removePlot(plot.id));
+        safeInvokeMethod(clearBtn, 'addEventListener', 'click', () => {
             plot.buffer.clear();
             plot._latestText = '最新: —';
             if (plot.elements.latestText) {
@@ -1331,7 +1349,7 @@ export class ObservationPanel {
             plot.yDisplayMode
         );
 
-        pointsInput.addEventListener('change', () => {
+        safeInvokeMethod(pointsInput, 'addEventListener', 'change', () => {
             const next = Math.floor(Number(pointsInput.value));
             if (!Number.isFinite(next) || next <= 0) {
                 pointsInput.value = String(plot.maxPoints);
@@ -1355,226 +1373,23 @@ export class ObservationPanel {
     }
 
     bindPlotCanvasInteraction(plot) {
-        const canvas = plot?.elements?.canvas;
-        if (!canvas || typeof canvas.addEventListener !== 'function') return;
-        const getPoint = (event) => {
-            const rect = canvas.getBoundingClientRect?.();
-            if (!rect) return null;
-            const x = Number(event?.clientX) - Number(rect.left || 0);
-            const y = Number(event?.clientY) - Number(rect.top || 0);
-            if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
-            return {
-                x,
-                y,
-                pointerType: event?.pointerType || 'mouse',
-                time: typeof event?.timeStamp === 'number' ? event.timeStamp : Date.now()
-            };
-        };
-
-        canvas.addEventListener('pointerdown', (event) => {
-            const point = getPoint(event);
-            if (!point) return;
-            plot.chartInteraction?.onPointerDown(point);
-            this.syncLinkedCursorSnapshot(plot);
-            plot._needsRedraw = true;
-            this.requestRender({ onlyIfActive: true });
-        });
-        canvas.addEventListener('pointermove', (event) => {
-            const point = getPoint(event);
-            if (!point) return;
-            plot.chartInteraction?.onPointerMove(point);
-            this.syncLinkedCursorSnapshot(plot);
-            plot._needsRedraw = true;
-            this.requestRender({ onlyIfActive: true });
-        });
-        canvas.addEventListener('pointerup', () => {
-            plot.chartInteraction?.onPointerUp();
-            this.syncLinkedCursorSnapshot(plot);
-            plot._needsRedraw = true;
-            this.requestRender({ onlyIfActive: true });
-        });
-        canvas.addEventListener('pointerleave', () => {
-            plot.chartInteraction?.onPointerLeave();
-            this.syncLinkedCursorSnapshot(plot);
-            plot._needsRedraw = true;
-            this.requestRender({ onlyIfActive: true });
-        });
+        return getInteractionController(this, 'bindPlotCanvasInteraction').bindPlotCanvasInteraction(plot);
     }
 
     syncLinkedCursorSnapshot(plot) {
-        if (!plot?.chartInteraction || !plot.id) return;
-
-        const dpr = window.devicePixelRatio || 1;
-        const readout = plot.chartInteraction.getReadout?.();
-        if (!readout) {
-            if (this.linkedCursorSnapshot?.sourcePlotId === plot.id && !plot.chartInteraction.isFrozen?.()) {
-                this.linkedCursorSnapshot = null;
-            }
-            return;
-        }
-
-        const frame = plot._lastFrame;
-        const canvasWidth = Math.max(1, Number(plot.elements?.canvas?.getBoundingClientRect?.().width) || 1);
-        const canvasHeight = Math.max(1, Number(plot.elements?.canvas?.getBoundingClientRect?.().height) || 1);
-        const width = Number.isFinite(frame?.innerW) && frame.innerW > 0
-            ? frame.innerW / dpr
-            : canvasWidth;
-        const height = Number.isFinite(frame?.innerH) && frame.innerH > 0
-            ? frame.innerH / dpr
-            : canvasHeight;
-        const padLeft = Number.isFinite(frame?.padL) ? frame.padL / dpr : 0;
-        const padTop = Number.isFinite(frame?.padT) ? frame.padT / dpr : 0;
-        const xRatio = Math.max(0, Math.min(1, (Number(readout.x || 0) - padLeft) / Math.max(width, 1e-9)));
-        const yRatio = Math.max(0, Math.min(1, (Number(readout.y || 0) - padTop) / Math.max(height, 1e-9)));
-
-        const snapshot = plot.chartInteraction.toLinkedSnapshot?.({
-            width: canvasWidth,
-            height: canvasHeight
-        }) || {};
-        this.linkedCursorSnapshot = {
-            sourcePlotId: plot.id,
-            xRatio: Number.isFinite(xRatio) ? xRatio : snapshot.xRatio,
-            yRatio: Number.isFinite(yRatio) ? yRatio : snapshot.yRatio,
-            frozen: !!snapshot.frozen
-        };
+        return getInteractionController(this, 'syncLinkedCursorSnapshot').syncLinkedCursorSnapshot(plot);
     }
 
     resolveLinkedOverlayPoint(plot, frame, dpr) {
-        const interaction = plot?.chartInteraction;
-        if (!interaction || !frame) return null;
-
-        const localPoint = interaction.getReadout?.();
-        if (localPoint) {
-            const x = Math.max(frame.padL, Math.min(frame.padL + frame.innerW, Number(localPoint.x || 0) * dpr));
-            const y = Math.max(frame.padT, Math.min(frame.padT + frame.innerH, Number(localPoint.y || 0) * dpr));
-            const xRatio = frame.innerW > 0 ? (x - frame.padL) / frame.innerW : 0;
-            const yRatio = frame.innerH > 0 ? (y - frame.padT) / frame.innerH : 0;
-            const xValue = frame.xMin + xRatio * (frame.xMax - frame.xMin);
-            const yValue = frame.yMax - yRatio * (frame.yMax - frame.yMin);
-            return {
-                x,
-                y,
-                xValue,
-                yValue,
-                linked: false,
-                frozen: !!interaction.isFrozen?.()
-            };
-        }
-
-        const snapshot = this.linkedCursorSnapshot;
-        if (!snapshot || snapshot.sourcePlotId === plot.id) return null;
-
-        const xRatioRaw = Number(snapshot.xRatio);
-        const yRatioRaw = Number(snapshot.yRatio);
-        const xRatio = Number.isFinite(xRatioRaw) ? Math.max(0, Math.min(1, xRatioRaw)) : 0;
-        const yRatio = Number.isFinite(yRatioRaw) ? Math.max(0, Math.min(1, yRatioRaw)) : 0;
-        const targetXValue = frame.xMin + xRatio * (frame.xMax - frame.xMin);
-        const nearest = this.findNearestPlotSampleByX(plot, targetXValue);
-        const x = frame.padL + xRatio * frame.innerW;
-        let y = frame.padT + yRatio * frame.innerH;
-        let yValue = frame.yMax - yRatio * (frame.yMax - frame.yMin);
-        if (nearest) {
-            yValue = nearest.y;
-            const ySpan = frame.yMax - frame.yMin;
-            const normalizedY = Math.abs(ySpan) < 1e-12 ? 0.5 : (nearest.y - frame.yMin) / ySpan;
-            y = frame.padT + (1 - normalizedY) * frame.innerH;
-        }
-        y = Math.max(frame.padT, Math.min(frame.padT + frame.innerH, y));
-
-        return {
-            x,
-            y,
-            xValue: Number.isFinite(nearest?.x) ? nearest.x : targetXValue,
-            yValue,
-            linked: true,
-            frozen: !!snapshot.frozen
-        };
+        return getInteractionController(this, 'resolveLinkedOverlayPoint').resolveLinkedOverlayPoint(plot, frame, dpr);
     }
 
     findNearestPlotSampleByX(plot, targetX) {
-        if (!plot?.buffer || plot.buffer.length <= 0 || !Number.isFinite(targetX)) return null;
-        const finder = plot.chartInteraction;
-        if (finder && typeof finder.findNearestSampleByX === 'function') {
-            const found = finder.findNearestSampleByX(plot.buffer, targetX);
-            plot._lastNearestLookupStats = found?.stats || null;
-            return found?.point || null;
-        }
-
-        let best = null;
-        let bestDistance = Infinity;
-        plot.buffer.forEach?.((x, y) => {
-            const distance = Math.abs(x - targetX);
-            if (distance < bestDistance) {
-                bestDistance = distance;
-                best = { x, y };
-            }
-        });
-        return best;
+        return getInteractionController(this, 'findNearestPlotSampleByX').findNearestPlotSampleByX(plot, targetX);
     }
 
     createRangeControls(plot, axisKey, labelText) {
-        const axis = axisKey === 'x' ? plot.x : plot.y;
-        const group = createElement('div', { className: 'form-group', attrs: { 'data-range-for': `${plot.id}-${axisKey}` } });
-        group.appendChild(createElement('label', { textContent: labelText }));
-
-        const toggleRow = createElement('div', { className: 'obs-range-toggle' });
-        const autoToggle = createElement('input', { attrs: { type: 'checkbox' } });
-        autoToggle.checked = !!axis.autoRange;
-        toggleRow.appendChild(autoToggle);
-        toggleRow.appendChild(createElement('span', { textContent: '自动范围' }));
-        group.appendChild(toggleRow);
-
-        const inputs = createElement('div', { className: 'obs-range-inputs' });
-        const minInput = createElement('input', { attrs: { type: 'number', placeholder: 'min' } });
-        const maxInput = createElement('input', { attrs: { type: 'number', placeholder: 'max' } });
-        inputs.appendChild(minInput);
-        inputs.appendChild(maxInput);
-        group.appendChild(inputs);
-
-        const syncVisibility = () => {
-            inputs.style.display = autoToggle.checked ? 'none' : 'flex';
-        };
-        syncVisibility();
-
-        autoToggle.addEventListener('change', () => {
-            axis.autoRange = !!autoToggle.checked;
-            if (axis.autoRange) {
-                axis.min = null;
-                axis.max = null;
-                minInput.value = '';
-                maxInput.value = '';
-            } else {
-                // 切到手动时，用当前数据范围做默认值，便于直接微调
-                const range = computeRangeFromBuffer(plot.buffer);
-                if (range) {
-                    const nextMin = axisKey === 'x' ? range.minX : range.minY;
-                    const nextMax = axisKey === 'x' ? range.maxX : range.maxY;
-                    axis.min = nextMin;
-                    axis.max = nextMax;
-                    minInput.value = String(nextMin);
-                    maxInput.value = String(nextMax);
-                }
-            }
-            syncVisibility();
-            plot._needsRedraw = true;
-            this.requestRender({ onlyIfActive: true });
-            this.schedulePersist(0);
-        });
-
-        minInput.addEventListener('change', () => {
-            axis.min = parseOptionalNumber(minInput.value);
-            plot._needsRedraw = true;
-            this.requestRender({ onlyIfActive: true });
-            this.schedulePersist(0);
-        });
-        maxInput.addEventListener('change', () => {
-            axis.max = parseOptionalNumber(maxInput.value);
-            plot._needsRedraw = true;
-            this.requestRender({ onlyIfActive: true });
-            this.schedulePersist(0);
-        });
-
-        return group;
+        return getInteractionController(this, 'createRangeControls').createRangeControls(plot, axisKey, labelText);
     }
 
     refreshComponentOptions() {
@@ -1640,7 +1455,7 @@ export class ObservationPanel {
             footer.appendChild(meta);
             card.appendChild(footer);
 
-            closeBtn.addEventListener('click', () => {
+            safeInvokeMethod(closeBtn, 'addEventListener', 'click', () => {
                 comp.selfReading = false;
                 this.refreshDialGauges();
                 this.app.updateStatus('已关闭自主读数');
@@ -1674,17 +1489,7 @@ export class ObservationPanel {
     }
 
     resizeCanvasToDisplaySize(canvas) {
-        if (!canvas) return;
-        const rect = canvas.getBoundingClientRect();
-        const dpr = window.devicePixelRatio || 1;
-        const displayW = Math.max(1, Math.floor(rect.width));
-        const displayH = Math.max(1, Math.floor(rect.height || 180));
-        const internalW = Math.floor(displayW * dpr);
-        const internalH = Math.floor(displayH * dpr);
-        if (canvas.width !== internalW || canvas.height !== internalH) {
-            canvas.width = internalW;
-            canvas.height = internalH;
-        }
+        return getLayoutController(this, 'resizeCanvasToDisplaySize').resizeCanvasToDisplaySize(canvas);
     }
 
     onCircuitUpdate(results) {
@@ -1775,26 +1580,11 @@ export class ObservationPanel {
     }
 
     requestRender(options = {}) {
-        if (options.onlyIfActive && !this.isObservationActive()) return;
-        if (this._renderRaf) return;
-        this._renderRaf = window.requestAnimationFrame(() => {
-            this._renderRaf = 0;
-            this.renderAll();
-        });
+        return getRenderController(this, 'requestRender').requestRender(options);
     }
 
     renderAll() {
-        for (const plot of this.plots) {
-            if (!plot._needsRedraw) continue;
-            this.renderPlot(plot);
-            plot._needsRedraw = false;
-        }
-
-        for (const gauge of this.gauges.values()) {
-            if (!gauge._needsRedraw) continue;
-            this.renderGauge(gauge);
-            gauge._needsRedraw = false;
-        }
+        return getRenderController(this, 'renderAll').renderAll();
     }
 
     createCacheCanvas(width, height) {
@@ -1933,104 +1723,7 @@ export class ObservationPanel {
     }
 
     computePlotFrame(plot, canvas, dpr) {
-        const w = canvas.width;
-        const h = canvas.height;
-
-        const padL = 46 * dpr;
-        const padR = 10 * dpr;
-        const padT = 10 * dpr;
-        const padB = 28 * dpr;
-        const innerW = Math.max(1, w - padL - padR);
-        const innerH = Math.max(1, h - padT - padB);
-
-        plot._autoRangeWindow = plot._autoRangeWindow && typeof plot._autoRangeWindow === 'object'
-            ? plot._autoRangeWindow
-            : { x: null, y: null };
-        const autoRange = computeRangeFromBuffer(plot.buffer);
-        let xAutoWindow = null;
-        let yAutoWindow = null;
-        if (plot.x.autoRange && autoRange) {
-            xAutoWindow = stabilizeAutoRangeWindow({
-                min: autoRange.minX,
-                max: autoRange.maxX
-            }, plot._autoRangeWindow.x, {
-                paddingRatio: 0.03,
-                expandRatio: 0.02,
-                shrinkDeadbandRatio: 0.14,
-                shrinkSmoothing: 0.2
-            });
-            plot._autoRangeWindow.x = xAutoWindow;
-        } else {
-            plot._autoRangeWindow.x = null;
-        }
-        if (plot.y.autoRange && autoRange) {
-            yAutoWindow = stabilizeAutoRangeWindow({
-                min: autoRange.minY,
-                max: autoRange.maxY
-            }, plot._autoRangeWindow.y, {
-                paddingRatio: 0.05,
-                expandRatio: 0.025,
-                shrinkDeadbandRatio: 0.16,
-                shrinkSmoothing: 0.2
-            });
-            plot._autoRangeWindow.y = yAutoWindow;
-        } else {
-            plot._autoRangeWindow.y = null;
-        }
-
-        let xMin = plot.x.autoRange ? xAutoWindow?.min : plot.x.min;
-        let xMax = plot.x.autoRange ? xAutoWindow?.max : plot.x.max;
-        let yMin = plot.y.autoRange ? yAutoWindow?.min : plot.y.min;
-        let yMax = plot.y.autoRange ? yAutoWindow?.max : plot.y.max;
-
-        if (!Number.isFinite(xMin) || !Number.isFinite(xMax) || !Number.isFinite(yMin) || !Number.isFinite(yMax)) {
-            return null;
-        }
-
-        if (xMin === xMax) {
-            const pad = xMin === 0 ? 1 : Math.abs(xMin) * 0.1;
-            xMin -= pad;
-            xMax += pad;
-        }
-        if (yMin === yMax) {
-            const pad = yMin === 0 ? 1 : Math.abs(yMin) * 0.1;
-            yMin -= pad;
-            yMax += pad;
-        }
-        if (xMin > xMax) [xMin, xMax] = [xMax, xMin];
-        if (yMin > yMax) [yMin, yMax] = [yMax, yMin];
-
-        if (!plot.x.autoRange) {
-            const xPad = (xMax - xMin) * 0.03;
-            xMin -= xPad;
-            xMax += xPad;
-        }
-        if (!plot.y.autoRange) {
-            const yPad = (yMax - yMin) * 0.05;
-            yMin -= yPad;
-            yMax += yPad;
-        }
-
-        const xTicks = computeNiceTicks(xMin, xMax, 5);
-        const yTicks = computeNiceTicks(yMin, yMax, 5);
-
-        return {
-            w,
-            h,
-            dpr,
-            padL,
-            padR,
-            padT,
-            padB,
-            innerW,
-            innerH,
-            xMin,
-            xMax,
-            yMin,
-            yMax,
-            xTicks,
-            yTicks
-        };
+        return getRenderController(this, 'computePlotFrame').computePlotFrame(plot, canvas, dpr);
     }
 
     drawPlotStaticLayer(ctx, frame) {

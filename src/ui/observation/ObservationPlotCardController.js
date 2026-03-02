@@ -49,10 +49,18 @@ export class ObservationPlotCardController {
             const payload = payloadFactory();
             this.onChange(payload);
         };
-        selectEl.addEventListener('change', handler);
+        try {
+            selectEl.addEventListener('change', handler);
+        } catch (_) {
+            return;
+        }
         this.disposeHandlers.push(() => {
             if (typeof selectEl.removeEventListener === 'function') {
-                selectEl.removeEventListener('change', handler);
+                try {
+                    selectEl.removeEventListener('change', handler);
+                } catch (_) {
+                    // Ignore teardown errors from incomplete/mocked DOM targets.
+                }
             }
         });
     }

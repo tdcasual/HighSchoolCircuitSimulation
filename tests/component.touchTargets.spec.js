@@ -144,4 +144,45 @@ describe('SVGRenderer touch targets', () => {
         expect(newEndpointHits[0].getAttribute('r')).toBe(String(WIRE_ENDPOINT_HIT_RADIUS_PX));
         expect(newEndpointHits[1].getAttribute('r')).toBe(String(WIRE_ENDPOINT_HIT_RADIUS_PX));
     });
+
+    it('does not throw when body/g classList contains are non-callable during wire refresh', () => {
+        const path = makeSvgNode('path');
+        path.setAttribute('class', 'wire');
+        const hitArea = makeSvgNode('path');
+        hitArea.setAttribute('class', 'wire-hit-area');
+
+        const g = makeSvgNode('g');
+        g.children.push(path, hitArea);
+        g.querySelector = vi.fn((selector) => {
+            if (selector === 'path.wire') return path;
+            if (selector === 'path.wire-hit-area') return hitArea;
+            return null;
+        });
+        g.querySelectorAll = vi.fn(() => []);
+        g.classList = {
+            contains: {}
+        };
+
+        vi.stubGlobal('document', {
+            body: {
+                classList: {
+                    contains: {}
+                }
+            },
+            createElementNS: vi.fn((_, tagName) => makeSvgNode(tagName))
+        });
+        vi.stubGlobal('window', {
+            matchMedia: vi.fn(() => ({ matches: true }))
+        });
+
+        expect(() => {
+            SVGRenderer.updateWirePathWithGroup.call(SVGRenderer, g, {
+                a: { x: 5, y: 10 },
+                b: { x: 25, y: 30 }
+            });
+        }).not.toThrow();
+
+        const hints = g.children.filter((child) => hasClass(child, 'wire-endpoint-hint'));
+        expect(hints).toHaveLength(2);
+    });
 });

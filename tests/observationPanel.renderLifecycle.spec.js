@@ -98,4 +98,23 @@ describe('ObservationPanel render lifecycle', () => {
         expect(frame3.xMin).toBeLessThan(frame2.xMin);
         expect(frame3.xMax).toBeGreaterThan(frame2.xMax);
     });
+
+    it('requestRender keeps method signature while delegating to render controller when present', () => {
+        const requestAnimationFrame = vi.fn((callback) => {
+            callback();
+            return 1;
+        });
+        vi.stubGlobal('window', { requestAnimationFrame });
+        const renderController = {
+            requestRender: vi.fn()
+        };
+        const ctx = {
+            _renderRaf: 0,
+            renderController,
+            isObservationActive: () => true
+        };
+
+        expect(() => ObservationPanel.prototype.requestRender.call(ctx, { onlyIfActive: false })).not.toThrow();
+        expect(renderController.requestRender).toHaveBeenCalledWith({ onlyIfActive: false });
+    });
 });
