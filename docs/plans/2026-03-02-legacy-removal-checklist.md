@@ -71,6 +71,10 @@ Week5-10 执行轨道：`docs/plans/2026-03-02-architecture-de-risk-week5-10-imp
 - 前置条件：
   - Telemetry/日志证据表明旧调用路径为 0。
   - 先在预发布分支灰度一周。
+- 2026-03-02 执行更新：
+  - 已删除 `interactionModeStore -> runtime legacy flags` 镜像回写路径（commit: `e12654d`）。
+  - `PointerSessionManager` 悬挂连线快照改为优先读取 mode-store context，降低对 legacy flags 的耦合。
+  - 回归测试已补：`tests/interaction.modeStore.spec.js`、`tests/interaction.pointerSessionManager.spec.js`。
 
 ## 回滚策略
 
@@ -85,7 +89,7 @@ Week5-10 执行轨道：`docs/plans/2026-03-02-architecture-de-risk-week5-10-imp
 - Batch B：已完成第 1 轮（commit: `1ad7da4`，删 UIStateController legacy mode fallback）。
 - Batch C：Slice A 已完成（commit: `5db4799`，停写 classroom legacy bool mirror key）。
 - Batch C：Slice B 已完成（commit: `2ec3aba`，删 observation deprecated schema alias fallback）。
-- Batch D：未开始。
+- Batch D：已完成第 1 轮（commit: `e12654d`，删 interaction store->legacy flags mirror writes）。
 
 ## Week5-10 落地状态（2026-03-02 起）
 
@@ -94,4 +98,8 @@ Week5-10 执行轨道：`docs/plans/2026-03-02-architecture-de-risk-week5-10-imp
 - Week 7：已完成（Task17/18：测试契约迁移 + UIStateController legacy fallback 删除）。
 - Week 8：已完成（Task19/20：classroom legacy bool 停写 + 一次性迁移说明补充）。
 - Week 9：已完成（Task21/22：observation legacy 字段盘点分类 + 可删兼容分支移除）。
-- Week 10：未开始（目标：执行 Batch D 与大规模删除窗口）。
+- Week 10：已完成（Task23/24：interaction mirror writes 删除 + legacy prune final report）。
+
+## 最终报告
+
+- `docs/reports/2026-03-02-legacy-prune-final-report.md`
