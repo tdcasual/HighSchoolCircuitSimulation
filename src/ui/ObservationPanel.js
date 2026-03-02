@@ -8,15 +8,35 @@ import { applyTransform, computeNiceTicks, formatNumberCompact, RingBuffer2D, Tr
 import { evaluateSourceQuantity, getQuantitiesForSource, getSourceOptions, PROBE_SOURCE_PREFIX, QuantityIds, TIME_SOURCE_ID } from './observation/ObservationSources.js';
 import {
     createDefaultPlotState,
-    DEFAULT_OBSERVATION_TEMPLATE_NAME,
     DEFAULT_SAMPLE_INTERVAL_MS,
     normalizeObservationState,
-    normalizeObservationTemplate,
     normalizeSampleIntervalMs,
     ObservationDisplayModes,
     shouldSampleAtTime
 } from './observation/ObservationState.js';
 import { ObservationUIModes, normalizeObservationUI } from './observation/ObservationPreferences.js';
+import {
+    applySelectedTemplate as applySelectedTemplateService,
+    applyTemplateByName as applyTemplateByNameService,
+    buildCurrentTemplate as buildCurrentTemplateService,
+    buildTemplateSaveName as buildTemplateSaveNameService,
+    deleteSelectedTemplate as deleteSelectedTemplateService,
+    deleteTemplateByName as deleteTemplateByNameService,
+    getSelectedTemplateName as getSelectedTemplateNameService,
+    normalizeTemplateCollection as normalizeTemplateCollectionService,
+    refreshTemplateControls as refreshTemplateControlsService,
+    saveCurrentAsTemplate as saveCurrentAsTemplateService
+} from './observation/ObservationTemplateService.js';
+import {
+    buildObservationExportFileName as buildObservationExportFileNameService,
+    buildObservationExportMetadata as buildObservationExportMetadataService,
+    downloadCanvasImage as downloadCanvasImageService,
+    exportObservationSnapshot as exportObservationSnapshotService
+} from './observation/ObservationExportService.js';
+import {
+    hydrateObservationState as hydrateObservationStateService,
+    serializeObservationState as serializeObservationStateService
+} from './observation/ObservationStatePersistenceService.js';
 import { ObservationPlotCardController } from './observation/ObservationPlotCardController.js';
 import { ObservationChartInteraction } from './observation/ObservationChartInteraction.js';
 import { ObservationLayoutController } from './observation/ObservationLayoutController.js';
@@ -50,30 +70,10 @@ function createSelectGroup(labelText, selectId, hintText = null) {
     return group;
 }
 
-function parseOptionalNumber(inputValue) {
-    if (inputValue == null) return null;
-    const trimmed = String(inputValue).trim();
-    if (!trimmed) return null;
-    const v = Number(trimmed);
-    return Number.isFinite(v) ? v : null;
-}
-
 function safeHasClass(node, className) {
     if (!node || !node.classList || typeof node.classList.contains !== 'function') return false;
     try {
         return node.classList.contains(className);
-    } catch (_) {
-        return false;
-    }
-}
-
-function safeAppendToBody(node) {
-    if (typeof document === 'undefined') return false;
-    const body = document.body;
-    if (!body || typeof body.appendChild !== 'function') return false;
-    try {
-        body.appendChild(node);
-        return true;
     } catch (_) {
         return false;
     }
@@ -598,182 +598,43 @@ export class ObservationPanel {
     }
 
     normalizeTemplateCollection(rawTemplates) {
-        if (!Array.isArray(rawTemplates)) return [];
-        const deduped = new Map();
-        for (const rawTemplate of rawTemplates) {
-            const template = normalizeObservationTemplate(rawTemplate, {
-                defaultName: DEFAULT_OBSERVATION_TEMPLATE_NAME,
-                defaultYSourceId: this.getDefaultComponentId(),
-                defaultPlotCount: 1,
-                allowEmptyPlots: true
-            });
-            if (!template?.name) continue;
-            deduped.set(template.name, template);
-            if (deduped.size >= 30) break;
-        }
-        return Array.from(deduped.values());
+        return normalizeTemplateCollectionService(this, rawTemplates);
     }
 
     buildTemplateSaveName(rawName = '') {
-        const explicitName = typeof rawName === 'string' ? rawName.trim() : '';
-        if (explicitName) return explicitName;
-
-        const baseName = DEFAULT_OBSERVATION_TEMPLATE_NAME;
-        if (!Array.isArray(this.templates) || this.templates.length === 0) {
-            return baseName;
-        }
-        const hasBase = this.templates.some((item) => item?.name === baseName);
-        if (!hasBase) return baseName;
-
-        let suffix = 2;
-        let candidate = `${baseName} ${suffix}`;
-        while (this.templates.some((item) => item?.name === candidate)) {
-            suffix += 1;
-            candidate = `${baseName} ${suffix}`;
-        }
-        return candidate;
+        return buildTemplateSaveNameService(this, rawName);
     }
 
     buildCurrentTemplate(rawName = '') {
-        const name = ObservationPanel.prototype.buildTemplateSaveName.call(this, rawName);
-        const state = this.toJSON();
-        return normalizeObservationTemplate({
-            name,
-            plots: state?.plots || [],
-            ui: state?.ui || normalizeObservationUI()
-        }, {
-            defaultName: name,
-            defaultYSourceId: this.getDefaultComponentId(),
-            defaultPlotCount: 1,
-            allowEmptyPlots: true
-        });
+        return buildCurrentTemplateService(this, rawName);
     }
 
     refreshTemplateControls(options = {}) {
-        const controls = this.templateControls || {};
-        const selectEl = controls.select;
-        if (!selectEl) return;
-
-        const preferredName = typeof options.preferredName === 'string'
-            ? options.preferredName.trim()
-            : '';
-        const fallbackName = preferredName || controls.lastSelectedName || String(selectEl.value || '').trim();
-        const templateOptions = Array.isArray(this.templates)
-            ? this.templates.map((template) => ({ id: template.name, label: template.name }))
-            : [];
-        const resolved = setSelectOptions(selectEl, templateOptions, fallbackName);
-        const hasTemplates = templateOptions.length > 0;
-
-        if (!hasTemplates) {
-            selectEl.appendChild(createElement('option', {
-                textContent: '暂无模板',
-                attrs: { value: '' }
-            }));
-            selectEl.value = '';
-        }
-
-        controls.lastSelectedName = hasTemplates ? (resolved || templateOptions[0]?.id || '') : '';
-        if (controls.applyBtn) controls.applyBtn.disabled = !hasTemplates;
-        if (controls.deleteBtn) controls.deleteBtn.disabled = !hasTemplates;
+        return refreshTemplateControlsService(this, options);
     }
 
     getSelectedTemplateName() {
-        const selectEl = this.templateControls?.select;
-        const selectedName = typeof selectEl?.value === 'string' ? selectEl.value.trim() : '';
-        if (selectedName) return selectedName;
-        if (Array.isArray(this.templates) && this.templates.length > 0) {
-            return this.templates[0].name;
-        }
-        return '';
+        return getSelectedTemplateNameService(this);
     }
 
     saveCurrentAsTemplate(rawName = '') {
-        const template = ObservationPanel.prototype.buildCurrentTemplate.call(this, rawName);
-        if (!template) return null;
-
-        this.templates = Array.isArray(this.templates) ? this.templates : [];
-        const existingIndex = this.templates.findIndex((item) => item?.name === template.name);
-        const isUpdate = existingIndex >= 0;
-        if (isUpdate) {
-            this.templates[existingIndex] = template;
-        } else {
-            this.templates.push(template);
-        }
-
-        const normalizeCollection = typeof this.normalizeTemplateCollection === 'function'
-            ? this.normalizeTemplateCollection
-            : ObservationPanel.prototype.normalizeTemplateCollection;
-        this.templates = normalizeCollection.call(this, this.templates);
-
-        const refreshControls = typeof this.refreshTemplateControls === 'function'
-            ? this.refreshTemplateControls
-            : ObservationPanel.prototype.refreshTemplateControls;
-        refreshControls.call(this, { preferredName: template.name });
-
-        if (this.templateControls?.nameInput) {
-            this.templateControls.nameInput.value = '';
-        }
-
-        this.showTransientStatus?.(isUpdate ? `已更新模板：${template.name}` : `已保存模板：${template.name}`);
-        this.schedulePersist?.(0);
-        return template;
+        return saveCurrentAsTemplateService(this, rawName);
     }
 
     applyTemplateByName(rawName = '') {
-        const templateName = typeof rawName === 'string' ? rawName.trim() : '';
-        if (!templateName || !Array.isArray(this.templates) || this.templates.length === 0) {
-            return false;
-        }
-        const matched = this.templates.find((item) => item?.name === templateName);
-        if (!matched) return false;
-
-        const template = normalizeObservationTemplate(matched, {
-            defaultName: templateName,
-            defaultYSourceId: this.getDefaultComponentId(),
-            defaultPlotCount: 1,
-            allowEmptyPlots: true
-        });
-
-        this.fromJSON?.({
-            sampleIntervalMs: this.sampleIntervalMs,
-            plots: template.plots,
-            ui: template.ui,
-            templates: this.templates
-        });
-        this.showTransientStatus?.(`已应用模板：${template.name}`);
-        this.schedulePersist?.(0);
-        return true;
+        return applyTemplateByNameService(this, rawName);
     }
 
     applySelectedTemplate() {
-        const selectedName = ObservationPanel.prototype.getSelectedTemplateName.call(this);
-        if (!selectedName) return false;
-        return ObservationPanel.prototype.applyTemplateByName.call(this, selectedName);
+        return applySelectedTemplateService(this);
     }
 
     deleteTemplateByName(rawName = '') {
-        const templateName = typeof rawName === 'string' ? rawName.trim() : '';
-        if (!templateName || !Array.isArray(this.templates) || this.templates.length === 0) {
-            return false;
-        }
-        const index = this.templates.findIndex((item) => item?.name === templateName);
-        if (index < 0) return false;
-
-        const [removed] = this.templates.splice(index, 1);
-        const nextName = this.templates[index]?.name || this.templates[index - 1]?.name || '';
-        const refreshControls = typeof this.refreshTemplateControls === 'function'
-            ? this.refreshTemplateControls
-            : ObservationPanel.prototype.refreshTemplateControls;
-        refreshControls.call(this, { preferredName: nextName });
-        this.showTransientStatus?.(`已删除模板：${removed?.name || templateName}`);
-        this.schedulePersist?.(0);
-        return true;
+        return deleteTemplateByNameService(this, rawName);
     }
 
     deleteSelectedTemplate() {
-        const selectedName = ObservationPanel.prototype.getSelectedTemplateName.call(this);
-        if (!selectedName) return false;
-        return ObservationPanel.prototype.deleteTemplateByName.call(this, selectedName);
+        return deleteSelectedTemplateService(this);
     }
 
     resolveQuantityLabel(sourceId, quantityId) {
@@ -785,258 +646,27 @@ export class ObservationPanel {
     }
 
     buildObservationExportMetadata(options = {}) {
-        const exportedAt = options.exportedAt instanceof Date && Number.isFinite(options.exportedAt.getTime())
-            ? options.exportedAt
-            : new Date();
-        const timestamp = exportedAt.toISOString().replace('T', ' ').replace('Z', ' UTC');
-        const lines = [
-            `导出时间: ${timestamp}`,
-            `采样间隔: ${normalizeSampleIntervalMs(this.sampleIntervalMs, DEFAULT_SAMPLE_INTERVAL_MS)} ms`
-        ];
-
-        const plots = Array.isArray(this.plots) ? this.plots : [];
-        lines.push(`图像数量: ${plots.length}`);
-        const resolveSourceLabel = typeof this.resolveSourceLabel === 'function'
-            ? this.resolveSourceLabel.bind(this)
-            : ObservationPanel.prototype.resolveSourceLabel.bind(this);
-        const resolveQuantityLabel = typeof this.resolveQuantityLabel === 'function'
-            ? this.resolveQuantityLabel.bind(this)
-            : ObservationPanel.prototype.resolveQuantityLabel.bind(this);
-
-        plots.forEach((plot, index) => {
-            const title = typeof plot?.name === 'string' && plot.name.trim()
-                ? plot.name.trim()
-                : `图像 ${index + 1}`;
-            lines.push(`[图 ${index + 1}] ${title}`);
-            lines.push(`X: ${resolveSourceLabel(plot?.x?.sourceId)} · ${resolveQuantityLabel(plot?.x?.sourceId, plot?.x?.quantityId)}`);
-            lines.push(`Y: ${resolveSourceLabel(plot?.y?.sourceId)} · ${resolveQuantityLabel(plot?.y?.sourceId, plot?.y?.quantityId)}`);
-            if (typeof plot?._latestText === 'string' && plot._latestText.trim()) {
-                lines.push(plot._latestText.trim());
-            }
-        });
-
-        const meterComponents = [];
-        for (const comp of this.circuit?.components?.values?.() || []) {
-            if ((comp.type === 'Ammeter' || comp.type === 'Voltmeter') && comp.selfReading) {
-                meterComponents.push(comp);
-            }
-        }
-        if (meterComponents.length <= 0) {
-            lines.push('[表盘] 无自主读数');
-        } else {
-            for (const comp of meterComponents) {
-                const unit = comp.type === 'Ammeter' ? 'A' : 'V';
-                const reading = comp.type === 'Ammeter'
-                    ? Math.abs(Number(comp.currentValue) || 0)
-                    : Math.abs(Number(comp.voltageValue) || 0);
-                const range = Number.isFinite(comp.range) && Number(comp.range) > 0
-                    ? Number(comp.range)
-                    : (comp.type === 'Ammeter' ? 3 : 15);
-                const label = typeof comp.label === 'string' && comp.label.trim()
-                    ? comp.label.trim()
-                    : comp.id;
-                lines.push(`[表盘] ${label}: ${formatNumberCompact(reading, 4)} ${unit} / 量程 ${range}${unit}`);
-            }
-        }
-
-        return lines;
+        return buildObservationExportMetadataService(this, options);
     }
 
     buildObservationExportFileName(rawDate = new Date()) {
-        const date = rawDate instanceof Date && Number.isFinite(rawDate.getTime()) ? rawDate : new Date();
-        const y = String(date.getFullYear()).padStart(4, '0');
-        const m = String(date.getMonth() + 1).padStart(2, '0');
-        const d = String(date.getDate()).padStart(2, '0');
-        const hh = String(date.getHours()).padStart(2, '0');
-        const mm = String(date.getMinutes()).padStart(2, '0');
-        const ss = String(date.getSeconds()).padStart(2, '0');
-        return `observation_${y}-${m}-${d}_${hh}-${mm}-${ss}.png`;
+        return buildObservationExportFileNameService(this, rawDate);
     }
 
     downloadCanvasImage(canvas, fileName = 'observation_export.png') {
-        if (!canvas || typeof canvas.toDataURL !== 'function' || typeof document === 'undefined') {
-            return false;
-        }
-        const dataUrl = canvas.toDataURL('image/png');
-        if (!dataUrl || typeof dataUrl !== 'string') return false;
-
-        const anchor = document.createElement('a');
-        anchor.href = dataUrl;
-        anchor.download = fileName;
-        safeAppendToBody(anchor);
-        safeInvokeMethod(anchor, 'click');
-        safeInvokeMethod(anchor, 'remove');
-        return true;
+        return downloadCanvasImageService(this, canvas, fileName);
     }
 
     exportObservationSnapshot(options = {}) {
-        if (typeof document === 'undefined') return false;
-        const plots = Array.isArray(this.plots) ? this.plots : [];
-        if (typeof this.renderAll === 'function') {
-            this.renderAll();
-        }
-
-        const plotSnapshots = [];
-        for (const plot of plots) {
-            const canvas = plot?.elements?.canvas;
-            if (!canvas || !Number.isFinite(canvas.width) || !Number.isFinite(canvas.height)) continue;
-            if (canvas.width <= 0 || canvas.height <= 0) continue;
-            plotSnapshots.push({
-                name: typeof plot?.name === 'string' ? plot.name : '',
-                canvas
-            });
-        }
-
-        if (plotSnapshots.length <= 0) {
-            this.showTransientStatus?.('暂无可导出的图像');
-            return false;
-        }
-
-        const exportedAt = options.exportedAt instanceof Date ? options.exportedAt : new Date();
-        const metadataLines = this.buildObservationExportMetadata({ exportedAt });
-
-        const padX = 20;
-        const padY = 16;
-        const rowGap = 12;
-        const titleHeight = 20;
-        const metadataHeaderHeight = 22;
-        const metadataLineHeight = 18;
-        const headerHeight = 34;
-        const plotMaxWidth = Math.max(...plotSnapshots.map((item) => item.canvas.width));
-        const renderWidth = Math.max(480, plotMaxWidth);
-
-        const plotHeights = plotSnapshots.map((item) => Math.max(1, Math.round(item.canvas.height * (renderWidth / item.canvas.width))));
-        const plotBlockHeight = plotHeights.reduce((sum, value) => sum + value + titleHeight + rowGap, 0);
-        const metadataHeight = metadataHeaderHeight + metadataLines.length * metadataLineHeight;
-        const exportWidth = renderWidth + padX * 2;
-        const exportHeight = padY * 2 + headerHeight + plotBlockHeight + metadataHeight + rowGap;
-
-        const exportCanvas = document.createElement('canvas');
-        exportCanvas.width = exportWidth;
-        exportCanvas.height = exportHeight;
-        const ctx = exportCanvas.getContext('2d');
-        if (!ctx) {
-            this.showTransientStatus?.('导出失败：无法创建画布');
-            return false;
-        }
-
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, exportWidth, exportHeight);
-
-        let cursorY = padY;
-        ctx.fillStyle = '#0f172a';
-        ctx.font = 'bold 18px sans-serif';
-        ctx.fillText('观察图像导出', padX, cursorY + 18);
-        cursorY += headerHeight;
-
-        ctx.font = '600 13px sans-serif';
-        for (let i = 0; i < plotSnapshots.length; i += 1) {
-            const item = plotSnapshots[i];
-            const plotTitle = typeof item.name === 'string' && item.name.trim()
-                ? item.name.trim()
-                : `图像 ${i + 1}`;
-            ctx.fillStyle = '#0f172a';
-            ctx.fillText(`[图 ${i + 1}] ${plotTitle}`, padX, cursorY + 14);
-            cursorY += titleHeight;
-
-            const drawHeight = plotHeights[i];
-            ctx.strokeStyle = 'rgba(148, 163, 184, 0.8)';
-            ctx.strokeRect(padX, cursorY, renderWidth, drawHeight);
-            ctx.drawImage(item.canvas, padX, cursorY, renderWidth, drawHeight);
-            cursorY += drawHeight + rowGap;
-        }
-
-        ctx.fillStyle = '#111827';
-        ctx.font = 'bold 14px sans-serif';
-        ctx.fillText('读数元数据', padX, cursorY + 14);
-        cursorY += metadataHeaderHeight;
-
-        ctx.font = '12px monospace';
-        for (const line of metadataLines) {
-            ctx.fillStyle = '#334155';
-            ctx.fillText(line, padX, cursorY + 12);
-            cursorY += metadataLineHeight;
-        }
-
-        const fileName = this.buildObservationExportFileName(exportedAt);
-        const ok = this.downloadCanvasImage(exportCanvas, fileName);
-        this.showTransientStatus?.(ok ? `已导出观察图像：${fileName}` : '导出失败：下载不可用');
-        return ok;
+        return exportObservationSnapshotService(this, options);
     }
 
     toJSON() {
-        const data = {
-            sampleIntervalMs: normalizeSampleIntervalMs(this.sampleIntervalMs, DEFAULT_SAMPLE_INTERVAL_MS),
-            ui: normalizeObservationUI(this.ui),
-            plots: this.plots.map((plot) => ({
-                name: plot.name,
-                maxPoints: plot.maxPoints,
-                yDisplayMode: plot.yDisplayMode || ObservationDisplayModes.Signed,
-                x: {
-                    sourceId: plot.x.sourceId,
-                    quantityId: plot.x.quantityId,
-                    transformId: plot.x.transformId,
-                    autoRange: !!plot.x.autoRange,
-                    min: plot.x.autoRange ? null : parseOptionalNumber(plot.x.min),
-                    max: plot.x.autoRange ? null : parseOptionalNumber(plot.x.max)
-                },
-                y: {
-                    sourceId: plot.y.sourceId,
-                    quantityId: plot.y.quantityId,
-                    transformId: plot.y.transformId,
-                    autoRange: !!plot.y.autoRange,
-                    min: plot.y.autoRange ? null : parseOptionalNumber(plot.y.min),
-                    max: plot.y.autoRange ? null : parseOptionalNumber(plot.y.max)
-                }
-            }))
-        };
-        const normalizeCollection = typeof this.normalizeTemplateCollection === 'function'
-            ? this.normalizeTemplateCollection
-            : ObservationPanel.prototype.normalizeTemplateCollection;
-        const templates = normalizeCollection.call(this, this.templates);
-        if (templates.length > 0) {
-            data.templates = templates;
-        }
-        return data;
+        return serializeObservationStateService(this);
     }
 
     fromJSON(rawState) {
-        if (!this.root) return;
-        const templates = rawState && typeof rawState === 'object'
-            ? (rawState.templates ?? rawState.templatePresets ?? [])
-            : [];
-        const normalized = normalizeObservationState(rawState, {
-            defaultYSourceId: this.getDefaultComponentId(),
-            defaultPlotCount: 1,
-            allowEmptyPlots: true
-        });
-
-        this.sampleIntervalMs = normalized.sampleIntervalMs;
-        this.ui = normalizeObservationUI(normalized.ui);
-        const normalizeCollection = typeof this.normalizeTemplateCollection === 'function'
-            ? this.normalizeTemplateCollection
-            : ObservationPanel.prototype.normalizeTemplateCollection;
-        this.templates = normalizeCollection.call(this, templates);
-        if (this.sampleIntervalInput) {
-            this.sampleIntervalInput.value = String(this.sampleIntervalMs);
-        }
-
-        this.clearPlotCards();
-        this.nextPlotIndex = 1;
-        this._lastSampleTime = Number.NEGATIVE_INFINITY;
-
-        for (const plotState of normalized.plots) {
-            this.addPlot({ config: plotState, skipRefresh: true });
-        }
-
-        this.refreshComponentOptions();
-        this.updateModeToggleUI();
-        const refreshControls = typeof this.refreshTemplateControls === 'function'
-            ? this.refreshTemplateControls
-            : ObservationPanel.prototype.refreshTemplateControls;
-        refreshControls.call(this);
-        this.applyLayoutModeToAllPlotCards();
-        this.requestRender({ onlyIfActive: true });
+        return hydrateObservationStateService(this, rawState);
     }
 
     setUIMode(mode) {
