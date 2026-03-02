@@ -30,7 +30,9 @@ const guidePath = 'docs/process/component-interaction-usage-guide.md';
 const guide = readText(guidePath);
 const interactionSource = [
     readText('src/app/interaction/InteractionOrchestrator.js'),
-    readOptionalText('src/app/interaction/InteractionOrchestratorMouseDownHandlers.js')
+    readOptionalText('src/app/interaction/InteractionOrchestratorMouseDownHandlers.js'),
+    readOptionalText('src/app/interaction/InteractionOrchestratorMouseDownPendingToolHandlers.js'),
+    readOptionalText('src/app/interaction/InteractionOrchestratorMouseDownTargetHandlers.js')
 ].join('\n');
 
 function hasCtrlCmdModifier(source) {

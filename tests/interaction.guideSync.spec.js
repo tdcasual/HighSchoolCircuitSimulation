@@ -25,7 +25,9 @@ describe('component interaction usage guide sync', () => {
             sourceFiles: [
                 'docs/process/component-interaction-usage-guide.md',
                 'src/app/interaction/InteractionOrchestrator.js',
-                'src/app/interaction/InteractionOrchestratorMouseDownHandlers.js'
+                'src/app/interaction/InteractionOrchestratorMouseDownHandlers.js',
+                'src/app/interaction/InteractionOrchestratorMouseDownPendingToolHandlers.js',
+                'src/app/interaction/InteractionOrchestratorMouseDownTargetHandlers.js'
             ]
         });
 
@@ -39,7 +41,9 @@ describe('component interaction usage guide sync', () => {
             sourceFiles: [
                 'docs/process/component-interaction-usage-guide.md',
                 'src/app/interaction/InteractionOrchestrator.js',
-                'src/app/interaction/InteractionOrchestratorMouseDownHandlers.js'
+                'src/app/interaction/InteractionOrchestratorMouseDownHandlers.js',
+                'src/app/interaction/InteractionOrchestratorMouseDownPendingToolHandlers.js',
+                'src/app/interaction/InteractionOrchestratorMouseDownTargetHandlers.js'
             ],
             mutateByFile: {
                 'docs/process/component-interaction-usage-guide.md': (content) =>
