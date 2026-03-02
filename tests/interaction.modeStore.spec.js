@@ -84,4 +84,65 @@ describe('InteractionOrchestrator mode-store integration', () => {
         expect(context.interactionModeStore.getState().mode).toBe('endpoint-edit');
         expect(context.interactionModeStore.getState().context.pendingToolType).toBe('Wire');
     });
+
+    it('does not mirror store context back into legacy runtime flags on initialize', () => {
+        const context = {
+            pendingToolType: null,
+            mobileInteractionMode: 'select',
+            stickyWireTool: false,
+            isWiring: false,
+            isDraggingWireEndpoint: false,
+            isTerminalExtending: false,
+            isRheostatDragging: false,
+            interactionModeStore: new InteractionModeStore({
+                mode: 'wire',
+                context: {
+                    pendingToolType: 'Wire',
+                    mobileInteractionMode: 'wire',
+                    stickyWireTool: true,
+                    isWiring: true
+                }
+            })
+        };
+
+        const state = InteractionOrchestrator.initializeInteractionModeStore(context);
+
+        expect(state.mode).toBe('wire');
+        expect(context.interactionMode).toBe('wire');
+        expect(context.pendingToolType).toBe(null);
+        expect(context.mobileInteractionMode).toBe('select');
+        expect(context.stickyWireTool).toBe(false);
+        expect(context.isWiring).toBe(false);
+    });
+
+    it('does not mirror sync overrides into legacy runtime flags', () => {
+        const context = {
+            pendingToolType: null,
+            mobileInteractionMode: 'select',
+            stickyWireTool: false,
+            isWiring: false,
+            isDraggingWireEndpoint: false,
+            isTerminalExtending: false,
+            isRheostatDragging: false
+        };
+
+        const state = InteractionOrchestrator.syncInteractionModeStore(context, {
+            mode: 'wire',
+            source: 'spec',
+            context: {
+                pendingToolType: 'Wire',
+                mobileInteractionMode: 'wire',
+                stickyWireTool: true,
+                isWiring: true
+            }
+        });
+
+        expect(state.mode).toBe('wire');
+        expect(context.interactionMode).toBe('wire');
+        expect(context.interactionModeStore.getState().context.pendingToolType).toBe('Wire');
+        expect(context.pendingToolType).toBe(null);
+        expect(context.mobileInteractionMode).toBe('select');
+        expect(context.stickyWireTool).toBe(false);
+        expect(context.isWiring).toBe(false);
+    });
 });

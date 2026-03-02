@@ -85,15 +85,9 @@ function resolveInteractionMode(context = {}) {
 }
 
 function applyInteractionModeStateToContext(context, state) {
-    if (!context || !state?.context) return;
-    const modeContext = state.context;
-    context.pendingToolType = modeContext.pendingToolType;
-    context.mobileInteractionMode = modeContext.mobileInteractionMode;
-    context.stickyWireTool = !!modeContext.stickyWireTool;
-    context.isWiring = !!modeContext.isWiring;
-    context.isDraggingWireEndpoint = !!modeContext.isDraggingWireEndpoint;
-    context.isTerminalExtending = !!modeContext.isTerminalExtending;
-    context.isRheostatDragging = !!modeContext.isRheostatDragging;
+    if (!context || !state) return;
+    // Week10: interactionModeStore becomes authoritative for mode context.
+    // Do not mirror store context back into legacy runtime flags.
     context.interactionMode = state.mode;
 }
 
@@ -150,6 +144,9 @@ function resolveWireModeGestureThreshold(pointerType, kind = 'default') {
 function restorePendingWireToolAfterAction(context) {
     const modeState = syncInteractionModeStore(context, { source: 'restorePendingWireTool:start' });
     if (modeState?.context?.stickyWireTool) {
+        context.pendingToolType = 'Wire';
+        context.mobileInteractionMode = 'wire';
+        context.stickyWireTool = true;
         syncInteractionModeStore(context, {
             mode: InteractionModes.WIRE,
             source: 'restorePendingWireTool:wire',
@@ -165,6 +162,9 @@ function restorePendingWireToolAfterAction(context) {
         }
     } else {
         context.clearPendingToolType({ silent: true });
+        context.pendingToolType = null;
+        context.mobileInteractionMode = 'select';
+        context.stickyWireTool = false;
         syncInteractionModeStore(context, {
             mode: InteractionModes.SELECT,
             source: 'restorePendingWireTool:select',

@@ -137,6 +137,53 @@ describe('PointerSessionManager', () => {
         expect(context.hideAlignmentGuides).toHaveBeenCalledTimes(1);
     });
 
+    it('uses mode-store context when capturing suspended wire-tool session metadata', () => {
+        const context = {
+            isPanning: false,
+            isDraggingWireEndpoint: false,
+            isDraggingWire: false,
+            isDragging: false,
+            isWiring: true,
+            wireStart: {
+                x: 44,
+                y: 66,
+                snap: { type: 'terminal', componentId: 'R1', terminalIndex: 0 }
+            },
+            tempWire: null,
+            ignoreNextWireMouseUp: false,
+            pendingToolType: null,
+            pendingToolItem: null,
+            mobileInteractionMode: 'select',
+            stickyWireTool: false,
+            interactionModeStore: {
+                getState: vi.fn(() => ({
+                    mode: 'wire',
+                    context: {
+                        pendingToolType: 'Wire',
+                        mobileInteractionMode: 'wire',
+                        stickyWireTool: true,
+                        isWiring: true
+                    }
+                }))
+            },
+            renderer: {
+                removeTempWire: vi.fn(),
+                clearTerminalHighlight: vi.fn()
+            },
+            hideAlignmentGuides: vi.fn(),
+            cancelWiring: vi.fn()
+        };
+
+        PointerSessionManager.endPrimaryInteractionForGesture.call(context);
+
+        expect(context.suspendedWiringSession).toMatchObject({
+            pendingToolType: 'Wire',
+            mobileInteractionMode: 'wire',
+            stickyWireTool: true
+        });
+        expect(context.cancelWiring).not.toHaveBeenCalled();
+    });
+
     it('drops terminal and rheostat edit flags when pinch takes over', () => {
         const context = {
             isPanning: false,

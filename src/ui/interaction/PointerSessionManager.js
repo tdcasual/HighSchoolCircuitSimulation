@@ -89,13 +89,17 @@ function suspendWiringForPinch(context) {
         context.cancelWiring?.();
         return;
     }
+    const modeStoreContext = readInteractionModeStoreState(context)?.context || null;
+    const pendingToolType = modeStoreContext?.pendingToolType ?? context.pendingToolType ?? null;
+    const mobileInteractionMode = modeStoreContext?.mobileInteractionMode ?? context.mobileInteractionMode ?? 'select';
+    const stickyWireTool = modeStoreContext?.stickyWireTool ?? context.stickyWireTool;
 
     context.suspendedWiringSession = {
         wireStart: wireStartSnapshot,
-        pendingToolType: context.pendingToolType ?? null,
+        pendingToolType,
         pendingToolItem: context.pendingToolItem ?? null,
-        mobileInteractionMode: context.mobileInteractionMode ?? 'select',
-        stickyWireTool: !!context.stickyWireTool
+        mobileInteractionMode,
+        stickyWireTool: !!stickyWireTool
     };
 
     context.isWiring = false;
