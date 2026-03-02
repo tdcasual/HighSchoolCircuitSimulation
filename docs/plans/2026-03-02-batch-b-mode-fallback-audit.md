@@ -2,7 +2,7 @@
 
 日期：2026-03-02
 目标：评估是否可删除 `UIStateController.getActiveInteractionMode` 中的 legacy flags fallback。
-结论：当前不可删，需先补齐初始化与调用链约束。
+结论（预审计初版）：当前不可删，需先补齐初始化与调用链约束。
 
 ## 审计范围
 
@@ -58,5 +58,27 @@
 
 ## 决策
 
-- Batch B 当前状态：阻塞（Not Removable Yet）。
-- 行动建议：先做“store 启动即初始化 + 入口同步收敛”后，再回到本删除项。
+- 预审计阶段状态（2026-03-02 初版）：阻塞（Not Removable Yet）。
+- 行动建议（初版）：先做“store 启动即初始化 + 入口同步收敛”后，再回到本删除项。
+
+## 执行更新（2026-03-02）
+
+1. 前置条件达成证据
+   - `InteractionManager` 启动初始化已覆盖 `interactionModeStore`（commit: `3315632`）。
+   - ToolPlacement 关键入口已统一同步 mode store（commit: `3315632`）。
+   - 测试契约已迁移为“store-required，缺省回落 select”（commit: `1ad7da4`）。
+
+2. 删除执行
+   - 已删除 `UIStateController.getActiveInteractionMode` 中的 legacy flags fallback（commit: `1ad7da4`）。
+   - 保留 `interaction.mode.legacy-fallback` usage tracker 记录点，用于观测 store 缺失/非法状态。
+
+3. 验证结果
+   - `npm run check:legacy-prune-readiness`：PASS
+   - `npm run lint`：PASS
+   - `npm test`：PASS
+   - `npm run test:e2e:wire`：PASS
+   - `npm run test:e2e:responsive`：PASS
+   - `npm run mode-conflict-matrix`：PASS
+
+4. 最终状态
+   - Batch B 当前状态：已删除（Removed）。

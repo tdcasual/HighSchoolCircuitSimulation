@@ -36,9 +36,13 @@ Week5-10 执行轨道：`docs/plans/2026-03-02-architecture-de-risk-week5-10-imp
 - 前置条件：
   - 连续两轮主干回归全绿。
   - 确认运行期所有入口都初始化了 `interactionModeStore`。
-- 2026-03-02 预审计结论：
-  - 当前不满足删除前置条件，详见 `docs/plans/2026-03-02-batch-b-mode-fallback-audit.md`。
-  - 结论：暂不删除，保持 fallback。
+- 2026-03-02 预审计结论（初版）：
+  - 初版结论为阻塞，详见 `docs/plans/2026-03-02-batch-b-mode-fallback-audit.md`。
+- 2026-03-02 执行复核更新：
+  - Week 6 已完成初始化与入口同步收敛（commit: `3315632`）。
+  - Week 7 已完成契约迁移与 fallback 删除（commit: `1ad7da4`）。
+  - 删除后全门禁通过（`lint` + `test` + `test:e2e:wire` + `test:e2e:responsive` + `mode-conflict-matrix`）。
+  - 结论：Batch B 可删除并已执行。
 
 ### Batch C（中高风险）
 
@@ -71,14 +75,14 @@ Week5-10 执行轨道：`docs/plans/2026-03-02-architecture-de-risk-week5-10-imp
 
 - Batch A：已完成第 1 轮（commit: `ec3ee3a`，删无引用 script alias）。
 - Batch A：已完成第 2 轮（commit: `c89dbdb`，删 Toolbox wire legacy fallback）。
-- Batch B：预审计已完成，结论为“暂缓删除（阻塞中）”。
+- Batch B：已完成第 1 轮（commit: `1ad7da4`，删 UIStateController legacy mode fallback）。
 - Batch C/D：未开始。
 
 ## Week5-10 落地状态（2026-03-02 起）
 
 - Week 5：已完成（Task13/14：legacy path usage tracker + readiness guard 脚本）。
 - Week 6：已完成（Task15/16：mode store 启动初始化 + ToolPlacement 入口同步收敛）。
-- Week 7：未开始（目标：执行 Batch B 删除）。
+- Week 7：已完成（Task17/18：测试契约迁移 + UIStateController legacy fallback 删除）。
 - Week 8：未开始（目标：执行 Batch C Slice A）。
 - Week 9：未开始（目标：执行 Batch C Slice B）。
 - Week 10：未开始（目标：执行 Batch D 与大规模删除窗口）。
