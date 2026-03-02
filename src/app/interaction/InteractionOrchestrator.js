@@ -13,7 +13,10 @@ import {
     shouldCreateEndpointBridge,
     syncActiveWireStartAfterCompaction
 } from './InteractionOrchestratorHelpers.js';
-import { handlePendingToolMouseDown as handlePendingToolMouseDownViaHandlers } from './InteractionOrchestratorMouseDownHandlers.js';
+import {
+    handlePendingToolMouseDown as handlePendingToolMouseDownViaHandlers,
+    handleWireTargetMouseDown as handleWireTargetMouseDownViaHandlers
+} from './InteractionOrchestratorMouseDownHandlers.js';
 import {
     onContextMenu as onContextMenuViaTail,
     onDoubleClick as onDoubleClickViaTail,
@@ -149,45 +152,9 @@ export function onMouseDown(e) {
         return;
     }
 
-    // 检查是否点击了导线或导线组（可拖动移动）
-    if (hasClass(target, 'wire') || hasClass(target, 'wire-hit-area')) {
-        const wireGroup = safeClosest(target, '.wire-group');
-        const wireId = wireGroup ? wireGroup.dataset.id : target.dataset.id;
-
-        // 与 CircuitJS 一致：Ctrl/Cmd + 左键单击导线时执行分割。
-        if (e.button === 0 && (e.ctrlKey || e.metaKey)) {
-            if (wireId) {
-                const canvasCoords = this.screenToCanvas(e.clientX, e.clientY);
-                this.selectWire(wireId);
-                this.splitWireAtPoint(wireId, canvasCoords.x, canvasCoords.y);
-            }
-            return;
-        }
-
-        const pointerType = this.resolvePointerType(e);
-        if ((pointerType === 'touch' || pointerType === 'pen') && wireId) {
-            const wire = this.circuit?.getWire?.(wireId);
-            if (wire?.a && wire?.b) {
-                const canvasCoords = this.screenToCanvas(e.clientX, e.clientY);
-                const threshold = typeof this.getAdaptiveSnapThreshold === 'function'
-                    ? this.getAdaptiveSnapThreshold({
-                        pointerType,
-                        snapIntent: 'wire-endpoint-drag',
-                        threshold: 18
-                    })
-                    : 24;
-                const distA = Math.hypot(canvasCoords.x - wire.a.x, canvasCoords.y - wire.a.y);
-                const distB = Math.hypot(canvasCoords.x - wire.b.x, canvasCoords.y - wire.b.y);
-                const nearA = distA <= threshold;
-                const nearB = distB <= threshold;
-                if (nearA || nearB) {
-                    this.startWireEndpointDrag(wireId, nearA && (!nearB || distA <= distB) ? 'a' : 'b', e);
-                    return;
-                }
-            }
-        }
-
-        this.startWireDrag(wireId, e);
+    if (handleWireTargetMouseDownViaHandlers.call(this, e, {
+        target
+    })) {
         return;
     }
 

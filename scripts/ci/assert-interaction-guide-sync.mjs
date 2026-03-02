@@ -18,9 +18,20 @@ function readText(relPath) {
     return readFileSync(absPath, 'utf8');
 }
 
+function readOptionalText(relPath) {
+    const absPath = path.resolve(root, relPath);
+    if (!existsSync(absPath)) {
+        return '';
+    }
+    return readFileSync(absPath, 'utf8');
+}
+
 const guidePath = 'docs/process/component-interaction-usage-guide.md';
 const guide = readText(guidePath);
-const orchestrator = readText('src/app/interaction/InteractionOrchestrator.js');
+const interactionSource = [
+    readText('src/app/interaction/InteractionOrchestrator.js'),
+    readOptionalText('src/app/interaction/InteractionOrchestratorMouseDownHandlers.js')
+].join('\n');
 
 function hasCtrlCmdModifier(source) {
     return /e\.ctrlKey\s*\|\|\s*e\.metaKey|e\.metaKey\s*\|\|\s*e\.ctrlKey/.test(source);
@@ -30,7 +41,7 @@ function inferTerminalExtendGuideItem(source) {
     const marker = 'this.startTerminalExtend(componentId, terminalIndex, e)';
     const markerIdx = source.indexOf(marker);
     if (markerIdx < 0) {
-        fail('unable to locate terminal extension behavior in orchestrator');
+        fail('unable to locate terminal extension behavior in interaction sources');
     }
 
     const windowStart = Math.max(0, markerIdx - 300);
@@ -44,7 +55,7 @@ function inferWireSplitGuideItem(source) {
     const marker = 'this.splitWireAtPoint(';
     const markerIdx = source.indexOf(marker);
     if (markerIdx < 0) {
-        fail('unable to locate wire split behavior in orchestrator');
+        fail('unable to locate wire split behavior in interaction sources');
     }
 
     const windowStart = Math.max(0, markerIdx - 400);
@@ -54,8 +65,8 @@ function inferWireSplitGuideItem(source) {
 }
 
 const requiredGuideItems = [
-    inferTerminalExtendGuideItem(orchestrator),
-    inferWireSplitGuideItem(orchestrator)
+    inferTerminalExtendGuideItem(interactionSource),
+    inferWireSplitGuideItem(interactionSource)
 ];
 
 for (const item of requiredGuideItems) {

@@ -143,3 +143,49 @@ export function handlePendingToolMouseDown(e, resolvedTargets = {}) {
     this.placePendingToolAt(e.clientX, e.clientY);
     return true;
 }
+
+export function handleWireTargetMouseDown(e, resolvedTargets = {}) {
+    const target = resolvedTargets.target ?? e.target;
+    if (!(hasClass(target, 'wire') || hasClass(target, 'wire-hit-area'))) {
+        return false;
+    }
+
+    const wireGroup = safeClosest(target, '.wire-group');
+    const wireId = wireGroup ? wireGroup.dataset.id : target.dataset.id;
+
+    // 与 CircuitJS 一致：Ctrl/Cmd + 左键单击导线时执行分割。
+    if (e.button === 0 && (e.ctrlKey || e.metaKey)) {
+        if (wireId) {
+            const canvasCoords = this.screenToCanvas(e.clientX, e.clientY);
+            this.selectWire(wireId);
+            this.splitWireAtPoint(wireId, canvasCoords.x, canvasCoords.y);
+        }
+        return true;
+    }
+
+    const pointerType = this.resolvePointerType(e);
+    if ((pointerType === 'touch' || pointerType === 'pen') && wireId) {
+        const wire = this.circuit?.getWire?.(wireId);
+        if (wire?.a && wire?.b) {
+            const canvasCoords = this.screenToCanvas(e.clientX, e.clientY);
+            const threshold = typeof this.getAdaptiveSnapThreshold === 'function'
+                ? this.getAdaptiveSnapThreshold({
+                    pointerType,
+                    snapIntent: 'wire-endpoint-drag',
+                    threshold: 18
+                })
+                : 24;
+            const distA = Math.hypot(canvasCoords.x - wire.a.x, canvasCoords.y - wire.a.y);
+            const distB = Math.hypot(canvasCoords.x - wire.b.x, canvasCoords.y - wire.b.y);
+            const nearA = distA <= threshold;
+            const nearB = distB <= threshold;
+            if (nearA || nearB) {
+                this.startWireEndpointDrag(wireId, nearA && (!nearB || distA <= distB) ? 'a' : 'b', e);
+                return true;
+            }
+        }
+    }
+
+    this.startWireDrag(wireId, e);
+    return true;
+}

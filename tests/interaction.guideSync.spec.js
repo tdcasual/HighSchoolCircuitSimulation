@@ -24,7 +24,8 @@ describe('component interaction usage guide sync', () => {
             scriptRelPath: 'scripts/ci/assert-interaction-guide-sync.mjs',
             sourceFiles: [
                 'docs/process/component-interaction-usage-guide.md',
-                'src/app/interaction/InteractionOrchestrator.js'
+                'src/app/interaction/InteractionOrchestrator.js',
+                'src/app/interaction/InteractionOrchestratorMouseDownHandlers.js'
             ]
         });
 
@@ -37,7 +38,8 @@ describe('component interaction usage guide sync', () => {
             scriptRelPath: 'scripts/ci/assert-interaction-guide-sync.mjs',
             sourceFiles: [
                 'docs/process/component-interaction-usage-guide.md',
-                'src/app/interaction/InteractionOrchestrator.js'
+                'src/app/interaction/InteractionOrchestrator.js',
+                'src/app/interaction/InteractionOrchestratorMouseDownHandlers.js'
             ],
             mutateByFile: {
                 'docs/process/component-interaction-usage-guide.md': (content) =>
