@@ -1,6 +1,5 @@
 import { createComponent } from '../../components/Component.js';
 import { computeOverlapFractionFromOffsetPx, computeParallelPlateCapacitance } from '../../utils/Physics.js';
-import { getTerminalWorldPosition } from '../../utils/TerminalGeometry.js';
 import { normalizeCanvasPoint, toCanvasInt } from '../../utils/CanvasCoords.js';
 
 function defaultNormalizeObservationProbe(probe) {
@@ -128,58 +127,18 @@ export class CircuitDeserializer {
 
         const safePoint = (pt) => normalizeCanvasPoint(pt);
 
-        const getTerminalPoint = (componentId, terminalIndex) => {
-            const comp = componentsById.get(componentId);
-            if (!comp) return null;
-            return safePoint(getTerminalWorldPosition(comp, terminalIndex));
-        };
-
         for (const wireData of wireList) {
             if (!wireData || !wireData.id) continue;
 
-            if (wireData.a && wireData.b) {
-                const a = safePoint(wireData.a);
-                const b = safePoint(wireData.b);
-                if (!a || !b) continue;
-                const id = ensureUniqueWireId(wireData.id);
-                const wire = { id, a, b };
-                if (wireData.aRef) wire.aRef = wireData.aRef;
-                if (wireData.bRef) wire.bRef = wireData.bRef;
-                wires.set(id, wire);
-                continue;
-            }
-
-            const startRef = wireData.start
-                ? { componentId: wireData.start.componentId, terminalIndex: wireData.start.terminalIndex }
-                : (wireData.startComponentId != null
-                    ? { componentId: wireData.startComponentId, terminalIndex: wireData.startTerminalIndex }
-                    : null);
-            const endRef = wireData.end
-                ? { componentId: wireData.end.componentId, terminalIndex: wireData.end.terminalIndex }
-                : (wireData.endComponentId != null
-                    ? { componentId: wireData.endComponentId, terminalIndex: wireData.endTerminalIndex }
-                    : null);
-
-            if (!startRef || !endRef) continue;
-
-            const start = getTerminalPoint(startRef.componentId, startRef.terminalIndex);
-            const end = getTerminalPoint(endRef.componentId, endRef.terminalIndex);
-            if (!start || !end) continue;
-
-            const controlPoints = Array.isArray(wireData.controlPoints) ? wireData.controlPoints : [];
-            const poly = [start, ...controlPoints.map(safePoint).filter(Boolean), end];
-
-            for (let i = 0; i < poly.length - 1; i += 1) {
-                const a = poly[i];
-                const b = poly[i + 1];
-                if (!a || !b) continue;
-                const segBase = i === 0 ? wireData.id : `${wireData.id}_${i}`;
-                const id = ensureUniqueWireId(segBase);
-                const seg = { id, a: { x: a.x, y: a.y }, b: { x: b.x, y: b.y } };
-                if (i === 0) seg.aRef = startRef;
-                if (i === poly.length - 2) seg.bRef = endRef;
-                wires.set(id, seg);
-            }
+            if (!wireData.a || !wireData.b) continue;
+            const a = safePoint(wireData.a);
+            const b = safePoint(wireData.b);
+            if (!a || !b) continue;
+            const id = ensureUniqueWireId(wireData.id);
+            const wire = { id, a, b };
+            if (wireData.aRef) wire.aRef = wireData.aRef;
+            if (wireData.bRef) wire.bRef = wireData.bRef;
+            wires.set(id, wire);
         }
 
         const probes = [];
