@@ -77,7 +77,7 @@ Week5-10 执行轨道：`docs/plans/2026-03-02-architecture-de-risk-week5-10-imp
 ## Week5-10 落地状态（2026-03-02 起）
 
 - Week 5：已完成（Task13/14：legacy path usage tracker + readiness guard 脚本）。
-- Week 6：未开始（目标：mode store 初始化强约束 + ToolPlacement 同步收敛）。
+- Week 6：已完成（Task15/16：mode store 启动初始化 + ToolPlacement 入口同步收敛）。
 - Week 7：未开始（目标：执行 Batch B 删除）。
 - Week 8：未开始（目标：执行 Batch C Slice A）。
 - Week 9：未开始（目标：执行 Batch C Slice B）。
