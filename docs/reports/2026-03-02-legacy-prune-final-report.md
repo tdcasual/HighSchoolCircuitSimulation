@@ -22,7 +22,7 @@
 
 ### Batch C（中高风险）
 
-- Slice A：`5db4799` 停写 classroom legacy bool key（保留只读兼容窗口）。
+- Slice A：`5db4799` 停写 classroom legacy bool key（后续批次已关闭 legacy 只读兼容窗口）。
 - Slice B：
   - `d005ed4` 形成 observation legacy schema 审计分类。
   - `2ec3aba` 删除可删 alias 分支（`title/presetName/bindingMap/plot/plotId/target/source/quantity`）。

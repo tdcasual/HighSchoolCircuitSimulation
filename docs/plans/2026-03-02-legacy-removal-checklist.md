@@ -55,7 +55,8 @@ Week5-10 执行轨道：`docs/plans/2026-03-02-architecture-de-risk-week5-10-imp
   - 发布说明明确“兼容窗口结束”。
   - 提供一次性迁移脚本或迁移公告。
 - 2026-03-02 Slice A 执行更新：
-  - 已停止写入 classroom legacy bool key `ui.classroom_mode_enabled`，仅保留读取兼容窗口（commit: `5db4799`）。
+  - 已停止写入 classroom legacy bool key `ui.classroom_mode_enabled`（commit: `5db4799`）。
+  - 兼容窗口已关闭：legacy bool 读取路径已移除（2026-03-02 后续清理批次）。
   - 一次性迁移说明已补充到 `docs/releases/v0.10-stability-checklist.md`。
 - 2026-03-02 Slice B 执行更新：
   - 已完成 observation legacy schema 字段盘点与分类审计（commit: `d005ed4`）。

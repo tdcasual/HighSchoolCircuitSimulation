@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ClassroomModeController } from '../src/ui/ClassroomModeController.js';
-import { getLegacyPathUsageSnapshot } from '../src/app/legacy/LegacyPathUsageTracker.js';
 
 function createClassList() {
     const values = new Set();
@@ -79,16 +78,14 @@ function createWindowMock(width = 1366) {
 function setupFixture(options = {}) {
     const {
         width = 1366,
-        storedLevel = null,
-        storedLegacy = null
+        storedLevel = null
     } = options;
     const body = { classList: createClassList() };
     const button = createButtonMock();
     const win = createWindowMock(width);
 
     const values = new Map([
-        ['ui.classroom_mode_level', storedLevel],
-        ['ui.classroom_mode_enabled', storedLegacy]
+        ['ui.classroom_mode_level', storedLevel]
     ]);
 
     const storage = {
@@ -131,23 +128,6 @@ describe('ClassroomModeController', () => {
         expect(button.textContent).toBe('课堂模式: 增强');
     });
 
-    it('restores legacy boolean storage to standard mode for backward compatibility', () => {
-        const { body, button } = setupFixture({ width: 1366, storedLevel: null, storedLegacy: '1' });
-        const app = {
-            responsiveLayout: { isOverlayMode: () => false },
-            updateStatus: vi.fn()
-        };
-        new ClassroomModeController(app);
-
-        expect(body.classList.contains('classroom-mode')).toBe(true);
-        expect(body.classList.contains('classroom-mode-enhanced')).toBe(false);
-        expect(button.textContent).toBe('课堂模式: 标准');
-        const snapshot = getLegacyPathUsageSnapshot(app);
-        expect(snapshot).toHaveLength(1);
-        expect(snapshot[0].key).toBe('classroom.mode.legacy-bool-read');
-        expect(snapshot[0].count).toBe(1);
-    });
-
     it('suspends preferred level in compact viewport and restores after resize', () => {
         const { body, button, win } = setupFixture({ width: 820, storedLevel: 'enhanced' });
         let overlay = true;
@@ -184,7 +164,6 @@ describe('ClassroomModeController', () => {
         expect(body.classList.contains('classroom-mode-enhanced')).toBe(false);
         expect(button.textContent).toBe('课堂模式: 标准');
         expect(storage.setItem).toHaveBeenCalledWith('ui.classroom_mode_level', 'standard');
-        expect(storage.setItem).not.toHaveBeenCalledWith('ui.classroom_mode_enabled', expect.anything());
         expect(updateStatus).toHaveBeenLastCalledWith('已开启课堂模式（标准）');
 
         button.trigger('click');
@@ -201,7 +180,6 @@ describe('ClassroomModeController', () => {
         expect(body.classList.contains('classroom-mode-enhanced')).toBe(false);
         expect(button.textContent).toBe('课堂模式: 关');
         expect(storage.setItem).toHaveBeenCalledWith('ui.classroom_mode_level', 'off');
-        expect(storage.setItem).not.toHaveBeenCalledWith('ui.classroom_mode_enabled', expect.anything());
         expect(updateStatus).toHaveBeenLastCalledWith('已关闭课堂模式');
     });
 
