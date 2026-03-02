@@ -1,4 +1,3 @@
-import { recordLegacyPathUsage } from '../../app/legacy/LegacyPathUsageTracker.js';
 export const FIRST_RUN_GUIDE_DISMISSED_STORAGE_KEY = 'ui.first_run_guide_dismissed';
 
 function safeHasClass(node, className) {
@@ -34,7 +33,6 @@ export function isObservationTabActive() {
 
 export function getActiveInteractionMode() {
     const context = this || {};
-    const usageTarget = context?.app || context;
     const getModeState = context?.interactionModeStore?.getState;
     if (typeof getModeState === 'function') {
         try {
@@ -42,19 +40,9 @@ export function getActiveInteractionMode() {
             if (mode === 'select' || mode === 'wire' || mode === 'endpoint-edit') {
                 return mode;
             }
-            recordLegacyPathUsage(usageTarget, 'interaction.mode.legacy-fallback', {
-                reason: 'invalid-store-mode'
-            });
         } catch (_) {
             // Ignore store read failures and use the safe default mode.
-            recordLegacyPathUsage(usageTarget, 'interaction.mode.legacy-fallback', {
-                reason: 'store-read-error'
-            });
         }
-    } else {
-        recordLegacyPathUsage(usageTarget, 'interaction.mode.legacy-fallback', {
-            reason: 'store-missing'
-        });
     }
     return 'select';
 }
