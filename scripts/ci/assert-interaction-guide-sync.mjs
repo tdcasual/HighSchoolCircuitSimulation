@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
 const root = process.cwd();
@@ -26,14 +26,29 @@ function readOptionalText(relPath) {
     return readFileSync(absPath, 'utf8');
 }
 
+function readOptionalTextsFromInteractionDir(fileNamePattern) {
+    const interactionDirRel = 'src/app/interaction';
+    const interactionDirAbs = path.resolve(root, interactionDirRel);
+    if (!existsSync(interactionDirAbs)) {
+        return [];
+    }
+    const names = readdirSync(interactionDirAbs);
+    return names
+        .filter((name) => fileNamePattern.test(name))
+        .sort()
+        .map((name) => {
+            const relPath = path.posix.join(interactionDirRel, name);
+            return readOptionalText(relPath);
+        });
+}
+
 const guidePath = 'docs/process/component-interaction-usage-guide.md';
 const guide = readText(guidePath);
-const interactionSource = [
+const interactionSourceParts = [
     readText('src/app/interaction/InteractionOrchestrator.js'),
-    readOptionalText('src/app/interaction/InteractionOrchestratorMouseDownHandlers.js'),
-    readOptionalText('src/app/interaction/InteractionOrchestratorMouseDownPendingToolHandlers.js'),
-    readOptionalText('src/app/interaction/InteractionOrchestratorMouseDownTargetHandlers.js')
-].join('\n');
+    ...readOptionalTextsFromInteractionDir(/^InteractionOrchestratorMouseDown.*Handlers\.js$/)
+];
+const interactionSource = interactionSourceParts.join('\n');
 
 function hasCtrlCmdModifier(source) {
     return /e\.ctrlKey\s*\|\|\s*e\.metaKey|e\.metaKey\s*\|\|\s*e\.ctrlKey/.test(source);
