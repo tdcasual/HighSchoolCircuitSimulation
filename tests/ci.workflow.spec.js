@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { runScriptInTempWorkspace } from './helpers/scriptGuardTestUtils.js';
 
 describe('CI workflow coverage', () => {
-    it('runs responsive/wire/observation e2e jobs in GitHub Actions', () => {
+    it('runs responsive/wire/observation/mode-matrix e2e jobs in GitHub Actions', () => {
         const workflowPath = resolve(process.cwd(), '.github/workflows/ci.yml');
         const content = readFileSync(workflowPath, 'utf8');
 
@@ -22,6 +22,22 @@ describe('CI workflow coverage', () => {
         expect(content).toContain('npm run test:e2e:observation');
         expect(content).toContain('observation-e2e-screenshots');
         expect(content).toContain('output/e2e/observation-touch');
+
+        expect(content).toContain('mode-conflict-matrix-e2e:');
+        expect(content).toContain('npm run mode-conflict-matrix');
+        expect(content).toContain('mode-conflict-matrix-artifacts');
+        expect(content).toContain('output/e2e/mode-conflict');
+    });
+
+    it('includes v0.10 stability release checklist', () => {
+        const checklistPath = resolve(process.cwd(), 'docs/releases/v0.10-stability-checklist.md');
+        expect(existsSync(checklistPath)).toBe(true);
+
+        const content = readFileSync(checklistPath, 'utf8');
+        expect(content).toContain('v0.10 Stability Checklist');
+        expect(content).toContain('mode-conflict-matrix');
+        expect(content).toContain('test:e2e:wire');
+        expect(content).toContain('test:e2e:responsive');
     });
 
     it('runs reliability-focused regression gate in quality job', () => {
@@ -112,6 +128,23 @@ describe('CI workflow coverage', () => {
         expect(output.ok).toBe(false);
         expect(output.output).toContain('missing required step in observation-e2e');
         expect(output.output).toContain('Run observation touch E2E');
+    });
+
+    it('fails CI workflow coverage script when mode matrix run step is removed', () => {
+        const output = runScriptInTempWorkspace({
+            scriptRelPath: 'scripts/ci/assert-ci-workflow-coverage.mjs',
+            sourceFiles: ['.github/workflows/ci.yml', 'package.json'],
+            mutateByFile: {
+                '.github/workflows/ci.yml': (content) =>
+                    content
+                        .replace('      - name: Run mode conflict matrix E2E\n', '')
+                        .replace('        run: npm run mode-conflict-matrix\n', '')
+            }
+        });
+
+        expect(output.ok).toBe(false);
+        expect(output.output).toContain('missing required step in mode-conflict-matrix-e2e');
+        expect(output.output).toContain('Run mode conflict matrix E2E');
     });
 
     it('fails CI workflow coverage script when workflow npm script is missing in package', () => {

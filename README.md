@@ -33,6 +33,12 @@
 - AI 教学：运行时故障诊断可映射为“发生了什么/为什么/如何修复”教学提示
 - 质量门禁：`check:full` + P0/CircuitJS/AI 三组 baseline 回归通过
 
+## 🛡️ v0.10 稳定性门禁（2026-03）
+
+- 稳定性清单：[`docs/releases/v0.10-stability-checklist.md`](docs/releases/v0.10-stability-checklist.md)
+- 本轮报告：[`docs/reports/2026-03-02-architecture-derisk-report.md`](docs/reports/2026-03-02-architecture-derisk-report.md)
+- 新增矩阵命令：`npm run mode-conflict-matrix`
+
 ## ✅ v1.0 8-Day 冲刺收官（2026-04-06）
 
 - 发布门禁：[`docs/releases/v1.0-8day-readiness-gate.md`](docs/releases/v1.0-8day-readiness-gate.md)
