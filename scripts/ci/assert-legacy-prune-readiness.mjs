@@ -42,29 +42,29 @@ assertMatch(
 );
 assertMatch(
     checklist,
-    /Batch B：预审计已完成，结论为“暂缓删除（阻塞中）”。/,
-    'must keep batch-b blocked status'
+    /Batch B：已完成第 1 轮（commit:\s*`[0-9a-f]{7,40}`[^）]*）/,
+    'must include batch-b commit evidence'
 );
 assertMatch(
     checklist,
-    /当前不满足删除前置条件/,
-    'must document why batch-b is blocked'
+    /Week 7：已完成（Task17\/18：测试契约迁移 \+ UIStateController legacy fallback 删除）。/,
+    'must mark week7 as completed in checklist'
 );
 assertMatch(
     checklist,
     /docs\/plans\/2026-03-02-batch-b-mode-fallback-audit\.md/,
-    'must link batch-b audit evidence in checklist'
+    'must link batch-b audit evidence'
 );
 
 assertMatch(
     batchBAudit,
-    /结论：当前不可删/,
-    'must keep batch-b audit non-removable conclusion'
+    /结论（预审计初版）：当前不可删/,
+    'must preserve batch-b pre-audit baseline conclusion'
 );
 assertMatch(
     batchBAudit,
-    /Batch B 当前状态：阻塞（Not Removable Yet）。/,
-    'must keep batch-b audit blocking decision'
+    /Batch B 当前状态：已删除（Removed）。/,
+    'must mark batch-b as removed in audit execution update'
 );
 
 console.log('[legacy-prune-readiness] ok');

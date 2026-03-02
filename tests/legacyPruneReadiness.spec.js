@@ -26,7 +26,7 @@ describe('legacy prune readiness guard', () => {
         expect(output.output).toContain('[legacy-prune-readiness] ok');
     });
 
-    it('fails when checklist loses batch-b blocked status', () => {
+    it('fails when checklist loses batch-b completion evidence', () => {
         const output = runScriptInTempWorkspace({
             scriptRelPath: 'scripts/ci/assert-legacy-prune-readiness.mjs',
             sourceFiles: [
@@ -35,12 +35,15 @@ describe('legacy prune readiness guard', () => {
             ],
             mutateByFile: {
                 'docs/plans/2026-03-02-legacy-removal-checklist.md': (content) =>
-                    content.replace('Batch B：预审计已完成，结论为“暂缓删除（阻塞中）”。', 'Batch B：预审计已完成，结论为“可执行删除”。')
+                    content.replace(
+                        'Batch B：已完成第 1 轮（commit: `1ad7da4`，删 UIStateController legacy mode fallback）。',
+                        'Batch B：已完成第 1 轮（删 UIStateController legacy mode fallback）。'
+                    )
             }
         });
 
         expect(output.ok).toBe(false);
-        expect(output.output).toContain('must keep batch-b blocked status');
+        expect(output.output).toContain('must include batch-b commit evidence');
     });
 
     it('fails when batch-a commit evidence is missing in checklist', () => {
@@ -60,7 +63,7 @@ describe('legacy prune readiness guard', () => {
         expect(output.output).toContain('must include batch-a commit evidence');
     });
 
-    it('fails when batch-b audit doc no longer marks blocking decision', () => {
+    it('fails when batch-b audit doc no longer marks removed status', () => {
         const output = runScriptInTempWorkspace({
             scriptRelPath: 'scripts/ci/assert-legacy-prune-readiness.mjs',
             sourceFiles: [
@@ -69,11 +72,11 @@ describe('legacy prune readiness guard', () => {
             ],
             mutateByFile: {
                 'docs/plans/2026-03-02-batch-b-mode-fallback-audit.md': (content) =>
-                    content.replace('Batch B 当前状态：阻塞（Not Removable Yet）。', 'Batch B 当前状态：可删除（Removable）。')
+                    content.replace('Batch B 当前状态：已删除（Removed）。', 'Batch B 当前状态：可删除（Removable）。')
             }
         });
 
         expect(output.ok).toBe(false);
-        expect(output.output).toContain('must keep batch-b audit blocking decision');
+        expect(output.output).toContain('must mark batch-b as removed in audit execution update');
     });
 });
