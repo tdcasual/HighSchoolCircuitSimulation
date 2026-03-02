@@ -19,6 +19,10 @@ import { resetIdCounter, updateIdCounterFromExisting } from './components/Compon
 import { createRuntimeLogger } from './utils/Logger.js';
 import { buildRuntimeDiagnostics } from './core/simulation/RuntimeDiagnostics.js';
 import { resolveRuntimeDiagnosticsForUpdate } from './app/RuntimeDiagnosticsPipeline.js';
+import { safeRemoveStorageItem } from './app/AppStorage.js';
+import { buildAppSaveData, safeInvokeMethod } from './app/AppSerialization.js';
+import { setSimulationControlsRunning, setStatusText } from './app/SimulationUiState.js';
+import { registerAppBootstrap } from './app/AppBootstrapRuntime.js';
 
 class CircuitSimulatorApp {
     constructor() {
@@ -250,24 +254,9 @@ class CircuitSimulatorApp {
             : '';
 
         this.circuit.startSimulation();
-        
-        // 更新UI状态
-        document.getElementById('btn-run').disabled = true;
-        document.getElementById('btn-stop').disabled = false;
-        const mobileRunBtn = document.getElementById('btn-mobile-run');
-        const mobileStopBtn = document.getElementById('btn-mobile-stop');
-        if (mobileRunBtn) mobileRunBtn.disabled = true;
-        if (mobileStopBtn) mobileStopBtn.disabled = false;
-        const mobileSimToggle = document.getElementById('btn-mobile-sim-toggle');
-        if (mobileSimToggle) {
-            mobileSimToggle.textContent = '停止';
-            mobileSimToggle.setAttribute('aria-pressed', 'true');
-            mobileSimToggle.classList.add('running');
-        }
-        
-        const statusEl = document.getElementById('simulation-status');
-        statusEl.textContent = '模拟: 运行中';
-        statusEl.classList.add('running');
+
+        // 更新UI状态（在嵌入/裁剪DOM场景下安全降级）
+        setSimulationControlsRunning(true);
         
         this.renderer.updateWireAnimations(true);
         this.observationPanel?.setRuntimeStatus?.(topologyWarning || '');
@@ -279,24 +268,9 @@ class CircuitSimulatorApp {
      */
     stopSimulation() {
         this.circuit.stopSimulation();
-        
-        // 更新UI状态
-        document.getElementById('btn-run').disabled = false;
-        document.getElementById('btn-stop').disabled = true;
-        const mobileRunBtn = document.getElementById('btn-mobile-run');
-        const mobileStopBtn = document.getElementById('btn-mobile-stop');
-        if (mobileRunBtn) mobileRunBtn.disabled = false;
-        if (mobileStopBtn) mobileStopBtn.disabled = true;
-        const mobileSimToggle = document.getElementById('btn-mobile-sim-toggle');
-        if (mobileSimToggle) {
-            mobileSimToggle.textContent = '运行';
-            mobileSimToggle.setAttribute('aria-pressed', 'false');
-            mobileSimToggle.classList.remove('running');
-        }
-        
-        const statusEl = document.getElementById('simulation-status');
-        statusEl.textContent = '模拟: 停止';
-        statusEl.classList.remove('running');
+
+        // 更新UI状态（在嵌入/裁剪DOM场景下安全降级）
+        setSimulationControlsRunning(false);
         
         this.renderer.updateWireAnimations(false);
         this.observationPanel?.setRuntimeStatus?.('');
@@ -317,7 +291,7 @@ class CircuitSimulatorApp {
         this.exerciseBoard?.reset();
             
         // 清除缓存
-        localStorage.removeItem('saved_circuit');
+        safeRemoveStorageItem('saved_circuit');
         
         this.updateStatus('电路已清空');
     }
@@ -336,7 +310,7 @@ class CircuitSimulatorApp {
 
         this.stopSimulation();
         this.circuit.fromJSON(data);
-        this.exerciseBoard?.fromJSON(data.meta?.exerciseBoard);
+        safeInvokeMethod(this.exerciseBoard, 'fromJSON', data.meta?.exerciseBoard);
 
         const allIds = [
             ...data.components.map((component) => component.id),
@@ -348,7 +322,7 @@ class CircuitSimulatorApp {
         this.interaction.clearSelection();
         this.observationPanel?.refreshComponentOptions();
         this.observationPanel?.refreshDialGauges();
-        this.observationPanel?.fromJSON(data.meta?.observation);
+        safeInvokeMethod(this.observationPanel, 'fromJSON', data.meta?.observation);
 
         if (!silent) {
             this.updateStatus(statusText || `已加载电路 (${data.components.length} 个元器件)`);
@@ -406,7 +380,7 @@ class CircuitSimulatorApp {
      * 更新状态栏
      */
     updateStatus(text) {
-        document.getElementById('status-text').textContent = text;
+        setStatusText(text);
     }
     
     /**
@@ -444,15 +418,11 @@ class CircuitSimulatorApp {
      * 统一构建“可保存/可导出”的电路 JSON（包含习题板等 UI 元信息）
      */
     buildSaveData() {
-        const data = this.circuit.toJSON();
-        data.meta = data.meta && typeof data.meta === 'object' ? data.meta : {};
-        if (this.exerciseBoard?.toJSON) {
-            data.meta.exerciseBoard = this.exerciseBoard.toJSON();
-        }
-        if (this.observationPanel?.toJSON) {
-            data.meta.observation = this.observationPanel.toJSON();
-        }
-        return data;
+        return buildAppSaveData({
+            circuit: this.circuit,
+            exerciseBoard: this.exerciseBoard,
+            observationPanel: this.observationPanel
+        });
     }
     
     /**
@@ -481,6 +451,6 @@ class CircuitSimulatorApp {
 }
 
 // 应用启动
-document.addEventListener('DOMContentLoaded', () => {
-    window.app = new CircuitSimulatorApp();
+registerAppBootstrap({
+    createApp: () => new CircuitSimulatorApp()
 });

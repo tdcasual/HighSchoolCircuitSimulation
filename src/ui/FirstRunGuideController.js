@@ -4,6 +4,24 @@ import {
     shouldShowFirstRunGuide
 } from './interaction/UIStateController.js';
 
+function safeInvokeMethod(target, methodName, ...args) {
+    const fn = target?.[methodName];
+    if (typeof fn !== 'function') return undefined;
+    try {
+        return fn.apply(target, args);
+    } catch (_) {
+        return undefined;
+    }
+}
+
+function safeAddClass(node, className) {
+    safeInvokeMethod(node?.classList, 'add', className);
+}
+
+function safeRemoveClass(node, className) {
+    safeInvokeMethod(node?.classList, 'remove', className);
+}
+
 export class FirstRunGuideController {
     constructor(app, options = {}) {
         this.app = app;
@@ -48,7 +66,7 @@ export class FirstRunGuideController {
             overlay = document.createElement('div');
             overlay.id = this.overlayId;
             overlay.className = 'first-run-guide-overlay hidden';
-            overlay.setAttribute('aria-hidden', 'true');
+            safeInvokeMethod(overlay, 'setAttribute', 'aria-hidden', 'true');
             overlay.innerHTML = `
                 <div class="first-run-guide-card" role="dialog" aria-modal="true" aria-label="快速上手引导">
                     <h3>欢迎使用电路模拟器</h3>
@@ -68,13 +86,13 @@ export class FirstRunGuideController {
                     </div>
                 </div>
             `;
-            document.body.appendChild(overlay);
+            safeInvokeMethod(document.body, 'appendChild', overlay);
         }
 
         this.overlayEl = overlay;
-        this.rememberCheckboxEl = overlay.querySelector('[data-guide-action="remember"]');
-        overlay.removeEventListener('click', this.boundOverlayClick);
-        overlay.addEventListener('click', this.boundOverlayClick);
+        this.rememberCheckboxEl = safeInvokeMethod(overlay, 'querySelector', '[data-guide-action="remember"]') || null;
+        safeInvokeMethod(overlay, 'removeEventListener', 'click', this.boundOverlayClick);
+        safeInvokeMethod(overlay, 'addEventListener', 'click', this.boundOverlayClick);
     }
 
     handleOverlayClick(event) {
@@ -91,15 +109,15 @@ export class FirstRunGuideController {
 
     show() {
         if (!this.overlayEl) return false;
-        this.overlayEl.classList.remove('hidden');
-        this.overlayEl.setAttribute('aria-hidden', 'false');
+        safeRemoveClass(this.overlayEl, 'hidden');
+        safeInvokeMethod(this.overlayEl, 'setAttribute', 'aria-hidden', 'false');
         return true;
     }
 
     hide() {
         if (!this.overlayEl) return false;
-        this.overlayEl.classList.add('hidden');
-        this.overlayEl.setAttribute('aria-hidden', 'true');
+        safeAddClass(this.overlayEl, 'hidden');
+        safeInvokeMethod(this.overlayEl, 'setAttribute', 'aria-hidden', 'true');
         return true;
     }
 
@@ -120,4 +138,3 @@ export class FirstRunGuideController {
         return this.show();
     }
 }
-
