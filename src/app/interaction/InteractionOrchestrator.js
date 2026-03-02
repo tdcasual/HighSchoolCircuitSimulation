@@ -14,8 +14,10 @@ import {
 } from './InteractionOrchestratorMouseDownHandlers.js';
 import {
     handleActiveWiringMouseUp as handleActiveWiringMouseUpViaHandlers,
+    handleComponentDragMouseUp as handleComponentDragMouseUpViaHandlers,
     handlePointerDownSelectionToggleMouseUp as handlePointerDownSelectionToggleMouseUpViaHandlers,
     handlePanningMouseUp as handlePanningMouseUpViaHandlers,
+    handleWireDragMouseUp as handleWireDragMouseUpViaHandlers,
     handleWireEndpointDragMouseUp as handleWireEndpointDragMouseUpViaHandlers,
     handleWireModeGestureMouseUp as handleWireModeGestureMouseUpViaHandlers
 } from './InteractionOrchestratorMouseUpHandlers.js';
@@ -491,31 +493,11 @@ export function onMouseUp(e) {
         return;
     }
 
-    // 结束导线整体拖动
-    if (this.isDraggingWire) {
-        const drag = this.wireDrag;
-        this.isDraggingWire = false;
-        this.wireDrag = null;
-        this.compactWiresAndRefresh({
-            preferredWireId: drag?.wireId || this.selectedWire,
-            scopeWireIds: drag?.wireId ? [drag.wireId] : null
-        });
-        this.circuit.rebuildNodes();
-        this.commitHistoryTransaction();
-        this.pointerDownInfo = null;
+    if (handleWireDragMouseUpViaHandlers.call(this)) {
         return;
     }
 
-    // 结束拖动
-    if (this.isDragging) {
-        this.isDragging = false;
-        this.dragTarget = null;
-        this.isDraggingComponent = false;
-        this.dragGroup = null;
-        this.hideAlignmentGuides();
-        this.circuit.rebuildNodes();
-        this.commitHistoryTransaction();
-    }
+    handleComponentDragMouseUpViaHandlers.call(this);
 
     if (handlePointerDownSelectionToggleMouseUpViaHandlers.call(this, e, pointerDownInfo)) {
         return;

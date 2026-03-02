@@ -220,3 +220,36 @@ export function handleWireEndpointDragMouseUp(e) {
     this.pointerDownInfo = null;
     return true;
 }
+
+export function handleWireDragMouseUp() {
+    if (!this.isDraggingWire) {
+        return false;
+    }
+
+    const drag = this.wireDrag;
+    this.isDraggingWire = false;
+    this.wireDrag = null;
+    this.compactWiresAndRefresh({
+        preferredWireId: drag?.wireId || this.selectedWire,
+        scopeWireIds: drag?.wireId ? [drag.wireId] : null
+    });
+    this.circuit.rebuildNodes();
+    this.commitHistoryTransaction();
+    this.pointerDownInfo = null;
+    return true;
+}
+
+export function handleComponentDragMouseUp() {
+    if (!this.isDragging) {
+        return false;
+    }
+
+    this.isDragging = false;
+    this.dragTarget = null;
+    this.isDraggingComponent = false;
+    this.dragGroup = null;
+    this.hideAlignmentGuides();
+    this.circuit.rebuildNodes();
+    this.commitHistoryTransaction();
+    return true;
+}

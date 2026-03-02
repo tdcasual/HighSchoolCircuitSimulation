@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
     handleActiveWiringMouseUp,
+    handleComponentDragMouseUp,
     handlePointerDownSelectionToggleMouseUp,
     handlePanningMouseUp,
+    handleWireDragMouseUp,
     handleWireEndpointDragMouseUp,
     handleWireModeGestureMouseUp
 } from '../src/app/interaction/InteractionOrchestratorMouseUpHandlers.js';
@@ -301,5 +303,77 @@ describe('InteractionOrchestratorMouseUpHandlers.handleWireEndpointDragMouseUp',
         expect(context.circuit.rebuildNodes).toHaveBeenCalledTimes(1);
         expect(context.commitHistoryTransaction).toHaveBeenCalledTimes(1);
         expect(context.pointerDownInfo).toBeNull();
+    });
+});
+
+describe('InteractionOrchestratorMouseUpHandlers.handleWireDragMouseUp', () => {
+    it('returns false when wire dragging is not active', () => {
+        const context = {
+            isDraggingWire: false
+        };
+
+        const handled = handleWireDragMouseUp.call(context);
+
+        expect(handled).toBe(false);
+    });
+
+    it('finalizes full-wire drag and commits transaction', () => {
+        const context = {
+            isDraggingWire: true,
+            wireDrag: { wireId: 'W8' },
+            selectedWire: 'W1',
+            compactWiresAndRefresh: vi.fn(),
+            circuit: { rebuildNodes: vi.fn() },
+            commitHistoryTransaction: vi.fn(),
+            pointerDownInfo: { componentId: 'R9' }
+        };
+
+        const handled = handleWireDragMouseUp.call(context);
+
+        expect(handled).toBe(true);
+        expect(context.isDraggingWire).toBe(false);
+        expect(context.wireDrag).toBeNull();
+        expect(context.compactWiresAndRefresh).toHaveBeenCalledWith({
+            preferredWireId: 'W8',
+            scopeWireIds: ['W8']
+        });
+        expect(context.circuit.rebuildNodes).toHaveBeenCalledTimes(1);
+        expect(context.commitHistoryTransaction).toHaveBeenCalledTimes(1);
+        expect(context.pointerDownInfo).toBeNull();
+    });
+});
+
+describe('InteractionOrchestratorMouseUpHandlers.handleComponentDragMouseUp', () => {
+    it('returns false when component dragging is not active', () => {
+        const context = {
+            isDragging: false
+        };
+
+        const handled = handleComponentDragMouseUp.call(context);
+
+        expect(handled).toBe(false);
+    });
+
+    it('finalizes component drag and commits transaction', () => {
+        const context = {
+            isDragging: true,
+            dragTarget: 'R1',
+            isDraggingComponent: true,
+            dragGroup: { boxId: 'B1' },
+            hideAlignmentGuides: vi.fn(),
+            circuit: { rebuildNodes: vi.fn() },
+            commitHistoryTransaction: vi.fn()
+        };
+
+        const handled = handleComponentDragMouseUp.call(context);
+
+        expect(handled).toBe(true);
+        expect(context.isDragging).toBe(false);
+        expect(context.dragTarget).toBeNull();
+        expect(context.isDraggingComponent).toBe(false);
+        expect(context.dragGroup).toBeNull();
+        expect(context.hideAlignmentGuides).toHaveBeenCalledTimes(1);
+        expect(context.circuit.rebuildNodes).toHaveBeenCalledTimes(1);
+        expect(context.commitHistoryTransaction).toHaveBeenCalledTimes(1);
     });
 });
