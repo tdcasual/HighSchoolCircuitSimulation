@@ -1,7 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { runScriptInTempWorkspace } from './helpers/scriptGuardTestUtils.js';
+
+function resolveGuideSyncSourceFiles() {
+    const interactionDir = resolve(process.cwd(), 'src/app/interaction');
+    const mouseDownHandlers = readdirSync(interactionDir)
+        .filter((name) => /^InteractionOrchestratorMouseDown.*Handlers\.js$/.test(name))
+        .sort()
+        .map((name) => `src/app/interaction/${name}`);
+
+    return [
+        'docs/process/component-interaction-usage-guide.md',
+        'src/app/interaction/InteractionOrchestrator.js',
+        ...mouseDownHandlers
+    ];
+}
 
 describe('component interaction usage guide sync', () => {
     it('has interaction-guide sync script wired in package scripts', () => {
@@ -22,13 +36,7 @@ describe('component interaction usage guide sync', () => {
     it('executes interaction-guide sync script on current workspace', () => {
         const output = runScriptInTempWorkspace({
             scriptRelPath: 'scripts/ci/assert-interaction-guide-sync.mjs',
-            sourceFiles: [
-                'docs/process/component-interaction-usage-guide.md',
-                'src/app/interaction/InteractionOrchestrator.js',
-                'src/app/interaction/InteractionOrchestratorMouseDownHandlers.js',
-                'src/app/interaction/InteractionOrchestratorMouseDownPendingToolHandlers.js',
-                'src/app/interaction/InteractionOrchestratorMouseDownTargetHandlers.js'
-            ]
+            sourceFiles: resolveGuideSyncSourceFiles()
         });
 
         expect(output.ok).toBe(true);
@@ -38,13 +46,7 @@ describe('component interaction usage guide sync', () => {
     it('fails when required interaction item is missing from guide', () => {
         const output = runScriptInTempWorkspace({
             scriptRelPath: 'scripts/ci/assert-interaction-guide-sync.mjs',
-            sourceFiles: [
-                'docs/process/component-interaction-usage-guide.md',
-                'src/app/interaction/InteractionOrchestrator.js',
-                'src/app/interaction/InteractionOrchestratorMouseDownHandlers.js',
-                'src/app/interaction/InteractionOrchestratorMouseDownPendingToolHandlers.js',
-                'src/app/interaction/InteractionOrchestratorMouseDownTargetHandlers.js'
-            ],
+            sourceFiles: resolveGuideSyncSourceFiles(),
             mutateByFile: {
                 'docs/process/component-interaction-usage-guide.md': (content) =>
                     content.replace('Ctrl/Cmd + 点击导线', 'Ctrl/Cmd + 点击连线')
