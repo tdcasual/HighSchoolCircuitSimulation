@@ -182,4 +182,61 @@ describe('ChartWindowControls', () => {
             }
         });
     });
+
+    it('keeps numeric zero source ids when rebuilding controls', () => {
+        const controller = {
+            workspace: {
+                circuit: {
+                    components: new Map([
+                        ['0', { id: '0', type: 'Resistor' }]
+                    ])
+                },
+                resolveSourceId: (sourceId) => {
+                    if (sourceId === undefined || sourceId === null || String(sourceId).trim() === '') {
+                        return TIME_SOURCE_ID;
+                    }
+                    return String(sourceId).trim();
+                },
+                commandService: {
+                    updateSeries: vi.fn(),
+                    removeSeries: vi.fn()
+                }
+            },
+            state: {
+                id: 'chart_1',
+                axis: {
+                    xBinding: {
+                        sourceId: 0,
+                        quantityId: QuantityIds.Current,
+                        transformId: 'identity'
+                    }
+                },
+                series: [
+                    {
+                        id: 's1',
+                        name: '系列 1',
+                        sourceId: 0,
+                        quantityId: QuantityIds.Current,
+                        transformId: 'identity',
+                        visible: true,
+                        color: '#1d4ed8',
+                        xMode: 'shared-x'
+                    }
+                ]
+            },
+            elements: {
+                legendBody: document.createElement('div'),
+                xSource: document.createElement('select'),
+                xQuantity: document.createElement('select')
+            },
+            seriesElements: new Map(),
+            createControlGroup
+        };
+
+        rebuildSeriesControls(controller);
+        const seriesEls = controller.seriesElements.get('s1');
+
+        expect(controller.elements.xSource.value).toBe('0');
+        expect(seriesEls.sourceSelect.value).toBe('0');
+    });
 });

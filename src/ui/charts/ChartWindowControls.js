@@ -16,6 +16,15 @@ export const X_MODE_OPTIONS = Object.freeze([
 
 export const RESIZE_DIRECTIONS = Object.freeze(['n', 'e', 's', 'w', 'nw', 'ne', 'sw', 'se']);
 
+function normalizeIdentifier(value) {
+    if (value === undefined || value === null) return '';
+    return String(value).trim();
+}
+
+function resolveSourceSelectionId(value) {
+    return normalizeIdentifier(value) || TIME_SOURCE_ID;
+}
+
 export function setSelectOptions(selectEl, options, selectedId) {
     if (!selectEl) return null;
     while (selectEl.firstChild) {
@@ -63,7 +72,11 @@ function createScatterBinding(controller, scatterSourceSelect, scatterQuantitySe
 export function refreshSourceOptions(controller) {
     const sourceOptions = getSourceOptions(controller.workspace.circuit);
     const axisBinding = controller.state.axis?.xBinding || {};
-    const xSource = setSelectOptions(controller.elements.xSource, sourceOptions, axisBinding.sourceId || TIME_SOURCE_ID);
+    const xSource = setSelectOptions(
+        controller.elements.xSource,
+        sourceOptions,
+        resolveSourceSelectionId(axisBinding.sourceId)
+    );
     const xQuantities = getQuantitiesForSource(xSource || TIME_SOURCE_ID, controller.workspace.circuit);
     setSelectOptions(controller.elements.xQuantity, xQuantities, axisBinding.quantityId || 't');
 
@@ -71,14 +84,22 @@ export function refreshSourceOptions(controller) {
         const itemEls = controller.seriesElements.get(series.id);
         if (!itemEls) continue;
 
-        const sourceId = setSelectOptions(itemEls.sourceSelect, sourceOptions, series.sourceId || TIME_SOURCE_ID);
+        const sourceId = setSelectOptions(
+            itemEls.sourceSelect,
+            sourceOptions,
+            resolveSourceSelectionId(series.sourceId)
+        );
         const yQuantities = getQuantitiesForSource(sourceId || TIME_SOURCE_ID, controller.workspace.circuit);
         setSelectOptions(itemEls.quantitySelect, yQuantities, series.quantityId || yQuantities[0]?.id || null);
         setSelectOptions(itemEls.transformSelect, TransformOptions.map((opt) => ({ id: opt.id, label: opt.label })), series.transformId);
         setSelectOptions(itemEls.xModeSelect, X_MODE_OPTIONS, series.xMode || 'shared-x');
 
         const scatterBinding = series.scatterXBinding || { sourceId: TIME_SOURCE_ID, quantityId: 't' };
-        const scatterSource = setSelectOptions(itemEls.scatterSourceSelect, sourceOptions, scatterBinding.sourceId);
+        const scatterSource = setSelectOptions(
+            itemEls.scatterSourceSelect,
+            sourceOptions,
+            resolveSourceSelectionId(scatterBinding.sourceId)
+        );
         const scatterQuantities = getQuantitiesForSource(scatterSource || TIME_SOURCE_ID, controller.workspace.circuit);
         setSelectOptions(itemEls.scatterQuantitySelect, scatterQuantities, scatterBinding.quantityId || scatterQuantities[0]?.id || 't');
 
