@@ -3,6 +3,12 @@ import { safeInvoke } from '../../utils/RuntimeSafety.js';
 
 const safeInvokeMethod = (target, methodName, ...args) => safeInvoke(target, methodName, args);
 
+function normalizeIdentifier(value) {
+    if (value === undefined || value === null) return null;
+    const normalized = String(value).trim();
+    return normalized === '' ? null : normalized;
+}
+
 export class HistoryManager {
     constructor(interaction, options = {}) {
         this.interaction = interaction;
@@ -30,14 +36,14 @@ export class HistoryManager {
 
     getSelectionSnapshot() {
         return {
-            componentId: this.interaction?.selectedComponent || null,
-            wireId: this.interaction?.selectedWire || null
+            componentId: normalizeIdentifier(this.interaction?.selectedComponent),
+            wireId: normalizeIdentifier(this.interaction?.selectedWire)
         };
     }
 
     restoreSelectionSnapshot(snapshot) {
-        const compId = snapshot?.componentId;
-        const wireId = snapshot?.wireId;
+        const compId = normalizeIdentifier(snapshot?.componentId);
+        const wireId = normalizeIdentifier(snapshot?.wireId);
         if (compId && safeInvokeMethod(this.interaction?.circuit, 'getComponent', compId)) {
             safeInvokeMethod(this.interaction, 'selectComponent', compId);
             return;
@@ -130,7 +136,9 @@ export class HistoryManager {
             const allIds = [
                 ...(state.components || []).map((component) => component.id),
                 ...(state.wires || []).map((wire) => wire.id)
-            ].filter(Boolean);
+            ]
+                .map((id) => normalizeIdentifier(id))
+                .filter((id) => typeof id === 'string');
             updateIdCounterFromExisting(allIds);
 
             safeInvokeMethod(this.interaction?.renderer, 'render');

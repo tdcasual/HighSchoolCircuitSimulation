@@ -45,4 +45,23 @@ describe('HistoryManager safety', () => {
         expect(interaction.app.chartWorkspace.refreshComponentOptions).toHaveBeenCalledTimes(1);
         expect(interaction.app.chartWorkspace.refreshDialGauges).toHaveBeenCalledTimes(1);
     });
+
+    it('restores numeric zero component ids from selection snapshots', () => {
+        const interaction = {
+            circuit: {
+                getComponent: vi.fn((id) => (id === '0' ? { id: '0' } : null)),
+                getWire: vi.fn(() => null)
+            },
+            selectComponent: vi.fn(),
+            selectWire: vi.fn(),
+            clearSelection: vi.fn()
+        };
+        const manager = new HistoryManager(interaction);
+
+        manager.restoreSelectionSnapshot({ componentId: 0, wireId: null });
+
+        expect(interaction.circuit.getComponent).toHaveBeenCalledWith('0');
+        expect(interaction.selectComponent).toHaveBeenCalledWith('0');
+        expect(interaction.clearSelection).not.toHaveBeenCalled();
+    });
 });
