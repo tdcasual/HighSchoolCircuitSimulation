@@ -38,3 +38,27 @@ npm run lint && npm test && npm run check:full
    - `baseline:p0` 通过（20 scenarios）。
    - `baseline:circuitjs` 通过（10 scenarios）。
    - `baseline:ai` 通过（3 scenarios）。
+
+### Task 1: Add v2 architecture boundary guard
+
+- Status: completed
+- Started: 2026-03-03
+- Completed: 2026-03-03
+- Notes:
+  - 新增 `scripts/ci/assert-v2-architecture-boundaries.mjs`，用于扫描 `src/v2` 分层依赖方向。
+  - 新增 `tests/ci.v2ArchitectureBoundaries.spec.js`，覆盖 package script、CI wiring 与脚本可执行性。
+  - `package.json` 已注册 `check:v2:boundaries`，并接入 `check` 流水线。
+  - `.github/workflows/ci.yml` 的 `quality` job 已增加 `Check v2 architecture boundaries` 步骤。
+
+**Verification Commands**
+
+```bash
+npm test -- tests/ci.v2ArchitectureBoundaries.spec.js && npm run check:v2:boundaries
+npm run check:ci-workflow
+```
+
+**Verification Summary**
+
+1. `tests/ci.v2ArchitectureBoundaries.spec.js` 通过（3 tests）。
+2. `check:v2:boundaries` 通过（当前 `src/v2` 尚不存在，输出 `ok (src/v2 not present yet)`）。
+3. `check:ci-workflow` 通过（`[ci-workflow] ok`）。

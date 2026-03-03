@@ -44,6 +44,9 @@ jobs:
       - name: Check CI workflow coverage
         run: node scripts/ci/assert-ci-workflow-coverage.mjs
 
+      - name: Check v2 architecture boundaries
+        run: node scripts/ci/assert-v2-architecture-boundaries.mjs
+
       - name: Build frontend artifacts
         run: npm run build:frontend
 
