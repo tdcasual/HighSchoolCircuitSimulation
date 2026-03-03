@@ -72,4 +72,32 @@ describe('SolveCircuitV2 purity contract', () => {
         expect(result.currents.get('R1')).toBeCloseTo(0.3, 6);
         expect(result.voltages[1]).toBeCloseTo(2.4, 6);
     });
+
+    it('preserves numeric zero component id from DTO payload', () => {
+        const dto = {
+            meta: { version: 2 },
+            nodes: [{ id: '0' }, { id: '1' }],
+            components: [
+                {
+                    id: 'V1',
+                    type: 'PowerSource',
+                    nodes: [1, 0],
+                    params: { voltage: 3, internalResistance: 2 }
+                },
+                {
+                    id: 0,
+                    type: 'Resistor',
+                    nodes: [1, 0],
+                    params: { resistance: 8 }
+                }
+            ]
+        };
+
+        const result = solveCircuitV2(dto, new SimulationStateV2(), { dt: 0.01 });
+
+        expect(result.valid).toBe(true);
+        expect(result.currents.has('0')).toBe(true);
+        expect(result.currents.has('Resistor_1')).toBe(false);
+        expect(result.currents.get('0')).toBeCloseTo(0.3, 6);
+    });
 });

@@ -48,4 +48,14 @@ describe('NetlistBuilder', () => {
         });
         expect(netlist.components[1].source).toBe(resistor);
     });
+
+    it('preserves numeric zero component id instead of fallback id', () => {
+        const builder = new NetlistBuilder();
+        const netlist = builder.build({
+            components: [{ id: 0, type: 'Resistor', nodes: [1, 0], resistance: 100 }],
+            nodes: ['gnd', 'n1']
+        });
+
+        expect(netlist.components[0].id).toBe('0');
+    });
 });

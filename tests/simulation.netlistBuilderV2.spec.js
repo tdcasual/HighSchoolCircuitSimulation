@@ -59,4 +59,14 @@ describe('NetlistBuilderV2', () => {
         expect(netlist.nodes).toEqual([{ id: 'n0' }, { id: '2' }]);
         expect(() => JSON.stringify(netlist)).not.toThrow();
     });
+
+    it('preserves numeric zero component id instead of generating fallback id', () => {
+        const builder = new NetlistBuilderV2();
+        const netlist = builder.build({
+            components: [{ id: 0, type: 'Resistor', nodes: [1, 0], resistance: 100 }],
+            nodes: [0, 1]
+        });
+
+        expect(netlist.components[0].id).toBe('0');
+    });
 });

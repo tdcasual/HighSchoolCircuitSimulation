@@ -51,7 +51,10 @@ function normalizeNodeIndex(value) {
 function normalizeComponent(component, index) {
     const safeComponent = component && typeof component === 'object' ? component : {};
     const type = typeof safeComponent.type === 'string' ? safeComponent.type : 'Unknown';
-    const id = safeComponent.id ? String(safeComponent.id) : `${type}_${index}`;
+    const hasId = safeComponent.id !== undefined
+        && safeComponent.id !== null
+        && (typeof safeComponent.id !== 'string' || safeComponent.id.trim());
+    const id = hasId ? String(safeComponent.id) : `${type}_${index}`;
     const sourceNodes = Array.isArray(safeComponent.nodes) ? safeComponent.nodes : [];
     const nodes = sourceNodes
         .map((node) => normalizeNodeIndex(node))

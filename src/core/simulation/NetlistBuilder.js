@@ -15,7 +15,10 @@ export class NetlistBuilder {
     toComponentEntry(component, index) {
         const safeComponent = component && typeof component === 'object' ? component : {};
         const type = typeof safeComponent.type === 'string' ? safeComponent.type : 'Unknown';
-        const id = safeComponent.id || `${type}_${index}`;
+        const hasId = safeComponent.id !== undefined
+            && safeComponent.id !== null
+            && (typeof safeComponent.id !== 'string' || safeComponent.id.trim());
+        const id = hasId ? String(safeComponent.id) : `${type}_${index}`;
         const nodes = Array.isArray(safeComponent.nodes) ? [...safeComponent.nodes] : [];
         return {
             id,
