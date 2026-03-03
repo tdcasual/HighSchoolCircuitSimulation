@@ -268,6 +268,15 @@ async function runPhoneTaskScenario(page, taskId) {
             renderer.addWire(wire);
             return wire.id;
         };
+        const getObservationPlotCount = () => {
+            if (Array.isArray(app.chartWorkspace?.windows)) {
+                return app.chartWorkspace.windows.length;
+            }
+            if (Array.isArray(app.observationPanel?.plots)) {
+                return app.observationPanel.plots.length;
+            }
+            return 0;
+        };
 
         try {
             app.clearCircuit?.();
@@ -292,14 +301,14 @@ async function runPhoneTaskScenario(page, taskId) {
                 connect(resistor, 1, source, 1);
 
                 const beforeProbeCount = (circuit.getAllObservationProbes?.() || []).length;
-                const beforePlotCount = Array.isArray(app.observationPanel?.plots) ? app.observationPanel.plots.length : 0;
+                const beforePlotCount = getObservationPlotCount();
                 tapCount += 1;
                 interaction.addObservationProbeForWire?.(w1, 'WireCurrentProbe', { autoAddPlot: true });
                 const probes = circuit.getAllObservationProbes?.() || [];
                 if (probes.length <= beforeProbeCount) {
                     throw new Error('probe_add_failed');
                 }
-                const afterPlotCount = Array.isArray(app.observationPanel?.plots) ? app.observationPanel.plots.length : 0;
+                const afterPlotCount = getObservationPlotCount();
                 if (afterPlotCount <= beforePlotCount) {
                     throw new Error('probe_plot_auto_add_failed');
                 }

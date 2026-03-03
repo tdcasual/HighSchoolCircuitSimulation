@@ -12,7 +12,7 @@ describe('registerAppBootstrap', () => {
             })
         };
         const runtimeWindow = {};
-        const appInstance = { id: 'app-instance' };
+        const appInstance = { id: 'app-instance', chartWorkspace: {} };
         const createApp = vi.fn(() => appInstance);
 
         const registered = registerAppBootstrap({
@@ -42,5 +42,30 @@ describe('registerAppBootstrap', () => {
             createApp
         })).not.toThrow();
         expect(createApp).not.toHaveBeenCalled();
+    });
+
+    it('does not expose runtime app when chartWorkspace contract is missing', () => {
+        let domReadyHandler = null;
+        const doc = {
+            addEventListener: vi.fn((eventName, handler) => {
+                if (eventName === 'DOMContentLoaded') {
+                    domReadyHandler = handler;
+                }
+            })
+        };
+        const runtimeWindow = {};
+        const createApp = vi.fn(() => ({ id: 'legacy-app-only' }));
+
+        const registered = registerAppBootstrap({
+            documentRef: doc,
+            windowRef: runtimeWindow,
+            createApp
+        });
+
+        expect(registered).toBe(true);
+        expect(typeof domReadyHandler).toBe('function');
+        domReadyHandler();
+        expect(createApp).toHaveBeenCalledTimes(1);
+        expect(runtimeWindow.app).toBeUndefined();
     });
 });

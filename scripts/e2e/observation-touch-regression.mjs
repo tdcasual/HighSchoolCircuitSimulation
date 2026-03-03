@@ -126,86 +126,84 @@ async function runObservationScenario(browser, baseUrl) {
     const page = await context.newPage();
     await installCdnStubs(page);
     await page.goto(baseUrl, { waitUntil: 'domcontentloaded' });
-    await page.waitForFunction(() => Boolean(window.app?.observationPanel && window.app?.interaction));
+    await page.waitForFunction(() => Boolean(window.app?.chartWorkspace && window.app?.interaction));
 
     const initial = await page.evaluate(() => {
-        const panel = window.app.observationPanel;
-        window.app.interaction.activateSidePanelTab?.('observation');
-        panel.setUIMode('basic');
-        panel.onLayoutModeChanged?.('phone');
+        const workspace = window.app.chartWorkspace;
+        workspace.onLayoutModeChanged?.('phone');
+        const root = document.getElementById('chart-workspace-root');
         return {
-            plotCount: panel.plots.length,
-            collapsedCount: panel.plots.filter((plot) => plot.elements?.card?.classList?.contains('observation-card-collapsed')).length,
-            hasPresetButton: Boolean(document.querySelector('[data-observation-preset="voltage-time"]'))
+            windowCount: Array.isArray(workspace?.windows) ? workspace.windows.length : 0,
+            hasAddButton: Boolean(document.querySelector('[data-chart-action="add"]')),
+            isPhoneMode: root?.classList?.contains?.('chart-workspace-phone') === true
         };
     });
 
-    assertCondition(initial.hasPresetButton, 'observation preset button should exist');
-    assertCondition(initial.plotCount >= 1, `expected at least one default plot, got ${initial.plotCount}`);
-    assertCondition(initial.collapsedCount >= 1, 'expected basic mode cards to collapse on phone layout');
+    assertCondition(initial.hasAddButton, 'chart workspace add button should exist');
+    assertCondition(initial.windowCount >= 1, `expected at least one default chart window, got ${initial.windowCount}`);
+    assertCondition(initial.isPhoneMode, 'chart workspace should switch to phone layout mode');
 
-    const afterPreset = await page.evaluate(() => {
-        const panel = window.app.observationPanel;
-        const before = panel.plots.length;
-        const presetButton = document.querySelector('[data-observation-preset="voltage-time"]');
-        presetButton?.click?.();
+    const afterAdd = await page.evaluate(() => {
+        const workspace = window.app.chartWorkspace;
+        const before = Array.isArray(workspace?.windows) ? workspace.windows.length : 0;
+        const addButton = document.querySelector('[data-chart-action="add"]');
+        addButton?.click?.();
         return {
             before,
-            after: panel.plots.length
+            after: Array.isArray(workspace?.windows) ? workspace.windows.length : 0
         };
     });
 
     assertCondition(
-        afterPreset.after === afterPreset.before + 1,
-        `quick preset should append one plot (${afterPreset.before} -> ${afterPreset.after})`
+        afterAdd.after === afterAdd.before + 1,
+        `chart workspace add button should append one window (${afterAdd.before} -> ${afterAdd.after})`
     );
 
-    const interaction = await page.evaluate(() => {
-        const panel = window.app.observationPanel;
-        const plot = panel.plots[0];
-        plot.chartInteraction.onPointerDown({ x: 90, y: 58, pointerType: 'touch', time: 0 });
-        plot.chartInteraction.onPointerMove({ x: 102, y: 60, time: 420 });
-        panel.requestRender({ onlyIfActive: false });
+    const collapseCheck = await page.evaluate(() => {
+        const workspace = window.app.chartWorkspace;
+        const firstWindow = workspace?.windows?.[0];
+        if (!firstWindow) {
+            return { ok: false, reason: 'missing-default-window' };
+        }
+        const buttons = Array.from(firstWindow.elements?.root?.querySelectorAll?.('button.chart-window-btn') || []);
+        const collapseBtn = buttons.find((btn) => {
+            const text = String(btn?.textContent || '').trim();
+            return text === '收起' || text === '展开';
+        });
+        if (!collapseBtn) {
+            return { ok: false, reason: 'missing-collapse-button' };
+        }
+        const before = !!firstWindow.state?.uiState?.collapsed;
+        collapseBtn.click();
+        const after = !!firstWindow.state?.uiState?.collapsed;
         return {
-            frozen: plot.chartInteraction.isFrozen(),
-            readout: plot.chartInteraction.getReadout()
+            ok: true,
+            before,
+            after
         };
     });
 
-    assertCondition(interaction.frozen, 'chart interaction should freeze after touch hold');
+    assertCondition(collapseCheck.ok, `chart window collapse check failed: ${collapseCheck.reason || 'unknown'}`);
     assertCondition(
-        Number.isFinite(interaction.readout?.x) && Number.isFinite(interaction.readout?.y),
-        'chart readout should contain finite x/y'
+        collapseCheck.before !== collapseCheck.after,
+        'chart window collapse state should toggle after clicking collapse button'
     );
 
-    const exportResult = await page.evaluate(() => {
-        const panel = window.app.observationPanel;
-        const exportButton = document.querySelector('[data-observation-action="export"]');
-        if (!panel || !exportButton) {
-            return { ok: false, reason: 'missing-panel-or-button' };
+    const sampleIntervalCheck = await page.evaluate(() => {
+        const workspace = window.app.chartWorkspace;
+        const sampleInput = document.querySelector('.chart-workspace-sample-input');
+        if (!sampleInput) {
+            return { ok: false, reason: 'missing-sample-input' };
         }
-        let payload = null;
-        const originalDownload = panel.downloadCanvasImage?.bind(panel);
-        panel.downloadCanvasImage = (canvas, fileName) => {
-            payload = {
-                fileName,
-                width: Number(canvas?.width) || 0,
-                height: Number(canvas?.height) || 0
-            };
-            return true;
-        };
-        exportButton.click();
-        if (typeof originalDownload === 'function') {
-            panel.downloadCanvasImage = originalDownload;
-        }
+        sampleInput.value = '25';
+        sampleInput.dispatchEvent(new Event('change', { bubbles: true }));
         return {
-            ok: !!payload,
-            ...payload
+            ok: true,
+            value: workspace?.sampleIntervalMs
         };
     });
-    assertCondition(exportResult.ok, `observation export should be triggered (${exportResult.reason || 'no-payload'})`);
-    assertCondition(/\.png$/iu.test(exportResult.fileName || ''), 'observation export filename should end with .png');
-    assertCondition(exportResult.width > 0 && exportResult.height > 0, 'observation export canvas should have valid size');
+    assertCondition(sampleIntervalCheck.ok, `chart workspace sample interval check failed: ${sampleIntervalCheck.reason || 'unknown'}`);
+    assertCondition(sampleIntervalCheck.value === 25, `expected sample interval to be 25ms, got ${sampleIntervalCheck.value}`);
 
     await capture(page, 'observation-phone-touch.png');
     await context.close();

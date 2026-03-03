@@ -1,3 +1,7 @@
+function hasChartWorkspaceContract(appInstance) {
+    return !!appInstance && typeof appInstance === 'object' && !!appInstance.chartWorkspace;
+}
+
 export function registerAppBootstrap(options = {}) {
     const documentRef = options.documentRef || (typeof document !== 'undefined' ? document : null);
     const windowRef = options.windowRef || (typeof window !== 'undefined' ? window : null);
@@ -9,7 +13,9 @@ export function registerAppBootstrap(options = {}) {
     try {
         documentRef.addEventListener('DOMContentLoaded', () => {
             if (!windowRef) return;
-            windowRef.app = createApp();
+            const appInstance = createApp();
+            if (!hasChartWorkspaceContract(appInstance)) return;
+            windowRef.app = appInstance;
         });
         return true;
     } catch (_) {
