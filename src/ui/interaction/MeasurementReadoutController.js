@@ -49,9 +49,20 @@ export function createMeterSelfReadingControl(comp) {
     });
 
     safeInvokeMethod(openObservationBtn, 'addEventListener', 'click', () => {
-        this.app.chartWorkspace?.refreshComponentOptions?.();
-        this.app.chartWorkspace?.refreshDialGauges?.();
-        this.app.chartWorkspace?.requestRender?.({ onlyIfActive: false });
+        const workspace = this.app?.chartWorkspace;
+        if (!workspace) return;
+        const chartCount = Array.isArray(workspace?.getState?.()?.charts)
+            ? workspace.getState().charts.length
+            : (Array.isArray(workspace?.windows) ? workspace.windows.length : 0);
+        if (chartCount <= 0) {
+            workspace.addChart?.();
+        }
+        if (comp?.id) {
+            workspace.addSeriesForSource?.(comp.id);
+        }
+        workspace.refreshComponentOptions?.();
+        workspace.refreshDialGauges?.();
+        workspace.requestRender?.({ onlyIfActive: false });
     });
 
     row.appendChild(toggleBtn);

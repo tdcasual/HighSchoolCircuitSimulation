@@ -557,7 +557,7 @@ body.layout-mode-phone .toolbox-close-btn {
 
 .chart-workspace-runtime-status {
     position: absolute;
-    top: 62px;
+    top: 12px;
     right: 12px;
     max-width: 340px;
     border-radius: 10px;
@@ -589,6 +589,10 @@ body.layout-mode-phone .toolbox-close-btn {
     pointer-events: auto;
     min-width: 280px;
     min-height: 200px;
+}
+
+.chart-window-v2 {
+    grid-template-rows: auto auto minmax(120px, 1fr) auto auto;
 }
 
 .chart-window-header {
@@ -629,6 +633,16 @@ body.layout-mode-phone .toolbox-close-btn {
     background: #eef2f7;
 }
 
+.chart-window-btn-primary {
+    border-color: rgba(37, 99, 235, 0.34);
+    background: rgba(37, 99, 235, 0.1);
+    color: #0f4aa0;
+}
+
+.chart-window-btn-primary:hover {
+    background: rgba(37, 99, 235, 0.18);
+}
+
 .chart-window-btn-danger {
     border-color: rgba(239, 68, 68, 0.35);
     background: rgba(254, 242, 242, 0.9);
@@ -649,6 +663,15 @@ body.layout-mode-phone .toolbox-close-btn {
     height: 100%;
     min-height: 120px;
     display: block;
+}
+
+.chart-window-axis-controls {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    padding: 8px;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.24);
+    background: rgba(248, 250, 252, 0.92);
 }
 
 .chart-window-latest {
@@ -689,12 +712,102 @@ body.layout-mode-phone .toolbox-close-btn {
     color: #0f172a;
 }
 
+.chart-window-control-group input {
+    width: 100%;
+    min-width: 0;
+    border: 1px solid rgba(148, 163, 184, 0.4);
+    border-radius: 8px;
+    padding: 6px 8px;
+    background: #ffffff;
+    font-size: 12px;
+    color: #0f172a;
+}
+
+.chart-window-legend {
+    background: rgba(248, 250, 252, 0.95);
+    border-top: 1px solid rgba(148, 163, 184, 0.24);
+    padding: 8px;
+    overflow: auto;
+}
+
+.chart-window-legend-body {
+    display: grid;
+    gap: 8px;
+}
+
+.chart-window-empty-series {
+    margin: 0;
+    color: #64748b;
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.chart-series-row {
+    border: 1px solid rgba(148, 163, 184, 0.38);
+    border-radius: 10px;
+    background: #ffffff;
+    padding: 6px;
+    display: grid;
+    gap: 6px;
+}
+
+.chart-series-row-head {
+    display: grid;
+    grid-template-columns: auto auto 1fr auto;
+    align-items: center;
+    gap: 8px;
+}
+
+.chart-series-color {
+    width: 12px;
+    height: 12px;
+    border-radius: 999px;
+    border: 1px solid rgba(15, 23, 42, 0.2);
+}
+
+.chart-series-name-input {
+    width: 100%;
+    min-width: 0;
+    border: 1px solid rgba(148, 163, 184, 0.4);
+    border-radius: 8px;
+    padding: 6px 8px;
+    background: #ffffff;
+    font-size: 12px;
+    color: #0f172a;
+    font-weight: 600;
+}
+
+.chart-series-remove-btn {
+    min-width: 34px;
+}
+
+.chart-series-row-body {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+}
+
+.chart-series-scatter-wrap {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+}
+
+.chart-series-scatter-wrap.hidden {
+    display: none;
+}
+
 .chart-window.chart-window-collapsed .chart-window-controls {
     display: none;
 }
 
 .chart-window.chart-window-dragging {
     box-shadow: 0 20px 36px rgba(15, 23, 42, 0.28);
+}
+
+.chart-window.chart-window-active {
+    border-color: rgba(37, 99, 235, 0.45);
+    box-shadow: 0 18px 32px rgba(37, 99, 235, 0.16);
 }
 
 #status-bar {
@@ -2255,6 +2368,7 @@ body.layout-mode-phone .top-action-btn {
 body.layout-mode-phone #btn-clear,
 body.layout-mode-phone #btn-export,
 body.layout-mode-phone #btn-import,
+body.layout-mode-phone #btn-add-chart,
 body.layout-mode-phone #btn-exercise-board {
     display: none;
 }
@@ -2306,7 +2420,7 @@ body.layout-mode-phone .chart-workspace-sample-label {
 }
 
 body.layout-mode-phone .chart-workspace-runtime-status {
-    top: 56px;
+    top: 10px;
     left: 8px;
     right: 8px;
     max-width: none;
@@ -2317,8 +2431,14 @@ body.layout-mode-phone .chart-window {
     min-height: 180px;
 }
 
-body.layout-mode-phone .chart-window-controls {
+body.layout-mode-phone .chart-window-axis-controls,
+body.layout-mode-phone .chart-series-row-body,
+body.layout-mode-phone .chart-series-scatter-wrap {
     grid-template-columns: 1fr;
+}
+
+body.layout-mode-phone .chart-window-legend {
+    max-height: min(40vh, 240px);
 }
 
 body.layout-mode-phone.ai-input-active #canvas-mobile-controls,

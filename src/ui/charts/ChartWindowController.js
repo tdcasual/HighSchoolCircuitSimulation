@@ -1,15 +1,7 @@
 import { createElement } from '../../utils/SafeDOM.js';
-import { safeInvoke } from '../../utils/RuntimeSafety.js';
+import { safeAddEventListener, safeInvoke, safeSetAttribute } from '../../utils/RuntimeSafety.js';
+import { TransformOptions, formatNumberCompact } from '../observation/ObservationMath.js';
 import {
-    applyTransform,
-    computeNiceTicks,
-    computeRangeFromBuffer,
-    formatNumberCompact,
-    RingBuffer2D,
-    stabilizeAutoRangeWindow
-} from '../observation/ObservationMath.js';
-import {
-    evaluateSourceQuantity,
     getQuantitiesForSource,
     getSourceOptions,
     TIME_SOURCE_ID
@@ -17,24 +9,32 @@ import {
 
 const safeInvokeMethod = (target, methodName, ...args) => safeInvoke(target, methodName, args);
 
+const X_MODE_OPTIONS = Object.freeze([
+    { id: 'shared-x', label: '共享X' },
+    { id: 'scatter-override', label: '散点X' }
+]);
+
 function setSelectOptions(selectEl, options, selectedId) {
     if (!selectEl) return null;
     while (selectEl.firstChild) {
         selectEl.removeChild(selectEl.firstChild);
     }
-    options.forEach((opt) => {
+
+    options.forEach((option) => {
         const optionEl = createElement('option', {
-            textContent: opt.label,
-            attrs: { value: opt.id }
+            textContent: option.label,
+            attrs: { value: option.id }
         });
         selectEl.appendChild(optionEl);
     });
-    const hasSelected = selectedId != null && options.some((opt) => opt.id === selectedId);
+
+    const hasSelected = selectedId != null && options.some((item) => item.id === selectedId);
     if (hasSelected) {
         selectEl.value = selectedId;
     } else if (options.length > 0) {
         selectEl.value = options[0].id;
     }
+
     return selectEl.value || null;
 }
 
@@ -47,7 +47,7 @@ export class ChartWindowController {
     constructor(workspace, state) {
         this.workspace = workspace;
         this.state = state;
-        this.buffer = new RingBuffer2D(this.state.maxPoints);
+        this.seriesElements = new Map();
         this._needsRedraw = true;
         this._autoRangeWindow = { x: null, y: null };
         this._latestText = '最新: —';
@@ -56,14 +56,14 @@ export class ChartWindowController {
         this.elements = {
             root: null,
             header: null,
+            titleInput: null,
             canvas: null,
             latest: null,
-            title: null,
             xSource: null,
             xQuantity: null,
-            ySource: null,
-            yQuantity: null,
-            controls: null
+            legend: null,
+            legendBody: null,
+            legendToggleBtn: null
         };
 
         this.boundPointerMove = (event) => this.onPointerMove(event);
@@ -72,12 +72,11 @@ export class ChartWindowController {
 
     mount(parentEl) {
         const root = createElement('section', {
-            className: 'chart-window',
+            className: 'chart-window chart-window-v2',
             attrs: {
                 'data-chart-window-id': this.state.id
             }
         });
-        root.style.zIndex = String(this.state.zIndex);
 
         const header = createElement('div', { className: 'chart-window-header' });
         const titleInput = createElement('input', {
@@ -88,14 +87,14 @@ export class ChartWindowController {
                 placeholder: '图表标题'
             }
         });
-        const clearBtn = createElement('button', {
-            className: 'chart-window-btn',
-            textContent: '清空',
+        const addSeriesBtn = createElement('button', {
+            className: 'chart-window-btn chart-window-btn-primary',
+            textContent: '+ 系列',
             attrs: { type: 'button' }
         });
-        const collapseBtn = createElement('button', {
+        const legendToggleBtn = createElement('button', {
             className: 'chart-window-btn',
-            textContent: this.state.uiState?.collapsed ? '展开' : '收起',
+            textContent: this.state.ui?.legendCollapsed ? '展开图例' : '收起图例',
             attrs: { type: 'button' }
         });
         const closeBtn = createElement('button', {
@@ -105,9 +104,15 @@ export class ChartWindowController {
         });
 
         header.appendChild(titleInput);
-        header.appendChild(clearBtn);
-        header.appendChild(collapseBtn);
+        header.appendChild(addSeriesBtn);
+        header.appendChild(legendToggleBtn);
         header.appendChild(closeBtn);
+
+        const axisControls = createElement('div', { className: 'chart-window-axis-controls' });
+        const xSource = createElement('select');
+        const xQuantity = createElement('select');
+        axisControls.appendChild(this.createControlGroup('共享X来源', xSource));
+        axisControls.appendChild(this.createControlGroup('共享X量', xQuantity));
 
         const canvasWrap = createElement('div', { className: 'chart-window-canvas-wrap' });
         const canvas = createElement('canvas', { className: 'chart-window-canvas' });
@@ -118,134 +123,135 @@ export class ChartWindowController {
             textContent: this._latestText
         });
 
-        const controls = createElement('div', { className: 'chart-window-controls' });
-        const xSource = createElement('select');
-        const xQuantity = createElement('select');
-        const ySource = createElement('select');
-        const yQuantity = createElement('select');
-        controls.appendChild(this.createControlGroup('X 来源', xSource));
-        controls.appendChild(this.createControlGroup('X 量', xQuantity));
-        controls.appendChild(this.createControlGroup('Y 来源', ySource));
-        controls.appendChild(this.createControlGroup('Y 量', yQuantity));
+        const legend = createElement('section', { className: 'chart-window-legend' });
+        const legendBody = createElement('div', { className: 'chart-window-legend-body' });
+        legend.appendChild(legendBody);
 
         root.appendChild(header);
+        root.appendChild(axisControls);
         root.appendChild(canvasWrap);
         root.appendChild(latest);
-        root.appendChild(controls);
+        root.appendChild(legend);
 
         this.elements = {
             root,
             header,
+            titleInput,
             canvas,
             latest,
-            title: titleInput,
             xSource,
             xQuantity,
-            ySource,
-            yQuantity,
-            controls,
-            collapseBtn
+            legend,
+            legendBody,
+            legendToggleBtn
         };
 
-        safeInvokeMethod(root, 'addEventListener', 'pointerdown', () => {
+        safeAddEventListener(root, 'pointerdown', () => {
             this.workspace.focusWindow(this);
         });
-        safeInvokeMethod(header, 'addEventListener', 'pointerdown', (event) => this.onHeaderPointerDown(event));
-        safeInvokeMethod(titleInput, 'addEventListener', 'change', () => {
-            this.state.title = String(titleInput.value || '').trim() || this.state.title;
-            titleInput.value = this.state.title;
-            this.workspace.schedulePersist(0);
+        safeAddEventListener(header, 'pointerdown', (event) => this.onHeaderPointerDown(event));
+        safeAddEventListener(titleInput, 'change', () => {
+            this.workspace.commandService.updateChartTitle(this.state.id, titleInput.value);
         });
-        safeInvokeMethod(clearBtn, 'addEventListener', 'click', () => {
-            this.clearData();
-            this.workspace.requestRender();
+        safeAddEventListener(addSeriesBtn, 'click', () => {
+            this.workspace.addSeriesToChart(this.state.id);
         });
-        safeInvokeMethod(collapseBtn, 'addEventListener', 'click', () => {
-            const next = !this.state.uiState?.collapsed;
-            this.state.uiState = {
-                ...this.state.uiState,
-                collapsed: next
-            };
-            this.applyCollapsedState();
-            this.workspace.schedulePersist(0);
+        safeAddEventListener(legendToggleBtn, 'click', () => {
+            this.workspace.commandService.toggleChartLegend(this.state.id);
         });
-        safeInvokeMethod(closeBtn, 'addEventListener', 'click', () => {
-            this.workspace.removeWindow(this.state.id);
+        safeAddEventListener(closeBtn, 'click', () => {
+            this.workspace.commandService.removeChart(this.state.id);
         });
-        safeInvokeMethod(xSource, 'addEventListener', 'change', () => this.onAxisSourceChange('x'));
-        safeInvokeMethod(ySource, 'addEventListener', 'change', () => this.onAxisSourceChange('y'));
-        safeInvokeMethod(xQuantity, 'addEventListener', 'change', () => this.onAxisQuantityChange('x'));
-        safeInvokeMethod(yQuantity, 'addEventListener', 'change', () => this.onAxisQuantityChange('y'));
+        safeAddEventListener(xSource, 'change', () => this.onAxisSourceChange());
+        safeAddEventListener(xQuantity, 'change', () => this.onAxisQuantityChange());
 
         parentEl.appendChild(root);
+
         this.applyRect();
-        this.applyCollapsedState();
+        this.applyLegendState();
         this.refreshSourceOptions();
+        this.rebuildSeriesControls();
         this.markDirty();
     }
 
-    createControlGroup(labelText, selectEl) {
+    createControlGroup(labelText, fieldEl) {
         const group = createElement('label', { className: 'chart-window-control-group' });
-        const label = createElement('span', { textContent: labelText });
-        group.appendChild(label);
-        group.appendChild(selectEl);
+        group.appendChild(createElement('span', { textContent: labelText }));
+        group.appendChild(fieldEl);
         return group;
     }
 
     dispose() {
         this.detachDragListeners();
         safeInvokeMethod(this.elements.root, 'remove');
-        this.elements.root = null;
+        this.seriesElements.clear();
     }
 
-    setZIndex(nextZIndex) {
-        this.state.zIndex = Math.max(1, Math.floor(Number(nextZIndex) || 1));
+    updateState(nextState) {
+        this.state = nextState;
+        this.applyRect();
+        if (this.elements.titleInput) {
+            const nextTitle = this.state.title || '';
+            if (this.elements.titleInput.value !== nextTitle) {
+                this.elements.titleInput.value = nextTitle;
+            }
+        }
+        this.applyLegendState();
+        this.refreshSourceOptions();
+        this.rebuildSeriesControls();
+        this.markDirty();
+    }
+
+    applyLegendState() {
+        const collapsed = !!this.state.ui?.legendCollapsed;
+        safeInvokeMethod(this.elements.root?.classList, 'toggle', 'chart-window-legend-collapsed', collapsed);
+        if (this.elements.legendToggleBtn) {
+            this.elements.legendToggleBtn.textContent = collapsed ? '展开图例' : '收起图例';
+            safeSetAttribute(this.elements.legendToggleBtn, 'aria-expanded', collapsed ? 'false' : 'true');
+        }
+    }
+
+    setZIndex(zIndex) {
+        this.state.zIndex = Math.max(1, Math.floor(Number(zIndex) || 1));
         if (this.elements.root?.style) {
             this.elements.root.style.zIndex = String(this.state.zIndex);
         }
     }
 
     applyRect() {
-        const rect = this.workspace.clampRect(this.state.rect);
-        this.state.rect = rect;
+        const frame = this.workspace.clampRect(this.state.frame || {});
+        this.state.frame = frame;
         if (!this.elements.root?.style) return;
-        this.elements.root.style.left = `${rect.x}px`;
-        this.elements.root.style.top = `${rect.y}px`;
-        this.elements.root.style.width = `${rect.width}px`;
-        this.elements.root.style.height = `${rect.height}px`;
-    }
-
-    applyCollapsedState() {
-        const collapsed = !!this.state.uiState?.collapsed;
-        safeInvokeMethod(this.elements.root?.classList, 'toggle', 'chart-window-collapsed', collapsed);
-        if (this.elements.collapseBtn) {
-            this.elements.collapseBtn.textContent = collapsed ? '展开' : '收起';
-        }
-        this.markDirty();
+        this.elements.root.style.left = `${frame.x}px`;
+        this.elements.root.style.top = `${frame.y}px`;
+        this.elements.root.style.width = `${frame.width}px`;
+        this.elements.root.style.height = `${frame.height}px`;
+        this.setZIndex(this.state.zIndex);
     }
 
     onHeaderPointerDown(event) {
         if (!this.workspace.isWindowDragEnabled()) return;
         if (isInteractiveTarget(event?.target)) return;
         const pointerId = Number.isFinite(event?.pointerId) ? Number(event.pointerId) : null;
-        if (pointerId === null) return;
+        if (pointerId == null) return;
 
         this.workspace.focusWindow(this);
         this._dragSession = {
             pointerId,
             startX: Number(event?.clientX) || 0,
             startY: Number(event?.clientY) || 0,
-            originX: this.state.rect.x,
-            originY: this.state.rect.y
+            originX: this.state.frame?.x || 0,
+            originY: this.state.frame?.y || 0,
+            pendingFrame: null
         };
-        safeInvokeMethod(this.elements.root?.classList, 'add', 'chart-window-dragging');
 
-        const target = this.elements.header;
-        safeInvokeMethod(target, 'setPointerCapture', pointerId);
+        safeInvokeMethod(this.elements.root?.classList, 'add', 'chart-window-dragging');
+        safeInvokeMethod(this.elements.header, 'setPointerCapture', pointerId);
+
         if (typeof window !== 'undefined') {
-            safeInvokeMethod(window, 'addEventListener', 'pointermove', this.boundPointerMove);
-            safeInvokeMethod(window, 'addEventListener', 'pointerup', this.boundPointerUp);
-            safeInvokeMethod(window, 'addEventListener', 'pointercancel', this.boundPointerUp);
+            safeAddEventListener(window, 'pointermove', this.boundPointerMove);
+            safeAddEventListener(window, 'pointerup', this.boundPointerUp);
+            safeAddEventListener(window, 'pointercancel', this.boundPointerUp);
         }
         event?.preventDefault?.();
     }
@@ -254,16 +260,21 @@ export class ChartWindowController {
         const session = this._dragSession;
         if (!session) return;
         if (Number(event?.pointerId) !== session.pointerId) return;
+
         const dx = (Number(event?.clientX) || 0) - session.startX;
         const dy = (Number(event?.clientY) || 0) - session.startY;
-        this.state.rect = this.workspace.clampRect({
-            ...this.state.rect,
+
+        const nextFrame = this.workspace.clampRect({
+            ...this.state.frame,
             x: Math.round(session.originX + dx),
             y: Math.round(session.originY + dy)
         });
-        this.applyRect();
-        this.markDirty();
-        this.workspace.requestRender();
+        session.pendingFrame = nextFrame;
+
+        if (this.elements.root?.style) {
+            this.elements.root.style.left = `${nextFrame.x}px`;
+            this.elements.root.style.top = `${nextFrame.y}px`;
+        }
         event?.preventDefault?.();
     }
 
@@ -271,10 +282,14 @@ export class ChartWindowController {
         const session = this._dragSession;
         if (!session) return;
         if (Number(event?.pointerId) !== session.pointerId) return;
+
         this._dragSession = null;
         this.detachDragListeners();
         safeInvokeMethod(this.elements.root?.classList, 'remove', 'chart-window-dragging');
-        this.workspace.schedulePersist(0);
+
+        if (session.pendingFrame) {
+            this.workspace.commandService.updateChartFrame(this.state.id, session.pendingFrame);
+        }
     }
 
     detachDragListeners() {
@@ -284,61 +299,230 @@ export class ChartWindowController {
         safeInvokeMethod(window, 'removeEventListener', 'pointercancel', this.boundPointerUp);
     }
 
-    onAxisSourceChange(axisKey) {
-        const isXAxis = axisKey === 'x';
-        const sourceSelect = isXAxis ? this.elements.xSource : this.elements.ySource;
-        const axisState = isXAxis ? this.state.series.x : this.state.series.y;
-        const nextSource = this.workspace.resolveSourceId(sourceSelect?.value);
-        axisState.sourceId = nextSource;
-        this.refreshQuantityOptions(axisKey);
-        this.markDirty();
-        this.workspace.requestRender();
-        this.workspace.schedulePersist(0);
+    onAxisSourceChange() {
+        const sourceId = this.workspace.resolveSourceId(this.elements.xSource?.value || TIME_SOURCE_ID);
+        const quantityOptions = getQuantitiesForSource(sourceId, this.workspace.circuit);
+        const quantityId = quantityOptions.some((item) => item.id === this.elements.xQuantity?.value)
+            ? this.elements.xQuantity.value
+            : (quantityOptions[0]?.id || 't');
+
+        this.workspace.commandService.setChartAxisXBinding(this.state.id, {
+            sourceId,
+            quantityId
+        });
     }
 
-    onAxisQuantityChange(axisKey) {
-        const isXAxis = axisKey === 'x';
-        const quantitySelect = isXAxis ? this.elements.xQuantity : this.elements.yQuantity;
-        const axisState = isXAxis ? this.state.series.x : this.state.series.y;
-        axisState.quantityId = String(quantitySelect?.value || axisState.quantityId || '');
-        this.markDirty();
-        this.workspace.requestRender();
-        this.workspace.schedulePersist(0);
+    onAxisQuantityChange() {
+        const sourceId = this.workspace.resolveSourceId(this.elements.xSource?.value || TIME_SOURCE_ID);
+        const quantityId = String(this.elements.xQuantity?.value || 't');
+        this.workspace.commandService.setChartAxisXBinding(this.state.id, {
+            sourceId,
+            quantityId
+        });
     }
 
     refreshSourceOptions() {
         const sourceOptions = getSourceOptions(this.workspace.circuit);
-        const resolvedX = setSelectOptions(
-            this.elements.xSource,
-            sourceOptions,
-            this.workspace.resolveSourceId(this.state.series.x.sourceId)
-        );
-        const resolvedY = setSelectOptions(
-            this.elements.ySource,
-            sourceOptions,
-            this.workspace.resolveSourceId(this.state.series.y.sourceId)
-        );
-        if (resolvedX) this.state.series.x.sourceId = resolvedX;
-        if (resolvedY) this.state.series.y.sourceId = resolvedY;
-        this.refreshQuantityOptions('x');
-        this.refreshQuantityOptions('y');
-    }
+        const axisBinding = this.state.axis?.xBinding || {};
+        const xSource = setSelectOptions(this.elements.xSource, sourceOptions, axisBinding.sourceId || TIME_SOURCE_ID);
+        const xQuantities = getQuantitiesForSource(xSource || TIME_SOURCE_ID, this.workspace.circuit);
+        setSelectOptions(this.elements.xQuantity, xQuantities, axisBinding.quantityId || 't');
 
-    refreshQuantityOptions(axisKey) {
-        const isXAxis = axisKey === 'x';
-        const axisState = isXAxis ? this.state.series.x : this.state.series.y;
-        const selectEl = isXAxis ? this.elements.xQuantity : this.elements.yQuantity;
-        const quantityOptions = getQuantitiesForSource(axisState.sourceId, this.workspace.circuit);
-        const resolvedQuantity = setSelectOptions(selectEl, quantityOptions, axisState.quantityId);
-        if (resolvedQuantity) {
-            axisState.quantityId = resolvedQuantity;
-        } else if (quantityOptions.length > 0) {
-            axisState.quantityId = quantityOptions[0].id;
+        for (const series of this.state.series || []) {
+            const itemEls = this.seriesElements.get(series.id);
+            if (!itemEls) continue;
+
+            const sourceId = setSelectOptions(itemEls.sourceSelect, sourceOptions, series.sourceId || TIME_SOURCE_ID);
+            const yQuantities = getQuantitiesForSource(sourceId || TIME_SOURCE_ID, this.workspace.circuit);
+            setSelectOptions(itemEls.quantitySelect, yQuantities, series.quantityId || yQuantities[0]?.id || null);
+            setSelectOptions(itemEls.transformSelect, TransformOptions.map((opt) => ({ id: opt.id, label: opt.label })), series.transformId);
+            setSelectOptions(itemEls.xModeSelect, X_MODE_OPTIONS, series.xMode || 'shared-x');
+
+            const scatterBinding = series.scatterXBinding || { sourceId: TIME_SOURCE_ID, quantityId: 't' };
+            const scatterSource = setSelectOptions(itemEls.scatterSourceSelect, sourceOptions, scatterBinding.sourceId);
+            const scatterQuantities = getQuantitiesForSource(scatterSource || TIME_SOURCE_ID, this.workspace.circuit);
+            setSelectOptions(itemEls.scatterQuantitySelect, scatterQuantities, scatterBinding.quantityId || scatterQuantities[0]?.id || 't');
+
+            const scatterEnabled = (series.xMode || 'shared-x') === 'scatter-override';
+            safeInvokeMethod(itemEls.scatterWrap?.classList, 'toggle', 'hidden', !scatterEnabled);
         }
     }
 
+    rebuildSeriesControls() {
+        if (!this.elements.legendBody) return;
+        while (this.elements.legendBody.firstChild) {
+            this.elements.legendBody.removeChild(this.elements.legendBody.firstChild);
+        }
+        this.seriesElements.clear();
+
+        const seriesList = Array.isArray(this.state.series) ? this.state.series : [];
+        if (seriesList.length <= 0) {
+            this.elements.legendBody.appendChild(createElement('p', {
+                className: 'chart-window-empty-series',
+                textContent: '暂无系列，点击“+ 系列”添加。'
+            }));
+            return;
+        }
+
+        seriesList.forEach((series) => {
+            const row = createElement('div', {
+                className: 'chart-series-row',
+                attrs: { 'data-series-id': series.id }
+            });
+
+            const head = createElement('div', { className: 'chart-series-row-head' });
+            const colorSwatch = createElement('span', {
+                className: 'chart-series-color',
+                style: { backgroundColor: series.color || '#1d4ed8' }
+            });
+            const visibleToggle = createElement('input', {
+                attrs: {
+                    type: 'checkbox'
+                }
+            });
+            visibleToggle.checked = series.visible !== false;
+            const nameInput = createElement('input', {
+                className: 'chart-series-name-input',
+                attrs: {
+                    type: 'text',
+                    value: series.name || '',
+                    placeholder: '系列名称'
+                }
+            });
+            const removeBtn = createElement('button', {
+                className: 'chart-window-btn chart-window-btn-danger chart-series-remove-btn',
+                textContent: '删',
+                attrs: { type: 'button' }
+            });
+
+            head.appendChild(colorSwatch);
+            head.appendChild(visibleToggle);
+            head.appendChild(nameInput);
+            head.appendChild(removeBtn);
+
+            const body = createElement('div', { className: 'chart-series-row-body' });
+            const sourceSelect = createElement('select');
+            const quantitySelect = createElement('select');
+            const transformSelect = createElement('select');
+            const xModeSelect = createElement('select');
+
+            body.appendChild(this.createControlGroup('Y来源', sourceSelect));
+            body.appendChild(this.createControlGroup('Y量', quantitySelect));
+            body.appendChild(this.createControlGroup('变换', transformSelect));
+            body.appendChild(this.createControlGroup('X模式', xModeSelect));
+
+            const scatterWrap = createElement('div', { className: 'chart-series-scatter-wrap hidden' });
+            const scatterSourceSelect = createElement('select');
+            const scatterQuantitySelect = createElement('select');
+            scatterWrap.appendChild(this.createControlGroup('散点X来源', scatterSourceSelect));
+            scatterWrap.appendChild(this.createControlGroup('散点X量', scatterQuantitySelect));
+
+            row.appendChild(head);
+            row.appendChild(body);
+            row.appendChild(scatterWrap);
+            this.elements.legendBody.appendChild(row);
+
+            this.seriesElements.set(series.id, {
+                row,
+                colorSwatch,
+                visibleToggle,
+                nameInput,
+                sourceSelect,
+                quantitySelect,
+                transformSelect,
+                xModeSelect,
+                scatterWrap,
+                scatterSourceSelect,
+                scatterQuantitySelect,
+                removeBtn
+            });
+
+            safeAddEventListener(visibleToggle, 'change', () => {
+                this.workspace.commandService.updateSeries(this.state.id, series.id, {
+                    visible: !!visibleToggle.checked
+                });
+            });
+
+            safeAddEventListener(nameInput, 'change', () => {
+                this.workspace.commandService.updateSeries(this.state.id, series.id, {
+                    name: nameInput.value
+                });
+            });
+
+            safeAddEventListener(sourceSelect, 'change', () => {
+                const sourceId = this.workspace.resolveSourceId(sourceSelect.value || TIME_SOURCE_ID);
+                const quantities = getQuantitiesForSource(sourceId, this.workspace.circuit);
+                const quantityId = quantities.some((item) => item.id === quantitySelect.value)
+                    ? quantitySelect.value
+                    : (quantities[0]?.id || 'I');
+                this.workspace.commandService.updateSeries(this.state.id, series.id, {
+                    sourceId,
+                    quantityId
+                });
+            });
+
+            safeAddEventListener(quantitySelect, 'change', () => {
+                this.workspace.commandService.updateSeries(this.state.id, series.id, {
+                    quantityId: quantitySelect.value
+                });
+            });
+
+            safeAddEventListener(transformSelect, 'change', () => {
+                this.workspace.commandService.updateSeries(this.state.id, series.id, {
+                    transformId: transformSelect.value
+                });
+            });
+
+            safeAddEventListener(xModeSelect, 'change', () => {
+                const xMode = xModeSelect.value === 'scatter-override' ? 'scatter-override' : 'shared-x';
+                const patch = { xMode };
+                if (xMode === 'scatter-override') {
+                    patch.scatterXBinding = {
+                        sourceId: scatterSourceSelect.value || TIME_SOURCE_ID,
+                        quantityId: scatterQuantitySelect.value || 't',
+                        transformId: 'identity'
+                    };
+                }
+                this.workspace.commandService.updateSeries(this.state.id, series.id, patch);
+            });
+
+            safeAddEventListener(scatterSourceSelect, 'change', () => {
+                this.workspace.commandService.updateSeries(this.state.id, series.id, {
+                    xMode: 'scatter-override',
+                    scatterXBinding: {
+                        sourceId: this.workspace.resolveSourceId(scatterSourceSelect.value || TIME_SOURCE_ID),
+                        quantityId: scatterQuantitySelect.value || 't',
+                        transformId: 'identity'
+                    }
+                });
+            });
+
+            safeAddEventListener(scatterQuantitySelect, 'change', () => {
+                this.workspace.commandService.updateSeries(this.state.id, series.id, {
+                    xMode: 'scatter-override',
+                    scatterXBinding: {
+                        sourceId: this.workspace.resolveSourceId(scatterSourceSelect.value || TIME_SOURCE_ID),
+                        quantityId: scatterQuantitySelect.value || 't',
+                        transformId: 'identity'
+                    }
+                });
+            });
+
+            safeAddEventListener(removeBtn, 'click', () => {
+                this.workspace.commandService.removeSeries(this.state.id, series.id);
+            });
+        });
+
+        this.refreshSourceOptions();
+    }
+
     clearData() {
-        this.buffer.clear();
+        const seriesBuffers = this.workspace.getChartSeriesBuffers(this.state.id);
+        if (!(seriesBuffers instanceof Map)) return;
+        for (const buffer of seriesBuffers.values()) {
+            buffer?.clear?.();
+        }
+        this._autoRangeWindow = { x: null, y: null };
         this._latestText = '最新: —';
         if (this.elements.latest) {
             this.elements.latest.textContent = this._latestText;
@@ -350,35 +534,6 @@ export class ChartWindowController {
         this._needsRedraw = true;
     }
 
-    sample(valueCache = null) {
-        const xAxis = this.state.series.x;
-        const yAxis = this.state.series.y;
-        const xRaw = this.getSampleValue(xAxis.sourceId, xAxis.quantityId, valueCache);
-        const yRaw = this.getSampleValue(yAxis.sourceId, yAxis.quantityId, valueCache);
-        const x = applyTransform(xRaw, xAxis.transformId);
-        const y = applyTransform(yRaw, yAxis.transformId);
-        if (!Number.isFinite(x) || !Number.isFinite(y)) return;
-        this.buffer.push(x, y);
-        this._latestText = `最新: x=${formatNumberCompact(x)}, y=${formatNumberCompact(y)}`;
-        if (this.elements.latest) {
-            this.elements.latest.textContent = this._latestText;
-        }
-        this.markDirty();
-    }
-
-    getSampleValue(sourceId, quantityId, valueCache = null) {
-        if (!(valueCache instanceof Map)) {
-            return evaluateSourceQuantity(this.workspace.circuit, sourceId, quantityId);
-        }
-        const key = `${sourceId || ''}\u0000${quantityId || ''}`;
-        if (valueCache.has(key)) {
-            return valueCache.get(key);
-        }
-        const value = evaluateSourceQuantity(this.workspace.circuit, sourceId, quantityId);
-        valueCache.set(key, value);
-        return value;
-    }
-
     resizeCanvasToDisplaySize() {
         const canvas = this.elements.canvas;
         if (!canvas) return;
@@ -386,79 +541,15 @@ export class ChartWindowController {
             ? window.devicePixelRatio
             : 1;
         const rect = canvas.getBoundingClientRect?.();
-        const cssWidth = Math.max(1, Math.round(rect?.width || canvas.clientWidth || this.state.rect.width));
+        const cssWidth = Math.max(1, Math.round(rect?.width || canvas.clientWidth || this.state.frame?.width || 320));
         const cssHeight = Math.max(1, Math.round(rect?.height || canvas.clientHeight || 180));
-        const targetWidth = Math.max(1, Math.round(cssWidth * dpr));
-        const targetHeight = Math.max(1, Math.round(cssHeight * dpr));
-        if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
-            canvas.width = targetWidth;
-            canvas.height = targetHeight;
+        const targetW = Math.max(1, Math.round(cssWidth * dpr));
+        const targetH = Math.max(1, Math.round(cssHeight * dpr));
+        if (canvas.width !== targetW || canvas.height !== targetH) {
+            canvas.width = targetW;
+            canvas.height = targetH;
             this.markDirty();
         }
-    }
-
-    computeFrame(dpr) {
-        const canvas = this.elements.canvas;
-        if (!canvas) return null;
-        const w = canvas.width;
-        const h = canvas.height;
-        const padL = 46 * dpr;
-        const padR = 12 * dpr;
-        const padT = 14 * dpr;
-        const padB = 28 * dpr;
-        const innerW = Math.max(1, w - padL - padR);
-        const innerH = Math.max(1, h - padT - padB);
-
-        const range = computeRangeFromBuffer(this.buffer);
-        if (!range) return null;
-        const xWindow = stabilizeAutoRangeWindow({ min: range.minX, max: range.maxX }, this._autoRangeWindow.x, {
-            paddingRatio: 0.03,
-            expandRatio: 0.02,
-            shrinkDeadbandRatio: 0.14,
-            shrinkSmoothing: 0.2
-        });
-        const yWindow = stabilizeAutoRangeWindow({ min: range.minY, max: range.maxY }, this._autoRangeWindow.y, {
-            paddingRatio: 0.05,
-            expandRatio: 0.025,
-            shrinkDeadbandRatio: 0.16,
-            shrinkSmoothing: 0.2
-        });
-        this._autoRangeWindow = { x: xWindow, y: yWindow };
-        if (!xWindow || !yWindow) return null;
-
-        let xMin = xWindow.min;
-        let xMax = xWindow.max;
-        let yMin = yWindow.min;
-        let yMax = yWindow.max;
-        if (xMin === xMax) {
-            const pad = xMin === 0 ? 1 : Math.abs(xMin) * 0.1;
-            xMin -= pad;
-            xMax += pad;
-        }
-        if (yMin === yMax) {
-            const pad = yMin === 0 ? 1 : Math.abs(yMin) * 0.1;
-            yMin -= pad;
-            yMax += pad;
-        }
-        const xTicks = computeNiceTicks(xMin, xMax, 5);
-        const yTicks = computeNiceTicks(yMin, yMax, 5);
-
-        return {
-            w,
-            h,
-            padL,
-            padR,
-            padT,
-            padB,
-            innerW,
-            innerH,
-            xMin,
-            xMax,
-            yMin,
-            yMax,
-            xTicks,
-            yTicks
-        };
     }
 
     render() {
@@ -469,131 +560,124 @@ export class ChartWindowController {
 
         const ctx = canvas.getContext?.('2d');
         if (!ctx) return;
+
         const dpr = typeof window !== 'undefined' && Number.isFinite(window.devicePixelRatio)
             ? window.devicePixelRatio
             : 1;
-        const frame = this.computeFrame(dpr);
+
+        const seriesBuffers = this.workspace.getChartSeriesBuffers(this.state.id);
+        const frame = this.workspace.projectionService.computeFrame({
+            chart: this.state,
+            seriesBuffers,
+            autoRangeWindow: this._autoRangeWindow,
+            width: canvas.width,
+            height: canvas.height,
+            dpr
+        });
 
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        if (!frame || this.buffer.length <= 0) {
+        if (!frame) {
             ctx.fillStyle = '#64748b';
             ctx.font = `${12 * dpr}px sans-serif`;
-            ctx.fillText('暂无数据，运行模拟后开始采样', 22 * dpr, 26 * dpr);
+            ctx.fillText('暂无数据，运行模拟后开始采样', 20 * dpr, 24 * dpr);
             this._needsRedraw = false;
             return;
         }
 
-        const { padL, padT, innerW, innerH, xMin, xMax, yMin, yMax, xTicks, yTicks } = frame;
-        const xToPx = (x) => padL + ((x - xMin) / (xMax - xMin)) * innerW;
-        const yToPx = (y) => padT + (1 - (y - yMin) / (yMax - yMin)) * innerH;
+        this._autoRangeWindow = frame.nextAutoRangeWindow || this._autoRangeWindow;
 
         ctx.strokeStyle = 'rgba(15, 23, 42, 0.1)';
         ctx.lineWidth = Math.max(1, dpr);
-        xTicks.forEach((tick) => {
-            const x = xToPx(tick);
+        frame.xTicks.forEach((tick) => {
+            const x = frame.xToPx(tick);
             ctx.beginPath();
-            ctx.moveTo(x, padT);
-            ctx.lineTo(x, padT + innerH);
+            ctx.moveTo(x, frame.padT);
+            ctx.lineTo(x, frame.padT + frame.innerH);
             ctx.stroke();
         });
-        yTicks.forEach((tick) => {
-            const y = yToPx(tick);
+        frame.yTicks.forEach((tick) => {
+            const y = frame.yToPx(tick);
             ctx.beginPath();
-            ctx.moveTo(padL, y);
-            ctx.lineTo(padL + innerW, y);
+            ctx.moveTo(frame.padL, y);
+            ctx.lineTo(frame.padL + frame.innerW, y);
             ctx.stroke();
         });
 
         ctx.strokeStyle = 'rgba(15, 23, 42, 0.35)';
         ctx.beginPath();
-        ctx.moveTo(padL, padT);
-        ctx.lineTo(padL, padT + innerH);
-        ctx.lineTo(padL + innerW, padT + innerH);
+        ctx.moveTo(frame.padL, frame.padT);
+        ctx.lineTo(frame.padL, frame.padT + frame.innerH);
+        ctx.lineTo(frame.padL + frame.innerW, frame.padT + frame.innerH);
         ctx.stroke();
 
         ctx.fillStyle = '#334155';
         ctx.font = `${11 * dpr}px sans-serif`;
-        xTicks.forEach((tick) => {
-            const px = xToPx(tick);
-            ctx.fillText(formatNumberCompact(tick, 3), px - 10 * dpr, padT + innerH + 18 * dpr);
+        frame.xTicks.forEach((tick) => {
+            const px = frame.xToPx(tick);
+            ctx.fillText(formatNumberCompact(tick, 3), px - 10 * dpr, frame.padT + frame.innerH + 18 * dpr);
         });
-        yTicks.forEach((tick) => {
-            const py = yToPx(tick);
+        frame.yTicks.forEach((tick) => {
+            const py = frame.yToPx(tick);
             ctx.fillText(formatNumberCompact(tick, 3), 4 * dpr, py + 4 * dpr);
         });
 
-        const maxDrawPoints = Math.max(220, Math.floor(innerW / Math.max(dpr, 1)) * 2);
-        const pointCount = this.buffer.length;
-        const step = pointCount > maxDrawPoints ? Math.ceil(pointCount / maxDrawPoints) : 1;
+        const visibleSeries = (this.state.series || []).filter((series) => series.visible !== false);
+        const drawSeries = visibleSeries.length > 0 ? visibleSeries : (this.state.series || []);
 
-        ctx.strokeStyle = '#1d4ed8';
-        ctx.lineWidth = 2 * dpr;
-        ctx.lineJoin = 'round';
-        ctx.lineCap = 'round';
-        ctx.beginPath();
-        let started = false;
-        this.buffer.forEachSampled(step, (x, y) => {
-            const px = xToPx(x);
-            const py = yToPx(y);
-            if (!Number.isFinite(px) || !Number.isFinite(py)) return;
-            if (!started) {
-                started = true;
-                ctx.moveTo(px, py);
-            } else {
-                ctx.lineTo(px, py);
+        let latestPoint = null;
+        drawSeries.forEach((series) => {
+            const buffer = seriesBuffers?.get?.(series.id);
+            if (!buffer || buffer.length <= 0) return;
+
+            const maxDrawPoints = Math.max(220, Math.floor(frame.innerW / Math.max(dpr, 1)) * 2);
+            const pointCount = buffer.length;
+            const step = pointCount > maxDrawPoints ? Math.ceil(pointCount / maxDrawPoints) : 1;
+
+            ctx.strokeStyle = series.color || '#1d4ed8';
+            ctx.lineWidth = 2 * dpr;
+            ctx.lineJoin = 'round';
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+
+            let started = false;
+            buffer.forEachSampled(step, (x, y) => {
+                const px = frame.xToPx(x);
+                const py = frame.yToPx(y);
+                if (!Number.isFinite(px) || !Number.isFinite(py)) return;
+                if (!started) {
+                    started = true;
+                    ctx.moveTo(px, py);
+                } else {
+                    ctx.lineTo(px, py);
+                }
+            });
+
+            if (started) {
+                ctx.stroke();
+            }
+
+            const last = buffer.getPoint?.(buffer.length - 1);
+            if (last && Number.isFinite(last.x) && Number.isFinite(last.y)) {
+                latestPoint = {
+                    seriesName: series.name,
+                    x: last.x,
+                    y: last.y
+                };
             }
         });
-        if (started) {
-            ctx.stroke();
+
+        if (latestPoint) {
+            this._latestText = `最新(${latestPoint.seriesName}): x=${formatNumberCompact(latestPoint.x)}, y=${formatNumberCompact(latestPoint.y)}`;
+        } else {
+            this._latestText = '最新: —';
+        }
+        if (this.elements.latest) {
+            this.elements.latest.textContent = this._latestText;
         }
 
         this._needsRedraw = false;
-    }
-
-    serializeState() {
-        return {
-            id: this.state.id,
-            title: this.state.title,
-            rect: {
-                x: this.state.rect.x,
-                y: this.state.rect.y,
-                width: this.state.rect.width,
-                height: this.state.rect.height
-            },
-            zIndex: this.state.zIndex,
-            maxPoints: this.state.maxPoints,
-            series: {
-                x: { ...this.state.series.x },
-                y: { ...this.state.series.y }
-            },
-            uiState: {
-                collapsed: !!this.state.uiState?.collapsed
-            }
-        };
-    }
-
-    configureYAxis(sourceId, quantityId = null) {
-        const nextSource = this.workspace.resolveSourceId(sourceId);
-        this.state.series.y.sourceId = nextSource;
-        this.refreshSourceOptions();
-        if (quantityId && this.elements.yQuantity) {
-            this.state.series.y.quantityId = quantityId;
-            this.elements.yQuantity.value = quantityId;
-        }
-        this.markDirty();
-    }
-
-    configureXAxis(sourceId, quantityId = null) {
-        const nextSource = this.workspace.resolveSourceId(sourceId || TIME_SOURCE_ID);
-        this.state.series.x.sourceId = nextSource;
-        this.refreshSourceOptions();
-        if (quantityId && this.elements.xQuantity) {
-            this.state.series.x.quantityId = quantityId;
-            this.elements.xQuantity.value = quantityId;
-        }
-        this.markDirty();
     }
 }

@@ -195,6 +195,19 @@ export function bindButtonEvents() {
     bindClick('btn-import', handleImport);
     bindClick('btn-mobile-import', handleImport);
 
+    // 图表按钮（全局创建）
+    const handleAddChart = () => {
+        const chart = this.app?.chartWorkspace?.addChart?.();
+        if (!chart) {
+            this.updateStatus?.('图表工作区不可用');
+            return;
+        }
+        this.app?.chartWorkspace?.requestRender?.();
+        this.updateStatus?.('已添加图表');
+    };
+    bindClick('btn-add-chart', handleAddChart);
+    bindClick('btn-mobile-add-chart', handleAddChart);
+
     // 习题板（复用原按钮绑定，避免重复切换）
     bindClick('btn-mobile-exercise-board', () => {
         safeInvokeMethod(document.getElementById('btn-exercise-board'), 'click');

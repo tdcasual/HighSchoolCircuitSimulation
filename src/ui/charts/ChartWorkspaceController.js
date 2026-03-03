@@ -5,12 +5,17 @@ import {
     normalizeSampleIntervalMs,
     shouldSampleAtTime
 } from '../observation/ObservationState.js';
+import { RingBuffer2D } from '../observation/ObservationMath.js';
 import { getQuantitiesForSource, PROBE_SOURCE_PREFIX, TIME_SOURCE_ID } from '../observation/ObservationSources.js';
 import {
-    createDefaultChartWindowState,
+    createDefaultChartWorkspaceState,
     normalizeChartWorkspaceState,
     serializeChartWorkspaceState
 } from './ChartWorkspaceState.js';
+import { ChartDocumentStore } from './ChartDocumentStore.js';
+import { ChartCommandService } from './ChartCommandService.js';
+import { ChartSamplingService } from './ChartSamplingService.js';
+import { ChartProjectionService } from './ChartProjectionService.js';
 import { ChartWindowController } from './ChartWindowController.js';
 
 export class ChartWorkspaceController {
@@ -19,28 +24,40 @@ export class ChartWorkspaceController {
         this.circuit = app?.circuit || null;
         this.root = null;
         this.windowLayer = null;
-        this.toolbar = null;
         this.runtimeStatusEl = null;
-        this.sampleIntervalMs = DEFAULT_SAMPLE_INTERVAL_MS;
+        this.layoutMode = 'desktop';
+
+        this.store = new ChartDocumentStore(createDefaultChartWorkspaceState({
+            sampleIntervalMs: DEFAULT_SAMPLE_INTERVAL_MS
+        }));
+        this.commandService = new ChartCommandService(this.store, {
+            onChange: (reason, state) => this.onDocumentChanged(reason, state),
+            resolveDefaultFrame: (index, options) => this.resolveDefaultFrame(index, options)
+        });
+        this.samplingService = new ChartSamplingService();
+        this.projectionService = new ChartProjectionService();
+
+        this.windowControllers = new Map();
+        this.seriesBuffers = new Map();
         this.windows = [];
         this.nextZIndex = 1;
+
         this._renderRaf = 0;
         this._lastSimTime = 0;
         this._lastSampleTime = Number.NEGATIVE_INFINITY;
-        this.layoutMode = 'desktop';
+        this._suppressPersist = false;
 
         this.ensureRoot();
         if (!this.root || !this.windowLayer) return;
-        this.fromJSON({
-            sampleIntervalMs: DEFAULT_SAMPLE_INTERVAL_MS,
-            windows: [createDefaultChartWindowState({ index: 1 })]
-        });
+        this.syncControllersWithState(this.store.getState());
+        this.requestRender();
     }
 
     ensureRoot() {
         if (typeof document === 'undefined') return;
         const canvasContainer = document.getElementById('canvas-container');
         if (!canvasContainer) return;
+
         const root = document.getElementById('chart-workspace-root')
             || createElement('div', { id: 'chart-workspace-root' });
         if (!root.parentElement) {
@@ -52,63 +69,20 @@ export class ChartWorkspaceController {
             root.removeChild(root.firstChild);
         }
 
-        const toolbar = createElement('div', { className: 'chart-workspace-toolbar' });
-        const addBtn = createElement('button', {
-            className: 'chart-workspace-btn',
-            textContent: '＋ 图表',
-            attrs: { type: 'button', 'data-chart-action': 'add' }
-        });
-        const clearBtn = createElement('button', {
-            className: 'chart-workspace-btn',
-            textContent: '清空数据',
-            attrs: { type: 'button', 'data-chart-action': 'clear' }
-        });
-        const sampleLabel = createElement('label', { className: 'chart-workspace-sample-label' });
-        sampleLabel.appendChild(createElement('span', { textContent: '采样(ms)' }));
-        const sampleInput = createElement('input', {
-            className: 'chart-workspace-sample-input',
-            attrs: {
-                type: 'number',
-                min: '0',
-                max: '5000',
-                step: '1',
-                value: String(this.sampleIntervalMs)
-            }
-        });
-        sampleLabel.appendChild(sampleInput);
-
-        toolbar.appendChild(addBtn);
-        toolbar.appendChild(clearBtn);
-        toolbar.appendChild(sampleLabel);
-
         const runtimeStatusEl = createElement('div', {
             className: 'chart-workspace-runtime-status',
             textContent: ''
         });
         runtimeStatusEl.style.display = 'none';
+
         const windowLayer = createElement('div', { className: 'chart-workspace-window-layer' });
 
-        root.appendChild(toolbar);
         root.appendChild(runtimeStatusEl);
         root.appendChild(windowLayer);
 
         this.root = root;
-        this.toolbar = toolbar;
         this.runtimeStatusEl = runtimeStatusEl;
         this.windowLayer = windowLayer;
-
-        safeAddEventListener(addBtn, 'click', () => {
-            this.addWindow();
-        });
-        safeAddEventListener(clearBtn, 'click', () => {
-            this.clearAllPlots();
-        });
-        safeAddEventListener(sampleInput, 'change', () => {
-            const next = normalizeSampleIntervalMs(sampleInput.value, this.sampleIntervalMs);
-            this.sampleIntervalMs = next;
-            sampleInput.value = String(next);
-            this.schedulePersist(0);
-        });
 
         if (typeof window !== 'undefined') {
             safeAddEventListener(window, 'resize', () => {
@@ -119,7 +93,18 @@ export class ChartWorkspaceController {
     }
 
     schedulePersist(delayMs = 0) {
+        if (this._suppressPersist) return;
         this.app?.scheduleSave?.(delayMs);
+    }
+
+    getState() {
+        return this.store.getState();
+    }
+
+    onDocumentChanged(_reason, state) {
+        this.syncControllersWithState(state);
+        this.schedulePersist(0);
+        this.requestRender();
     }
 
     setRuntimeStatus(message = '') {
@@ -141,6 +126,8 @@ export class ChartWorkspaceController {
     onLayoutModeChanged(mode = 'desktop') {
         this.layoutMode = String(mode || 'desktop');
         safeClassListToggle(this.root, 'chart-workspace-phone', this.layoutMode === 'phone');
+        this.applyWindowRects();
+        this.requestRender();
     }
 
     resolveSourceId(sourceId) {
@@ -163,109 +150,207 @@ export class ChartWorkspaceController {
         return { width, height };
     }
 
+    resolveDefaultFrame(index = 1, options = {}) {
+        const { width: layerWidth, height: layerHeight } = this.getLayerSize();
+        const preferredWidth = Math.min(Math.max(340, Math.round(layerWidth * 0.44)), 620);
+        const preferredHeight = Math.min(Math.max(240, Math.round(layerHeight * 0.4)), 460);
+        const frame = {
+            x: 36 + (index - 1) * 26,
+            y: 72 + (index - 1) * 20,
+            width: options?.frame?.width ?? preferredWidth,
+            height: options?.frame?.height ?? preferredHeight
+        };
+        return this.clampRect({ ...frame, ...(options?.frame || {}) });
+    }
+
     clampRect(rect = {}) {
         const { width: layerWidth, height: layerHeight } = this.getLayerSize();
         const widthRaw = Number(rect.width);
         const heightRaw = Number(rect.height);
-        const width = Math.max(280, Math.min(layerWidth, Math.round(Number.isFinite(widthRaw) ? widthRaw : 420)));
-        const height = Math.max(200, Math.min(layerHeight, Math.round(Number.isFinite(heightRaw) ? heightRaw : 280)));
+        const width = Math.max(240, Math.min(layerWidth, Math.round(Number.isFinite(widthRaw) ? widthRaw : 420)));
+        const height = Math.max(180, Math.min(layerHeight, Math.round(Number.isFinite(heightRaw) ? heightRaw : 300)));
         const xRaw = Number(rect.x);
         const yRaw = Number(rect.y);
         const maxX = Math.max(0, layerWidth - Math.min(width, 120));
-        const maxY = Math.max(0, layerHeight - 48);
+        const maxY = Math.max(0, layerHeight - 44);
         const x = Math.min(maxX, Math.max(0, Math.round(Number.isFinite(xRaw) ? xRaw : 48)));
         const y = Math.min(maxY, Math.max(0, Math.round(Number.isFinite(yRaw) ? yRaw : 86)));
         return { x, y, width, height };
     }
 
-    addWindow(options = {}) {
-        const index = this.windows.length + 1;
-        const state = createDefaultChartWindowState({
-            index,
-            rect: options.rect
-        });
-        if (options.title) {
-            state.title = String(options.title);
-        }
-        if (options.sourceId) {
-            const sourceId = this.resolveSourceId(options.sourceId);
-            const quantities = getQuantitiesForSource(sourceId, this.circuit);
-            state.series.y.sourceId = sourceId;
-            state.series.y.quantityId = options.quantityId
-                || quantities[0]?.id
-                || state.series.y.quantityId;
-        }
-        if (options.xSourceId) {
-            const xSourceId = this.resolveSourceId(options.xSourceId);
-            const quantities = getQuantitiesForSource(xSourceId, this.circuit);
-            state.series.x.sourceId = xSourceId;
-            state.series.x.quantityId = options.xQuantityId
-                || quantities[0]?.id
-                || state.series.x.quantityId;
-        }
+    syncControllersWithState(state) {
+        if (!this.windowLayer) return;
+        const charts = Array.isArray(state?.charts) ? state.charts : [];
+        const staleIds = new Set(this.windowControllers.keys());
 
-        const controller = this.createWindowController(state);
-        this.focusWindow(controller);
-        this.refreshComponentOptions();
-        this.requestRender();
-        this.schedulePersist(0);
-        return controller;
+        charts.forEach((chart) => {
+            if (!chart?.id) return;
+            this.syncBuffersForChart(chart);
+            let controller = this.windowControllers.get(chart.id);
+            if (!controller) {
+                controller = new ChartWindowController(this, chart);
+                controller.mount(this.windowLayer);
+                this.windowControllers.set(chart.id, controller);
+            } else {
+                controller.updateState(chart);
+            }
+            staleIds.delete(chart.id);
+        });
+
+        staleIds.forEach((chartId) => {
+            const controller = this.windowControllers.get(chartId);
+            controller?.dispose?.();
+            this.windowControllers.delete(chartId);
+            this.seriesBuffers.delete(chartId);
+        });
+
+        const activeChartId = state?.selection?.activeChartId || null;
+        this.windowControllers.forEach((controller) => {
+            const focused = controller?.state?.id === activeChartId;
+            safeClassListToggle(controller?.elements?.root, 'chart-window-active', focused);
+        });
+
+        this.windows = Array.from(this.windowControllers.values())
+            .sort((a, b) => (a.state?.zIndex || 0) - (b.state?.zIndex || 0));
+        this.nextZIndex = charts.reduce((acc, chart) => Math.max(acc, Number(chart?.zIndex) || 0), 0) + 1;
     }
 
-    createWindowController(state) {
-        const normalizedState = {
-            ...state,
-            rect: this.clampRect(state.rect)
-        };
-        const controller = new ChartWindowController(this, normalizedState);
-        controller.setZIndex(this.nextZIndex++);
-        controller.mount(this.windowLayer);
-        this.windows.push(controller);
-        return controller;
+    syncBuffersForChart(chart) {
+        if (!chart?.id) return;
+        let chartBuffers = this.seriesBuffers.get(chart.id);
+        if (!(chartBuffers instanceof Map)) {
+            chartBuffers = new Map();
+            this.seriesBuffers.set(chart.id, chartBuffers);
+        }
+
+        const validSeriesIds = new Set();
+        const maxPoints = Math.max(100, Number(chart.maxPoints) || 3000);
+        (chart.series || []).forEach((series) => {
+            if (!series?.id) return;
+            validSeriesIds.add(series.id);
+            const current = chartBuffers.get(series.id);
+            if (current instanceof RingBuffer2D && current.capacity === maxPoints) {
+                return;
+            }
+            chartBuffers.set(series.id, new RingBuffer2D(maxPoints));
+        });
+
+        for (const seriesId of chartBuffers.keys()) {
+            if (validSeriesIds.has(seriesId)) continue;
+            chartBuffers.delete(seriesId);
+        }
+    }
+
+    getChartSeriesBuffers(chartId) {
+        const existing = this.seriesBuffers.get(chartId);
+        if (existing instanceof Map) return existing;
+        const map = new Map();
+        this.seriesBuffers.set(chartId, map);
+        return map;
+    }
+
+    getSeriesBuffer(chartId, seriesId, maxPoints = 3000) {
+        if (!chartId || !seriesId) return null;
+        const chartBuffers = this.getChartSeriesBuffers(chartId);
+        const expectedCapacity = Math.max(100, Math.floor(Number(maxPoints) || 3000));
+        const current = chartBuffers.get(seriesId);
+        if (current instanceof RingBuffer2D && current.capacity === expectedCapacity) {
+            return current;
+        }
+        const next = new RingBuffer2D(expectedCapacity);
+        chartBuffers.set(seriesId, next);
+        return next;
+    }
+
+    addChart(options = {}) {
+        const chartId = this.commandService.addChart(options);
+        return this.windowControllers.get(chartId) || null;
+    }
+
+    addWindow(options = {}) {
+        return this.addChart(options);
+    }
+
+    addSeriesToChart(chartId, options = {}) {
+        const targetChartId = chartId || this.getState()?.selection?.activeChartId;
+        if (!targetChartId) return null;
+
+        const sourceId = options.sourceId ? this.resolveSourceId(options.sourceId) : null;
+        let quantityId = options.quantityId || null;
+        if (sourceId && !quantityId) {
+            quantityId = getQuantitiesForSource(sourceId, this.circuit)[0]?.id || null;
+        }
+
+        return this.commandService.addSeries(targetChartId, {
+            sourceId,
+            quantityId,
+            xMode: options.xMode,
+            scatterXBinding: options.scatterXBinding,
+            transformId: options.transformId,
+            name: options.name,
+            color: options.color
+        });
+    }
+
+    addSeriesForSource(sourceId, options = {}) {
+        const resolvedSourceId = this.resolveSourceId(sourceId);
+        const quantities = getQuantitiesForSource(resolvedSourceId, this.circuit);
+        const quantityId = options.quantityId || quantities[0]?.id || null;
+
+        let targetChartId = options.chartId || this.getState()?.selection?.activeChartId;
+        if (!targetChartId || !this.windowControllers.has(targetChartId)) {
+            const chart = this.addChart();
+            targetChartId = chart?.state?.id || null;
+        }
+        if (!targetChartId) return null;
+
+        const seriesId = this.commandService.addSeries(targetChartId, {
+            sourceId: resolvedSourceId,
+            quantityId,
+            xMode: options.xMode,
+            scatterXBinding: options.scatterXBinding,
+            transformId: options.transformId,
+            name: options.name,
+            color: options.color
+        });
+        this.commandService.focusChart(targetChartId);
+        return seriesId;
+    }
+
+    addPlotForSource(sourceId, options = {}) {
+        return this.addSeriesForSource(sourceId, options);
     }
 
     removeWindow(windowId) {
-        const index = this.windows.findIndex((item) => item.state.id === windowId);
-        if (index < 0) return;
-        const [removed] = this.windows.splice(index, 1);
-        removed?.dispose?.();
-        this.requestRender();
-        this.schedulePersist(0);
+        this.commandService.removeChart(windowId);
     }
 
     focusWindow(targetWindow) {
-        if (!targetWindow) return;
-        if (targetWindow.state.zIndex >= this.nextZIndex - 1) return;
-        targetWindow.setZIndex(this.nextZIndex++);
-        this.schedulePersist(0);
+        const chartId = targetWindow?.state?.id;
+        if (!chartId) return;
+        this.commandService.focusChart(chartId);
     }
 
     applyWindowRects() {
-        this.windows.forEach((windowController) => {
-            windowController.state.rect = this.clampRect(windowController.state.rect);
-            windowController.applyRect();
-            windowController.markDirty();
+        this.commandService.update('clamp-chart-frames', (draft) => {
+            draft.charts.forEach((chart) => {
+                chart.frame = this.clampRect(chart.frame);
+            });
+            return draft;
         });
     }
 
     refreshComponentOptions() {
-        this.windows.forEach((windowController) => windowController.refreshSourceOptions());
+        this.windowControllers.forEach((controller) => controller.refreshSourceOptions());
     }
 
     refreshDialGauges() {
-        // 保留统一接口，当前图表工作区不再展示独立表盘。
-    }
-
-    addPlotForSource(sourceId, options = {}) {
-        const quantityId = options.quantityId || null;
-        this.addWindow({
-            sourceId,
-            quantityId
-        });
+        // 预留兼容接口：当前图表工作区不显示独立表盘。
     }
 
     clearAllPlots() {
-        this.windows.forEach((windowController) => windowController.clearData());
+        this.windowControllers.forEach((controller) => controller.clearData());
+        this._lastSampleTime = Number.NEGATIVE_INFINITY;
         this.requestRender();
     }
 
@@ -279,11 +364,12 @@ export class ChartWorkspaceController {
     }
 
     renderAll() {
-        this.windows.forEach((windowController) => windowController.render());
+        this.windowControllers.forEach((controller) => controller.render());
     }
 
     onCircuitUpdate(results) {
         if (!this.root) return;
+
         const currentTime = Number.isFinite(this.circuit?.simTime) ? this.circuit.simTime : 0;
         if (currentTime + 1e-9 < this._lastSimTime) {
             this.clearAllPlots();
@@ -299,43 +385,38 @@ export class ChartWorkspaceController {
             }
             return;
         }
+
         this.setRuntimeStatus('');
 
-        const shouldSample = shouldSampleAtTime(currentTime, this._lastSampleTime, this.sampleIntervalMs);
+        const sampleIntervalMs = normalizeSampleIntervalMs(
+            this.getState()?.sampleIntervalMs,
+            DEFAULT_SAMPLE_INTERVAL_MS
+        );
+
+        const shouldSample = shouldSampleAtTime(currentTime, this._lastSampleTime, sampleIntervalMs);
         if (shouldSample) {
-            const valueCache = new Map();
-            this.windows.forEach((windowController) => {
-                windowController.sample(valueCache);
+            const charts = this.getState()?.charts || [];
+            this.samplingService.sampleCharts({
+                circuit: this.circuit,
+                charts,
+                getSeriesBuffer: (chartId, seriesId, maxPoints) => this.getSeriesBuffer(chartId, seriesId, maxPoints)
             });
+            this.windowControllers.forEach((controller) => controller.markDirty());
             this._lastSampleTime = currentTime;
         }
+
         this.requestRender();
     }
 
     toJSON() {
-        return serializeChartWorkspaceState({
-            sampleIntervalMs: this.sampleIntervalMs,
-            windows: this.windows.map((windowController) => windowController.serializeState())
-        });
+        return serializeChartWorkspaceState(this.getState());
     }
 
     fromJSON(rawState = {}) {
         const normalized = normalizeChartWorkspaceState(rawState);
-        this.sampleIntervalMs = normalizeSampleIntervalMs(normalized.sampleIntervalMs, DEFAULT_SAMPLE_INTERVAL_MS);
-        const sampleInput = this.toolbar?.querySelector?.('.chart-workspace-sample-input');
-        if (sampleInput) {
-            sampleInput.value = String(this.sampleIntervalMs);
-        }
-
-        this.windows.forEach((windowController) => windowController.dispose());
-        this.windows = [];
-        this.nextZIndex = 1;
-
-        normalized.windows.forEach((windowState) => {
-            this.createWindowController(windowState);
-        });
-
-        this.refreshComponentOptions();
+        this._suppressPersist = true;
+        this.commandService.replaceDocument(normalized);
+        this._suppressPersist = false;
         this.requestRender();
     }
 }

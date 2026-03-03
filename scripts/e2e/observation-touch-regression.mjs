@@ -134,19 +134,19 @@ async function runObservationScenario(browser, baseUrl) {
         const root = document.getElementById('chart-workspace-root');
         return {
             windowCount: Array.isArray(workspace?.windows) ? workspace.windows.length : 0,
-            hasAddButton: Boolean(document.querySelector('[data-chart-action="add"]')),
+            hasAddButton: Boolean(document.getElementById('btn-add-chart') || document.getElementById('btn-mobile-add-chart')),
             isPhoneMode: root?.classList?.contains?.('chart-workspace-phone') === true
         };
     });
 
     assertCondition(initial.hasAddButton, 'chart workspace add button should exist');
-    assertCondition(initial.windowCount >= 1, `expected at least one default chart window, got ${initial.windowCount}`);
+    assertCondition(initial.windowCount === 0, `expected default chart window count to be 0, got ${initial.windowCount}`);
     assertCondition(initial.isPhoneMode, 'chart workspace should switch to phone layout mode');
 
     const afterAdd = await page.evaluate(() => {
         const workspace = window.app.chartWorkspace;
         const before = Array.isArray(workspace?.windows) ? workspace.windows.length : 0;
-        const addButton = document.querySelector('[data-chart-action="add"]');
+        const addButton = document.getElementById('btn-mobile-add-chart') || document.getElementById('btn-add-chart');
         addButton?.click?.();
         return {
             before,
@@ -163,19 +163,19 @@ async function runObservationScenario(browser, baseUrl) {
         const workspace = window.app.chartWorkspace;
         const firstWindow = workspace?.windows?.[0];
         if (!firstWindow) {
-            return { ok: false, reason: 'missing-default-window' };
+            return { ok: false, reason: 'missing-first-window' };
         }
         const buttons = Array.from(firstWindow.elements?.root?.querySelectorAll?.('button.chart-window-btn') || []);
         const collapseBtn = buttons.find((btn) => {
             const text = String(btn?.textContent || '').trim();
-            return text === '收起' || text === '展开';
+            return text === '收起图例' || text === '展开图例';
         });
         if (!collapseBtn) {
             return { ok: false, reason: 'missing-collapse-button' };
         }
-        const before = !!firstWindow.state?.uiState?.collapsed;
+        const before = !!firstWindow.state?.ui?.legendCollapsed;
         collapseBtn.click();
-        const after = !!firstWindow.state?.uiState?.collapsed;
+        const after = !!firstWindow.state?.ui?.legendCollapsed;
         return {
             ok: true,
             before,
@@ -188,22 +188,6 @@ async function runObservationScenario(browser, baseUrl) {
         collapseCheck.before !== collapseCheck.after,
         'chart window collapse state should toggle after clicking collapse button'
     );
-
-    const sampleIntervalCheck = await page.evaluate(() => {
-        const workspace = window.app.chartWorkspace;
-        const sampleInput = document.querySelector('.chart-workspace-sample-input');
-        if (!sampleInput) {
-            return { ok: false, reason: 'missing-sample-input' };
-        }
-        sampleInput.value = '25';
-        sampleInput.dispatchEvent(new Event('change', { bubbles: true }));
-        return {
-            ok: true,
-            value: workspace?.sampleIntervalMs
-        };
-    });
-    assertCondition(sampleIntervalCheck.ok, `chart workspace sample interval check failed: ${sampleIntervalCheck.reason || 'unknown'}`);
-    assertCondition(sampleIntervalCheck.value === 25, `expected sample interval to be 25ms, got ${sampleIntervalCheck.value}`);
 
     await capture(page, 'observation-phone-touch.png');
     await context.close();

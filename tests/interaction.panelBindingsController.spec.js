@@ -30,6 +30,40 @@ afterEach(() => {
 });
 
 describe('PanelBindingsController.bindButtonEvents', () => {
+    it('binds global add-chart actions for desktop and mobile menu buttons', () => {
+        const desktopAddChartButton = makeClickableElement();
+        const mobileAddChartButton = makeClickableElement();
+
+        vi.stubGlobal('document', {
+            getElementById: vi.fn((id) => ({
+                'btn-add-chart': desktopAddChartButton,
+                'btn-mobile-add-chart': mobileAddChartButton
+            }[id] || null))
+        });
+        vi.stubGlobal('confirm', vi.fn(() => false));
+
+        const context = {
+            app: {
+                chartWorkspace: {
+                    addChart: vi.fn(() => ({})),
+                    requestRender: vi.fn()
+                }
+            },
+            updateStatus: vi.fn(),
+            hideDialog: vi.fn(),
+            applyDialogChanges: vi.fn()
+        };
+
+        PanelBindingsController.bindButtonEvents.call(context);
+
+        desktopAddChartButton.triggerClick();
+        mobileAddChartButton.triggerClick();
+
+        expect(context.app.chartWorkspace.addChart).toHaveBeenCalledTimes(2);
+        expect(context.app.chartWorkspace.requestRender).toHaveBeenCalledTimes(2);
+        expect(context.updateStatus).toHaveBeenCalledWith('已添加图表');
+    });
+
     it('binds run and stop buttons to app simulation controls', () => {
         const runButton = makeClickableElement();
         const stopButton = makeClickableElement();
