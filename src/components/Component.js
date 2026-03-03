@@ -5,6 +5,12 @@
 
 import { clamp, computeOverlapFractionFromOffsetPx, computeParallelPlateCapacitance } from '../utils/Physics.js';
 import {
+    computeDisplayRowGap,
+    updateAttributeIfChanged,
+    updateTextAndStyle,
+    updateTextIfChanged
+} from './display/ComponentDisplayState.js';
+import {
     getComponentHitBox,
     getTerminalLocalOffset,
     TOUCH_TARGET_RADIUS_PX,
@@ -1387,57 +1393,19 @@ export const SVGRenderer = {
     },
 
     setElementTextIfChanged(element, nextText) {
-        if (!element) return false;
-        const normalizedText = nextText ?? '';
-        if ((element.textContent || '') === normalizedText) return false;
-        element.textContent = normalizedText;
-        return true;
+        return updateTextIfChanged(element, nextText);
     },
 
     setElementAttributeIfChanged(element, name, value) {
-        if (!element) return false;
-        const normalizedValue = value == null ? '' : String(value);
-        let currentValue = null;
-        try {
-            currentValue = typeof element.getAttribute === 'function'
-                ? element.getAttribute(name)
-                : null;
-        } catch (_) {
-            currentValue = null;
-        }
-        if (currentValue === normalizedValue) return false;
-        if (typeof element.setAttribute !== 'function') return false;
-        try {
-            element.setAttribute(name, normalizedValue);
-            return true;
-        } catch (_) {
-            return false;
-        }
+        return updateAttributeIfChanged(element, name, value);
     },
 
     setDisplayTextAndStyle(element, text, fontSize = null, fontWeight = null) {
-        let changed = this.setElementTextIfChanged(element, text);
-        if (fontSize !== null) {
-            changed = this.setElementAttributeIfChanged(element, 'font-size', fontSize) || changed;
-        }
-        if (fontWeight !== null) {
-            changed = this.setElementAttributeIfChanged(element, 'font-weight', fontWeight) || changed;
-        }
-        return changed;
+        return updateTextAndStyle(element, text, fontSize, fontWeight);
     },
 
     resolveValueDisplayRowGap(visibleDisplays) {
-        if (!Array.isArray(visibleDisplays) || visibleDisplays.length === 0) {
-            return 15;
-        }
-        const maxFontSize = visibleDisplays.reduce((maxSize, display) => {
-            const fontSizeAttr = parseFloat(display.getAttribute('font-size') || '13');
-            if (!Number.isFinite(fontSizeAttr)) {
-                return maxSize;
-            }
-            return Math.max(maxSize, fontSizeAttr);
-        }, 13);
-        return Math.max(12, Math.round(maxFontSize + 2));
+        return computeDisplayRowGap(visibleDisplays);
     },
 
     layoutValueDisplay(g, comp) {
