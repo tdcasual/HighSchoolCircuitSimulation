@@ -113,7 +113,7 @@ function assertMethodBodyMatches(body, signature, fileLabel, checks = []) {
     }
 }
 
-const solverPath = 'src/engine/Solver.js';
+const solverPath = 'src/core/simulation/MNASolver.js';
 const resultPath = 'src/core/simulation/ResultPostprocessor.js';
 
 const solverSource = readText(solverPath);

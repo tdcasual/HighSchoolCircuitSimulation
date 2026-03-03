@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { Circuit } from '../src/engine/Circuit.js';
+import { Circuit } from '../src/core/runtime/Circuit.js';
 
 describe('Circuit topology batch', () => {
     it('defers rebuild until batch ends', () => {

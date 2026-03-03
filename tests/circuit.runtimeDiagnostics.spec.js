@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { FailureCategories } from '../src/core/simulation/FailureDiagnostics.js';
-import { Circuit } from '../src/engine/Circuit.js';
+import { Circuit } from '../src/core/runtime/Circuit.js';
 import { addComponent, connectWire, createTestCircuit } from './helpers/circuitTestUtils.js';
 
 describe('Circuit runtime diagnostics guard rails', () => {

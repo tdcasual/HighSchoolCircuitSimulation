@@ -4,14 +4,14 @@
  */
 
 import { Matrix } from './Matrix.js';
-import { computeNtcThermistorResistance, computePhotoresistorResistance } from '../utils/Physics.js';
-import { StampDispatcher } from '../core/simulation/StampDispatcher.js';
-import { DynamicIntegrator } from '../core/simulation/DynamicIntegrator.js';
-import { ResultPostprocessor } from '../core/simulation/ResultPostprocessor.js';
-import { SimulationState } from '../core/simulation/SimulationState.js';
-import { DefaultComponentRegistry } from '../core/simulation/ComponentRegistry.js';
-import { limitJunctionStep, resolveJunctionParameters } from '../core/simulation/JunctionModel.js';
-import { createRuntimeLogger } from '../utils/Logger.js';
+import { computeNtcThermistorResistance, computePhotoresistorResistance } from '../../utils/Physics.js';
+import { StampDispatcher } from './StampDispatcher.js';
+import { DynamicIntegrator } from './DynamicIntegrator.js';
+import { ResultPostprocessor } from './ResultPostprocessor.js';
+import { SimulationState } from './SimulationState.js';
+import { DefaultComponentRegistry } from './ComponentRegistry.js';
+import { limitJunctionStep, resolveJunctionParameters } from './JunctionModel.js';
+import { createRuntimeLogger } from '../../utils/Logger.js';
 
 export class MNASolver {
     constructor() {

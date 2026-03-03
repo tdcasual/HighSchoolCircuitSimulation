@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MNASolver } from '../src/engine/Solver.js';
+import { MNASolver } from '../src/core/simulation/MNASolver.js';
 import { ResultPostprocessor } from '../src/core/simulation/ResultPostprocessor.js';
 import { DefaultComponentRegistry } from '../src/core/simulation/ComponentRegistry.js';
 

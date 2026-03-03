@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { Circuit } from '../src/engine/Circuit.js';
+import { Circuit } from '../src/core/runtime/Circuit.js';
 import { createComponent } from '../src/components/Component.js';
 
 describe('Circuit wire compaction', () => {

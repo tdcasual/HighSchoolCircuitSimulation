@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { Circuit } from '../src/engine/Circuit.js';
+import { Circuit } from '../src/core/runtime/Circuit.js';
 import { InteractionManager } from '../src/ui/Interaction.js';
 import { getComponentHitBox } from '../src/components/geometry/ComponentGeometry.js';
 

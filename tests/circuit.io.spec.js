@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Circuit } from '../src/engine/Circuit.js';
+import { Circuit } from '../src/core/runtime/Circuit.js';
 import { createComponent } from '../src/components/Component.js';
 import { CircuitSerializer } from '../src/core/io/CircuitSerializer.js';
 import { CircuitDeserializer } from '../src/core/io/CircuitDeserializer.js';

@@ -3,7 +3,7 @@
  * 用于MNA（改进节点分析法）的线性方程组求解
  */
 
-import { createRuntimeLogger } from '../utils/Logger.js';
+import { createRuntimeLogger } from '../../utils/Logger.js';
 
 export class Matrix {
     static getLogger() {

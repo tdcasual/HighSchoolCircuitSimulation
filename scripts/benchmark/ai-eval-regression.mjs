@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, extname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { Circuit } from '../../src/engine/Circuit.js';
+import { Circuit } from '../../src/core/runtime/Circuit.js';
 import { CircuitExplainer } from '../../src/ai/CircuitExplainer.js';
 import { CircuitAIAgent } from '../../src/ai/agent/CircuitAIAgent.js';
 import { ClaimExtractSkill } from '../../src/ai/skills/ClaimExtractSkill.js';

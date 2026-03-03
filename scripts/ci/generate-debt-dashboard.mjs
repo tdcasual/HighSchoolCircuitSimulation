@@ -15,7 +15,7 @@ const MAIN_BUNDLE_MAX_BYTES = 400 * 1024;
 const TOTAL_BUNDLE_MAX_BYTES = 520 * 1024;
 
 const CORE_FILE_BUDGETS = [
-    { file: 'src/engine/Circuit.js', maxLines: 2000 },
+    { file: 'src/core/runtime/Circuit.js', maxLines: 2000 },
     { file: 'src/components/Component.js', maxLines: 1500 },
     { file: 'src/ui/charts/ChartWindowController.js', maxLines: 700 },
     { file: 'src/app/interaction/InteractionOrchestrator.js', maxLines: 400 },

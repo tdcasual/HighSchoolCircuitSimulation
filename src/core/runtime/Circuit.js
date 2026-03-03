@@ -3,27 +3,27 @@
  * 管理电路中的节点、元器件和连接
  */
 
-import { MNASolver } from './Solver.js';
-import { Matrix } from './Matrix.js';
-import { getTerminalWorldPosition } from '../utils/TerminalGeometry.js';
-import { normalizeCanvasPoint, pointKey, toCanvasInt } from '../utils/CanvasCoords.js';
-import { NodeBuilder } from '../core/topology/NodeBuilder.js';
-import { WireCompactor } from '../core/topology/WireCompactor.js';
-import { ConnectivityCache } from '../core/topology/ConnectivityCache.js';
-import { CircuitSerializer } from '../core/io/CircuitSerializer.js';
-import { CircuitDeserializer } from '../core/io/CircuitDeserializer.js';
-import { SimulationState } from '../core/simulation/SimulationState.js';
-import { NetlistBuilder } from '../core/simulation/NetlistBuilder.js';
-import { createRuntimeLogger } from '../utils/Logger.js';
-import { CircuitPersistenceAdapter } from '../core/runtime/CircuitPersistenceAdapter.js';
-import { CircuitDiagnosticsAdapter } from '../core/runtime/CircuitDiagnosticsAdapter.js';
-import { CircuitTopologyService } from '../core/services/CircuitTopologyService.js';
-import { CircuitSimulationLoopService } from '../core/services/CircuitSimulationLoopService.js';
+import { MNASolver } from '../simulation/MNASolver.js';
+import { Matrix } from '../simulation/Matrix.js';
+import { getTerminalWorldPosition } from '../../utils/TerminalGeometry.js';
+import { normalizeCanvasPoint, pointKey, toCanvasInt } from '../../utils/CanvasCoords.js';
+import { NodeBuilder } from '../topology/NodeBuilder.js';
+import { WireCompactor } from '../topology/WireCompactor.js';
+import { ConnectivityCache } from '../topology/ConnectivityCache.js';
+import { CircuitSerializer } from '../io/CircuitSerializer.js';
+import { CircuitDeserializer } from '../io/CircuitDeserializer.js';
+import { SimulationState } from '../simulation/SimulationState.js';
+import { NetlistBuilder } from '../simulation/NetlistBuilder.js';
+import { createRuntimeLogger } from '../../utils/Logger.js';
+import { CircuitPersistenceAdapter } from './CircuitPersistenceAdapter.js';
+import { CircuitDiagnosticsAdapter } from './CircuitDiagnosticsAdapter.js';
+import { CircuitTopologyService } from '../services/CircuitTopologyService.js';
+import { CircuitSimulationLoopService } from '../services/CircuitSimulationLoopService.js';
 import {
     getWireCurrentInfo as getWireCurrentInfoViaService,
     isWireInShortCircuit as isWireInShortCircuitViaService,
     refreshShortCircuitDiagnostics as refreshShortCircuitDiagnosticsViaService
-} from '../core/runtime/CircuitShortCircuitDiagnosticsService.js';
+} from './CircuitShortCircuitDiagnosticsService.js';
 
 export class Circuit {
     constructor(options = {}) {

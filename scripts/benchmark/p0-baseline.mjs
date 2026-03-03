@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { performance } from 'node:perf_hooks';
-import { Circuit } from '../../src/engine/Circuit.js';
+import { Circuit } from '../../src/core/runtime/Circuit.js';
 import { createComponent } from '../../src/components/Component.js';
 import { getTerminalWorldPosition } from '../../src/utils/TerminalGeometry.js';
 import { validateCircuitJSON } from '../../src/utils/circuitSchema.js';

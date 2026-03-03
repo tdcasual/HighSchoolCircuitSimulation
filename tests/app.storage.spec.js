@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { safeRemoveStorageItem } from '../src/app/AppStorage.js';
-import { Circuit } from '../src/engine/Circuit.js';
+import { Circuit } from '../src/core/runtime/Circuit.js';
 import { CircuitPersistenceAdapter } from '../src/core/runtime/CircuitPersistenceAdapter.js';
 
 describe('AppStorage', () => {

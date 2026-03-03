@@ -1,4 +1,4 @@
-import { Circuit } from '../../src/engine/Circuit.js';
+import { Circuit } from '../../src/core/runtime/Circuit.js';
 import { createComponent } from '../../src/components/Component.js';
 import { getTerminalWorldPosition } from '../../src/utils/TerminalGeometry.js';
 

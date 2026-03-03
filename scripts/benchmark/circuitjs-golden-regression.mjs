@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { Circuit } from '../../src/engine/Circuit.js';
+import { Circuit } from '../../src/core/runtime/Circuit.js';
 import { createComponent } from '../../src/components/Component.js';
 
 const __filename = fileURLToPath(import.meta.url);

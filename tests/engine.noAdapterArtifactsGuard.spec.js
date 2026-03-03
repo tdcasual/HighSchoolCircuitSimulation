@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import { runScriptInTempWorkspace } from './helpers/scriptGuardTestUtils.js';
 
-describe('engine no-adapter artifacts guard', () => {
+describe('engine no-legacy artifacts guard', () => {
     it('wires check script in package pipeline', () => {
         const pkgPath = resolve(process.cwd(), 'package.json');
         const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
@@ -26,24 +26,23 @@ describe('engine no-adapter artifacts guard', () => {
         expect(output).toContain('[engine-no-adapters] ok');
     });
 
-    it('fails when forbidden engine adapter import returns', () => {
+    it('fails when forbidden engine import path returns', () => {
         const result = runScriptInTempWorkspace({
             scriptRelPath: 'scripts/ci/assert-no-engine-adapter-artifacts.mjs',
             sourceFiles: [
-                'src/engine/Circuit.js',
+                'src/app/AppRuntimeV2.js',
                 'scripts/ci/assert-no-engine-adapter-artifacts.mjs'
             ],
             mutateByFile: {
-                'src/engine/Circuit.js': (source) => source.replace(
-                    "import { CircuitPersistenceAdapter } from '../core/runtime/CircuitPersistenceAdapter.js';",
-                    "import { CircuitPersistenceAdapter } from './runtime/CircuitPersistenceAdapter.js';"
+                'src/app/AppRuntimeV2.js': (source) => source.replace(
+                    "import { Circuit } from '../core/runtime/Circuit.js';",
+                    "import { Circuit } from '../engine/Circuit.js';"
                 )
             }
         });
 
         expect(result.ok).toBe(false);
         expect(result.output).toContain('[engine-no-adapters]');
-        expect(result.output).toContain('forbidden engine adapter reference');
+        expect(result.output).toContain('forbidden engine legacy reference');
     });
 });
-

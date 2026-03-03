@@ -44,11 +44,11 @@ describe('registry legacy fallback guard wiring', () => {
         const result = runScriptInTempWorkspace({
             scriptRelPath: 'scripts/ci/assert-registry-legacy-fallback-guard.mjs',
             sourceFiles: [
-                'src/engine/Solver.js',
+                'src/core/simulation/MNASolver.js',
                 'src/core/simulation/ResultPostprocessor.js'
             ],
             mutateByFile: {
-                'src/engine/Solver.js': (source) => source.replace(
+                'src/core/simulation/MNASolver.js': (source) => source.replace(
                     /if\s*\(\s*handledByDispatcher\s*\)\s*\{\s*return;\s*\}/,
                     `if (handledByDispatcher) {
             return;
@@ -69,11 +69,11 @@ describe('registry legacy fallback guard wiring', () => {
         const result = runScriptInTempWorkspace({
             scriptRelPath: 'scripts/ci/assert-registry-legacy-fallback-guard.mjs',
             sourceFiles: [
-                'src/engine/Solver.js',
+                'src/core/simulation/MNASolver.js',
                 'src/core/simulation/ResultPostprocessor.js'
             ],
             mutateByFile: {
-                'src/engine/Solver.js': (source) => source.replace('registry.get(comp.type)', 'registry.get(comp.kind)')
+                'src/core/simulation/MNASolver.js': (source) => source.replace('registry.get(comp.type)', 'registry.get(comp.kind)')
             }
         });
 
@@ -85,11 +85,11 @@ describe('registry legacy fallback guard wiring', () => {
         const result = runScriptInTempWorkspace({
             scriptRelPath: 'scripts/ci/assert-registry-legacy-fallback-guard.mjs',
             sourceFiles: [
-                'src/engine/Solver.js',
+                'src/core/simulation/MNASolver.js',
                 'src/core/simulation/ResultPostprocessor.js'
             ],
             mutateByFile: {
-                'src/engine/Solver.js': (source) => source.replace(
+                'src/core/simulation/MNASolver.js': (source) => source.replace(
                     "return keyParts.join('|');",
                     "this.gmin = 1e-12;\n        return keyParts.join('|');"
                 )

@@ -3,7 +3,7 @@
  * 初始化并连接所有模块
  */
 
-import { Circuit } from '../engine/Circuit.js';
+import { Circuit } from '../core/runtime/Circuit.js';
 import { Renderer } from '../ui/Renderer.js';
 import { InteractionManager } from '../ui/Interaction.js';
 import { loadAIPanelClass } from '../ui/ai/loadAIPanel.js';

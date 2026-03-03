@@ -11,10 +11,7 @@ function fail(message) {
 }
 
 const removedArtifacts = [
-    'src/engine/CircuitSchema.js',
-    'src/engine/runtime',
-    'src/engine/services',
-    'src/engine/scenarios'
+    'src/engine'
 ];
 
 for (const relPath of removedArtifacts) {
@@ -25,17 +22,9 @@ for (const relPath of removedArtifacts) {
 }
 
 const forbiddenPatterns = [
-    /engine\/runtime\//u,
-    /engine\/services\//u,
-    /engine\/scenarios\//u,
-    /engine\/CircuitSchema\.js/u,
-    /['"]\.\/runtime\/CircuitPersistenceAdapter\.js['"]/u,
-    /['"]\.\/runtime\/CircuitDiagnosticsAdapter\.js['"]/u,
-    /['"]\.\/runtime\/CircuitShortCircuitDiagnosticsService\.js['"]/u,
-    /['"]\.\/services\/CircuitTopologyService\.js['"]/u,
-    /['"]\.\/services\/CircuitSimulationLoopService\.js['"]/u,
-    /['"]\.\/scenarios\/ClassroomScenarioPack\.js['"]/u,
-    /['"]\.\/CircuitSchema\.js['"]/u
+    /src\/engine\//u,
+    /['"]\.\.?\/engine\/[^'"]+['"]/u,
+    /['"][^'"]*\/engine\/[^'"]+['"]/u
 ];
 const allowListFiles = new Set([
     'scripts/ci/assert-no-engine-adapter-artifacts.mjs',
@@ -66,7 +55,7 @@ function scanDirectory(dirPath) {
         const source = readFileSync(absPath, 'utf8');
         for (const pattern of forbiddenPatterns) {
             if (pattern.test(source)) {
-                fail(`forbidden engine adapter reference found in ${relPath}: ${pattern}`);
+                fail(`forbidden engine legacy reference found in ${relPath}: ${pattern}`);
             }
         }
     }
