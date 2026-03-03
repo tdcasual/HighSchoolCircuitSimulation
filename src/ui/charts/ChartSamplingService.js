@@ -1,14 +1,19 @@
 import { applyTransform } from '../observation/ObservationMath.js';
 import { evaluateSourceQuantity } from '../observation/ObservationSources.js';
 
+function normalizeIdentifier(value) {
+    if (value === undefined || value === null) return '';
+    return String(value).trim();
+}
+
 function getValueCacheKey(sourceId, quantityId) {
-    return `${sourceId || ''}\u0000${quantityId || ''}`;
+    return `${normalizeIdentifier(sourceId)}\u0000${normalizeIdentifier(quantityId)}`;
 }
 
 export class ChartSamplingService {
     evaluateBinding(circuit, binding, valueCache) {
-        const sourceId = binding?.sourceId;
-        const quantityId = binding?.quantityId;
+        const sourceId = normalizeIdentifier(binding?.sourceId);
+        const quantityId = normalizeIdentifier(binding?.quantityId);
         if (!sourceId || !quantityId) return null;
 
         if (valueCache instanceof Map) {
