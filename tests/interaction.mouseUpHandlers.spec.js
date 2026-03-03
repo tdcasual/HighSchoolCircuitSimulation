@@ -440,6 +440,26 @@ describe('InteractionOrchestratorMouseUpHandlers.handleWireDragMouseUp', () => {
         expect(context.commitHistoryTransaction).toHaveBeenCalledTimes(1);
         expect(context.pointerDownInfo).toBeNull();
     });
+
+    it('preserves numeric zero wire id when finalizing full-wire drag', () => {
+        const context = {
+            isDraggingWire: true,
+            wireDrag: { wireId: 0 },
+            selectedWire: 'W1',
+            compactWiresAndRefresh: vi.fn(),
+            circuit: { rebuildNodes: vi.fn() },
+            commitHistoryTransaction: vi.fn(),
+            pointerDownInfo: { componentId: 'R9' }
+        };
+
+        const handled = handleWireDragMouseUp.call(context);
+
+        expect(handled).toBe(true);
+        expect(context.compactWiresAndRefresh).toHaveBeenCalledWith({
+            preferredWireId: 0,
+            scopeWireIds: [0]
+        });
+    });
 });
 
 describe('InteractionOrchestratorMouseUpHandlers.handleComponentDragMouseUp', () => {

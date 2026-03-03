@@ -5,6 +5,10 @@ import {
     syncActiveWireStartAfterCompaction
 } from './InteractionOrchestratorHelpers.js';
 
+function hasWireIdentifier(value) {
+    return value !== undefined && value !== null && String(value).trim() !== '';
+}
+
 export function handleWireEndpointDragMouseUp(e) {
     if (!this.isDraggingWireEndpoint) {
         return false;
@@ -24,13 +28,13 @@ export function handleWireEndpointDragMouseUp(e) {
     this.renderer.clearTerminalHighlight();
 
     const affectedIds = Array.isArray(drag?.affected)
-        ? drag.affected.map((item) => item?.wireId).filter(Boolean)
+        ? drag.affected.map((item) => item?.wireId).filter(hasWireIdentifier)
         : [];
-    const scopeWireIds = [drag?.wireId, ...affectedIds].filter(Boolean);
+    const scopeWireIds = [drag?.wireId, ...affectedIds].filter(hasWireIdentifier);
 
     const shouldAutoCreateEndpointBridge = shouldCreateEndpointBridge(this, pointerType)
         && drag?.lastSnap?.type === 'wire-endpoint'
-        && drag?.lastSnap?.wireId
+        && hasWireIdentifier(drag?.lastSnap?.wireId)
         && drag?.lastPoint
         && drag?.origin
         && Array.isArray(drag?.affected)
@@ -77,7 +81,7 @@ export function handleWireEndpointDragMouseUp(e) {
     }
 
     const shouldSplitTargetWire = drag?.lastSnap?.type === 'wire-segment'
-        && drag?.lastSnap?.wireId
+        && hasWireIdentifier(drag?.lastSnap?.wireId)
         && drag?.lastPoint
         && typeof this.splitWireAtPointInternal === 'function';
 
@@ -96,9 +100,9 @@ export function handleWireEndpointDragMouseUp(e) {
         }
     }
 
-    const uniqueScopeWireIds = Array.from(new Set(scopeWireIds.filter(Boolean)));
+    const uniqueScopeWireIds = Array.from(new Set(scopeWireIds.filter(hasWireIdentifier)));
     const compacted = this.compactWiresAndRefresh({
-        preferredWireId: drag?.wireId || this.selectedWire,
+        preferredWireId: hasWireIdentifier(drag?.wireId) ? drag.wireId : this.selectedWire,
         scopeWireIds: uniqueScopeWireIds.length > 0 ? uniqueScopeWireIds : null
     });
     syncActiveWireStartAfterCompaction(this, compacted);
@@ -117,8 +121,8 @@ export function handleWireDragMouseUp() {
     this.isDraggingWire = false;
     this.wireDrag = null;
     this.compactWiresAndRefresh({
-        preferredWireId: drag?.wireId || this.selectedWire,
-        scopeWireIds: drag?.wireId ? [drag.wireId] : null
+        preferredWireId: hasWireIdentifier(drag?.wireId) ? drag.wireId : this.selectedWire,
+        scopeWireIds: hasWireIdentifier(drag?.wireId) ? [drag.wireId] : null
     });
     this.circuit.rebuildNodes();
     this.commitHistoryTransaction();

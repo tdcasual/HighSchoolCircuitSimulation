@@ -1,6 +1,10 @@
 import { setInteractionModeContext } from './InteractionModeBridge.js';
 import { syncActiveWireStartAfterCompaction } from './InteractionOrchestratorHelpers.js';
 
+function hasWireIdentifier(value) {
+    return value !== undefined && value !== null && String(value).trim() !== '';
+}
+
 export function handleMouseLeave(_e) {
     this.quickActionBar?.notifyActivity?.();
     this.wireModeGesture = null;
@@ -19,11 +23,11 @@ export function handleMouseLeave(_e) {
         this.wireEndpointDrag = null;
         this.renderer.clearTerminalHighlight();
         const affectedIds = Array.isArray(drag?.affected)
-            ? drag.affected.map((item) => item?.wireId).filter(Boolean)
+            ? drag.affected.map((item) => item?.wireId).filter(hasWireIdentifier)
             : [];
-        const scopeWireIds = Array.from(new Set([drag?.wireId, ...affectedIds].filter(Boolean)));
+        const scopeWireIds = Array.from(new Set([drag?.wireId, ...affectedIds].filter(hasWireIdentifier)));
         const compacted = this.compactWiresAndRefresh({
-            preferredWireId: drag?.wireId || this.selectedWire,
+            preferredWireId: hasWireIdentifier(drag?.wireId) ? drag.wireId : this.selectedWire,
             scopeWireIds
         });
         syncActiveWireStartAfterCompaction(this, compacted);
@@ -35,8 +39,8 @@ export function handleMouseLeave(_e) {
         this.isDraggingWire = false;
         this.wireDrag = null;
         this.compactWiresAndRefresh({
-            preferredWireId: drag?.wireId || this.selectedWire,
-            scopeWireIds: drag?.wireId ? [drag.wireId] : null
+            preferredWireId: hasWireIdentifier(drag?.wireId) ? drag.wireId : this.selectedWire,
+            scopeWireIds: hasWireIdentifier(drag?.wireId) ? [drag.wireId] : null
         });
         this.circuit.rebuildNodes();
         this.commitHistoryTransaction();

@@ -7,15 +7,20 @@ function resolveScaledThreshold(context, screenPx) {
     return screenPx / scale;
 }
 
+function hasIdentifier(value) {
+    return value !== undefined && value !== null && String(value).trim() !== '';
+}
+
 function resolveLiveWireStart(context) {
     const wireStart = context?.wireStart;
     if (!wireStart) return null;
 
     const snap = wireStart.snap || null;
     if (snap?.type === 'terminal') {
-        const componentId = snap.componentId;
+        const componentIdRaw = snap.componentId;
         const terminalIndex = Number(snap.terminalIndex);
-        if (componentId && Number.isInteger(terminalIndex) && terminalIndex >= 0) {
+        if (hasIdentifier(componentIdRaw) && Number.isInteger(terminalIndex) && terminalIndex >= 0) {
+            const componentId = String(componentIdRaw);
             const pos = context?.renderer?.getTerminalPosition?.(componentId, terminalIndex);
             if (pos && Number.isFinite(pos.x) && Number.isFinite(pos.y)) {
                 return {
@@ -28,7 +33,7 @@ function resolveLiveWireStart(context) {
     } else if (snap?.type === 'wire-endpoint') {
         const wireId = snap.wireId;
         const end = snap.end;
-        const wire = wireId ? context?.circuit?.getWire?.(wireId) : null;
+        const wire = hasIdentifier(wireId) ? context?.circuit?.getWire?.(String(wireId)) : null;
         const point = wire && (end === 'a' || end === 'b') ? wire[end] : null;
         if (point && Number.isFinite(point.x) && Number.isFinite(point.y)) {
             return {

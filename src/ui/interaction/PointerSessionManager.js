@@ -12,6 +12,10 @@ const DESTRUCTIVE_TAP_RULES = Object.freeze({
     mouse: Object.freeze({ minPressMs: 0, maxMovePx: 8 })
 });
 
+function hasIdentifier(value) {
+    return value !== undefined && value !== null && String(value).trim() !== '';
+}
+
 function normalizePointerSample(sample = {}) {
     return {
         pointerType: sample.pointerType || 'mouse',
@@ -37,9 +41,10 @@ function resolveSuspendedWireStartPoint(context, wireStartSnapshot) {
     const snap = wireStartSnapshot.snap || null;
 
     if (snap?.type === 'terminal') {
-        const componentId = snap.componentId;
+        const componentIdRaw = snap.componentId;
         const terminalIndex = Number(snap.terminalIndex);
-        if (typeof componentId === 'string' && Number.isInteger(terminalIndex) && terminalIndex >= 0) {
+        if (hasIdentifier(componentIdRaw) && Number.isInteger(terminalIndex) && terminalIndex >= 0) {
+            const componentId = String(componentIdRaw);
             const pos = context?.renderer?.getTerminalPosition?.(componentId, terminalIndex);
             if (pos && Number.isFinite(pos.x) && Number.isFinite(pos.y)) {
                 return { x: Number(pos.x), y: Number(pos.y), snap };
@@ -51,7 +56,7 @@ function resolveSuspendedWireStartPoint(context, wireStartSnapshot) {
     if (snap?.type === 'wire-endpoint') {
         const wireId = snap.wireId;
         const end = snap.end;
-        const wire = wireId ? context?.circuit?.getWire?.(wireId) : null;
+        const wire = hasIdentifier(wireId) ? context?.circuit?.getWire?.(String(wireId)) : null;
         const point = wire && (end === 'a' || end === 'b') ? wire[end] : null;
         if (point && Number.isFinite(point.x) && Number.isFinite(point.y)) {
             return { x: Number(point.x), y: Number(point.y), snap };
@@ -437,10 +442,10 @@ export function endPrimaryInteractionForGesture() {
         this.isDraggingWireEndpoint = false;
         this.wireEndpointDrag = null;
         const affectedIds = Array.isArray(drag?.affected)
-            ? drag.affected.map((item) => item?.wireId).filter(Boolean)
+            ? drag.affected.map((item) => item?.wireId).filter(hasIdentifier)
             : [];
         this.compactWiresAndRefresh({
-            preferredWireId: drag?.wireId || this.selectedWire,
+            preferredWireId: hasIdentifier(drag?.wireId) ? drag.wireId : this.selectedWire,
             scopeWireIds: affectedIds
         });
         this.circuit.rebuildNodes();
@@ -452,8 +457,8 @@ export function endPrimaryInteractionForGesture() {
         this.isDraggingWire = false;
         this.wireDrag = null;
         this.compactWiresAndRefresh({
-            preferredWireId: drag?.wireId || this.selectedWire,
-            scopeWireIds: drag?.wireId ? [drag.wireId] : null
+            preferredWireId: hasIdentifier(drag?.wireId) ? drag.wireId : this.selectedWire,
+            scopeWireIds: hasIdentifier(drag?.wireId) ? [drag.wireId] : null
         });
         this.circuit.rebuildNodes();
         this.commitHistoryTransaction();
