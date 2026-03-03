@@ -117,4 +117,48 @@ describe('CircuitSchema v3 strict validator', () => {
 
         expect(() => validateCircuitV3(badProbeWirePayload)).toThrow(/wireId.*not found|wireId.*不存在/u);
     });
+
+    it('rejects duplicate component ids', () => {
+        const duplicateComponentPayload = {
+            ...validV3Payload,
+            components: [
+                { id: 'R1', type: 'Resistor', x: 0, y: 0 },
+                { id: 'R1', type: 'Resistor', x: 10, y: 0 }
+            ]
+        };
+
+        expect(() => validateCircuitV3(duplicateComponentPayload)).toThrow(/duplicate component id|组件 id 重复/u);
+    });
+
+    it('rejects duplicate wire ids', () => {
+        const duplicateWirePayload = {
+            ...validV3Payload,
+            wires: [
+                {
+                    id: 'W1',
+                    a: { x: 0, y: 0 },
+                    b: { x: 10, y: 0 }
+                },
+                {
+                    id: 'W1',
+                    a: { x: 20, y: 0 },
+                    b: { x: 30, y: 0 }
+                }
+            ]
+        };
+
+        expect(() => validateCircuitV3(duplicateWirePayload)).toThrow(/duplicate wire id|导线 id 重复/u);
+    });
+
+    it('rejects duplicate probe ids', () => {
+        const duplicateProbePayload = {
+            ...validV3Payload,
+            probes: [
+                { id: 'P1', type: 'WireCurrentProbe', wireId: 'W1' },
+                { id: 'P1', type: 'NodeVoltageProbe', wireId: 'W1' }
+            ]
+        };
+
+        expect(() => validateCircuitV3(duplicateProbePayload)).toThrow(/duplicate probe id|probe id 重复/u);
+    });
 });

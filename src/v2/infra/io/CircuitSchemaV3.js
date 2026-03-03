@@ -196,12 +196,31 @@ export function validateCircuitV3(payload) {
         throw new Error('payload.probes must be an array when present');
     }
 
-    payload.components.forEach((component, index) => validateComponent(component, index));
-    payload.wires.forEach((wire, index) => validateWire(wire, index));
+    const componentIds = new Set();
+    payload.components.forEach((component, index) => {
+        validateComponent(component, index);
+        if (componentIds.has(component.id)) {
+            throw new Error(`components[${index}].id duplicate component id: ${component.id}`);
+        }
+        componentIds.add(component.id);
+    });
 
-    const wireIds = new Set(payload.wires.map((wire) => wire.id));
+    const wireIds = new Set();
+    payload.wires.forEach((wire, index) => {
+        validateWire(wire, index);
+        if (wireIds.has(wire.id)) {
+            throw new Error(`wires[${index}].id duplicate wire id: ${wire.id}`);
+        }
+        wireIds.add(wire.id);
+    });
+
+    const probeIds = new Set();
     (payload.probes || []).forEach((probe, index) => {
         validateProbe(probe, index);
+        if (probeIds.has(probe.id)) {
+            throw new Error(`probes[${index}].id duplicate probe id: ${probe.id}`);
+        }
+        probeIds.add(probe.id);
         if (!wireIds.has(probe.wireId)) {
             throw new Error(`probes[${index}].wireId not found: ${probe.wireId}`);
         }
