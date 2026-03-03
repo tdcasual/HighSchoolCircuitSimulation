@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createTestCircuit } from './helpers/circuitTestUtils.js';
-import { addWireAt } from '../src/ui/interaction/WireInteractions.js';
+import { addWireAt, resolveCompactedWireId } from '../src/ui/interaction/WireInteractions.js';
 
 describe('WireInteractions.addWireAt', () => {
     it('creates unique wire ids when two adds happen at the same timestamp', () => {
@@ -24,5 +24,12 @@ describe('WireInteractions.addWireAt', () => {
         const wires = circuit.getAllWires();
         expect(wires).toHaveLength(2);
         expect(new Set(wires.map((wire) => wire.id)).size).toBe(2);
+    });
+});
+
+describe('WireInteractions.resolveCompactedWireId', () => {
+    it('supports numeric wire ids including zero', () => {
+        expect(resolveCompactedWireId(0, { 0: 'W9' })).toBe('W9');
+        expect(resolveCompactedWireId(0, {})).toBe('0');
     });
 });

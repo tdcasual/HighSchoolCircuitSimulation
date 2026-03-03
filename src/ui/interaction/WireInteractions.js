@@ -357,11 +357,13 @@ export function startWireEndpointDrag(wireId, end, e) {
 }
 
 export function resolveCompactedWireId(wireId, replacementByRemovedId = {}) {
-    if (!wireId) return null;
-    let current = wireId;
+    if (wireId === undefined || wireId === null || String(wireId).trim() === '') return null;
+    let current = String(wireId);
     let guard = 0;
-    while (replacementByRemovedId && replacementByRemovedId[current] && guard < 32) {
-        current = replacementByRemovedId[current];
+    while (replacementByRemovedId && guard < 32) {
+        const next = replacementByRemovedId[current];
+        if (next === undefined || next === null || String(next).trim() === '') break;
+        current = String(next);
         guard += 1;
     }
     return current;
