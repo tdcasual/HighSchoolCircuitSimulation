@@ -59,7 +59,8 @@ export class ResultPostprocessorV2 {
         const simTime = toFiniteNumber(context?.simTime, 0);
 
         for (const component of components) {
-            const id = String(component?.id || '');
+            const rawId = component?.id;
+            const id = rawId === undefined || rawId === null ? '' : String(rawId);
             if (!id) continue;
 
             const n1 = component?.nodes?.[0];
