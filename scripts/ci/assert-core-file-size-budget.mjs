@@ -4,12 +4,21 @@ import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
 const root = process.cwd();
-const budgets = [
-    { file: 'src/engine/Circuit.js', maxLines: 2000 },
-    { file: 'src/components/Component.js', maxLines: 1700 },
-    { file: 'src/ui/charts/ChartWindowController.js', maxLines: 700 },
-    { file: 'src/app/interaction/InteractionOrchestrator.js', maxLines: 400 }
+const legacyTransitionalBudgets = [
+    { file: 'src/engine/Circuit.js', maxLines: 2000, track: 'legacy transitional' },
+    { file: 'src/components/Component.js', maxLines: 1700, track: 'legacy transitional' },
+    { file: 'src/ui/charts/ChartWindowController.js', maxLines: 700, track: 'legacy transitional' },
+    { file: 'src/app/interaction/InteractionOrchestrator.js', maxLines: 400, track: 'legacy transitional' }
 ];
+
+const v2CoreBudgets = [
+    { file: 'src/v2/app/AppRuntimeV2.js', maxLines: 800, track: 'v2 core', optional: true },
+    { file: 'src/v2/domain/CircuitModel.js', maxLines: 800, track: 'v2 core', optional: true },
+    { file: 'src/v2/simulation/CircuitSolverV2.js', maxLines: 800, track: 'v2 core', optional: true },
+    { file: 'src/v2/infra/io/CircuitDeserializerV3.js', maxLines: 800, track: 'v2 core', optional: true }
+];
+
+const budgets = [...legacyTransitionalBudgets, ...v2CoreBudgets];
 
 function fail(message) {
     console.error(`[core-size] ${message}`);
@@ -20,6 +29,10 @@ let hasWarning = false;
 for (const budget of budgets) {
     const absolutePath = path.resolve(root, budget.file);
     if (!existsSync(absolutePath)) {
+        if (budget.optional) {
+            console.log(`[core-size] skip ${budget.file}: pending ${budget.track}`);
+            continue;
+        }
         fail(`missing file: ${budget.file}`);
     }
 
@@ -32,9 +45,15 @@ for (const budget of budgets) {
 
     if (percentage >= 95) {
         hasWarning = true;
-        console.warn(`[core-size] warning ${budget.file}: ${lineCount}/${budget.maxLines} (${percentage}%)`);
+        console.warn(
+            `[core-size] warning ${budget.file}: ${lineCount}/${budget.maxLines} `
+            + `(${percentage}%, ${budget.track})`
+        );
     } else {
-        console.log(`[core-size] ok ${budget.file}: ${lineCount}/${budget.maxLines} (${percentage}%)`);
+        console.log(
+            `[core-size] ok ${budget.file}: ${lineCount}/${budget.maxLines} `
+            + `(${percentage}%, ${budget.track})`
+        );
     }
 }
 

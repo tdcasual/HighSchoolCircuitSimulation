@@ -62,3 +62,31 @@ npm run check:ci-workflow
 1. `tests/ci.v2ArchitectureBoundaries.spec.js` 通过（3 tests）。
 2. `check:v2:boundaries` 通过（当前 `src/v2` 尚不存在，输出 `ok (src/v2 not present yet)`）。
 3. `check:ci-workflow` 通过（`[ci-workflow] ok`）。
+
+### Task 2: Introduce v2 core-size budgets (<= 800 lines)
+
+- Status: completed
+- Started: 2026-03-03
+- Completed: 2026-03-03
+- Notes:
+  - 新增 `tests/ci.v2CoreSizeBudget.spec.js`，先红灯验证预算脚本缺少 v2 条目。
+  - `scripts/ci/assert-core-file-size-budget.mjs` 增加两类预算：
+    - legacy transitional：保留 v1 核心文件预算；
+    - v2 core：新增 `src/v2/**` 关键文件预算，统一 `<= 800`。
+  - v2 预算条目在文件尚未落地时采用 `skip`，避免当前阶段误报失败。
+
+**Verification Commands**
+
+```bash
+npm test -- tests/ci.v2CoreSizeBudget.spec.js && npm run check:core-size
+npm test -- tests/observation.runtimeContractGuard.spec.js
+```
+
+**Verification Summary**
+
+1. `tests/ci.v2CoreSizeBudget.spec.js` 通过（1 test）。
+2. `check:core-size` 通过：
+   - legacy transitional 预算正常；
+   - `src/components/Component.js` 95%（warning）；
+   - v2 预算条目当前均为 `skip (pending v2 core)`。
+3. `tests/observation.runtimeContractGuard.spec.js` 通过（6 tests），确认未回退到 ObservationPanel 旧路径。
