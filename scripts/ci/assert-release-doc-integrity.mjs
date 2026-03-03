@@ -18,20 +18,29 @@ function readText(relPath) {
     return readFileSync(absPath, 'utf8');
 }
 
-const reviewPath = 'docs/audits/mobile/2026-03-29-day28-release-readiness-review.md';
-const review = readText(reviewPath);
-
-if (!review.includes('Date: 2026-03-29')) {
-    fail(`${reviewPath} must declare Date: 2026-03-29`);
+function readJson(relPath) {
+    const content = readText(relPath);
+    try {
+        return JSON.parse(content);
+    } catch (error) {
+        fail(`${relPath} is not valid JSON: ${error.message}`);
+    }
 }
 
-const requiredDocRefs = [
-    'docs/releases/v0.9-qa-checklist.md',
-    'docs/releases/v0.9-rc1-release-notes.md',
-    'docs/releases/v0.9-rollback-plan.md'
-];
+const manifestPath = 'docs/releases/release-evidence-index.json';
+const manifest = readJson(manifestPath);
+const reviewPath = manifest.reviewPath || 'docs/audits/mobile/2026-03-29-day28-release-readiness-review.md';
+const review = readText(reviewPath);
 
-for (const relPath of requiredDocRefs) {
+if (!Array.isArray(manifest.requiredDocs) || manifest.requiredDocs.length === 0) {
+    fail(`${manifestPath} must define non-empty requiredDocs array`);
+}
+
+if (!Array.isArray(manifest.requiredOutputs) || manifest.requiredOutputs.length === 0) {
+    fail(`${manifestPath} must define non-empty requiredOutputs array`);
+}
+
+for (const relPath of manifest.requiredDocs) {
     if (!review.includes(relPath)) {
         fail(`${reviewPath} missing reference: ${relPath}`);
     }
@@ -40,13 +49,7 @@ for (const relPath of requiredDocRefs) {
     }
 }
 
-const requiredOutputRefs = [
-    'output/baselines/p0-electrical-current.json',
-    'output/baselines/circuitjs-golden-10-current.json',
-    'output/baselines/ai-eval-current.json'
-];
-
-for (const relPath of requiredOutputRefs) {
+for (const relPath of manifest.requiredOutputs) {
     if (!review.includes(relPath)) {
         fail(`${reviewPath} missing output reference: ${relPath}`);
     }

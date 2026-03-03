@@ -4,6 +4,15 @@ import { resolve } from 'node:path';
 import { runScriptInTempWorkspace } from './helpers/scriptGuardTestUtils.js';
 
 describe('release docs integrity', () => {
+    it('uses release-evidence-index manifest instead of hard-coded date literals', () => {
+        const script = readFileSync(
+            resolve(process.cwd(), 'scripts/ci/assert-release-doc-integrity.mjs'),
+            'utf8'
+        );
+        expect(script).toContain('release-evidence-index.json');
+        expect(script).not.toContain('Date: 2026-03-29');
+    });
+
     it('has release-doc integrity script wired in package scripts', () => {
         const pkgPath = resolve(process.cwd(), 'package.json');
         const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
@@ -13,20 +22,22 @@ describe('release docs integrity', () => {
 
     it('keeps day28 release-readiness references coherent', () => {
         const reviewPath = resolve(process.cwd(), 'docs/audits/mobile/2026-03-29-day28-release-readiness-review.md');
+        const manifestPath = resolve(process.cwd(), 'docs/releases/release-evidence-index.json');
         const content = readFileSync(reviewPath, 'utf8');
+        const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
 
-        expect(content).toContain('Date: 2026-03-29');
-        expect(content).toContain('docs/releases/v0.9-qa-checklist.md');
-        expect(content).toContain('docs/releases/v0.9-rc1-release-notes.md');
-        expect(content).toContain('docs/releases/v0.9-rollback-plan.md');
-
-        const requiredDocs = [
-            'docs/releases/v0.9-qa-checklist.md',
-            'docs/releases/v0.9-rc1-release-notes.md',
-            'docs/releases/v0.9-rollback-plan.md'
-        ];
-        for (const relPath of requiredDocs) {
+        expect(manifest.reviewPath).toBe('docs/audits/mobile/2026-03-29-day28-release-readiness-review.md');
+        expect(Array.isArray(manifest.requiredDocs)).toBe(true);
+        expect(manifest.requiredDocs.length).toBeGreaterThan(0);
+        for (const relPath of manifest.requiredDocs) {
+            expect(content).toContain(relPath);
             expect(existsSync(resolve(process.cwd(), relPath))).toBe(true);
+        }
+
+        expect(Array.isArray(manifest.requiredOutputs)).toBe(true);
+        expect(manifest.requiredOutputs.length).toBeGreaterThan(0);
+        for (const relPath of manifest.requiredOutputs) {
+            expect(content).toContain(relPath);
         }
     });
 
@@ -61,6 +72,7 @@ describe('release docs integrity', () => {
         const output = runScriptInTempWorkspace({
             scriptRelPath: 'scripts/ci/assert-release-doc-integrity.mjs',
             sourceFiles: [
+                'docs/releases/release-evidence-index.json',
                 'docs/audits/mobile/2026-03-29-day28-release-readiness-review.md',
                 'docs/releases/v0.9-qa-checklist.md',
                 'docs/releases/v0.9-rc1-release-notes.md',
@@ -76,6 +88,7 @@ describe('release docs integrity', () => {
         const output = runScriptInTempWorkspace({
             scriptRelPath: 'scripts/ci/assert-release-doc-integrity.mjs',
             sourceFiles: [
+                'docs/releases/release-evidence-index.json',
                 'docs/audits/mobile/2026-03-29-day28-release-readiness-review.md',
                 'docs/releases/v0.9-qa-checklist.md',
                 'docs/releases/v0.9-rc1-release-notes.md',

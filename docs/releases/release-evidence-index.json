@@ -1,0 +1,13 @@
+{
+  "reviewPath": "docs/audits/mobile/2026-03-29-day28-release-readiness-review.md",
+  "requiredDocs": [
+    "docs/releases/v0.9-qa-checklist.md",
+    "docs/releases/v0.9-rc1-release-notes.md",
+    "docs/releases/v0.9-rollback-plan.md"
+  ],
+  "requiredOutputs": [
+    "output/baselines/p0-electrical-current.json",
+    "output/baselines/circuitjs-golden-10-current.json",
+    "output/baselines/ai-eval-current.json"
+  ]
+}
