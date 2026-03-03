@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createTestCircuit } from './helpers/circuitTestUtils.js';
-import { addWireAt, resolveCompactedWireId } from '../src/ui/interaction/WireInteractions.js';
+import {
+    addWireAt,
+    compactWiresAndRefresh,
+    resolveCompactedWireId
+} from '../src/ui/interaction/WireInteractions.js';
 
 describe('WireInteractions.addWireAt', () => {
     it('creates unique wire ids when two adds happen at the same timestamp', () => {
@@ -31,5 +35,28 @@ describe('WireInteractions.resolveCompactedWireId', () => {
     it('supports numeric wire ids including zero', () => {
         expect(resolveCompactedWireId(0, { 0: 'W9' })).toBe('W9');
         expect(resolveCompactedWireId(0, {})).toBe('0');
+    });
+});
+
+describe('WireInteractions.compactWiresAndRefresh', () => {
+    it('preserves explicit numeric preferred wire ids instead of falling back to selected wire', () => {
+        const context = {
+            selectedWire: 'W_old',
+            circuit: {
+                compactWires: vi.fn(() => ({
+                    changed: false,
+                    replacementByRemovedId: {}
+                }))
+            },
+            resolveCompactedWireId: vi.fn((wireId) => String(wireId)),
+            renderer: { renderWires: vi.fn() },
+            selectWire: vi.fn(),
+            app: { chartWorkspace: { refreshComponentOptions: vi.fn() } }
+        };
+
+        const result = compactWiresAndRefresh.call(context, { preferredWireId: 0 });
+
+        expect(context.resolveCompactedWireId).toHaveBeenCalledWith(0, {});
+        expect(result.resolvedWireId).toBe('0');
     });
 });

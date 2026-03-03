@@ -370,8 +370,12 @@ export function resolveCompactedWireId(wireId, replacementByRemovedId = {}) {
 }
 
 export function compactWiresAndRefresh(options = {}) {
-    const preferredWireId = options.preferredWireId || this.selectedWire || null;
-    const scopeWireIds = options.scopeWireIds || null;
+    const hasPreferredWireId = options && typeof options === 'object'
+        && Object.prototype.hasOwnProperty.call(options, 'preferredWireId');
+    const hasScopeWireIds = options && typeof options === 'object'
+        && Object.prototype.hasOwnProperty.call(options, 'scopeWireIds');
+    const preferredWireId = hasPreferredWireId ? options.preferredWireId : (this.selectedWire ?? null);
+    const scopeWireIds = hasScopeWireIds ? options.scopeWireIds : null;
     const result = this.circuit.compactWires({ scopeWireIds });
     const resolvedWireId = this.resolveCompactedWireId(preferredWireId, result.replacementByRemovedId);
 
