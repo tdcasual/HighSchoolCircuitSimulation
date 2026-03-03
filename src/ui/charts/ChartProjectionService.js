@@ -71,10 +71,10 @@ export class ChartProjectionService {
         const canvasH = Math.max(1, Number(height) || 1);
         const pixelRatio = Number.isFinite(dpr) && dpr > 0 ? dpr : 1;
 
-        const padL = 46 * pixelRatio;
+        const padL = 62 * pixelRatio;
         const padR = 12 * pixelRatio;
         const padT = 14 * pixelRatio;
-        const padB = 28 * pixelRatio;
+        const padB = 42 * pixelRatio;
         const innerW = Math.max(1, canvasW - padL - padR);
         const innerH = Math.max(1, canvasH - padT - padB);
 

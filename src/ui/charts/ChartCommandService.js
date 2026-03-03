@@ -77,7 +77,8 @@ export class ChartCommandService {
             frame: defaultFrame,
             title: options.title,
             maxPoints: options.maxPoints,
-            axis: options.axis
+            axis: options.axis,
+            ui: options.ui
         });
         if (Array.isArray(options.series) && options.series.length > 0) {
             chart.series = options.series.map((item, seriesIndex) => createDefaultChartSeriesState({
@@ -161,6 +162,21 @@ export class ChartCommandService {
             chart.ui = {
                 ...chart.ui,
                 legendCollapsed: next
+            };
+            return draft;
+        });
+    }
+
+    toggleChartAxisControls(chartId, force = null) {
+        return this.update('toggle-chart-axis-controls', (draft) => {
+            const chart = findChart(draft, chartId);
+            if (!chart) return draft;
+            const next = force == null
+                ? !chart.ui?.axisCollapsed
+                : !!force;
+            chart.ui = {
+                ...chart.ui,
+                axisCollapsed: next
             };
             return draft;
         });

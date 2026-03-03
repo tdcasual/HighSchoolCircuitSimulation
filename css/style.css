@@ -797,6 +797,10 @@ body.layout-mode-phone .toolbox-close-btn {
     display: none;
 }
 
+.chart-window.chart-window-axis-collapsed .chart-window-axis-controls {
+    display: none;
+}
+
 .chart-window.chart-window-collapsed .chart-window-controls {
     display: none;
 }
@@ -833,16 +837,56 @@ body.layout-mode-phone .toolbox-close-btn {
     cursor: nwse-resize;
 }
 
+.chart-window-resizer.chart-window-resizer-n {
+    top: -7px;
+    left: 50%;
+    width: 24px;
+    height: 12px;
+    border-radius: 999px;
+    transform: translateX(-50%);
+    cursor: ns-resize;
+}
+
 .chart-window-resizer.chart-window-resizer-ne {
     right: -7px;
     top: -7px;
     cursor: nesw-resize;
 }
 
+.chart-window-resizer.chart-window-resizer-e {
+    right: -7px;
+    top: 50%;
+    width: 12px;
+    height: 24px;
+    border-radius: 999px;
+    transform: translateY(-50%);
+    cursor: ew-resize;
+}
+
 .chart-window-resizer.chart-window-resizer-sw {
     left: -7px;
     bottom: -7px;
     cursor: nesw-resize;
+}
+
+.chart-window-resizer.chart-window-resizer-s {
+    left: 50%;
+    bottom: -7px;
+    width: 24px;
+    height: 12px;
+    border-radius: 999px;
+    transform: translateX(-50%);
+    cursor: ns-resize;
+}
+
+.chart-window-resizer.chart-window-resizer-w {
+    left: -7px;
+    top: 50%;
+    width: 12px;
+    height: 24px;
+    border-radius: 999px;
+    transform: translateY(-50%);
+    cursor: ew-resize;
 }
 
 .chart-window-resizer.chart-window-resizer-se {

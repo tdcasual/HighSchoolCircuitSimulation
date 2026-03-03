@@ -26,6 +26,8 @@ describe('ChartWorkspaceState v2', () => {
         expect(chart.series).toEqual([]);
         expect(chart.axis.xBinding.sourceId).toBe('__time__');
         expect(chart.axis.xBinding.quantityId).toBe('t');
+        expect(chart.ui.axisCollapsed).toBe(false);
+        expect(chart.ui.legendCollapsed).toBe(false);
     });
 
     it('creates series state with shared-x mode and color from palette', () => {
@@ -74,7 +76,11 @@ describe('ChartWorkspaceState v2', () => {
                 {
                     id: 'chart_a',
                     title: 'A',
-                    series: [{ id: 's1', sourceId: 'R1', quantityId: 'I' }]
+                    series: [{ id: 's1', sourceId: 'R1', quantityId: 'I' }],
+                    ui: {
+                        axisCollapsed: true,
+                        legendCollapsed: false
+                    }
                 },
                 {
                     id: 'chart_a',
@@ -93,6 +99,8 @@ describe('ChartWorkspaceState v2', () => {
         expect(normalized.charts).toHaveLength(1);
         expect(normalized.selection.activeChartId).toBe('chart_a');
         expect(normalized.selection.activeSeriesId).toBe('s1');
+        expect(normalized.charts[0].ui.axisCollapsed).toBe(true);
+        expect(normalized.charts[0].ui.legendCollapsed).toBe(false);
     });
 
     it('serializes v2 schema without legacy windows key', () => {
@@ -123,7 +131,10 @@ describe('ChartWorkspaceState v2', () => {
                             scatterXBinding: null
                         }
                     ],
-                    ui: { legendCollapsed: false }
+                    ui: {
+                        axisCollapsed: true,
+                        legendCollapsed: false
+                    }
                 }
             ],
             selection: {
@@ -136,5 +147,7 @@ describe('ChartWorkspaceState v2', () => {
         expect(serialized).not.toHaveProperty('windows');
         expect(serialized.charts).toHaveLength(1);
         expect(serialized.charts[0].series).toHaveLength(1);
+        expect(serialized.charts[0].ui.axisCollapsed).toBe(true);
+        expect(serialized.charts[0].ui.legendCollapsed).toBe(false);
     });
 });

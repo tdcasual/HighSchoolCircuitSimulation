@@ -201,6 +201,7 @@ export function createDefaultChartState(options = {}) {
             ? options.series.map((series, seriesIndex) => normalizeSeries(series, seriesIndex + 1))
             : [],
         ui: {
+            axisCollapsed: !!options.ui?.axisCollapsed,
             legendCollapsed: !!options.ui?.legendCollapsed
         }
     };
@@ -272,6 +273,7 @@ function normalizeChart(rawChart, index = 1) {
         },
         series,
         ui: {
+            axisCollapsed: !!rawChart?.ui?.axisCollapsed,
             legendCollapsed: !!rawChart?.ui?.legendCollapsed
         }
     };
@@ -336,6 +338,7 @@ export function migrateChartWorkspaceStateV1ToV2(rawState = {}) {
             },
             series,
             ui: {
+                axisCollapsed: false,
                 legendCollapsed: !!windowState?.uiState?.collapsed
             }
         });
@@ -443,6 +446,7 @@ export function serializeChartWorkspaceState(rawState = {}) {
                     : null
             })),
             ui: {
+                axisCollapsed: !!chart.ui?.axisCollapsed,
                 legendCollapsed: !!chart.ui?.legendCollapsed
             }
         }))

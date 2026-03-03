@@ -155,6 +155,9 @@ export class ChartWorkspaceController {
     }
 
     resolveDefaultFrame(index = 1, options = {}) {
+        if (this.layoutMode === 'phone') {
+            return this.resolvePhoneDefaultFrame(index, options);
+        }
         const { width: layerWidth, height: layerHeight } = this.getLayerSize();
         const preferredWidth = Math.min(Math.max(340, Math.round(layerWidth * 0.44)), 620);
         const preferredHeight = Math.min(Math.max(240, Math.round(layerHeight * 0.4)), 460);
@@ -167,16 +170,79 @@ export class ChartWorkspaceController {
         return this.clampRect({ ...frame, ...(options?.frame || {}) });
     }
 
+    resolvePhoneDefaultFrame(index = 1, options = {}) {
+        const { width: layerWidth, height: layerHeight } = this.getLayerSize();
+        const horizontalPadding = 8;
+        const topPadding = 8;
+        const bottomReserve = this.getPhoneBottomAvoidancePx();
+        const maxWidth = Math.max(240, layerWidth - horizontalPadding * 2);
+        const preferredWidthRaw = Number(options?.frame?.width);
+        const preferredWidth = Number.isFinite(preferredWidthRaw)
+            ? Math.round(preferredWidthRaw)
+            : Math.round(layerWidth - horizontalPadding * 2);
+        const width = Math.max(240, Math.min(maxWidth, preferredWidth));
+        const x = Math.max(0, Math.round((layerWidth - width) / 2));
+
+        const availableHeight = Math.max(180, layerHeight - topPadding - bottomReserve);
+        const preferredHeightRaw = Number(options?.frame?.height);
+        const preferredHeight = Number.isFinite(preferredHeightRaw)
+            ? Math.round(preferredHeightRaw)
+            : Math.min(360, Math.round(layerHeight * 0.42));
+        const height = Math.max(180, Math.min(availableHeight, preferredHeight));
+
+        const frame = {
+            x,
+            y: topPadding + (index - 1) * 16,
+            width,
+            height
+        };
+        return this.clampRect({ ...frame, ...(options?.frame || {}) });
+    }
+
+    getPhoneBottomAvoidancePx() {
+        if (this.layoutMode !== 'phone' || typeof document === 'undefined') {
+            return 44;
+        }
+        const layerRect = this.windowLayer?.getBoundingClientRect?.();
+        if (!layerRect) {
+            return 120;
+        }
+
+        const controls = document.getElementById('canvas-mobile-controls');
+        const querySelector = typeof document.querySelector === 'function'
+            ? document.querySelector.bind(document)
+            : null;
+        const simToggle = document.getElementById('btn-mobile-sim-toggle')
+            || querySelector?.('.mobile-sim-toggle');
+        const candidates = [controls, simToggle];
+
+        let reserve = 44;
+        candidates.forEach((element) => {
+            const rect = element?.getBoundingClientRect?.();
+            if (!rect) return;
+            if (rect.bottom <= layerRect.top || rect.top >= layerRect.bottom) return;
+            const overlapReserve = Math.round(layerRect.bottom - rect.top + 8);
+            reserve = Math.max(reserve, overlapReserve);
+        });
+        return Math.max(44, reserve);
+    }
+
     clampRect(rect = {}) {
         const { width: layerWidth, height: layerHeight } = this.getLayerSize();
         const widthRaw = Number(rect.width);
         const heightRaw = Number(rect.height);
         const width = Math.max(240, Math.min(layerWidth, Math.round(Number.isFinite(widthRaw) ? widthRaw : 420)));
-        const height = Math.max(180, Math.min(layerHeight, Math.round(Number.isFinite(heightRaw) ? heightRaw : 300)));
+        const bottomReserve = this.layoutMode === 'phone' ? this.getPhoneBottomAvoidancePx() : 44;
+        const maxHeight = this.layoutMode === 'phone'
+            ? Math.max(180, layerHeight - bottomReserve - 8)
+            : layerHeight;
+        const height = Math.max(180, Math.min(maxHeight, Math.round(Number.isFinite(heightRaw) ? heightRaw : 300)));
         const xRaw = Number(rect.x);
         const yRaw = Number(rect.y);
         const maxX = Math.max(0, layerWidth - Math.min(width, 120));
-        const maxY = Math.max(0, layerHeight - 44);
+        const maxY = this.layoutMode === 'phone'
+            ? Math.max(0, layerHeight - bottomReserve - height)
+            : Math.max(0, layerHeight - 44);
         const x = Math.min(maxX, Math.max(0, Math.round(Number.isFinite(xRaw) ? xRaw : 48)));
         const y = Math.min(maxY, Math.max(0, Math.round(Number.isFinite(yRaw) ? yRaw : 86)));
         return { x, y, width, height };
@@ -267,7 +333,20 @@ export class ChartWorkspaceController {
     }
 
     addChart(options = {}) {
-        const chartId = this.commandService.addChart(options);
+        const providedOptions = options && typeof options === 'object' ? options : {};
+        let addOptions = providedOptions;
+        const legendSpecified = Object.prototype.hasOwnProperty.call(providedOptions.ui || {}, 'legendCollapsed');
+        if (this.layoutMode === 'phone' && !legendSpecified) {
+            addOptions = {
+                ...providedOptions,
+                ui: {
+                    ...(providedOptions.ui || {}),
+                    legendCollapsed: true
+                }
+            };
+        }
+
+        const chartId = this.commandService.addChart(addOptions);
         return this.windowControllers.get(chartId) || null;
     }
 

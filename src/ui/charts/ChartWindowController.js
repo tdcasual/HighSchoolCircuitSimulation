@@ -14,6 +14,8 @@ const X_MODE_OPTIONS = Object.freeze([
     { id: 'scatter-override', label: '散点X' }
 ]);
 
+const RESIZE_DIRECTIONS = Object.freeze(['n', 'e', 's', 'w', 'nw', 'ne', 'sw', 'se']);
+
 function setSelectOptions(selectEl, options, selectedId) {
     if (!selectEl) return null;
     while (selectEl.firstChild) {
@@ -53,6 +55,7 @@ export class ChartWindowController {
         this._latestText = '最新: —';
         this._dragSession = null;
         this._resizeSession = null;
+        this._restoreFrame = null;
 
         this.elements = {
             root: null,
@@ -60,6 +63,8 @@ export class ChartWindowController {
             titleInput: null,
             canvas: null,
             latest: null,
+            axisControls: null,
+            axisToggleBtn: null,
             xSource: null,
             xQuantity: null,
             legend: null,
@@ -94,6 +99,11 @@ export class ChartWindowController {
             textContent: '+ 系列',
             attrs: { type: 'button' }
         });
+        const axisToggleBtn = createElement('button', {
+            className: 'chart-window-btn',
+            textContent: this.state.ui?.axisCollapsed ? '展开X设置' : '收起X设置',
+            attrs: { type: 'button' }
+        });
         const legendToggleBtn = createElement('button', {
             className: 'chart-window-btn',
             textContent: this.state.ui?.legendCollapsed ? '展开图例' : '收起图例',
@@ -107,6 +117,7 @@ export class ChartWindowController {
 
         header.appendChild(titleInput);
         header.appendChild(addSeriesBtn);
+        header.appendChild(axisToggleBtn);
         header.appendChild(legendToggleBtn);
         header.appendChild(closeBtn);
 
@@ -130,7 +141,7 @@ export class ChartWindowController {
         legend.appendChild(legendBody);
 
         const resizers = createElement('div', { className: 'chart-window-resizers' });
-        ['nw', 'ne', 'sw', 'se'].forEach((dir) => {
+        RESIZE_DIRECTIONS.forEach((dir) => {
             const handle = createElement('div', {
                 className: `chart-window-resizer chart-window-resizer-${dir}`,
                 attrs: { 'data-resize-dir': dir }
@@ -152,6 +163,8 @@ export class ChartWindowController {
             titleInput,
             canvas,
             latest,
+            axisControls,
+            axisToggleBtn,
             xSource,
             xQuantity,
             legend,
@@ -164,11 +177,15 @@ export class ChartWindowController {
             this.workspace.focusWindow(this);
         });
         safeAddEventListener(header, 'pointerdown', (event) => this.onHeaderPointerDown(event));
+        safeAddEventListener(header, 'dblclick', (event) => this.onHeaderDoubleClick(event));
         safeAddEventListener(titleInput, 'change', () => {
             this.workspace.commandService.updateChartTitle(this.state.id, titleInput.value);
         });
         safeAddEventListener(addSeriesBtn, 'click', () => {
             this.workspace.addSeriesToChart(this.state.id);
+        });
+        safeAddEventListener(axisToggleBtn, 'click', () => {
+            this.workspace.commandService.toggleChartAxisControls(this.state.id);
         });
         safeAddEventListener(legendToggleBtn, 'click', () => {
             this.workspace.commandService.toggleChartLegend(this.state.id);
@@ -223,6 +240,13 @@ export class ChartWindowController {
             this.elements.legendToggleBtn.textContent = collapsed ? '展开图例' : '收起图例';
             safeSetAttribute(this.elements.legendToggleBtn, 'aria-expanded', collapsed ? 'false' : 'true');
         }
+
+        const axisCollapsed = !!this.state.ui?.axisCollapsed;
+        safeInvokeMethod(this.elements.root?.classList, 'toggle', 'chart-window-axis-collapsed', axisCollapsed);
+        if (this.elements.axisToggleBtn) {
+            this.elements.axisToggleBtn.textContent = axisCollapsed ? '展开X设置' : '收起X设置';
+            safeSetAttribute(this.elements.axisToggleBtn, 'aria-expanded', axisCollapsed ? 'false' : 'true');
+        }
     }
 
     setZIndex(zIndex) {
@@ -250,6 +274,7 @@ export class ChartWindowController {
         if (pointerId == null) return;
 
         this.cancelPointerSessions();
+        this._restoreFrame = null;
         this.workspace.focusWindow(this);
         this._dragSession = {
             pointerId,
@@ -266,12 +291,43 @@ export class ChartWindowController {
         event?.preventDefault?.();
     }
 
+    onHeaderDoubleClick(event) {
+        if (!this.workspace.isWindowResizeEnabled()) return;
+        if (isInteractiveTarget(event?.target)) return;
+
+        if (this._restoreFrame) {
+            const restoreFrame = { ...this._restoreFrame };
+            this._restoreFrame = null;
+            this.workspace.commandService.updateChartFrame(this.state.id, restoreFrame);
+            return;
+        }
+
+        const current = this.state.frame || {};
+        this._restoreFrame = {
+            x: Number(current.x) || 0,
+            y: Number(current.y) || 0,
+            width: Number(current.width) || 320,
+            height: Number(current.height) || 240
+        };
+        const layerSize = this.workspace.getLayerSize?.() || { width: 1024, height: 720 };
+        const margin = 12;
+        const next = this.workspace.clampRect({
+            x: margin,
+            y: margin,
+            width: Math.max(260, layerSize.width - margin * 2),
+            height: Math.max(200, layerSize.height - margin - 44)
+        });
+        this.workspace.commandService.updateChartFrame(this.state.id, next);
+        event?.preventDefault?.();
+    }
+
     onResizeHandlePointerDown(event, direction) {
         if (!this.workspace.isWindowResizeEnabled()) return;
         const pointerId = Number.isFinite(event?.pointerId) ? Number(event.pointerId) : null;
         if (pointerId == null) return;
 
         this.cancelPointerSessions();
+        this._restoreFrame = null;
         this.workspace.focusWindow(this);
         this._resizeSession = {
             pointerId,
@@ -617,6 +673,63 @@ export class ChartWindowController {
         this.refreshSourceOptions();
     }
 
+    resolveBindingMeaning(binding = {}) {
+        const sourceId = this.workspace.resolveSourceId?.(binding.sourceId || TIME_SOURCE_ID) || TIME_SOURCE_ID;
+        const quantityId = String(binding.quantityId || 't');
+        const sourceOptions = getSourceOptions(this.workspace.circuit);
+        const source = sourceOptions.find((item) => item.id === sourceId);
+        const sourceLabelRaw = source?.label || sourceId;
+        const sourceLabel = sourceLabelRaw.split(' · ')[0] || sourceLabelRaw;
+
+        const quantityOptions = getQuantitiesForSource(sourceId, this.workspace.circuit);
+        const quantity = quantityOptions.find((item) => item.id === quantityId) || quantityOptions[0] || null;
+        const quantityText = quantity?.label || quantityId;
+        const withUnit = quantity?.unit && !quantityText.includes(`(${quantity.unit})`)
+            ? `${quantityText} (${quantity.unit})`
+            : quantityText;
+
+        if (sourceId === TIME_SOURCE_ID) {
+            return withUnit;
+        }
+        return `${sourceLabel} · ${withUnit}`;
+    }
+
+    resolveAxisMeaningLabels() {
+        const xLabel = this.resolveBindingMeaning(this.state.axis?.xBinding);
+        const visibleSeries = (this.state.series || []).filter((series) => series.visible !== false);
+        const seriesList = visibleSeries.length > 0 ? visibleSeries : (this.state.series || []);
+        if (seriesList.length <= 0) {
+            return {
+                xLabel,
+                yLabel: '—'
+            };
+        }
+        if (seriesList.length === 1) {
+            const series = seriesList[0];
+            return {
+                xLabel,
+                yLabel: this.resolveBindingMeaning({
+                    sourceId: series.sourceId,
+                    quantityId: series.quantityId,
+                    transformId: series.transformId
+                })
+            };
+        }
+
+        const meanings = seriesList.map((series) => this.resolveBindingMeaning({
+            sourceId: series.sourceId,
+            quantityId: series.quantityId,
+            transformId: series.transformId
+        }));
+        const uniqueMeaningCount = new Set(meanings).size;
+        return {
+            xLabel,
+            yLabel: uniqueMeaningCount === 1
+                ? `${meanings[0]}（${seriesList.length}条系列）`
+                : `多系列（${seriesList.length}条）`
+        };
+    }
+
     clearData() {
         const seriesBuffers = this.workspace.getChartSeriesBuffers(this.state.id);
         if (!(seriesBuffers instanceof Map)) return;
@@ -724,6 +837,21 @@ export class ChartWindowController {
             const py = frame.yToPx(tick);
             ctx.fillText(formatNumberCompact(tick, 3), 4 * dpr, py + 4 * dpr);
         });
+
+        const axisMeaning = this.resolveAxisMeaningLabels();
+        ctx.fillStyle = '#1f2937';
+        ctx.font = `${11 * dpr}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'alphabetic';
+        ctx.fillText(`X: ${axisMeaning.xLabel}`, frame.padL + frame.innerW / 2, canvas.height - 6 * dpr);
+
+        ctx.save();
+        ctx.translate(12 * dpr, frame.padT + frame.innerH / 2);
+        ctx.rotate(-Math.PI / 2);
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(`Y: ${axisMeaning.yLabel}`, 0, 0);
+        ctx.restore();
 
         const visibleSeries = (this.state.series || []).filter((series) => series.visible !== false);
         const drawSeries = visibleSeries.length > 0 ? visibleSeries : (this.state.series || []);
