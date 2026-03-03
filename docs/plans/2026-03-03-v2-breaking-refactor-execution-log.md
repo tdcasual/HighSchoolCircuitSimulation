@@ -481,3 +481,40 @@ npm run check:v2:runtime-safety
 1. 以上 4 个测试文件全通过（28 tests）。
 2. `check:v2:boundaries` 通过（`[v2-architecture] ok`）。
 3. `check:v2:runtime-safety` 通过（`[v2-runtime-safety] ok`）。
+
+### Task 16: Final verification + release evidence
+
+- Status: completed
+- Started: 2026-03-03
+- Completed: 2026-03-03
+- Notes:
+  - 先补充提交 `.eslintrc.cjs` 的 v2 boundaries 元素类型修复（`4762a12`），确保 full matrix 稳定通过。
+  - 已执行 Task 16 要求的全量质量矩阵与 v2 专项门禁。
+  - 已补齐文档交付：
+    - 更新 `README.md`（新增 v2 破坏性重构状态与证据入口）。
+    - 更新 `docs/releases/v1.0-8day-readiness-gate.md`（补充 v2 breaking track 证据表）。
+    - 新建 `docs/reports/2026-03-03-v2-breaking-refactor-final-report.md`（评分卡、兼容路径移除清单、残留风险）。
+    - 更新 `docs/reports/debt-dashboard.md`（增加 v2 收敛快照解释）。
+  - 评分卡收口结果：综合 9.4，兼容性代价 1.4，达到设计阈值（综合 >= 9.3、兼容性代价 <= 2.0）。
+
+**Verification Commands**
+
+```bash
+npm run check
+npm run check:e2e
+npm run baseline:p0
+npm run baseline:circuitjs
+npm run baseline:ai
+npm run check:v2:boundaries
+npm run check:v2:runtime-safety
+npm run check:core-size
+npm run report:debt-dashboard
+```
+
+**Verification Summary**
+
+1. `check` 通过（196 files / 1019 tests）；仅保留 1 条已知 lint warning（`SolveCircuitV2.js` 未使用变量）。
+2. `check:e2e` 通过（wire/responsive/observation/ai-mobile 全绿）。
+3. baseline 三项均通过（`p0:20`、`circuitjs:10`、`ai:3` scenarios）。
+4. v2 专项门禁全通过（`v2-architecture` / `v2-runtime-safety`）。
+5. `check:core-size` 通过；v2 文件无超预算，legacy `Component.js` 仍 95% warning。

@@ -16,6 +16,16 @@
 - 🔍 探针测量：对导线和节点做可视化观测
 - 🤖 AI 辅助：结合当前电路状态给出物理解释
 
+## 🧨 v2 破坏性重构状态（2026-03-03）
+
+- 当前分支按 no-compat policy 执行：不提供旧 schema 迁移器，不保留 legacy runtime fallback。
+- 全量门禁与基线证据（`check / check:e2e / baseline:* / v2 guards`）已在本轮收官报告固定。
+- 评分卡结果（综合 9.4，兼容性代价 1.4）达到设计阈值（综合 >= 9.3，兼容性代价 <= 2.0）。
+- 详情见：
+  - 收官报告：[`docs/reports/2026-03-03-v2-breaking-refactor-final-report.md`](docs/reports/2026-03-03-v2-breaking-refactor-final-report.md)
+  - 执行日志：[`docs/plans/2026-03-03-v2-breaking-refactor-execution-log.md`](docs/plans/2026-03-03-v2-breaking-refactor-execution-log.md)
+  - 债务看板：[`docs/reports/debt-dashboard.md`](docs/reports/debt-dashboard.md)
+
 ## 🧭 观察运行时契约（2026-03-03）
 
 - 运行时观察链路以 `ChartWorkspace` 为唯一真相（`window.app.chartWorkspace`）。
