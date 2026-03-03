@@ -122,9 +122,10 @@ export class Circuit {
     }
 
     invalidateComponentTerminalCache(componentId) {
-        if (!componentId) return;
-        this.componentTerminalTopologyKeys.delete(componentId);
-        this.terminalWorldPosCache.delete(componentId);
+        if (componentId === undefined || componentId === null || String(componentId).trim() === '') return;
+        const normalizedId = String(componentId);
+        this.componentTerminalTopologyKeys.delete(normalizedId);
+        this.terminalWorldPosCache.delete(normalizedId);
     }
 
     buildComponentTerminalTopologyKey(comp) {
@@ -201,7 +202,13 @@ export class Circuit {
      * @param {Object} component - 元器件对象
      */
     addComponent(component) {
-        if (!component || !component.id) return;
+        if (
+            !component
+            || component.id === undefined
+            || component.id === null
+            || String(component.id).trim() === ''
+        ) return;
+        component.id = String(component.id);
         if (component) {
             component.x = toCanvasInt(component.x || 0);
             component.y = toCanvasInt(component.y || 0);
@@ -225,8 +232,10 @@ export class Circuit {
      * @param {string} id - 元器件ID
      */
     removeComponent(id) {
-        this.components.delete(id);
-        this.invalidateComponentTerminalCache(id);
+        if (id === undefined || id === null || String(id).trim() === '') return;
+        const normalizedId = String(id);
+        this.components.delete(normalizedId);
+        this.invalidateComponentTerminalCache(normalizedId);
         this.requestTopologyRebuild();
     }
 
@@ -235,7 +244,13 @@ export class Circuit {
      * @param {Object} wire - 导线对象
      */
     addWire(wire) {
-        if (!wire || !wire.id) return;
+        if (
+            !wire
+            || wire.id === undefined
+            || wire.id === null
+            || String(wire.id).trim() === ''
+        ) return;
+        wire.id = String(wire.id);
         const a = normalizeCanvasPoint(wire.a);
         const b = normalizeCanvasPoint(wire.b);
         if (!a || !b) return;
@@ -251,8 +266,10 @@ export class Circuit {
      * @param {string} id - 导线ID
      */
     removeWire(id) {
-        this.wires.delete(id);
-        this.removeObservationProbesByWireId(id);
+        if (id === undefined || id === null || String(id).trim() === '') return;
+        const normalizedId = String(id);
+        this.wires.delete(normalizedId);
+        this.removeObservationProbesByWireId(normalizedId);
         this.requestTopologyRebuild();
     }
 
@@ -262,7 +279,8 @@ export class Circuit {
      * @returns {Object} 导线对象
      */
     getWire(id) {
-        return this.wires.get(id);
+        if (id === undefined || id === null || String(id).trim() === '') return undefined;
+        return this.wires.get(String(id));
     }
 
     ensureUniqueObservationProbeId(baseId = `probe_${Date.now()}`) {
@@ -1223,7 +1241,8 @@ export class Circuit {
      * @returns {Object} 元器件对象
      */
     getComponent(id) {
-        return this.components.get(id);
+        if (id === undefined || id === null || String(id).trim() === '') return undefined;
+        return this.components.get(String(id));
     }
 
     /**

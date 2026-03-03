@@ -150,4 +150,50 @@ describe('ChartWorkspaceState v2', () => {
         expect(serialized.charts[0].ui.axisCollapsed).toBe(true);
         expect(serialized.charts[0].ui.legendCollapsed).toBe(false);
     });
+
+    it('preserves numeric zero source ids by normalizing to string', () => {
+        const normalized = normalizeChartWorkspaceState({
+            schemaVersion: 2,
+            charts: [
+                {
+                    id: 'chart_z',
+                    title: 'Z',
+                    axis: {
+                        xBinding: {
+                            sourceId: 0,
+                            quantityId: 't',
+                            transformId: 'identity'
+                        },
+                        xRangeMode: 'auto',
+                        yRangeMode: 'auto'
+                    },
+                    series: [
+                        {
+                            id: 's0',
+                            name: 'S0',
+                            sourceId: 0,
+                            quantityId: 'I',
+                            transformId: 'identity',
+                            visible: true,
+                            color: '#1d4ed8',
+                            xMode: 'shared-x',
+                            scatterXBinding: null
+                        }
+                    ],
+                    ui: {
+                        axisCollapsed: false,
+                        legendCollapsed: false
+                    }
+                }
+            ],
+            selection: {
+                activeChartId: 'chart_z',
+                activeSeriesId: 's0'
+            }
+        });
+
+        expect(normalized.charts).toHaveLength(1);
+        expect(normalized.charts[0].axis.xBinding.sourceId).toBe('0');
+        expect(normalized.charts[0].series[0].sourceId).toBe('0');
+    });
 });

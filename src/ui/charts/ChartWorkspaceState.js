@@ -27,6 +27,11 @@ const VALID_X_MODES = new Set(['shared-x', 'scatter-override']);
 let chartIdCounter = 1;
 let seriesIdCounter = 1;
 
+function normalizeIdentifier(value) {
+    if (value === undefined || value === null) return '';
+    return String(value).trim();
+}
+
 function createChartId() {
     const stamp = Date.now();
     const id = `chart_${stamp}_${chartIdCounter}`;
@@ -67,11 +72,11 @@ function normalizeFrame(rawFrame = {}, fallback = {}) {
 }
 
 export function normalizeChartBinding(rawBinding = {}, fallback = {}) {
-    const sourceIdRaw = typeof rawBinding?.sourceId === 'string' ? rawBinding.sourceId.trim() : '';
+    const sourceIdRaw = normalizeIdentifier(rawBinding?.sourceId);
     const quantityIdRaw = typeof rawBinding?.quantityId === 'string' ? rawBinding.quantityId.trim() : '';
     const transformRaw = rawBinding?.transformId;
 
-    const sourceId = sourceIdRaw || fallback.sourceId || TIME_SOURCE_ID;
+    const sourceId = sourceIdRaw || normalizeIdentifier(fallback.sourceId) || TIME_SOURCE_ID;
     const quantityId = quantityIdRaw || fallback.quantityId || QuantityIds.Time;
     const transformId = VALID_TRANSFORM_IDS.has(transformRaw)
         ? transformRaw
@@ -98,9 +103,7 @@ function normalizeOptionalNumber(value) {
 export function createDefaultChartSeriesState(options = {}) {
     const index = Math.max(1, Math.floor(Number(options.index) || 1));
     const colorFromPalette = SERIES_COLOR_PALETTE[(index - 1) % SERIES_COLOR_PALETTE.length];
-    const sourceId = typeof options.sourceId === 'string' && options.sourceId.trim()
-        ? options.sourceId.trim()
-        : TIME_SOURCE_ID;
+    const sourceId = normalizeIdentifier(options.sourceId) || TIME_SOURCE_ID;
     const quantityId = typeof options.quantityId === 'string' && options.quantityId.trim()
         ? options.quantityId.trim()
         : QuantityIds.Time;
@@ -132,7 +135,7 @@ export function createDefaultChartSeriesState(options = {}) {
 
 function normalizeSeries(rawSeries, index = 1) {
     const fallback = createDefaultChartSeriesState({ index });
-    const idText = typeof rawSeries?.id === 'string' ? rawSeries.id.trim() : '';
+    const idText = normalizeIdentifier(rawSeries?.id);
     const xMode = VALID_X_MODES.has(rawSeries?.xMode) ? rawSeries.xMode : fallback.xMode;
 
     return {
@@ -141,9 +144,7 @@ function normalizeSeries(rawSeries, index = 1) {
         name: typeof rawSeries?.name === 'string' && rawSeries.name.trim()
             ? rawSeries.name.trim()
             : fallback.name,
-        sourceId: typeof rawSeries?.sourceId === 'string' && rawSeries.sourceId.trim()
-            ? rawSeries.sourceId.trim()
-            : fallback.sourceId,
+        sourceId: normalizeIdentifier(rawSeries?.sourceId) || fallback.sourceId,
         quantityId: typeof rawSeries?.quantityId === 'string' && rawSeries.quantityId.trim()
             ? rawSeries.quantityId.trim()
             : fallback.quantityId,
@@ -222,7 +223,7 @@ export function createDefaultChartWorkspaceState(options = {}) {
 
 function normalizeChart(rawChart, index = 1) {
     const fallback = createDefaultChartState({ index });
-    const idText = typeof rawChart?.id === 'string' ? rawChart.id.trim() : '';
+    const idText = normalizeIdentifier(rawChart?.id);
     const titleText = typeof rawChart?.title === 'string' ? rawChart.title.trim() : '';
     const zRaw = Number(rawChart?.zIndex);
 
@@ -280,9 +281,7 @@ function normalizeChart(rawChart, index = 1) {
 }
 
 function normalizeSelection(rawSelection, charts = []) {
-    const activeChartRaw = typeof rawSelection?.activeChartId === 'string'
-        ? rawSelection.activeChartId.trim()
-        : '';
+    const activeChartRaw = normalizeIdentifier(rawSelection?.activeChartId);
     const activeChartId = activeChartRaw && charts.some((chart) => chart.id === activeChartRaw)
         ? activeChartRaw
         : null;
@@ -291,9 +290,7 @@ function normalizeSelection(rawSelection, charts = []) {
         ? charts.find((chart) => chart.id === activeChartId)
         : null;
 
-    const activeSeriesRaw = typeof rawSelection?.activeSeriesId === 'string'
-        ? rawSelection.activeSeriesId.trim()
-        : '';
+    const activeSeriesRaw = normalizeIdentifier(rawSelection?.activeSeriesId);
     const activeSeriesId = activeSeriesRaw
         && selectedChart
         && selectedChart.series.some((series) => series.id === activeSeriesRaw)
@@ -317,7 +314,7 @@ export function migrateChartWorkspaceStateV1ToV2(rawState = {}) {
         if (yRaw && typeof yRaw === 'object') {
             const migratedSeries = createDefaultChartSeriesState({
                 index: 1,
-                sourceId: typeof yRaw.sourceId === 'string' ? yRaw.sourceId : TIME_SOURCE_ID,
+                sourceId: normalizeIdentifier(yRaw.sourceId) || TIME_SOURCE_ID,
                 quantityId: typeof yRaw.quantityId === 'string' ? yRaw.quantityId : QuantityIds.Time,
                 transformId: yRaw.transformId,
                 name: '系列 1'

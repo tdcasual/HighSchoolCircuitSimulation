@@ -84,6 +84,36 @@ describe('ObservationState', () => {
         expect(state.plots[0].yDisplayMode).toBe(ObservationDisplayModes.Signed);
     });
 
+    it('preserves numeric zero source ids by normalizing to string', () => {
+        const state = normalizeObservationState({
+            sampleIntervalMs: 40,
+            plots: [
+                {
+                    name: '图像 Z',
+                    x: {
+                        sourceId: 0,
+                        quantityId: QuantityIds.Time,
+                        transformId: TransformIds.Identity,
+                        autoRange: true
+                    },
+                    y: {
+                        sourceId: 0,
+                        quantityId: QuantityIds.Current,
+                        transformId: TransformIds.Identity,
+                        autoRange: true
+                    }
+                }
+            ]
+        }, {
+            defaultYSourceId: 'R1',
+            defaultPlotCount: 1
+        });
+
+        expect(state.plots).toHaveLength(1);
+        expect(state.plots[0].x.sourceId).toBe('0');
+        expect(state.plots[0].y.sourceId).toBe('0');
+    });
+
     it('keeps explicit empty plot list when allowEmptyPlots is enabled', () => {
         const state = normalizeObservationState({
             sampleIntervalMs: 40,

@@ -59,6 +59,13 @@ function toFiniteOrNull(value) {
     return Number.isFinite(n) ? n : null;
 }
 
+function normalizeSourceId(value, fallback = TIME_SOURCE_ID) {
+    const text = value === undefined || value === null ? '' : String(value).trim();
+    if (text) return text;
+    if (fallback === undefined || fallback === null) return '';
+    return String(fallback).trim();
+}
+
 function normalizeTemplateName(rawName, fallbackName = DEFAULT_OBSERVATION_TEMPLATE_NAME) {
     const candidate = typeof rawName === 'string' ? rawName.trim() : '';
     const fallback = typeof fallbackName === 'string' && fallbackName.trim()
@@ -89,7 +96,7 @@ export function normalizeSampleIntervalMs(value, fallback = DEFAULT_SAMPLE_INTER
 
 export function createDefaultAxisState(options = {}) {
     return {
-        sourceId: options.sourceId ?? TIME_SOURCE_ID,
+        sourceId: normalizeSourceId(options.sourceId, TIME_SOURCE_ID),
         quantityId: options.quantityId ?? QuantityIds.Time,
         transformId: options.transformId ?? TransformIds.Identity,
         autoRange: options.autoRange !== false,
@@ -122,9 +129,7 @@ export function createDefaultPlotState(index = 1, defaultYSourceId = TIME_SOURCE
 
 export function normalizeAxisState(axisRaw, fallbackAxis) {
     const fallback = fallbackAxis || createDefaultAxisState();
-    const sourceId = typeof axisRaw?.sourceId === 'string' && axisRaw.sourceId
-        ? axisRaw.sourceId
-        : fallback.sourceId;
+    const sourceId = normalizeSourceId(axisRaw?.sourceId, fallback.sourceId);
     const quantityId = typeof axisRaw?.quantityId === 'string' && axisRaw.quantityId
         ? axisRaw.quantityId
         : fallback.quantityId;
@@ -216,8 +221,7 @@ export function normalizeObservationTemplateBindings(rawBindings) {
         const axis = axisRaw === 'x' ? 'x' : axisRaw === 'y' ? 'y' : '';
         if (!axis) continue;
 
-        const sourceIdRaw = typeof item.sourceId === 'string' ? item.sourceId : '';
-        const sourceId = sourceIdRaw.trim();
+        const sourceId = normalizeSourceId(item.sourceId, '');
         if (!sourceId) continue;
 
         const quantityRaw = typeof item.quantityId === 'string' ? item.quantityId : '';
