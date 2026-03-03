@@ -51,3 +51,9 @@
   - 单元测试或回归测试补强
   - `npm run check:full` 全量通过
   - 基线结果无差异（除非变更说明明确记录）
+
+## Phase2（Component.js warning 专项）
+
+- 目标：清除 `check:core-size` 中 `src/components/Component.js` 95% warning，并将拆分颗粒细化到可独立执行任务。
+- 计划文档：`docs/plans/2026-03-03-componentjs-core-size-phase2-implementation.md`
+- 执行方式：按 Task 0~6 单任务单提交推进，优先顺序 `T1 -> T2 -> T3 -> T4 -> T5 -> T6`。
