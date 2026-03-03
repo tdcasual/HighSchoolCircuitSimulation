@@ -269,3 +269,32 @@ npm run check:v2:runtime-safety
 1. `tests/solver.v2.purity.spec.js` 与 `tests/solver.v2.commonCases.spec.js` 全通过（2 tests）。
 2. `check:v2:boundaries` 通过（`[v2-architecture] ok`）。
 3. `check:v2:runtime-safety` 通过（`[v2-runtime-safety] ok`）。
+
+### Task 9: Add ResultProjector (ViewModel-only display values)
+
+- Status: completed
+- Started: 2026-03-03
+- Completed: 2026-03-03
+- Notes:
+  - 新增 `tests/app.resultProjectorV2.spec.js`（fail-first）：
+    - 输入 solve result + circuit model，输出只读 `ViewModel`；
+    - 缺失电流时标记 `disconnected`；
+    - 不允许回写 component 参数对象。
+  - 新增 `src/v2/app/ResultProjector.js`：
+    - 投影 `voltage/current/power/status`；
+    - 将诊断统一映射为 UI 只读结构；
+    - 不改写 domain model。
+
+**Verification Commands**
+
+```bash
+npm test -- tests/app.resultProjectorV2.spec.js
+npm run check:v2:boundaries
+npm run check:v2:runtime-safety
+```
+
+**Verification Summary**
+
+1. `tests/app.resultProjectorV2.spec.js` 通过（2 tests）。
+2. `check:v2:boundaries` 通过（`[v2-architecture] ok`）。
+3. `check:v2:runtime-safety` 通过（`[v2-runtime-safety] ok`）。
