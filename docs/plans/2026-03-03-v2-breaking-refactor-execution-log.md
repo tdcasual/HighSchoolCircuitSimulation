@@ -117,3 +117,31 @@ npm test -- tests/debtDashboard.spec.js tests/runtimeSafety.dedupe.spec.js
 1. `tests/ci.v2RuntimeSafetyDedupe.spec.js` 通过（2 tests）。
 2. `check:v2:runtime-safety` 通过（当前 `src/v2` 不存在，输出 `ok (src/v2 not present yet)`）。
 3. `tests/debtDashboard.spec.js` 与 `tests/runtimeSafety.dedupe.spec.js` 全部通过（3 tests）。
+
+### Task 4: Build pure NetlistDTO (remove source object references)
+
+- Status: completed
+- Started: 2026-03-03
+- Completed: 2026-03-03
+- Notes:
+  - 新增 `tests/simulation.netlistBuilderV2.spec.js`（fail-first），锁定纯 DTO 契约：
+    - `meta.version = 2`
+    - `nodes` 统一输出 `{ id }`
+    - `components` 仅含 `id/type/nodes/params`
+    - 不允许 `source` 引用与函数值进入 DTO
+  - 新增 `src/v2/simulation/NetlistBuilderV2.js`，实现纯对象深度规整（仅 primitive/plain object）。
+  - `src/core/simulation/NetlistBuilder.js` 增加 `@deprecated` 注释，标明 v1 为 legacy path。
+
+**Verification Commands**
+
+```bash
+npm test -- tests/simulation.netlistBuilderV2.spec.js
+npm run check:v2:boundaries
+npm run check:v2:runtime-safety
+```
+
+**Verification Summary**
+
+1. `tests/simulation.netlistBuilderV2.spec.js` 通过（2 tests）。
+2. `check:v2:boundaries` 通过（`[v2-architecture] ok`）。
+3. `check:v2:runtime-safety` 通过（`[v2-runtime-safety] ok`）。
