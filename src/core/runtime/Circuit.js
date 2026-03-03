@@ -531,8 +531,16 @@ export class Circuit {
     }
 
     isComponentConnected(componentId) {
+        if (
+            componentId === undefined
+            || componentId === null
+            || String(componentId).trim() === ''
+        ) {
+            return false;
+        }
+        const normalizedId = String(componentId);
         return this.connectivityCache.isComponentConnected(
-            componentId,
+            normalizedId,
             this.components,
             this.topologyVersion,
             this.terminalConnectionMap,

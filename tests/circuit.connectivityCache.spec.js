@@ -38,4 +38,13 @@ describe('Circuit connectivity cache', () => {
         circuit.isComponentConnected('R1');
         expect(computeSpy).toHaveBeenCalledTimes(1);
     });
+
+    it('treats numeric component ids as string keys for connectivity lookup', () => {
+        const circuit = createTestCircuit();
+        const resistor = addComponent(circuit, 'Resistor', 0);
+        connectWire(circuit, 'W1', resistor, 0, resistor, 1);
+
+        expect(circuit.isComponentConnected('0')).toBe(true);
+        expect(circuit.isComponentConnected(0)).toBe(true);
+    });
 });
