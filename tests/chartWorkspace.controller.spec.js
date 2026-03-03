@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ChartWorkspaceController } from '../src/ui/charts/ChartWorkspaceController.js';
+import { TIME_SOURCE_ID } from '../src/ui/observation/ObservationSources.js';
 
 describe('ChartWorkspaceController', () => {
     it('resolves phone default frame centered and above mobile controls reserve', () => {
@@ -39,5 +40,18 @@ describe('ChartWorkspaceController', () => {
             })
         }));
         expect(chart).toEqual({ state: { id: 'chart_1' } });
+    });
+
+    it('resolves numeric zero source ids to existing component id strings', () => {
+        const controller = Object.create(ChartWorkspaceController.prototype);
+        controller.circuit = {
+            components: new Map([
+                ['0', { id: '0', type: 'Resistor' }]
+            ]),
+            getObservationProbe: vi.fn(() => null)
+        };
+
+        expect(ChartWorkspaceController.prototype.resolveSourceId.call(controller, 0)).toBe('0');
+        expect(ChartWorkspaceController.prototype.resolveSourceId.call(controller, null)).toBe(TIME_SOURCE_ID);
     });
 });

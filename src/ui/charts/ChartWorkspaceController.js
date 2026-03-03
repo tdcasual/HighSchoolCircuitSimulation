@@ -135,8 +135,9 @@ export class ChartWorkspaceController {
     }
 
     resolveSourceId(sourceId) {
-        if (typeof sourceId !== 'string' || !sourceId.trim()) return TIME_SOURCE_ID;
-        const normalized = sourceId.trim();
+        if (sourceId === undefined || sourceId === null) return TIME_SOURCE_ID;
+        const normalized = String(sourceId).trim();
+        if (!normalized) return TIME_SOURCE_ID;
         if (normalized === TIME_SOURCE_ID) return TIME_SOURCE_ID;
         if (normalized.startsWith(PROBE_SOURCE_PREFIX)) return normalized;
         if (this.circuit?.components?.has?.(normalized)) return normalized;
