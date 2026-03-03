@@ -229,6 +229,33 @@ describe('QuickActionBarController', () => {
         expect(interaction.rotateComponent).toHaveBeenCalledWith('R1');
     });
 
+    it('treats numeric zero selected component id as a valid component selection', () => {
+        setupEnvironment();
+        const interaction = {
+            selectedComponent: 0,
+            selectedWire: null,
+            app: {
+                responsiveLayout: {
+                    isOverlayMode: () => false
+                }
+            },
+            circuit: {
+                getComponent: vi.fn((id) => (id === '0' ? { id: '0', label: '电阻0' } : null))
+            },
+            showPropertyDialog: vi.fn(),
+            rotateComponent: vi.fn(),
+            duplicateComponent: vi.fn(),
+            deleteComponent: vi.fn()
+        };
+        const controller = new QuickActionBarController(interaction);
+
+        controller.update();
+
+        expect(interaction.circuit.getComponent).toHaveBeenCalledWith('0');
+        expect(controller.root.hidden).toBe(false);
+        expect(controller.label.textContent).toContain('电阻0');
+    });
+
     it('dispatches wire midpoint split action', () => {
         setupEnvironment();
         const interaction = {

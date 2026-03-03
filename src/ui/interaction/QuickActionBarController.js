@@ -303,8 +303,18 @@ export class QuickActionBarController {
     }
 
     resolveSelectionState() {
-        const componentId = this.interaction?.selectedComponent || null;
-        const wireId = this.interaction?.selectedWire || null;
+        const rawComponentId = this.interaction?.selectedComponent;
+        const rawWireId = this.interaction?.selectedWire;
+        const componentId = rawComponentId === undefined
+            || rawComponentId === null
+            || String(rawComponentId).trim() === ''
+            ? null
+            : String(rawComponentId);
+        const wireId = rawWireId === undefined
+            || rawWireId === null
+            || String(rawWireId).trim() === ''
+            ? null
+            : String(rawWireId);
         const hasComponent = componentId
             ? this.interaction?.circuit?.getComponent?.(componentId)
             : null;
