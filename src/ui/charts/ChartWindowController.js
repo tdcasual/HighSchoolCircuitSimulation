@@ -1,49 +1,19 @@
 import { createElement } from '../../utils/SafeDOM.js';
 import { safeAddEventListener, safeInvoke, safeSetAttribute } from '../../utils/RuntimeSafety.js';
-import { TransformOptions, formatNumberCompact } from '../observation/ObservationMath.js';
+import { formatNumberCompact } from '../observation/ObservationMath.js';
 import {
     getQuantitiesForSource,
     getSourceOptions,
     TIME_SOURCE_ID
 } from '../observation/ObservationSources.js';
+import {
+    RESIZE_DIRECTIONS,
+    isInteractiveTarget,
+    refreshSourceOptions as refreshChartWindowSourceOptions,
+    rebuildSeriesControls as rebuildChartWindowSeriesControls
+} from './ChartWindowControls.js';
 
 const safeInvokeMethod = (target, methodName, ...args) => safeInvoke(target, methodName, args);
-
-const X_MODE_OPTIONS = Object.freeze([
-    { id: 'shared-x', label: '共享X' },
-    { id: 'scatter-override', label: '散点X' }
-]);
-
-const RESIZE_DIRECTIONS = Object.freeze(['n', 'e', 's', 'w', 'nw', 'ne', 'sw', 'se']);
-
-function setSelectOptions(selectEl, options, selectedId) {
-    if (!selectEl) return null;
-    while (selectEl.firstChild) {
-        selectEl.removeChild(selectEl.firstChild);
-    }
-
-    options.forEach((option) => {
-        const optionEl = createElement('option', {
-            textContent: option.label,
-            attrs: { value: option.id }
-        });
-        selectEl.appendChild(optionEl);
-    });
-
-    const hasSelected = selectedId != null && options.some((item) => item.id === selectedId);
-    if (hasSelected) {
-        selectEl.value = selectedId;
-    } else if (options.length > 0) {
-        selectEl.value = options[0].id;
-    }
-
-    return selectEl.value || null;
-}
-
-function isInteractiveTarget(node) {
-    if (!node || typeof node.closest !== 'function') return false;
-    return !!node.closest('input,select,button,textarea,label,a');
-}
 
 export class ChartWindowController {
     constructor(workspace, state) {
@@ -479,198 +449,11 @@ export class ChartWindowController {
     }
 
     refreshSourceOptions() {
-        const sourceOptions = getSourceOptions(this.workspace.circuit);
-        const axisBinding = this.state.axis?.xBinding || {};
-        const xSource = setSelectOptions(this.elements.xSource, sourceOptions, axisBinding.sourceId || TIME_SOURCE_ID);
-        const xQuantities = getQuantitiesForSource(xSource || TIME_SOURCE_ID, this.workspace.circuit);
-        setSelectOptions(this.elements.xQuantity, xQuantities, axisBinding.quantityId || 't');
-
-        for (const series of this.state.series || []) {
-            const itemEls = this.seriesElements.get(series.id);
-            if (!itemEls) continue;
-
-            const sourceId = setSelectOptions(itemEls.sourceSelect, sourceOptions, series.sourceId || TIME_SOURCE_ID);
-            const yQuantities = getQuantitiesForSource(sourceId || TIME_SOURCE_ID, this.workspace.circuit);
-            setSelectOptions(itemEls.quantitySelect, yQuantities, series.quantityId || yQuantities[0]?.id || null);
-            setSelectOptions(itemEls.transformSelect, TransformOptions.map((opt) => ({ id: opt.id, label: opt.label })), series.transformId);
-            setSelectOptions(itemEls.xModeSelect, X_MODE_OPTIONS, series.xMode || 'shared-x');
-
-            const scatterBinding = series.scatterXBinding || { sourceId: TIME_SOURCE_ID, quantityId: 't' };
-            const scatterSource = setSelectOptions(itemEls.scatterSourceSelect, sourceOptions, scatterBinding.sourceId);
-            const scatterQuantities = getQuantitiesForSource(scatterSource || TIME_SOURCE_ID, this.workspace.circuit);
-            setSelectOptions(itemEls.scatterQuantitySelect, scatterQuantities, scatterBinding.quantityId || scatterQuantities[0]?.id || 't');
-
-            const scatterEnabled = (series.xMode || 'shared-x') === 'scatter-override';
-            safeInvokeMethod(itemEls.scatterWrap?.classList, 'toggle', 'hidden', !scatterEnabled);
-        }
+        refreshChartWindowSourceOptions(this);
     }
 
     rebuildSeriesControls() {
-        if (!this.elements.legendBody) return;
-        while (this.elements.legendBody.firstChild) {
-            this.elements.legendBody.removeChild(this.elements.legendBody.firstChild);
-        }
-        this.seriesElements.clear();
-
-        const seriesList = Array.isArray(this.state.series) ? this.state.series : [];
-        if (seriesList.length <= 0) {
-            this.elements.legendBody.appendChild(createElement('p', {
-                className: 'chart-window-empty-series',
-                textContent: '暂无系列，点击“+ 系列”添加。'
-            }));
-            return;
-        }
-
-        seriesList.forEach((series) => {
-            const row = createElement('div', {
-                className: 'chart-series-row',
-                attrs: { 'data-series-id': series.id }
-            });
-
-            const head = createElement('div', { className: 'chart-series-row-head' });
-            const colorSwatch = createElement('span', {
-                className: 'chart-series-color',
-                style: { backgroundColor: series.color || '#1d4ed8' }
-            });
-            const visibleToggle = createElement('input', {
-                attrs: {
-                    type: 'checkbox'
-                }
-            });
-            visibleToggle.checked = series.visible !== false;
-            const nameInput = createElement('input', {
-                className: 'chart-series-name-input',
-                attrs: {
-                    type: 'text',
-                    value: series.name || '',
-                    placeholder: '系列名称'
-                }
-            });
-            const removeBtn = createElement('button', {
-                className: 'chart-window-btn chart-window-btn-danger chart-series-remove-btn',
-                textContent: '删',
-                attrs: { type: 'button' }
-            });
-
-            head.appendChild(colorSwatch);
-            head.appendChild(visibleToggle);
-            head.appendChild(nameInput);
-            head.appendChild(removeBtn);
-
-            const body = createElement('div', { className: 'chart-series-row-body' });
-            const sourceSelect = createElement('select');
-            const quantitySelect = createElement('select');
-            const transformSelect = createElement('select');
-            const xModeSelect = createElement('select');
-
-            body.appendChild(this.createControlGroup('Y来源', sourceSelect));
-            body.appendChild(this.createControlGroup('Y量', quantitySelect));
-            body.appendChild(this.createControlGroup('变换', transformSelect));
-            body.appendChild(this.createControlGroup('X模式', xModeSelect));
-
-            const scatterWrap = createElement('div', { className: 'chart-series-scatter-wrap hidden' });
-            const scatterSourceSelect = createElement('select');
-            const scatterQuantitySelect = createElement('select');
-            scatterWrap.appendChild(this.createControlGroup('散点X来源', scatterSourceSelect));
-            scatterWrap.appendChild(this.createControlGroup('散点X量', scatterQuantitySelect));
-
-            row.appendChild(head);
-            row.appendChild(body);
-            row.appendChild(scatterWrap);
-            this.elements.legendBody.appendChild(row);
-
-            this.seriesElements.set(series.id, {
-                row,
-                colorSwatch,
-                visibleToggle,
-                nameInput,
-                sourceSelect,
-                quantitySelect,
-                transformSelect,
-                xModeSelect,
-                scatterWrap,
-                scatterSourceSelect,
-                scatterQuantitySelect,
-                removeBtn
-            });
-
-            safeAddEventListener(visibleToggle, 'change', () => {
-                this.workspace.commandService.updateSeries(this.state.id, series.id, {
-                    visible: !!visibleToggle.checked
-                });
-            });
-
-            safeAddEventListener(nameInput, 'change', () => {
-                this.workspace.commandService.updateSeries(this.state.id, series.id, {
-                    name: nameInput.value
-                });
-            });
-
-            safeAddEventListener(sourceSelect, 'change', () => {
-                const sourceId = this.workspace.resolveSourceId(sourceSelect.value || TIME_SOURCE_ID);
-                const quantities = getQuantitiesForSource(sourceId, this.workspace.circuit);
-                const quantityId = quantities.some((item) => item.id === quantitySelect.value)
-                    ? quantitySelect.value
-                    : (quantities[0]?.id || 'I');
-                this.workspace.commandService.updateSeries(this.state.id, series.id, {
-                    sourceId,
-                    quantityId
-                });
-            });
-
-            safeAddEventListener(quantitySelect, 'change', () => {
-                this.workspace.commandService.updateSeries(this.state.id, series.id, {
-                    quantityId: quantitySelect.value
-                });
-            });
-
-            safeAddEventListener(transformSelect, 'change', () => {
-                this.workspace.commandService.updateSeries(this.state.id, series.id, {
-                    transformId: transformSelect.value
-                });
-            });
-
-            safeAddEventListener(xModeSelect, 'change', () => {
-                const xMode = xModeSelect.value === 'scatter-override' ? 'scatter-override' : 'shared-x';
-                const patch = { xMode };
-                if (xMode === 'scatter-override') {
-                    patch.scatterXBinding = {
-                        sourceId: scatterSourceSelect.value || TIME_SOURCE_ID,
-                        quantityId: scatterQuantitySelect.value || 't',
-                        transformId: 'identity'
-                    };
-                }
-                this.workspace.commandService.updateSeries(this.state.id, series.id, patch);
-            });
-
-            safeAddEventListener(scatterSourceSelect, 'change', () => {
-                this.workspace.commandService.updateSeries(this.state.id, series.id, {
-                    xMode: 'scatter-override',
-                    scatterXBinding: {
-                        sourceId: this.workspace.resolveSourceId(scatterSourceSelect.value || TIME_SOURCE_ID),
-                        quantityId: scatterQuantitySelect.value || 't',
-                        transformId: 'identity'
-                    }
-                });
-            });
-
-            safeAddEventListener(scatterQuantitySelect, 'change', () => {
-                this.workspace.commandService.updateSeries(this.state.id, series.id, {
-                    xMode: 'scatter-override',
-                    scatterXBinding: {
-                        sourceId: this.workspace.resolveSourceId(scatterSourceSelect.value || TIME_SOURCE_ID),
-                        quantityId: scatterQuantitySelect.value || 't',
-                        transformId: 'identity'
-                    }
-                });
-            });
-
-            safeAddEventListener(removeBtn, 'click', () => {
-                this.workspace.commandService.removeSeries(this.state.id, series.id);
-            });
-        });
-
-        this.refreshSourceOptions();
+        rebuildChartWindowSeriesControls(this);
     }
 
     resolveBindingMeaning(binding = {}) {
