@@ -230,4 +230,19 @@ describe('Renderer value snapshot updates', () => {
 
         expect(() => Renderer.prototype.highlightTerminal.call(renderer, 'R1', 0, { pointerType: 'touch' })).not.toThrow();
     });
+
+    it('getWireObservationProbes accepts numeric zero wire ids', () => {
+        const renderer = Object.create(Renderer.prototype);
+        renderer.circuit = {
+            getAllObservationProbes: () => ([
+                { id: 'P0', type: 'WireCurrentProbe', wireId: '0' },
+                { id: 'P1', type: 'WireCurrentProbe', wireId: 'W1' }
+            ])
+        };
+
+        const probes = Renderer.prototype.getWireObservationProbes.call(renderer, 0);
+
+        expect(probes).toHaveLength(1);
+        expect(probes[0]?.id).toBe('P0');
+    });
 });

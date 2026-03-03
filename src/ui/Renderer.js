@@ -421,9 +421,11 @@ export class Renderer {
     }
 
     getWireObservationProbes(wireId) {
-        if (!wireId || typeof this.circuit?.getAllObservationProbes !== 'function') return [];
+        const hasWireId = wireId !== undefined && wireId !== null && String(wireId).trim() !== '';
+        if (!hasWireId || typeof this.circuit?.getAllObservationProbes !== 'function') return [];
+        const normalizedWireId = String(wireId);
         return this.circuit.getAllObservationProbes()
-            .filter((probe) => probe?.wireId === wireId);
+            .filter((probe) => String(probe?.wireId ?? '') === normalizedWireId);
     }
 
     getProbeTypeGlyph(type) {
