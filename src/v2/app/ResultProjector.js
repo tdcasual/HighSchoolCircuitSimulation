@@ -3,6 +3,11 @@ function readNodeVoltage(voltages, nodeIndex) {
     return Number(voltages[nodeIndex] || 0);
 }
 
+function toFiniteNumber(value, fallback = 0) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+}
+
 function resolveCurrentsMap(currents) {
     if (currents instanceof Map) return new Map(currents);
     if (currents && typeof currents === 'object') {
@@ -33,7 +38,7 @@ export function projectResultV2({ circuitModel, solveResult } = {}) {
         const n2 = safeComponent.nodes?.[1];
         const voltage = readNodeVoltage(voltages, n1) - readNodeVoltage(voltages, n2);
         const hasCurrent = currents.has(id);
-        const current = hasCurrent ? Number(currents.get(id) || 0) : 0;
+        const current = hasCurrent ? toFiniteNumber(currents.get(id), 0) : 0;
         const power = voltage * current;
 
         components.push({

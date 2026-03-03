@@ -70,4 +70,27 @@ describe('ResultProjector v2', () => {
         expect(viewModel.components[0].status).toBe('disconnected');
         expect(viewModel.components[0].measurements.current).toBe(0);
     });
+
+    it('coerces non-finite current readings to zero in projection output', () => {
+        let model = CircuitModel.empty();
+        model = addComponent(model, {
+            id: 'R1',
+            type: 'Resistor',
+            nodes: [1, 0],
+            resistance: 8
+        });
+
+        const viewModel = projectResultV2({
+            circuitModel: model,
+            solveResult: {
+                valid: true,
+                voltages: [0, 2.4],
+                currents: { R1: 'not-a-number' },
+                diagnostics: { code: '', warnings: [] }
+            }
+        });
+
+        expect(viewModel.components[0].measurements.current).toBe(0);
+        expect(viewModel.components[0].measurements.power).toBe(0);
+    });
 });
