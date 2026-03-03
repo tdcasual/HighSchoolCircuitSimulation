@@ -398,10 +398,18 @@ export class MNASolver {
         const nodeCount = this.nodes.length;
         if (nodeCount < 2) {
             const voltages = Array.from({ length: nodeCount }, () => 0);
-            const currents = new Map();
-            for (const comp of this.components) {
-                currents.set(comp.id, 0);
-            }
+            const { currents } = this.resultPostprocessor.apply({
+                components: this.components,
+                voltages,
+                x: [],
+                nodeCount,
+                dt: this.dt,
+                debugMode: this.debugMode,
+                resolveDynamicIntegrationMethod: (component) => this.resolveDynamicIntegrationMethod(component),
+                getSourceInstantVoltage: (component) => this.getSourceInstantVoltage(component),
+                simulationState: this.simulationState,
+                registry: this.componentRegistry
+            });
             return {
                 voltages,
                 currents,
@@ -419,10 +427,18 @@ export class MNASolver {
         
         if (n <= 0) {
             const voltages = Array.from({ length: nodeCount }, () => 0);
-            const currents = new Map();
-            for (const comp of this.components) {
-                currents.set(comp.id, 0);
-            }
+            const { currents } = this.resultPostprocessor.apply({
+                components: this.components,
+                voltages,
+                x: [],
+                nodeCount,
+                dt: this.dt,
+                debugMode: this.debugMode,
+                resolveDynamicIntegrationMethod: (component) => this.resolveDynamicIntegrationMethod(component),
+                getSourceInstantVoltage: (component) => this.getSourceInstantVoltage(component),
+                simulationState: this.simulationState,
+                registry: this.componentRegistry
+            });
             return {
                 voltages,
                 currents,

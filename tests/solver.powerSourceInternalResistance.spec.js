@@ -92,4 +92,24 @@ describe('PowerSource internal resistance (Norton model)', () => {
         const vMinus = results.voltages[source.nodes[1]] || 0;
         expect(vPlus - vMinus).toBeCloseTo(10, 6);
     });
+
+    it('keeps finite-source short-circuit current when topology collapses to one node', () => {
+        const circuit = createTestCircuit();
+        const source = addComponent(circuit, 'PowerSource', 'Vshort', {
+            voltage: 3,
+            internalResistance: 2
+        });
+
+        connectWire(circuit, 'Wshort', source, 0, source, 1);
+
+        const results = solveCircuit(circuit);
+        expect(results.valid).toBe(true);
+
+        const sourceCurrent = results.currents.get('Vshort') || 0;
+        expect(sourceCurrent).toBeCloseTo(1.5, 6);
+
+        const vPlus = results.voltages[source.nodes[0]] || 0;
+        const vMinus = results.voltages[source.nodes[1]] || 0;
+        expect(vPlus - vMinus).toBeCloseTo(0, 9);
+    });
 });
