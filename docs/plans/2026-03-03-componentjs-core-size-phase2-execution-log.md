@@ -122,3 +122,28 @@ npm test -- tests/component.rendererDispatch.spec.js tests/component.touchTarget
 
 1. `component.rendererDispatch` 新测试通过（3 tests）。
 2. touch target 与测量读数控制器回归通过（14 tests）。
+
+### Task 5: Extract Value Display Orchestration
+
+- Status: completed
+- Started: 2026-03-03
+- Completed: 2026-03-03
+- Notes:
+  - 新增 `src/components/render/ComponentValueDisplayRenderer.js`，外提：
+    - `addValueDisplay`
+    - `layoutValueDisplay`
+    - `updateValueDisplay`
+    - `formatValue`
+  - `src/components/Component.js` 的 value-display 相关方法改为 façade 转发，保留签名。
+  - 新增 `tests/component.valueDisplayRenderer.spec.js` 验证工程单位格式化行为。
+
+**Verification Commands**
+
+```bash
+npm test -- tests/component.valueDisplayRenderer.spec.js tests/valueDisplayLayout.spec.js tests/component.renderSafety.spec.js tests/renderer.valueSnapshot.spec.js
+```
+
+**Verification Summary**
+
+1. `component.valueDisplayRenderer` 新测试通过（1 test）。
+2. value layout / render safety / renderer snapshot 回归通过（19 tests）。

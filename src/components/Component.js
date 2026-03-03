@@ -27,6 +27,12 @@ import {
     updateWirePath as updateWireSvgPath,
     updateWirePathWithGroup as updateWireSvgPathWithGroup
 } from './render/ComponentWireRenderer.js';
+import {
+    addValueDisplay as addValueDisplayRenderer,
+    formatValue as formatDisplayValue,
+    layoutValueDisplay as layoutValueDisplayRenderer,
+    updateValueDisplay as updateValueDisplayRenderer
+} from './render/ComponentValueDisplayRenderer.js';
 import { renderLegacyComponent } from './render/legacy/RendererRegistryLegacy.js';
 import {
     updateParallelPlateCapacitorVisualRuntime,
@@ -998,9 +1004,10 @@ export const SVGRenderer = {
      * 添加数值显示
      */
     addValueDisplay(g, comp) {
-        return createValueDisplayShape({
+        return addValueDisplayRenderer({
             g,
             comp,
+            createValueDisplayShape,
             resolveValueDisplayAnchor,
             layoutValueDisplay: (target, targetComp) => this.layoutValueDisplay(target, targetComp)
         });
@@ -1027,60 +1034,35 @@ export const SVGRenderer = {
     },
 
     layoutValueDisplay(g, comp) {
-        const elements = this.getValueDisplayElements(g);
-        const valueGroup = elements?.valueGroup;
-        if (!valueGroup) return;
-
-        const displays = {
-            power: elements.powerDisplay,
-            voltage: elements.voltageDisplay,
-            current: elements.currentDisplay
-        };
-        const visibleRows = [];
-        const visibleDisplays = [];
-        for (const row of VALUE_DISPLAY_STACK_ORDER) {
-            const display = displays[row];
-            if (!display) continue;
-            if ((display.textContent || '').trim().length > 0) {
-                visibleRows.push(row);
-                visibleDisplays.push(display);
-            }
-        }
-
-        const anchor = resolveValueDisplayAnchor(comp);
-        const rowGap = this.resolveValueDisplayRowGap(visibleDisplays);
-        const layoutSignature = `${anchor.x},${anchor.y}|${visibleRows.join(',')}|${rowGap}`;
-        if (valueGroup.__layoutSignature === layoutSignature) {
-            return;
-        }
-        valueGroup.__layoutSignature = layoutSignature;
-        this.setElementAttributeIfChanged(valueGroup, 'transform', `translate(${anchor.x}, ${anchor.y})`);
-        const rowOffsets = computeValueDisplayRowOffsets(visibleRows, rowGap);
-        for (const row of VALUE_DISPLAY_STACK_ORDER) {
-            const display = displays[row];
-            if (!display) continue;
-            this.setElementAttributeIfChanged(display, 'y', rowOffsets[row] ?? 0);
-        }
+        return layoutValueDisplayRenderer({
+            g,
+            comp,
+            getValueDisplayElements: (node) => this.getValueDisplayElements(node),
+            valueDisplayStackOrder: VALUE_DISPLAY_STACK_ORDER,
+            resolveValueDisplayAnchor,
+            resolveValueDisplayRowGap: (items) => this.resolveValueDisplayRowGap(items),
+            setElementAttributeIfChanged: (...args) => this.setElementAttributeIfChanged(...args),
+            computeValueDisplayRowOffsets
+        });
     },
 
     /**
      * 更新元器件的数值显示
      */
     updateValueDisplay(g, comp, showCurrent, showVoltage, showPower) {
-        return updateValueDisplayRuntime({
+        return updateValueDisplayRenderer({
             g,
             comp,
             showCurrent,
             showVoltage,
             showPower,
-            helpers: {
-                getValueDisplayElements: (node) => this.getValueDisplayElements(node),
-                setDisplayTextAndStyle: (...args) => this.setDisplayTextAndStyle(...args),
-                layoutValueDisplay: (target, targetComp) => this.layoutValueDisplay(target, targetComp),
-                formatValue: (value, unit) => this.formatValue(value, unit),
-                setElementAttributeIfChanged: (...args) => this.setElementAttributeIfChanged(...args),
-                safeToggleClass
-            }
+            updateValueDisplayRuntime,
+            getValueDisplayElements: (node) => this.getValueDisplayElements(node),
+            setDisplayTextAndStyle: (...args) => this.setDisplayTextAndStyle(...args),
+            layoutValueDisplay: (target, targetComp) => this.layoutValueDisplay(target, targetComp),
+            formatValue: (value, unit) => this.formatValue(value, unit),
+            setElementAttributeIfChanged: (...args) => this.setElementAttributeIfChanged(...args),
+            safeToggleClass
         });
     },
 
@@ -1101,20 +1083,7 @@ export const SVGRenderer = {
      * 格式化数值 - 更清晰的显示
      */
     formatValue(value, unit) {
-        if (value === undefined || value === null || isNaN(value)) return '0 ' + unit;
-        
-        const absValue = Math.abs(value);
-        if (absValue >= 1000) {
-            return (value / 1000).toFixed(2) + ' k' + unit;
-        } else if (absValue >= 1) {
-            return value.toFixed(3) + ' ' + unit;
-        } else if (absValue >= 0.001) {
-            return (value * 1000).toFixed(2) + ' m' + unit;
-        } else if (absValue >= 0.000001) {
-            return (value * 1000000).toFixed(2) + ' μ' + unit;
-        } else {
-            return '0 ' + unit;
-        }
+        return formatDisplayValue(value, unit);
     },
 
     /**
