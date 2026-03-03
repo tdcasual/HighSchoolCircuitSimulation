@@ -159,6 +159,23 @@ async function runObservationScenario(browser, baseUrl) {
         `chart workspace add button should append one window (${afterAdd.before} -> ${afterAdd.after})`
     );
 
+    const phoneInteractionCheck = await page.evaluate(() => {
+        const workspace = window.app.chartWorkspace;
+        const firstWindow = workspace?.windows?.[0];
+        const root = firstWindow?.elements?.root;
+        return {
+            dragEnabled: workspace?.isWindowDragEnabled?.(),
+            resizeEnabled: workspace?.isWindowResizeEnabled?.(),
+            hasResizeHandle: Boolean(root?.querySelector?.('.chart-window-resizer-se')),
+            activeWindowClass: root?.classList?.contains?.('chart-window-active') === true
+        };
+    });
+
+    assertCondition(phoneInteractionCheck.dragEnabled === false, 'phone mode should disable chart drag');
+    assertCondition(phoneInteractionCheck.resizeEnabled === false, 'phone mode should disable chart resize');
+    assertCondition(phoneInteractionCheck.hasResizeHandle, 'chart window should expose resize handles in DOM');
+    assertCondition(phoneInteractionCheck.activeWindowClass, 'new chart should be focused as active window');
+
     const collapseCheck = await page.evaluate(() => {
         const workspace = window.app.chartWorkspace;
         const firstWindow = workspace?.windows?.[0];

@@ -810,6 +810,51 @@ body.layout-mode-phone .toolbox-close-btn {
     box-shadow: 0 18px 32px rgba(37, 99, 235, 0.16);
 }
 
+.chart-window-resizers {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+
+.chart-window-resizer {
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 1px solid rgba(15, 23, 42, 0.32);
+    background: rgba(255, 255, 255, 0.95);
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.18);
+    pointer-events: auto;
+}
+
+.chart-window-resizer.chart-window-resizer-nw {
+    left: -7px;
+    top: -7px;
+    cursor: nwse-resize;
+}
+
+.chart-window-resizer.chart-window-resizer-ne {
+    right: -7px;
+    top: -7px;
+    cursor: nesw-resize;
+}
+
+.chart-window-resizer.chart-window-resizer-sw {
+    left: -7px;
+    bottom: -7px;
+    cursor: nesw-resize;
+}
+
+.chart-window-resizer.chart-window-resizer-se {
+    right: -7px;
+    bottom: -7px;
+    cursor: nwse-resize;
+}
+
+.chart-window.chart-window-resizing {
+    box-shadow: 0 22px 38px rgba(15, 23, 42, 0.26);
+}
+
 #status-bar {
     position: absolute;
     bottom: 0;
@@ -2431,6 +2476,10 @@ body.layout-mode-phone .chart-window {
     min-height: 180px;
 }
 
+body.layout-mode-phone .chart-window-resizers {
+    display: none;
+}
+
 body.layout-mode-phone .chart-window-axis-controls,
 body.layout-mode-phone .chart-series-row-body,
 body.layout-mode-phone .chart-series-scatter-wrap {
@@ -2438,7 +2487,22 @@ body.layout-mode-phone .chart-series-scatter-wrap {
 }
 
 body.layout-mode-phone .chart-window-legend {
-    max-height: min(40vh, 240px);
+    display: none;
+}
+
+body.layout-mode-phone .chart-window.chart-window-active:not(.chart-window-legend-collapsed) .chart-window-legend {
+    display: block;
+    position: fixed;
+    left: max(8px, env(safe-area-inset-left));
+    right: max(8px, env(safe-area-inset-right));
+    bottom: calc(34px + env(safe-area-inset-bottom) + 8px);
+    max-height: min(42vh, 300px);
+    border: 1px solid rgba(148, 163, 184, 0.42);
+    border-radius: 12px 12px 0 0;
+    box-shadow: 0 -10px 26px rgba(15, 23, 42, 0.18);
+    background: rgba(255, 255, 255, 0.98);
+    z-index: 252;
+    pointer-events: auto;
 }
 
 body.layout-mode-phone.ai-input-active #canvas-mobile-controls,

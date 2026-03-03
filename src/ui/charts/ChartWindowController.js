@@ -52,6 +52,7 @@ export class ChartWindowController {
         this._autoRangeWindow = { x: null, y: null };
         this._latestText = '最新: —';
         this._dragSession = null;
+        this._resizeSession = null;
 
         this.elements = {
             root: null,
@@ -63,7 +64,8 @@ export class ChartWindowController {
             xQuantity: null,
             legend: null,
             legendBody: null,
-            legendToggleBtn: null
+            legendToggleBtn: null,
+            resizers: null
         };
 
         this.boundPointerMove = (event) => this.onPointerMove(event);
@@ -127,11 +129,22 @@ export class ChartWindowController {
         const legendBody = createElement('div', { className: 'chart-window-legend-body' });
         legend.appendChild(legendBody);
 
+        const resizers = createElement('div', { className: 'chart-window-resizers' });
+        ['nw', 'ne', 'sw', 'se'].forEach((dir) => {
+            const handle = createElement('div', {
+                className: `chart-window-resizer chart-window-resizer-${dir}`,
+                attrs: { 'data-resize-dir': dir }
+            });
+            safeAddEventListener(handle, 'pointerdown', (event) => this.onResizeHandlePointerDown(event, dir));
+            resizers.appendChild(handle);
+        });
+
         root.appendChild(header);
         root.appendChild(axisControls);
         root.appendChild(canvasWrap);
         root.appendChild(latest);
         root.appendChild(legend);
+        root.appendChild(resizers);
 
         this.elements = {
             root,
@@ -143,7 +156,8 @@ export class ChartWindowController {
             xQuantity,
             legend,
             legendBody,
-            legendToggleBtn
+            legendToggleBtn,
+            resizers
         };
 
         safeAddEventListener(root, 'pointerdown', () => {
@@ -182,7 +196,7 @@ export class ChartWindowController {
     }
 
     dispose() {
-        this.detachDragListeners();
+        this.cancelPointerSessions();
         safeInvokeMethod(this.elements.root, 'remove');
         this.seriesElements.clear();
     }
@@ -235,6 +249,7 @@ export class ChartWindowController {
         const pointerId = Number.isFinite(event?.pointerId) ? Number(event.pointerId) : null;
         if (pointerId == null) return;
 
+        this.cancelPointerSessions();
         this.workspace.focusWindow(this);
         this._dragSession = {
             pointerId,
@@ -247,29 +262,89 @@ export class ChartWindowController {
 
         safeInvokeMethod(this.elements.root?.classList, 'add', 'chart-window-dragging');
         safeInvokeMethod(this.elements.header, 'setPointerCapture', pointerId);
-
-        if (typeof window !== 'undefined') {
-            safeAddEventListener(window, 'pointermove', this.boundPointerMove);
-            safeAddEventListener(window, 'pointerup', this.boundPointerUp);
-            safeAddEventListener(window, 'pointercancel', this.boundPointerUp);
-        }
+        this.attachGlobalPointerListeners();
         event?.preventDefault?.();
     }
 
-    onPointerMove(event) {
-        const session = this._dragSession;
-        if (!session) return;
-        if (Number(event?.pointerId) !== session.pointerId) return;
+    onResizeHandlePointerDown(event, direction) {
+        if (!this.workspace.isWindowResizeEnabled()) return;
+        const pointerId = Number.isFinite(event?.pointerId) ? Number(event.pointerId) : null;
+        if (pointerId == null) return;
 
-        const dx = (Number(event?.clientX) || 0) - session.startX;
-        const dy = (Number(event?.clientY) || 0) - session.startY;
+        this.cancelPointerSessions();
+        this.workspace.focusWindow(this);
+        this._resizeSession = {
+            pointerId,
+            direction: String(direction || 'se'),
+            startX: Number(event?.clientX) || 0,
+            startY: Number(event?.clientY) || 0,
+            originFrame: { ...(this.state.frame || {}) },
+            pendingFrame: null
+        };
+
+        safeInvokeMethod(this.elements.root?.classList, 'add', 'chart-window-resizing');
+        safeInvokeMethod(event?.currentTarget, 'setPointerCapture', pointerId);
+        this.attachGlobalPointerListeners();
+        event?.preventDefault?.();
+        event?.stopPropagation?.();
+    }
+
+    onPointerMove(event) {
+        const resizeSession = this._resizeSession;
+        if (resizeSession && Number(event?.pointerId) === resizeSession.pointerId) {
+            const dx = (Number(event?.clientX) || 0) - resizeSession.startX;
+            const dy = (Number(event?.clientY) || 0) - resizeSession.startY;
+            const origin = resizeSession.originFrame || {};
+            const direction = resizeSession.direction || 'se';
+
+            const nextFrame = {
+                x: Number(origin.x) || 0,
+                y: Number(origin.y) || 0,
+                width: Number(origin.width) || 320,
+                height: Number(origin.height) || 240
+            };
+
+            if (direction.includes('e')) {
+                nextFrame.width += dx;
+            }
+            if (direction.includes('s')) {
+                nextFrame.height += dy;
+            }
+            if (direction.includes('w')) {
+                nextFrame.x += dx;
+                nextFrame.width -= dx;
+            }
+            if (direction.includes('n')) {
+                nextFrame.y += dy;
+                nextFrame.height -= dy;
+            }
+
+            const clamped = this.workspace.clampRect(nextFrame);
+            resizeSession.pendingFrame = clamped;
+            if (this.elements.root?.style) {
+                this.elements.root.style.left = `${clamped.x}px`;
+                this.elements.root.style.top = `${clamped.y}px`;
+                this.elements.root.style.width = `${clamped.width}px`;
+                this.elements.root.style.height = `${clamped.height}px`;
+            }
+            this.markDirty();
+            event?.preventDefault?.();
+            return;
+        }
+
+        const dragSession = this._dragSession;
+        if (!dragSession) return;
+        if (Number(event?.pointerId) !== dragSession.pointerId) return;
+
+        const dx = (Number(event?.clientX) || 0) - dragSession.startX;
+        const dy = (Number(event?.clientY) || 0) - dragSession.startY;
 
         const nextFrame = this.workspace.clampRect({
             ...this.state.frame,
-            x: Math.round(session.originX + dx),
-            y: Math.round(session.originY + dy)
+            x: Math.round(dragSession.originX + dx),
+            y: Math.round(dragSession.originY + dy)
         });
-        session.pendingFrame = nextFrame;
+        dragSession.pendingFrame = nextFrame;
 
         if (this.elements.root?.style) {
             this.elements.root.style.left = `${nextFrame.x}px`;
@@ -279,17 +354,43 @@ export class ChartWindowController {
     }
 
     onPointerUp(event) {
-        const session = this._dragSession;
-        if (!session) return;
-        if (Number(event?.pointerId) !== session.pointerId) return;
+        const resizeSession = this._resizeSession;
+        if (resizeSession && Number(event?.pointerId) === resizeSession.pointerId) {
+            this._resizeSession = null;
+            safeInvokeMethod(this.elements.root?.classList, 'remove', 'chart-window-resizing');
+            this.detachDragListeners();
+            if (resizeSession.pendingFrame) {
+                this.workspace.commandService.updateChartFrame(this.state.id, resizeSession.pendingFrame);
+            }
+            return;
+        }
+
+        const dragSession = this._dragSession;
+        if (!dragSession) return;
+        if (Number(event?.pointerId) !== dragSession.pointerId) return;
 
         this._dragSession = null;
         this.detachDragListeners();
         safeInvokeMethod(this.elements.root?.classList, 'remove', 'chart-window-dragging');
 
-        if (session.pendingFrame) {
-            this.workspace.commandService.updateChartFrame(this.state.id, session.pendingFrame);
+        if (dragSession.pendingFrame) {
+            this.workspace.commandService.updateChartFrame(this.state.id, dragSession.pendingFrame);
         }
+    }
+
+    attachGlobalPointerListeners() {
+        if (typeof window === 'undefined') return;
+        safeAddEventListener(window, 'pointermove', this.boundPointerMove);
+        safeAddEventListener(window, 'pointerup', this.boundPointerUp);
+        safeAddEventListener(window, 'pointercancel', this.boundPointerUp);
+    }
+
+    cancelPointerSessions() {
+        this._dragSession = null;
+        this._resizeSession = null;
+        safeInvokeMethod(this.elements.root?.classList, 'remove', 'chart-window-dragging');
+        safeInvokeMethod(this.elements.root?.classList, 'remove', 'chart-window-resizing');
+        this.detachDragListeners();
     }
 
     detachDragListeners() {

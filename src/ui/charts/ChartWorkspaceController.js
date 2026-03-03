@@ -123,6 +123,10 @@ export class ChartWorkspaceController {
         return this.layoutMode !== 'phone';
     }
 
+    isWindowResizeEnabled() {
+        return this.layoutMode !== 'phone';
+    }
+
     onLayoutModeChanged(mode = 'desktop') {
         this.layoutMode = String(mode || 'desktop');
         safeClassListToggle(this.root, 'chart-workspace-phone', this.layoutMode === 'phone');
