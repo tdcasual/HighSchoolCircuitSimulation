@@ -10,8 +10,8 @@ npm run report:debt-dashboard
 
 ## Output Files
 
-- `docs/reports/debt-dashboard.json`：结构化机器可读指标
-- `docs/reports/debt-dashboard.md`：便于评审的文本摘要
+- `docs/reports/debt-dashboard.json`：结构化机器可读指标（生成产物）
+- `docs/reports/debt-dashboard.md`：便于评审的文本摘要（生成产物，默认不入库）
 
 ## Current Metrics Included
 
