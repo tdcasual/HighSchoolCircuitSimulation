@@ -19,13 +19,13 @@ export function buildAppSaveData({
 } = {}) {
     const serialized = safeInvokeMethod(circuit, 'toJSON');
     const data = isPlainObject(serialized)
-        ? serialized
+        ? { ...serialized }
         : {
             components: [],
             wires: []
         };
 
-    data.meta = isPlainObject(data.meta) ? data.meta : {};
+    data.meta = isPlainObject(serialized?.meta) ? { ...serialized.meta } : {};
 
     const exerciseBoardData = safeInvokeMethod(exerciseBoard, 'toJSON');
     if (exerciseBoardData !== undefined) {

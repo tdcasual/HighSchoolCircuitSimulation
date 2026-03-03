@@ -55,6 +55,22 @@ describe('AppSerialization', () => {
         expect(result.meta?.observation).toBeUndefined();
     });
 
+    it('buildAppSaveData does not throw when circuit.toJSON returns a frozen object', () => {
+        const frozenPayload = Object.freeze({
+            components: [],
+            wires: []
+        });
+        const circuit = {
+            toJSON: vi.fn(() => frozenPayload)
+        };
+
+        expect(() => buildAppSaveData({ circuit })).not.toThrow();
+
+        const result = buildAppSaveData({ circuit });
+        expect(result).not.toBe(frozenPayload);
+        expect(result.meta).toEqual({});
+    });
+
     it('restoreAppMetaFromSaveData only calls callable fromJSON methods', () => {
         const exerciseBoard = {
             fromJSON: vi.fn()
