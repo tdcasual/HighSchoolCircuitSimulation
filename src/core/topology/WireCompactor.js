@@ -10,7 +10,14 @@ export class WireCompactor {
             syncWireEndpointsToTerminalRefs();
         }
         const scoped = scopeWireIds
-            ? new Set(Array.from(scopeWireIds).filter(Boolean))
+            ? new Set(
+                Array.from(scopeWireIds)
+                    .map((wireId) => {
+                        if (wireId === undefined || wireId === null) return '';
+                        return String(wireId).trim();
+                    })
+                    .filter((wireId) => wireId !== '')
+            )
             : null;
 
         const removedIds = [];
