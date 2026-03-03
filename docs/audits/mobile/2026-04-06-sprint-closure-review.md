@@ -1,5 +1,7 @@
 # Sprint Closure Review (2026-04-06)
 
+> Note: This is an archived sprint-closure record. Validate current branch status via latest CI gates.
+
 ## Scope
 
 Close out the post-v0.9 8-day hardening sprint and confirm release readiness evidence is complete.
@@ -32,9 +34,8 @@ Close out the post-v0.9 8-day hardening sprint and confirm release readiness evi
 - `output/benchmarks/ai-teaching-mini-eval/mini-eval.md`
 - `output/e2e/responsive-touch/mobile-flow-baseline.json`
 
-## Final Decision
+## Final Decision (Archive Snapshot)
 
-- Release recommendation: `GO`
+- Release recommendation at archived checkpoint: `GO`
 - Residual risk:
   - One existing lint warning remains (`PanelLayoutController.js:125`), non-blocking.
-

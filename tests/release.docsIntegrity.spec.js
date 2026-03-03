@@ -90,4 +90,16 @@ describe('release docs integrity', () => {
         expect(output.ok).toBe(false);
         expect(output.output).toContain('missing reference');
     });
+
+    it('avoids stale pass claims and removed guard command references', () => {
+        const readme = readFileSync(resolve(process.cwd(), 'README.md'), 'utf8');
+        const legacyReport = readFileSync(
+            resolve(process.cwd(), 'docs/reports/2026-03-02-legacy-prune-final-report.md'),
+            'utf8'
+        );
+
+        expect(readme).toContain('请以当前 CI 运行结果为准');
+        expect(readme).not.toContain('质量门禁：`check:full` + P0/CircuitJS/AI 三组 baseline 回归通过');
+        expect(legacyReport).not.toContain('npm run check:legacy-prune-readiness');
+    });
 });

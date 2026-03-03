@@ -1,12 +1,13 @@
-# 核心大文件拆分计划（Circuit / Component / InteractionOrchestrator）
+# 核心大文件拆分计划（Circuit / Component / ObservationPanel / InteractionOrchestrator）
 
 ## 背景
 
 当前核心文件规模（chart-workspace 架构）：
 
-- `src/engine/Circuit.js`: 1961 行
-- `src/components/Component.js`: 1649 行
-- `src/app/interaction/InteractionOrchestrator.js`: 1365 行
+- `src/engine/Circuit.js`: 1962 行
+- `src/components/Component.js`: 1650 行
+- `src/ui/ObservationPanel.js`: 1587 行
+- `src/app/interaction/InteractionOrchestrator.js`: 187 行
 
 这些文件继续增长会显著提高回归成本和合并冲突概率。
 
@@ -16,16 +17,17 @@
 
 - `Circuit.js <= 2000`
 - `Component.js <= 1700`
-- `InteractionOrchestrator.js <= 1450`
+- `ObservationPanel.js <= 1650`
+- `InteractionOrchestrator.js <= 400`
 
 目标是先阻止继续膨胀，再进行结构拆分。
 
 ## 拆分顺序与目标
 
-1. `InteractionOrchestrator.js`（低风险先行）
-   - 按职责拆分：模式状态机 / 组件操作 / 导线交互代理
-   - 将“写入 Circuit 的入口”收敛到 facade，减少横向耦合
-   - 目标：降到 `< 1000` 行
+1. `ObservationPanel.js`（优先）
+   - 继续向 `ChartWorkspaceController / ChartWindowController` 迁移行为契约
+   - 将仅 legacy 入口的 UI/渲染路径拆至独立适配层
+   - 目标：降到 `< 1200` 行或完成运行时下线
 
 2. `Component.js`
    - 拆出几何与命中测试（terminal/segment/collision）
@@ -37,6 +39,10 @@
    - 拆出短路诊断与稳定性防护管线
    - 拆出仿真循环编排（step/tick 与 runtime guard）
    - 目标：降到 `< 1400` 行
+
+4. `InteractionOrchestrator.js`（已完成阶段）
+   - 当前已拆分至 187 行，后续以稳定为主
+   - 目标：保持 `< 400` 行，不再作为首要拆分对象
 
 ## 拆分执行规则
 

@@ -16,6 +16,12 @@
 - 🔍 探针测量：对导线和节点做可视化观测
 - 🤖 AI 辅助：结合当前电路状态给出物理解释
 
+## 🧭 观察运行时契约（2026-03-03）
+
+- 运行时观察链路以 `ChartWorkspace` 为唯一真相（`window.app.chartWorkspace`）。
+- `ObservationPanel` 仅作为迁移期代码资产，不作为当前运行时契约。
+- 设计决策记录见：[`docs/adr/2026-03-03-observation-sot.md`](docs/adr/2026-03-03-observation-sot.md)。
+
 ## 📊 Observation v2（2026-02）
 
 - 双模式：`基础` / `高级`，在手机端默认以低干扰观察流程为主
@@ -31,7 +37,7 @@
 - 教学场景：内置 6 个课堂预设（串联/并联/分压/RC/电机/测量）
 - 首次引导：支持跳过与“记住选择”，减少回访用户干扰
 - AI 教学：运行时故障诊断可映射为“发生了什么/为什么/如何修复”教学提示
-- 质量门禁：`check:full` + P0/CircuitJS/AI 三组 baseline 回归通过
+- 质量门禁命令：`check:full` + P0/CircuitJS/AI baseline；请以当前 CI 运行结果为准。
 
 ## 🛡️ v0.10 稳定性门禁（2026-03）
 
@@ -39,7 +45,9 @@
 - 本轮报告：[`docs/reports/2026-03-02-architecture-derisk-report.md`](docs/reports/2026-03-02-architecture-derisk-report.md)
 - 新增矩阵命令：`npm run mode-conflict-matrix`
 
-## ✅ v1.0 8-Day 冲刺收官（2026-04-06）
+## ✅ v1.0 8-Day 冲刺档案（目标日期：2026-04-06）
+
+- 说明：以下内容为里程碑归档引用，不代表当前分支即时门禁状态。
 
 - 发布门禁：[`docs/releases/v1.0-8day-readiness-gate.md`](docs/releases/v1.0-8day-readiness-gate.md)
 - Go/No-Go 矩阵：[`docs/releases/v1.0-8day-go-no-go-matrix.md`](docs/releases/v1.0-8day-go-no-go-matrix.md)
@@ -108,6 +116,7 @@ npm run build:edgeone
 ## 📚 深入阅读（技术细节）
 
 - 文档系统入口：[`docs/README.md`](docs/README.md)
+- 观察链路清债闭环：[`docs/reports/2026-03-03-observation-tech-debt-closure-report.md`](docs/reports/2026-03-03-observation-tech-debt-closure-report.md)
 - 改进闭环流程：[`docs/process/improvement-workflow.md`](docs/process/improvement-workflow.md)
 - 手机端交互回归清单：[`docs/process/mobile-ux-regression-checklist.md`](docs/process/mobile-ux-regression-checklist.md)
 - 元器件行为与扩展流程：[`AGENTS.md`](AGENTS.md)

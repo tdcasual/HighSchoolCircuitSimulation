@@ -47,7 +47,7 @@
 
 本轮执行通过：
 
-- `npm run check:legacy-prune-readiness`
+- `node scripts/ci/assert-legacy-prune-readiness.mjs`（历史阶段脚本，当前仓库已下线）
 - `npm run check:registry-guard`
 - `npm run check:ci-workflow`
 - `npm run lint`
