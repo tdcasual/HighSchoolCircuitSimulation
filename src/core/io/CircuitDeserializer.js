@@ -3,6 +3,8 @@ import { computeOverlapFractionFromOffsetPx, computeParallelPlateCapacitance } f
 import { normalizeCanvasPoint, toCanvasInt } from '../../utils/CanvasCoords.js';
 import { CircuitSchemaGateway } from './CircuitSchemaGateway.js';
 
+const RESERVED_COMPONENT_PROPERTY_KEYS = new Set(['id', 'type', 'nodes']);
+
 function defaultNormalizeObservationProbe(probe) {
     if (!probe || typeof probe !== 'object') return null;
     const type = probe.type;
@@ -42,6 +44,14 @@ function sanitizeRuntimeCriticalProperties(comp) {
     }
 }
 
+function applyComponentProperties(comp, properties) {
+    if (!properties || typeof properties !== 'object') return;
+    for (const [key, value] of Object.entries(properties)) {
+        if (RESERVED_COMPONENT_PROPERTY_KEYS.has(key)) continue;
+        comp[key] = value;
+    }
+}
+
 export class CircuitDeserializer {
     static deserialize(json, options = {}) {
         CircuitSchemaGateway.validate(json);
@@ -67,7 +77,7 @@ export class CircuitDeserializer {
             if (compData.label) {
                 comp.label = compData.label;
             }
-            Object.assign(comp, compData.properties);
+            applyComponentProperties(comp, compData.properties);
             sanitizeRuntimeCriticalProperties(comp);
 
             if ((comp.type === 'Capacitor' || comp.type === 'Inductor' || comp.type === 'ParallelPlateCapacitor')

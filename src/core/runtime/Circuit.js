@@ -386,7 +386,7 @@ export class Circuit {
                 const terminalIndex = ref?.terminalIndex;
                 if (componentId === undefined || componentId === null) return;
                 if (!Number.isInteger(terminalIndex) || terminalIndex < 0) return;
-                const comp = this.components.get(componentId);
+                const comp = this.components.get(componentId) || this.components.get(String(componentId));
                 if (!comp) return;
                 const pos = getTerminalWorldPosition(comp, terminalIndex);
                 if (!pos) return;

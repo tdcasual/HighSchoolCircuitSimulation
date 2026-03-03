@@ -121,6 +121,53 @@ describe('Circuit IO gateway', () => {
         expect(() => CircuitDeserializer.deserialize(legacy)).toThrow(/meta\.version.*3/u);
     });
 
+    it('does not allow component properties to override top-level id/type during deserialize', () => {
+        const payload = {
+            meta: {
+                version: 3,
+                name: 'override-guard',
+                timestamp: 1760000000000
+            },
+            components: [
+                {
+                    id: 'V1',
+                    type: 'PowerSource',
+                    x: 0,
+                    y: 0,
+                    properties: {
+                        id: 'V_HIJACK',
+                        type: 'Resistor',
+                        voltage: 6,
+                        internalResistance: 2
+                    }
+                },
+                {
+                    id: 'R1',
+                    type: 'Resistor',
+                    x: 100,
+                    y: 0,
+                    properties: {
+                        resistance: 8
+                    }
+                }
+            ],
+            wires: [{
+                id: 'W1',
+                a: { x: 0, y: 0 },
+                b: { x: 100, y: 0 },
+                aRef: { componentId: 'V1', terminalIndex: 0 },
+                bRef: { componentId: 'R1', terminalIndex: 0 }
+            }]
+        };
+
+        const loaded = CircuitDeserializer.deserialize(payload);
+        const ids = loaded.components.map((component) => component.id);
+
+        expect(ids).toContain('V1');
+        expect(ids).not.toContain('V_HIJACK');
+        expect(loaded.components.find((component) => component.id === 'V1')?.type).toBe('PowerSource');
+    });
+
     it('loads and runs all classroom scenario presets', () => {
         const scenarios = getClassroomScenarioPack();
         expect(scenarios).toHaveLength(6);
