@@ -298,3 +298,33 @@ npm run check:v2:runtime-safety
 1. `tests/app.resultProjectorV2.spec.js` 通过（2 tests）。
 2. `check:v2:boundaries` 通过（`[v2-architecture] ok`）。
 3. `check:v2:runtime-safety` 通过（`[v2-runtime-safety] ok`）。
+
+### Task 10: Add v2 coordinators and one-step use case
+
+- Status: completed
+- Started: 2026-03-03
+- Completed: 2026-03-03
+- Notes:
+  - 新增 `tests/app.runSimulationStepV2.spec.js`（fail-first），覆盖：
+    - 单步仿真链路返回 `solveResult + projection + diagnostics + nextState`；
+    - 基准串联算例输出电流结果可用。
+  - 新增 `src/v2/app/coordinators/TopologyCoordinatorV2.js`：
+    - 从 `CircuitModel` 收敛组件集合并构建 `NetlistDTO`。
+  - 新增 `src/v2/app/coordinators/SimulationCoordinatorV2.js`：
+    - 封装 `solveCircuitV2` 调用与 state 透传。
+  - 新增 `src/v2/app/usecases/RunSimulationStepV2.js`：
+    - 串联 `CircuitModel -> NetlistBuilderV2 -> SolveCircuitV2 -> ResultProjector`。
+
+**Verification Commands**
+
+```bash
+npm test -- tests/app.runSimulationStepV2.spec.js
+npm run check:v2:boundaries
+npm run check:v2:runtime-safety
+```
+
+**Verification Summary**
+
+1. `tests/app.runSimulationStepV2.spec.js` 通过（1 test）。
+2. `check:v2:boundaries` 通过（`[v2-architecture] ok`）。
+3. `check:v2:runtime-safety` 通过（`[v2-runtime-safety] ok`）。
