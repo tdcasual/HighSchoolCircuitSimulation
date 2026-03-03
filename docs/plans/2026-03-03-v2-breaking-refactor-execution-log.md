@@ -328,3 +328,32 @@ npm run check:v2:runtime-safety
 1. `tests/app.runSimulationStepV2.spec.js` 通过（1 test）。
 2. `check:v2:boundaries` 通过（`[v2-architecture] ok`）。
 3. `check:v2:runtime-safety` 通过（`[v2-runtime-safety] ok`）。
+
+### Task 11: Extract component manifest and factory v2
+
+- Status: completed
+- Started: 2026-03-03
+- Completed: 2026-03-03
+- Notes:
+  - 新增 `tests/components.manifestV2.spec.js`（fail-first），覆盖：
+    - v2 manifest 覆盖全量组件类型；
+    - terminal count / default params 可读；
+    - factory 可基于 manifest 创建组件实例。
+  - 新增 `src/v2/domain/components/ComponentManifest.js`：
+    - 提供 `COMPONENT_MANIFEST_V2`、`listComponentTypesV2`、`getComponentManifestV2`。
+  - 新增 `src/v2/domain/components/createComponentV2.js`：
+    - 提供 v2 组件工厂和独立 ID 计数器管理 API。
+
+**Verification Commands**
+
+```bash
+npm test -- tests/components.manifestV2.spec.js
+npm run check:v2:boundaries
+npm run check:v2:runtime-safety
+```
+
+**Verification Summary**
+
+1. `tests/components.manifestV2.spec.js` 通过（3 tests）。
+2. `check:v2:boundaries` 通过（`[v2-architecture] ok`）。
+3. `check:v2:runtime-safety` 通过（`[v2-runtime-safety] ok`）。
