@@ -54,4 +54,31 @@ describe('ChartWorkspaceController', () => {
         expect(ChartWorkspaceController.prototype.resolveSourceId.call(controller, 0)).toBe('0');
         expect(ChartWorkspaceController.prototype.resolveSourceId.call(controller, null)).toBe(TIME_SOURCE_ID);
     });
+
+    it('keeps numeric zero source ids when adding series to a chart', () => {
+        const controller = Object.create(ChartWorkspaceController.prototype);
+        controller.circuit = {
+            components: new Map([
+                ['0', { id: '0', type: 'Resistor' }]
+            ]),
+            getObservationProbe: vi.fn(() => null)
+        };
+        controller.commandService = {
+            addSeries: vi.fn(() => 'series_1')
+        };
+        controller.getState = () => ({
+            selection: { activeChartId: 'chart_1' }
+        });
+
+        const seriesId = ChartWorkspaceController.prototype.addSeriesToChart.call(controller, 'chart_1', {
+            sourceId: 0,
+            quantityId: 'I'
+        });
+
+        expect(seriesId).toBe('series_1');
+        expect(controller.commandService.addSeries).toHaveBeenCalledWith('chart_1', expect.objectContaining({
+            sourceId: '0',
+            quantityId: 'I'
+        }));
+    });
 });

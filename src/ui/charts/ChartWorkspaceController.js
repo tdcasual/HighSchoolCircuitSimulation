@@ -359,7 +359,10 @@ export class ChartWorkspaceController {
         const targetChartId = chartId || this.getState()?.selection?.activeChartId;
         if (!targetChartId) return null;
 
-        const sourceId = options.sourceId ? this.resolveSourceId(options.sourceId) : null;
+        const hasSourceId = options?.sourceId !== undefined
+            && options?.sourceId !== null
+            && String(options.sourceId).trim() !== '';
+        const sourceId = hasSourceId ? this.resolveSourceId(options.sourceId) : null;
         let quantityId = options.quantityId || null;
         if (sourceId && !quantityId) {
             quantityId = getQuantitiesForSource(sourceId, this.circuit)[0]?.id || null;
