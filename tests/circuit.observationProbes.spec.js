@@ -20,6 +20,22 @@ describe('Circuit observation probes', () => {
         expect(circuit.getObservationProbe('P1')).toBeUndefined();
     });
 
+    it('supports numeric zero probe ids for lookup and removal', () => {
+        const circuit = new Circuit();
+        circuit.addWire({ id: 'W1', a: { x: 0, y: 0 }, b: { x: 20, y: 0 } });
+
+        const probe = circuit.addObservationProbe({
+            id: 0,
+            type: 'NodeVoltageProbe',
+            wireId: 'W1'
+        });
+
+        expect(probe?.id).toBe('0');
+        expect(circuit.getObservationProbe(0)?.id).toBe('0');
+        expect(circuit.removeObservationProbe(0)).toBe(true);
+        expect(circuit.getObservationProbe('0')).toBeUndefined();
+    });
+
     it('removes probes when wire is deleted', () => {
         const circuit = new Circuit();
         circuit.addWire({ id: 'W1', a: { x: 0, y: 0 }, b: { x: 20, y: 0 } });

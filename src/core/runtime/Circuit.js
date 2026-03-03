@@ -294,12 +294,12 @@ export class Circuit {
     }
 
     removeObservationProbe(id) {
-        if (!id) return false;
+        if (id === undefined || id === null || String(id).trim() === '') return false;
         return this.observationProbes.delete(String(id));
     }
 
     removeObservationProbesByWireId(wireId) {
-        if (!wireId) return;
+        if (wireId === undefined || wireId === null || String(wireId).trim() === '') return;
         const target = String(wireId);
         for (const [id, probe] of this.observationProbes.entries()) {
             if (probe?.wireId === target) {
@@ -323,7 +323,7 @@ export class Circuit {
     }
 
     getObservationProbe(id) {
-        if (!id) return undefined;
+        if (id === undefined || id === null || String(id).trim() === '') return undefined;
         return this.observationProbes.get(String(id));
     }
 
