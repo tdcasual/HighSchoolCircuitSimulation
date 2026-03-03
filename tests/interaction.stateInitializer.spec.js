@@ -25,7 +25,6 @@ describe('InteractionStateInitializer.initializeInteractionState', () => {
         expect(ctx.svg).toBe(app.svg);
 
         expect(ctx.isDragging).toBe(false);
-        expect(ctx.isWiring).toBe(false);
         expect(ctx.isDraggingComponent).toBe(false);
         expect(ctx.dragTarget).toBe(null);
         expect(ctx.dragGroup).toBe(null);
@@ -56,8 +55,11 @@ describe('InteractionStateInitializer.initializeInteractionState', () => {
         expect(ctx.blockSinglePointerInteraction).toBe(false);
         expect(ctx.lastPrimaryPointerType).toBe('mouse');
 
-        expect(ctx.pendingToolType).toBe(null);
         expect(ctx.pendingToolItem).toBe(null);
+        expect('pendingToolType' in ctx).toBe(false);
+        expect('mobileInteractionMode' in ctx).toBe(false);
+        expect('stickyWireTool' in ctx).toBe(false);
+        expect('isWiring' in ctx).toBe(false);
         expect(ctx.endpointAutoBridgeMode).toBe('auto');
         expect(ctx.statusActionTimer).toBe(null);
         expect(ctx.statusActionToken).toBe(null);

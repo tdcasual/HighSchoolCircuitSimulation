@@ -15,6 +15,7 @@ export function handleMouseLeave(_e) {
         }, {
             source: 'onMouseLeave:endpoint-drag-end'
         });
+        this.isDraggingWireEndpoint = false;
         this.wireEndpointDrag = null;
         this.renderer.clearTerminalHighlight();
         const affectedIds = Array.isArray(drag?.affected)

@@ -1,11 +1,13 @@
 import { InteractionModeStore, InteractionModes } from './InteractionModeStore.js';
 
-function captureInteractionModeContext(context = {}) {
+function captureRuntimeInteractionModeContext(context = {}) {
     return {
-        pendingToolType: context.pendingToolType ?? null,
-        mobileInteractionMode: context.mobileInteractionMode === 'wire' ? 'wire' : 'select',
-        stickyWireTool: !!context.stickyWireTool,
-        isWiring: !!context.isWiring,
+        // Legacy runtime wire flags are physically removed.
+        // Store initialization always starts from canonical select-mode defaults.
+        pendingTool: null,
+        mobileMode: 'select',
+        wireModeSticky: false,
+        wiringActive: false,
         isDraggingWireEndpoint: !!context.isDraggingWireEndpoint,
         isTerminalExtending: !!context.isTerminalExtending,
         isRheostatDragging: !!context.isRheostatDragging
@@ -17,10 +19,10 @@ function resolveInteractionMode(context = {}) {
         return InteractionModes.ENDPOINT_EDIT;
     }
     if (
-        context.pendingToolType === 'Wire'
-        || context.mobileInteractionMode === 'wire'
-        || context.stickyWireTool
-        || context.isWiring
+        context.pendingTool === 'Wire'
+        || context.mobileMode === 'wire'
+        || context.wireModeSticky
+        || context.wiringActive
     ) {
         return InteractionModes.WIRE;
     }
@@ -37,7 +39,7 @@ function applyInteractionModeStateToContext(context, state) {
 function ensureInteractionModeStore(context) {
     if (!context) return null;
     if (!(context.interactionModeStore instanceof InteractionModeStore)) {
-        const initialContext = captureInteractionModeContext(context);
+        const initialContext = captureRuntimeInteractionModeContext(context);
         context.interactionModeStore = new InteractionModeStore({
             mode: resolveInteractionMode(initialContext),
             context: initialContext
@@ -63,8 +65,12 @@ export function syncInteractionModeStore(context, options = {}) {
     const contextOverrides = options.context && typeof options.context === 'object'
         ? options.context
         : {};
+    const currentState = store.getState();
+    const baseContext = currentState?.context && typeof currentState.context === 'object'
+        ? currentState.context
+        : captureRuntimeInteractionModeContext(context);
     const modeContext = {
-        ...captureInteractionModeContext(context),
+        ...baseContext,
         ...contextOverrides,
         source: typeof options.source === 'string' && options.source ? options.source : null
     };

@@ -155,6 +155,18 @@ assertStepRun(
 assertStepRun(
     qualitySteps,
     'quality',
+    'Check observation runtime contract guard',
+    'node scripts/ci/assert-observation-runtime-contract.mjs'
+);
+assertStepRun(
+    qualitySteps,
+    'quality',
+    'Check interaction mode runtime contract guard',
+    'node scripts/ci/assert-interaction-mode-runtime-contract.mjs'
+);
+assertStepRun(
+    qualitySteps,
+    'quality',
     'Check registry legacy fallback guard',
     'node scripts/ci/assert-registry-legacy-fallback-guard.mjs'
 );
@@ -180,6 +192,8 @@ assertStepRun(
 assertStepOrder(qualitySteps, 'quality', [
     'Check release docs integrity',
     'Check interaction guide sync',
+    'Check observation runtime contract guard',
+    'Check interaction mode runtime contract guard',
     'Check registry legacy fallback guard',
     'Check CI workflow coverage',
     'Run reliability regression gate',

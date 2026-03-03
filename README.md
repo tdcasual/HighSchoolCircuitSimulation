@@ -19,8 +19,15 @@
 ## 🧭 观察运行时契约（2026-03-03）
 
 - 运行时观察链路以 `ChartWorkspace` 为唯一真相（`window.app.chartWorkspace`）。
-- `ObservationPanel` 仅作为迁移期代码资产，不作为当前运行时契约。
+- 旧 `ObservationPanel` 代码路径已下线，不再作为运行时契约或测试依赖。
 - 设计决策记录见：[`docs/adr/2026-03-03-observation-sot.md`](docs/adr/2026-03-03-observation-sot.md)。
+
+## 🧭 交互模式运行时契约（2026-03-03）
+
+- 交互模式链路以 `interactionModeStore.context` 为唯一真相。
+- 已删除 legacy runtime mode 字段代码路径：`pendingToolType` / `mobileInteractionMode` / `stickyWireTool` / `isWiring`。
+- canonical mode context 字段：`pendingTool` / `mobileMode` / `wireModeSticky` / `wiringActive`。
+- 设计决策记录见：[`docs/adr/2026-03-03-interaction-mode-sot.md`](docs/adr/2026-03-03-interaction-mode-sot.md)。
 
 ## 📊 Observation v2（2026-02）
 

@@ -17,12 +17,56 @@ afterEach(() => {
 });
 
 describe('TouchActionController', () => {
+    it('does not track when store context reports pending tool without legacy runtime fields', () => {
+        const interaction = {
+            blockSinglePointerInteraction: false,
+            interactionModeStore: {
+                getState: vi.fn(() => ({
+                    mode: 'wire',
+                    context: {
+                        pendingTool: 'Wire',
+                        wiringActive: false
+                    }
+                }))
+            }
+        };
+        const controller = new TouchActionController(interaction);
+
+        const shouldTrack = controller.shouldTrackPointer({
+            pointerType: 'touch'
+        });
+
+        expect(shouldTrack).toBe(false);
+    });
+
+    it('does not track when store context reports active wiring without legacy runtime fields', () => {
+        const interaction = {
+            blockSinglePointerInteraction: false,
+            interactionModeStore: {
+                getState: vi.fn(() => ({
+                    mode: 'wire',
+                    context: {
+                        pendingTool: null,
+                        wiringActive: true
+                    }
+                }))
+            }
+        };
+        const controller = new TouchActionController(interaction);
+
+        const shouldTrack = controller.shouldTrackPointer({
+            pointerType: 'touch'
+        });
+
+        expect(shouldTrack).toBe(false);
+    });
+
     it('opens component context menu on long press', () => {
         vi.useFakeTimers();
         const interaction = {
             blockSinglePointerInteraction: false,
-            pendingToolType: null,
-            isWiring: false,
+            pendingTool: null,
+            wiringActive: false,
             resolveProbeMarkerTarget: vi.fn(() => null),
             endPrimaryInteractionForGesture: vi.fn(),
             selectComponent: vi.fn(),
@@ -52,8 +96,8 @@ describe('TouchActionController', () => {
         vi.useFakeTimers();
         const interaction = {
             blockSinglePointerInteraction: false,
-            pendingToolType: null,
-            isWiring: false,
+            pendingTool: null,
+            wiringActive: false,
             resolveProbeMarkerTarget: vi.fn(() => null),
             endPrimaryInteractionForGesture: vi.fn(),
             selectComponent: vi.fn(),
@@ -84,8 +128,8 @@ describe('TouchActionController', () => {
         vi.useFakeTimers();
         const interaction = {
             blockSinglePointerInteraction: false,
-            pendingToolType: null,
-            isWiring: false,
+            pendingTool: null,
+            wiringActive: false,
             isDragging: false,
             resolveProbeMarkerTarget: vi.fn(() => null),
             endPrimaryInteractionForGesture: vi.fn(),

@@ -85,8 +85,8 @@ describe('UIStateController.getActiveInteractionMode', () => {
                     mode: 'endpoint-edit'
                 }))
             },
-            pendingToolType: 'Wire',
-            isWiring: true
+            pendingTool: 'Wire',
+            wiringActive: true
         };
 
         expect(UIStateController.getActiveInteractionMode.call(context)).toBe('endpoint-edit');
@@ -94,8 +94,8 @@ describe('UIStateController.getActiveInteractionMode', () => {
 
     it('defaults to select when mode store is unavailable and ignores legacy flags', () => {
         const context = {
-            pendingToolType: 'Wire',
-            isWiring: false,
+            pendingTool: 'Wire',
+            wiringActive: false,
             isDraggingWireEndpoint: false,
             isTerminalExtending: false,
             isRheostatDragging: false
@@ -111,8 +111,8 @@ describe('UIStateController.getActiveInteractionMode', () => {
                     mode: 'unsupported-mode'
                 }))
             },
-            pendingToolType: 'Wire',
-            isWiring: true
+            pendingTool: 'Wire',
+            wiringActive: true
         };
 
         expect(UIStateController.getActiveInteractionMode.call(context)).toBe('select');

@@ -8,12 +8,12 @@ import {
 } from '../src/app/interaction/InteractionModeBridge.js';
 
 describe('InteractionModeBridge', () => {
-    it('reads normalized runtime context when store state is unavailable', () => {
+    it('returns safe defaults when store state is unavailable and ignores legacy runtime fields', () => {
         const context = {
-            pendingToolType: 'Wire',
-            mobileInteractionMode: 'unknown-mode',
-            stickyWireTool: 1,
-            isWiring: 'yes',
+            pendingTool: 'Wire',
+            mobileMode: 'unknown-mode',
+            wireModeSticky: 1,
+            wiringActive: 'yes',
             isDraggingWireEndpoint: 0,
             isTerminalExtending: '1',
             isRheostatDragging: null
@@ -21,94 +21,94 @@ describe('InteractionModeBridge', () => {
 
         const modeContext = readInteractionModeContext(context);
         expect(modeContext).toEqual({
-            pendingToolType: 'Wire',
-            mobileInteractionMode: 'select',
-            stickyWireTool: true,
-            isWiring: true,
+            pendingTool: null,
+            mobileMode: 'select',
+            wireModeSticky: false,
+            wiringActive: false,
             isDraggingWireEndpoint: false,
-            isTerminalExtending: true,
+            isTerminalExtending: false,
             isRheostatDragging: false
         });
     });
 
-    it('writes normalized context to runtime flags and mode store in one call', () => {
+    it('writes normalized context to mode store without mutating legacy runtime flags', () => {
         const syncInteractionModeStore = vi.fn(() => ({ mode: 'wire', context: {}, version: 1 }));
         const context = {
-            pendingToolType: 'Wire',
-            mobileInteractionMode: 'select',
-            stickyWireTool: false,
-            isWiring: false,
+            pendingTool: 'Wire',
+            mobileMode: 'select',
+            wireModeSticky: false,
+            wiringActive: false,
             isDraggingWireEndpoint: false,
             syncInteractionModeStore
         };
 
         setInteractionModeContext(context, {
-            pendingToolType: '',
-            mobileInteractionMode: 'wire',
-            stickyWireTool: 1,
-            isWiring: 1,
+            pendingTool: '',
+            mobileMode: 'wire',
+            wireModeSticky: 1,
+            wiringActive: 1,
             isDraggingWireEndpoint: 1
         }, {
             mode: 'wire',
             source: 'mode-bridge-spec'
         });
 
-        expect(context.pendingToolType).toBe(null);
-        expect(context.mobileInteractionMode).toBe('wire');
-        expect(context.stickyWireTool).toBe(true);
-        expect(context.isWiring).toBe(true);
-        expect(context.isDraggingWireEndpoint).toBe(true);
+        expect(context.pendingTool).toBe('Wire');
+        expect(context.mobileMode).toBe('select');
+        expect(context.wireModeSticky).toBe(false);
+        expect(context.wiringActive).toBe(false);
+        expect(context.isDraggingWireEndpoint).toBe(false);
         expect(syncInteractionModeStore).toHaveBeenCalledWith({
             mode: 'wire',
             source: 'mode-bridge-spec',
             context: {
-                pendingToolType: null,
-                mobileInteractionMode: 'wire',
-                stickyWireTool: true,
-                isWiring: true,
+                pendingTool: null,
+                mobileMode: 'wire',
+                wireModeSticky: true,
+                wiringActive: true,
                 isDraggingWireEndpoint: true
             }
         });
     });
 
-    it('supports wire-context and wiring-active convenience helpers', () => {
+    it('supports wire-context and wiring-active helpers without mutating legacy runtime flags', () => {
         const syncInteractionModeStore = vi.fn(() => ({ mode: 'wire', context: {}, version: 1 }));
         const context = {
-            pendingToolType: null,
-            mobileInteractionMode: 'select',
-            stickyWireTool: false,
-            isWiring: false,
+            pendingTool: null,
+            mobileMode: 'select',
+            wireModeSticky: false,
+            wiringActive: false,
             syncInteractionModeStore
         };
 
         setWireToolContext(context, {
-            pendingToolType: 'Wire',
-            mobileInteractionMode: 'wire',
-            stickyWireTool: true
+            pendingTool: 'Wire',
+            mobileMode: 'wire',
+            wireModeSticky: true
         }, {
             mode: 'wire',
             source: 'wire-context-spec'
         });
         setWiringActive(context, true, { mode: 'wire', source: 'set-wiring-active-spec' });
 
-        expect(context.pendingToolType).toBe('Wire');
-        expect(context.mobileInteractionMode).toBe('wire');
-        expect(context.stickyWireTool).toBe(true);
-        expect(context.isWiring).toBe(true);
+        expect(context.pendingTool).toBe(null);
+        expect(context.mobileMode).toBe('select');
+        expect(context.wireModeSticky).toBe(false);
+        expect(context.wiringActive).toBe(false);
         expect(syncInteractionModeStore).toHaveBeenNthCalledWith(1, {
             mode: 'wire',
             source: 'wire-context-spec',
             context: {
-                pendingToolType: 'Wire',
-                mobileInteractionMode: 'wire',
-                stickyWireTool: true
+                pendingTool: 'Wire',
+                mobileMode: 'wire',
+                wireModeSticky: true
             }
         });
         expect(syncInteractionModeStore).toHaveBeenNthCalledWith(2, {
             mode: 'wire',
             source: 'set-wiring-active-spec',
             context: {
-                isWiring: true
+                wiringActive: true
             }
         });
     });

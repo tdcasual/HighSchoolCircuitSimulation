@@ -71,11 +71,11 @@ export function resolveWireModeGestureThreshold(pointerType, kind = 'default') {
 
 export function restorePendingWireToolAfterAction(context) {
     const modeContext = readInteractionModeContext(context);
-    if (modeContext?.stickyWireTool) {
+    if (modeContext?.wireModeSticky) {
         setWireToolContext(context, {
-            pendingToolType: 'Wire',
-            mobileInteractionMode: 'wire',
-            stickyWireTool: true
+            pendingTool: 'Wire',
+            mobileMode: 'wire',
+            wireModeSticky: true
         }, {
             mode: InteractionModes.WIRE,
             source: 'restorePendingWireTool:wire'
@@ -87,10 +87,10 @@ export function restorePendingWireToolAfterAction(context) {
     } else {
         context.clearPendingToolType({ silent: true });
         setInteractionModeContext(context, {
-            pendingToolType: null,
-            mobileInteractionMode: 'select',
-            stickyWireTool: false,
-            isWiring: false
+            pendingTool: null,
+            mobileMode: 'select',
+            wireModeSticky: false,
+            wiringActive: false
         }, {
             mode: InteractionModes.SELECT,
             source: 'restorePendingWireTool:select'
@@ -129,7 +129,8 @@ export function resolveLiveWireStart(context) {
 }
 
 export function syncActiveWireStartAfterCompaction(context, compacted = null) {
-    if (!context?.isWiring || context?.wireStart?.snap?.type !== 'wire-endpoint') {
+    const modeContext = readInteractionModeContext(context);
+    if (!modeContext.wiringActive || context?.wireStart?.snap?.type !== 'wire-endpoint') {
         return;
     }
 

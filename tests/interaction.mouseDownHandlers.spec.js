@@ -4,10 +4,58 @@ import {
     handlePendingToolMouseDown
 } from '../src/app/interaction/InteractionOrchestratorMouseDownHandlers.js';
 
+function createInteractionModeStore(modeContext = {}) {
+    return {
+        getState: vi.fn(() => ({
+            mode: modeContext.pendingTool === 'Wire' || modeContext.wiringActive ? 'wire' : 'select',
+            context: {
+                pendingTool: null,
+                mobileMode: 'select',
+                wireModeSticky: false,
+                wiringActive: false,
+                ...modeContext
+            }
+        }))
+    };
+}
+
 describe('InteractionOrchestratorMouseDownHandlers.handlePendingToolMouseDown', () => {
+    it('uses store context pending tool when legacy runtime field is absent', () => {
+        const context = {
+            interactionModeStore: {
+                getState: vi.fn(() => ({
+                    mode: 'wire',
+                    context: {
+                        pendingTool: 'Resistor',
+                        wiringActive: false
+                    }
+                }))
+            },
+            placePendingToolAt: vi.fn()
+        };
+        const event = {
+            button: 0,
+            clientX: 12,
+            clientY: 16,
+            target: {}
+        };
+
+        const handled = handlePendingToolMouseDown.call(context, event, {
+            target: event.target,
+            terminalTarget: null,
+            componentGroup: null
+        });
+
+        expect(handled).toBe(true);
+        expect(context.placePendingToolAt).toHaveBeenCalledWith(12, 16);
+    });
+
     it('returns false when no pending tool is armed', () => {
         const context = {
-            pendingToolType: null,
+            interactionModeStore: createInteractionModeStore({
+                pendingTool: null,
+                wiringActive: false
+            }),
             placePendingToolAt: vi.fn()
         };
         const event = {
@@ -31,8 +79,10 @@ describe('InteractionOrchestratorMouseDownHandlers.handlePendingToolMouseDown', 
         const terminalTarget = { dataset: { terminal: '1' } };
         const componentGroup = { dataset: { id: 'R1' } };
         const context = {
-            pendingToolType: 'Wire',
-            isWiring: false,
+            interactionModeStore: createInteractionModeStore({
+                pendingTool: 'Wire',
+                wiringActive: false
+            }),
             resolvePointerType: vi.fn(() => 'mouse'),
             renderer: {
                 getTerminalPosition: vi.fn(() => ({ x: 220, y: 180 }))
@@ -69,9 +119,16 @@ describe('InteractionOrchestratorMouseDownHandlers.handlePendingToolMouseDown', 
 
     it('cancels active wiring when no valid finish snap is found', () => {
         const context = {
-            pendingToolType: 'Wire',
-            stickyWireTool: false,
-            isWiring: true,
+            interactionModeStore: {
+                getState: vi.fn(() => ({
+                    mode: 'wire',
+                    context: {
+                        pendingTool: 'Wire',
+                        wireModeSticky: false,
+                        wiringActive: true
+                    }
+                }))
+            },
             resolvePointerType: vi.fn(() => 'mouse'),
             isWireEndpointTarget: vi.fn(() => false),
             screenToCanvas: vi.fn(() => ({ x: 300, y: 200 })),
@@ -106,7 +163,10 @@ describe('InteractionOrchestratorMouseDownHandlers.handlePendingToolMouseDown', 
 
     it('places pending non-wire tool and exits', () => {
         const context = {
-            pendingToolType: 'Resistor',
+            interactionModeStore: createInteractionModeStore({
+                pendingTool: 'Resistor',
+                wiringActive: false
+            }),
             placePendingToolAt: vi.fn()
         };
         const event = {

@@ -2,6 +2,7 @@ import {
     initializeInteractionModeStore as initializeInteractionModeStoreViaStateMachine,
     syncInteractionModeStore as syncInteractionModeStoreViaStateMachine
 } from './InteractionModeStateMachine.js';
+import { readInteractionModeContext } from './InteractionModeBridge.js';
 import {
     safeClosest,
 } from './InteractionOrchestratorHelpers.js';
@@ -78,7 +79,8 @@ export function onMouseDown(e) {
 
     // 如果正在连线模式，点击非端子/非节点的地方应该取消连线
     // 点击端子或节点会在 onMouseUp 中处理
-    if (this.isWiring) {
+    const modeContext = readInteractionModeContext(this);
+    if (modeContext.wiringActive) {
         // 连线模式下的 mousedown 不做特殊处理，让 mouseup 来处理
         return;
     }

@@ -6,21 +6,21 @@ export const InteractionModes = Object.freeze({
 
 const SUPPORTED_MODES = new Set(Object.values(InteractionModes));
 
-function normalizePendingToolType(type) {
+function normalizePendingTool(type) {
     if (type === null || type === undefined || type === '') return null;
     return String(type);
 }
 
-function normalizeMobileInteractionMode(mode) {
+function normalizeMobileMode(mode) {
     return mode === 'wire' ? 'wire' : 'select';
 }
 
 function normalizeModeContext(context = {}) {
     return {
-        pendingToolType: normalizePendingToolType(context.pendingToolType),
-        mobileInteractionMode: normalizeMobileInteractionMode(context.mobileInteractionMode),
-        stickyWireTool: !!context.stickyWireTool,
-        isWiring: !!context.isWiring,
+        pendingTool: normalizePendingTool(context.pendingTool),
+        mobileMode: normalizeMobileMode(context.mobileMode),
+        wireModeSticky: !!context.wireModeSticky,
+        wiringActive: !!context.wiringActive,
         isDraggingWireEndpoint: !!context.isDraggingWireEndpoint,
         isTerminalExtending: !!context.isTerminalExtending,
         isRheostatDragging: !!context.isRheostatDragging,
@@ -44,10 +44,10 @@ function cloneState(state) {
 }
 
 function isContextEqual(a, b) {
-    return a.pendingToolType === b.pendingToolType
-        && a.mobileInteractionMode === b.mobileInteractionMode
-        && a.stickyWireTool === b.stickyWireTool
-        && a.isWiring === b.isWiring
+    return a.pendingTool === b.pendingTool
+        && a.mobileMode === b.mobileMode
+        && a.wireModeSticky === b.wireModeSticky
+        && a.wiringActive === b.wiringActive
         && a.isDraggingWireEndpoint === b.isDraggingWireEndpoint
         && a.isTerminalExtending === b.isTerminalExtending
         && a.isRheostatDragging === b.isRheostatDragging

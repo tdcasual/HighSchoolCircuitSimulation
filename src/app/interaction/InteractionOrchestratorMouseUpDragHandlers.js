@@ -19,6 +19,7 @@ export function handleWireEndpointDragMouseUp(e) {
     }, {
         source: 'onMouseUp:endpoint-drag-end'
     });
+    this.isDraggingWireEndpoint = false;
     this.wireEndpointDrag = null;
     this.renderer.clearTerminalHighlight();
 

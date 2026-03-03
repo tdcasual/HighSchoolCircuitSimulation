@@ -4,6 +4,7 @@ import { existsSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { getInteractionModeSnapshot } from '../../src/ui/interaction/ToolPlacementController.js';
+import { InteractionModeStore } from '../../src/app/interaction/InteractionModeStore.js';
 
 const POINTER_TYPES = ['mouse', 'pen', 'touch'];
 const LAYOUT_MODES = ['desktop', 'tablet', 'compact', 'phone'];
@@ -75,6 +76,19 @@ function withLayoutDocument(layoutMode, callback) {
 }
 
 function createBaseContext({ classroomLevel, embedReadonly }) {
+    const interactionModeStore = new InteractionModeStore({
+        mode: 'select',
+        context: {
+            pendingTool: null,
+            mobileMode: 'select',
+            wireModeSticky: false,
+            wiringActive: false,
+            isDraggingWireEndpoint: false,
+            isTerminalExtending: false,
+            isRheostatDragging: false
+        }
+    });
+
     return {
         app: {
             classroomMode: { activeLevel: classroomLevel },
@@ -83,29 +97,33 @@ function createBaseContext({ classroomLevel, embedReadonly }) {
                 readonly: !!embedReadonly
             }
         },
-        pendingToolType: null,
-        mobileInteractionMode: 'select',
-        stickyWireTool: false,
-        isWiring: false,
-        isDraggingWireEndpoint: false,
-        isTerminalExtending: false,
-        isRheostatDragging: false,
+        interactionModeStore,
         endpointAutoBridgeMode: 'auto'
     };
 }
 
 function applyModeIntent(context, modeIntent) {
+    const modeStore = context?.interactionModeStore;
+    const baseContext = modeStore?.getState?.().context || {};
+
     if (modeIntent === 'wire') {
-        context.pendingToolType = 'Wire';
-        context.mobileInteractionMode = 'wire';
-        context.stickyWireTool = true;
-        context.isWiring = true;
+        modeStore?.setMode?.('wire', {
+            ...baseContext,
+            pendingTool: 'Wire',
+            mobileMode: 'wire',
+            wireModeSticky: true,
+            wiringActive: true
+        });
         return 'wire';
     }
     if (modeIntent === 'endpoint-edit') {
-        context.isDraggingWireEndpoint = true;
+        modeStore?.setMode?.('endpoint-edit', {
+            ...baseContext,
+            isDraggingWireEndpoint: true
+        });
         return 'endpoint-edit';
     }
+    modeStore?.setMode?.('select', baseContext);
     return 'select';
 }
 

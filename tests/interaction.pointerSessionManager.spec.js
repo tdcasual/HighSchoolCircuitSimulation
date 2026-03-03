@@ -1,6 +1,31 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as PointerSessionManager from '../src/ui/interaction/PointerSessionManager.js';
 
+function createInteractionModeStore(modeContext = {}) {
+    const snapshot = {
+        pendingTool: null,
+        mobileMode: 'select',
+        wireModeSticky: false,
+        wiringActive: false,
+        isDraggingWireEndpoint: false,
+        isTerminalExtending: false,
+        isRheostatDragging: false,
+        ...modeContext
+    };
+    const mode = snapshot.isDraggingWireEndpoint || snapshot.isTerminalExtending || snapshot.isRheostatDragging
+        ? 'endpoint-edit'
+        : ((snapshot.pendingTool === 'Wire'
+            || snapshot.mobileMode === 'wire'
+            || snapshot.wireModeSticky
+            || snapshot.wiringActive) ? 'wire' : 'select');
+    return {
+        getState: vi.fn(() => ({
+            mode,
+            context: { ...snapshot }
+        }))
+    };
+}
+
 describe('PointerSessionManager', () => {
     it('routes primary pointer down to mouse handler', () => {
         const context = {
@@ -98,7 +123,7 @@ describe('PointerSessionManager', () => {
             isDraggingWireEndpoint: false,
             isDraggingWire: false,
             isDragging: false,
-            isWiring: true,
+            wiringActive: true,
             wireStart: {
                 x: 44,
                 y: 66,
@@ -106,10 +131,22 @@ describe('PointerSessionManager', () => {
             },
             tempWire: 'TEMP-1',
             ignoreNextWireMouseUp: true,
-            pendingToolType: 'Wire',
+            pendingTool: 'Wire',
             pendingToolItem,
-            mobileInteractionMode: 'wire',
-            stickyWireTool: true,
+            mobileMode: 'wire',
+            wireModeSticky: true,
+            interactionModeStore: {
+                getState: vi.fn(() => ({
+                    mode: 'wire',
+                    context: {
+                        pendingTool: 'Wire',
+                        mobileMode: 'wire',
+                        wireModeSticky: true,
+                        wiringActive: true
+                    }
+                }))
+            },
+            syncInteractionModeStore: vi.fn(() => ({ mode: 'wire', context: {}, version: 1 })),
             renderer: {
                 removeTempWire: vi.fn(),
                 clearTerminalHighlight: vi.fn()
@@ -121,20 +158,71 @@ describe('PointerSessionManager', () => {
         PointerSessionManager.endPrimaryInteractionForGesture.call(context);
 
         expect(context.cancelWiring).not.toHaveBeenCalled();
-        expect(context.isWiring).toBe(false);
+        expect(context.syncInteractionModeStore).toHaveBeenCalledWith({
+            source: 'pointerSession.suspendWiringForPinch',
+            context: {
+                wiringActive: false
+            }
+        });
         expect(context.wireStart).toBe(null);
         expect(context.tempWire).toBe(null);
         expect(context.ignoreNextWireMouseUp).toBe(false);
         expect(context.suspendedWiringSession).toMatchObject({
             wireStart: { x: 44, y: 66, snap: { type: 'terminal', componentId: 'R1', terminalIndex: 0 } },
-            pendingToolType: 'Wire',
+            pendingTool: 'Wire',
             pendingToolItem,
-            mobileInteractionMode: 'wire',
-            stickyWireTool: true
+            mobileMode: 'wire',
+            wireModeSticky: true
         });
         expect(context.renderer.removeTempWire).toHaveBeenCalledWith('TEMP-1');
         expect(context.renderer.clearTerminalHighlight).toHaveBeenCalledTimes(1);
         expect(context.hideAlignmentGuides).toHaveBeenCalledTimes(1);
+    });
+
+    it('suspends active wiring for pinch gesture using mode-store state when runtime field is absent', () => {
+        const context = {
+            isPanning: false,
+            isDraggingWireEndpoint: false,
+            isDraggingWire: false,
+            isDragging: false,
+            wireStart: {
+                x: 44,
+                y: 66,
+                snap: { type: 'terminal', componentId: 'R1', terminalIndex: 0 }
+            },
+            tempWire: 'TEMP-1',
+            ignoreNextWireMouseUp: true,
+            pendingToolItem: null,
+            interactionModeStore: {
+                getState: vi.fn(() => ({
+                    mode: 'wire',
+                    context: {
+                        pendingTool: 'Wire',
+                        mobileMode: 'wire',
+                        wireModeSticky: true,
+                        wiringActive: true
+                    }
+                }))
+            },
+            renderer: {
+                removeTempWire: vi.fn(),
+                clearTerminalHighlight: vi.fn()
+            },
+            hideAlignmentGuides: vi.fn(),
+            cancelWiring: vi.fn()
+        };
+
+        PointerSessionManager.endPrimaryInteractionForGesture.call(context);
+
+        expect(context.cancelWiring).not.toHaveBeenCalled();
+        expect(context.wireStart).toBe(null);
+        expect(context.tempWire).toBe(null);
+        expect(context.ignoreNextWireMouseUp).toBe(false);
+        expect(context.suspendedWiringSession).toMatchObject({
+            pendingTool: 'Wire',
+            mobileMode: 'wire',
+            wireModeSticky: true
+        });
     });
 
     it('uses mode-store context when capturing suspended wire-tool session metadata', () => {
@@ -143,7 +231,7 @@ describe('PointerSessionManager', () => {
             isDraggingWireEndpoint: false,
             isDraggingWire: false,
             isDragging: false,
-            isWiring: true,
+            wiringActive: true,
             wireStart: {
                 x: 44,
                 y: 66,
@@ -151,18 +239,18 @@ describe('PointerSessionManager', () => {
             },
             tempWire: null,
             ignoreNextWireMouseUp: false,
-            pendingToolType: null,
+            pendingTool: null,
             pendingToolItem: null,
-            mobileInteractionMode: 'select',
-            stickyWireTool: false,
+            mobileMode: 'select',
+            wireModeSticky: false,
             interactionModeStore: {
                 getState: vi.fn(() => ({
                     mode: 'wire',
                     context: {
-                        pendingToolType: 'Wire',
-                        mobileInteractionMode: 'wire',
-                        stickyWireTool: true,
-                        isWiring: true
+                        pendingTool: 'Wire',
+                        mobileMode: 'wire',
+                        wireModeSticky: true,
+                        wiringActive: true
                     }
                 }))
             },
@@ -177,9 +265,52 @@ describe('PointerSessionManager', () => {
         PointerSessionManager.endPrimaryInteractionForGesture.call(context);
 
         expect(context.suspendedWiringSession).toMatchObject({
-            pendingToolType: 'Wire',
-            mobileInteractionMode: 'wire',
-            stickyWireTool: true
+            pendingTool: 'Wire',
+            mobileMode: 'wire',
+            wireModeSticky: true
+        });
+        expect(context.cancelWiring).not.toHaveBeenCalled();
+    });
+
+    it('does not fallback to legacy runtime mode fields when mode store context is unavailable', () => {
+        const context = {
+            isPanning: false,
+            isDraggingWireEndpoint: false,
+            isDraggingWire: false,
+            isDragging: false,
+            wiringActive: true,
+            wireStart: {
+                x: 21,
+                y: 33,
+                snap: { type: 'terminal', componentId: 'R3', terminalIndex: 0 }
+            },
+            tempWire: null,
+            ignoreNextWireMouseUp: false,
+            pendingTool: 'Wire',
+            pendingToolItem: null,
+            mobileMode: 'wire',
+            wireModeSticky: true,
+            interactionModeStore: {
+                getState: vi.fn(() => ({
+                    mode: 'wire',
+                    context: null
+                }))
+            },
+            renderer: {
+                removeTempWire: vi.fn(),
+                clearTerminalHighlight: vi.fn()
+            },
+            hideAlignmentGuides: vi.fn(),
+            cancelWiring: vi.fn()
+        };
+
+        PointerSessionManager.endPrimaryInteractionForGesture.call(context);
+
+        expect(context.suspendedWiringSession).toBeUndefined();
+        expect(context.wireStart).toEqual({
+            x: 21,
+            y: 33,
+            snap: { type: 'terminal', componentId: 'R3', terminalIndex: 0 }
         });
         expect(context.cancelWiring).not.toHaveBeenCalled();
     });
@@ -190,7 +321,7 @@ describe('PointerSessionManager', () => {
             isDraggingWireEndpoint: false,
             isDraggingWire: false,
             isDragging: false,
-            isWiring: false,
+            wiringActive: false,
             isTerminalExtending: true,
             isRheostatDragging: true,
             hideAlignmentGuides: vi.fn(),
@@ -212,7 +343,7 @@ describe('PointerSessionManager', () => {
             isDraggingWireEndpoint: false,
             isDraggingWire: false,
             isDragging: false,
-            isWiring: false
+            wiringActive: false
         };
 
         expect(() => PointerSessionManager.endPrimaryInteractionForGesture.call(context)).not.toThrow();
@@ -225,7 +356,7 @@ describe('PointerSessionManager', () => {
             isDraggingWireEndpoint: false,
             isDraggingWire: false,
             isDragging: false,
-            isWiring: false,
+            wiringActive: false,
             isTerminalExtending: true,
             isRheostatDragging: false,
             hideAlignmentGuides: vi.fn(),
@@ -247,7 +378,7 @@ describe('PointerSessionManager', () => {
             isDraggingWireEndpoint: false,
             isDraggingWire: false,
             isDragging: false,
-            isWiring: false,
+            wiringActive: false,
             isTerminalExtending: false,
             isRheostatDragging: true,
             hideAlignmentGuides: vi.fn(),
@@ -275,10 +406,10 @@ describe('PointerSessionManager', () => {
                     y: 18,
                     snap: { type: 'terminal', componentId: 'R2', terminalIndex: 1 }
                 },
-                pendingToolType: 'Wire',
+                pendingTool: 'Wire',
                 pendingToolItem,
-                mobileInteractionMode: 'wire',
-                stickyWireTool: true
+                mobileMode: 'wire',
+                wireModeSticky: true
             },
             renderer: {
                 getTerminalPosition: vi.fn(() => ({ x: 80, y: 120 }))
@@ -286,10 +417,10 @@ describe('PointerSessionManager', () => {
             circuit: {
                 getWire: vi.fn(() => null)
             },
-            pendingToolType: null,
+            pendingTool: null,
             pendingToolItem: null,
-            mobileInteractionMode: 'select',
-            stickyWireTool: false,
+            mobileMode: 'select',
+            wireModeSticky: false,
             startWiringFromPoint: vi.fn(),
             cancelWiring: vi.fn(),
             updateStatus: vi.fn(),
@@ -306,10 +437,10 @@ describe('PointerSessionManager', () => {
             snap: { type: 'terminal', componentId: 'R2', terminalIndex: 1 }
         }, null, false);
         expect(context.cancelWiring).not.toHaveBeenCalled();
-        expect(context.pendingToolType).toBe('Wire');
+        expect(context.pendingTool).toBe(null);
         expect(context.pendingToolItem).toBe(pendingToolItem);
-        expect(context.mobileInteractionMode).toBe('wire');
-        expect(context.stickyWireTool).toBe(true);
+        expect(context.mobileMode).toBe('select');
+        expect(context.wireModeSticky).toBe(false);
         expect(context.syncMobileModeButtons).toHaveBeenCalledTimes(1);
     });
 
@@ -326,10 +457,10 @@ describe('PointerSessionManager', () => {
                     y: 18,
                     snap: { type: 'wire-endpoint', wireId: 'W404', end: 'a' }
                 },
-                pendingToolType: 'Wire',
+                pendingTool: 'Wire',
                 pendingToolItem: null,
-                mobileInteractionMode: 'wire',
-                stickyWireTool: true
+                mobileMode: 'wire',
+                wireModeSticky: true
             },
             renderer: {
                 getTerminalPosition: vi.fn(() => null)
@@ -358,7 +489,7 @@ describe('PointerSessionManager', () => {
             pinchGesture: null,
             blockSinglePointerInteraction: false,
             primaryPointerId: 12,
-            isWiring: true,
+            wiringActive: true,
             isDraggingWireEndpoint: true,
             wireEndpointDrag: { wireId: 'W1', affected: [{ wireId: 'W1', end: 'a' }] },
             cancelWiring: vi.fn(),
@@ -381,7 +512,7 @@ describe('PointerSessionManager', () => {
             pinchGesture: null,
             blockSinglePointerInteraction: false,
             primaryPointerId: 121,
-            isWiring: true,
+            wiringActive: true,
             isDraggingWireEndpoint: false,
             isDraggingWire: false,
             isDragging: false,
@@ -392,10 +523,10 @@ describe('PointerSessionManager', () => {
                 getState: vi.fn(() => ({
                     mode: 'endpoint-edit',
                     context: {
-                        pendingToolType: 'Wire',
-                        mobileInteractionMode: 'wire',
-                        stickyWireTool: true,
-                        isWiring: true,
+                        pendingTool: 'Wire',
+                        mobileMode: 'wire',
+                        wireModeSticky: true,
+                        wiringActive: true,
                         isDraggingWireEndpoint: true,
                         isTerminalExtending: false,
                         isRheostatDragging: false
@@ -422,7 +553,7 @@ describe('PointerSessionManager', () => {
             pinchGesture: null,
             blockSinglePointerInteraction: false,
             primaryPointerId: 13,
-            isWiring: true,
+            wiringActive: true,
             isTerminalExtending: true,
             cancelWiring: vi.fn(),
             onMouseLeave: vi.fn(),
@@ -444,7 +575,7 @@ describe('PointerSessionManager', () => {
             pinchGesture: null,
             blockSinglePointerInteraction: false,
             primaryPointerId: 1310,
-            isWiring: false,
+            wiringActive: false,
             isTerminalExtending: true,
             cancelWiring: vi.fn(),
             onMouseLeave: vi.fn(),
@@ -470,8 +601,15 @@ describe('PointerSessionManager', () => {
             pinchGesture: null,
             blockSinglePointerInteraction: false,
             primaryPointerId: 131,
-            isWiring: true,
+            wiringActive: true,
             isTerminalExtending: true,
+            interactionModeStore: createInteractionModeStore({
+                pendingTool: 'Wire',
+                mobileMode: 'wire',
+                wireModeSticky: true,
+                wiringActive: true,
+                isTerminalExtending: true
+            }),
             ignoreNextWireMouseUp: true,
             cancelWiring: vi.fn(),
             onMouseLeave: vi.fn(),
@@ -492,7 +630,7 @@ describe('PointerSessionManager', () => {
             pinchGesture: null,
             blockSinglePointerInteraction: false,
             primaryPointerId: 14,
-            isWiring: true,
+            wiringActive: true,
             isRheostatDragging: true,
             cancelWiring: vi.fn(),
             onMouseLeave: vi.fn(),
@@ -514,7 +652,7 @@ describe('PointerSessionManager', () => {
             pinchGesture: null,
             blockSinglePointerInteraction: false,
             primaryPointerId: 1410,
-            isWiring: false,
+            wiringActive: false,
             isRheostatDragging: true,
             cancelWiring: vi.fn(),
             onMouseLeave: vi.fn(),
@@ -538,7 +676,13 @@ describe('PointerSessionManager', () => {
             pinchGesture: null,
             blockSinglePointerInteraction: false,
             primaryPointerId: 22,
-            isWiring: true,
+            wiringActive: true,
+            interactionModeStore: createInteractionModeStore({
+                pendingTool: 'Wire',
+                mobileMode: 'wire',
+                wireModeSticky: true,
+                wiringActive: true
+            }),
             isDraggingWireEndpoint: false,
             isDraggingWire: false,
             isDragging: false,
@@ -550,6 +694,39 @@ describe('PointerSessionManager', () => {
         };
 
         PointerSessionManager.onPointerCancel.call(context, { pointerId: 22 });
+
+        expect(context.cancelWiring).toHaveBeenCalledTimes(1);
+        expect(context.onMouseLeave).toHaveBeenCalledTimes(1);
+        expect(context.primaryPointerId).toBe(null);
+    });
+
+    it('cancels active wiring on pointer cancel based on mode-store state when runtime field is absent', () => {
+        const context = {
+            touchActionController: { onPointerCancel: vi.fn() },
+            pinchGesture: null,
+            blockSinglePointerInteraction: false,
+            primaryPointerId: 222,
+            interactionModeStore: {
+                getState: vi.fn(() => ({
+                    mode: 'wire',
+                    context: {
+                        wiringActive: true
+                    }
+                }))
+            },
+            isDraggingWireEndpoint: false,
+            isDraggingWire: false,
+            isDragging: false,
+            isTerminalExtending: false,
+            isRheostatDragging: false,
+            cancelWiring: vi.fn(),
+            onMouseLeave: vi.fn(),
+            activePointers: new Map([[222, { clientX: 30, clientY: 40, pointerType: 'touch' }]]),
+            releasePointerCaptureSafe: vi.fn(),
+            lastPrimaryPointerType: 'touch'
+        };
+
+        PointerSessionManager.onPointerCancel.call(context, { pointerId: 222 });
 
         expect(context.cancelWiring).toHaveBeenCalledTimes(1);
         expect(context.onMouseLeave).toHaveBeenCalledTimes(1);

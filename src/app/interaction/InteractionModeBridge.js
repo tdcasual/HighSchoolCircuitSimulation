@@ -1,25 +1,25 @@
-function normalizePendingToolType(type) {
+function normalizePendingTool(type) {
     if (type === null || type === undefined || type === '') return null;
     return String(type);
 }
 
-function normalizeMobileInteractionMode(mode) {
+function normalizeMobileMode(mode) {
     return mode === 'wire' ? 'wire' : 'select';
 }
 
 function normalizeContextPatch(patch = {}) {
     const next = {};
-    if ('pendingToolType' in patch) {
-        next.pendingToolType = normalizePendingToolType(patch.pendingToolType);
+    if ('pendingTool' in patch) {
+        next.pendingTool = normalizePendingTool(patch.pendingTool);
     }
-    if ('mobileInteractionMode' in patch) {
-        next.mobileInteractionMode = normalizeMobileInteractionMode(patch.mobileInteractionMode);
+    if ('mobileMode' in patch) {
+        next.mobileMode = normalizeMobileMode(patch.mobileMode);
     }
-    if ('stickyWireTool' in patch) {
-        next.stickyWireTool = !!patch.stickyWireTool;
+    if ('wireModeSticky' in patch) {
+        next.wireModeSticky = !!patch.wireModeSticky;
     }
-    if ('isWiring' in patch) {
-        next.isWiring = !!patch.isWiring;
+    if ('wiringActive' in patch) {
+        next.wiringActive = !!patch.wiringActive;
     }
     if ('isDraggingWireEndpoint' in patch) {
         next.isDraggingWireEndpoint = !!patch.isDraggingWireEndpoint;
@@ -33,29 +33,16 @@ function normalizeContextPatch(patch = {}) {
     return next;
 }
 
-function applyRuntimeContextPatch(context, patch = {}) {
-    if (!context || !patch || typeof patch !== 'object') return;
-    if ('pendingToolType' in patch) {
-        context.pendingToolType = patch.pendingToolType;
-    }
-    if ('mobileInteractionMode' in patch) {
-        context.mobileInteractionMode = patch.mobileInteractionMode;
-    }
-    if ('stickyWireTool' in patch) {
-        context.stickyWireTool = patch.stickyWireTool;
-    }
-    if ('isWiring' in patch) {
-        context.isWiring = patch.isWiring;
-    }
-    if ('isDraggingWireEndpoint' in patch) {
-        context.isDraggingWireEndpoint = patch.isDraggingWireEndpoint;
-    }
-    if ('isTerminalExtending' in patch) {
-        context.isTerminalExtending = patch.isTerminalExtending;
-    }
-    if ('isRheostatDragging' in patch) {
-        context.isRheostatDragging = patch.isRheostatDragging;
-    }
+function normalizeModeContextSnapshot(raw = {}) {
+    return {
+        pendingTool: normalizePendingTool(raw.pendingTool),
+        mobileMode: normalizeMobileMode(raw.mobileMode),
+        wireModeSticky: !!raw.wireModeSticky,
+        wiringActive: !!raw.wiringActive,
+        isDraggingWireEndpoint: !!raw.isDraggingWireEndpoint,
+        isTerminalExtending: !!raw.isTerminalExtending,
+        isRheostatDragging: !!raw.isRheostatDragging
+    };
 }
 
 function readModeStoreState(context) {
@@ -94,34 +81,26 @@ function syncModeStore(context, patch = {}, options = {}) {
 export function readInteractionModeContext(context = null) {
     const state = readModeStoreState(context);
     if (state?.context && typeof state.context === 'object') {
-        return { ...state.context };
+        return normalizeModeContextSnapshot(state.context);
     }
-    return {
-        pendingToolType: normalizePendingToolType(context?.pendingToolType),
-        mobileInteractionMode: normalizeMobileInteractionMode(context?.mobileInteractionMode),
-        stickyWireTool: !!context?.stickyWireTool,
-        isWiring: !!context?.isWiring,
-        isDraggingWireEndpoint: !!context?.isDraggingWireEndpoint,
-        isTerminalExtending: !!context?.isTerminalExtending,
-        isRheostatDragging: !!context?.isRheostatDragging
-    };
+    // runtime mode fields are legacy; absence of store must not read them.
+    return normalizeModeContextSnapshot();
 }
 
 export function setInteractionModeContext(context, patch = {}, options = {}) {
     if (!context) return null;
     const normalizedPatch = normalizeContextPatch(patch);
-    applyRuntimeContextPatch(context, normalizedPatch);
     return syncModeStore(context, normalizedPatch, options) || readModeStoreState(context);
 }
 
 export function setWireToolContext(context, wireToolPatch = {}, options = {}) {
     return setInteractionModeContext(context, {
-        pendingToolType: wireToolPatch.pendingToolType,
-        mobileInteractionMode: wireToolPatch.mobileInteractionMode,
-        stickyWireTool: wireToolPatch.stickyWireTool
+        pendingTool: wireToolPatch.pendingTool,
+        mobileMode: wireToolPatch.mobileMode,
+        wireModeSticky: wireToolPatch.wireModeSticky
     }, options);
 }
 
-export function setWiringActive(context, isWiring, options = {}) {
-    return setInteractionModeContext(context, { isWiring: !!isWiring }, options);
+export function setWiringActive(context, wiringActive, options = {}) {
+    return setInteractionModeContext(context, { wiringActive: !!wiringActive }, options);
 }

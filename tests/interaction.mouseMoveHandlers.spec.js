@@ -9,6 +9,24 @@ import {
     handleWireModeGestureMouseMove
 } from '../src/app/interaction/InteractionOrchestratorMouseMoveHandlers.js';
 
+function createInteractionModeStore(modeContext = {}) {
+    return {
+        getState: vi.fn(() => ({
+            mode: modeContext.pendingTool === 'Wire' || modeContext.wiringActive ? 'wire' : 'select',
+            context: {
+                pendingTool: null,
+                mobileMode: 'select',
+                wireModeSticky: false,
+                wiringActive: false,
+                isDraggingWireEndpoint: false,
+                isTerminalExtending: false,
+                isRheostatDragging: false,
+                ...modeContext
+            }
+        }))
+    };
+}
+
 describe('InteractionOrchestratorMouseMoveHandlers.handleWireModeGestureMouseMove', () => {
     it('returns false when no deferred wire-mode gesture exists', () => {
         const context = {
@@ -466,9 +484,41 @@ describe('InteractionOrchestratorMouseMoveHandlers.handleComponentDragMouseMove'
 });
 
 describe('InteractionOrchestratorMouseMoveHandlers.handleWiringPreviewMouseMove', () => {
+    it('uses mode-store wiring state when legacy runtime field is absent', () => {
+        const context = {
+            interactionModeStore: {
+                getState: vi.fn(() => ({
+                    mode: 'wire',
+                    context: {
+                        wiringActive: true
+                    }
+                }))
+            },
+            wireStart: { x: 10, y: 20 },
+            tempWire: 'TEMP',
+            resolvePointerType: vi.fn(() => 'mouse'),
+            snapPoint: vi.fn(() => ({
+                x: 131,
+                y: 141,
+                snap: { type: 'wire-segment', wireId: 'W2' }
+            })),
+            renderer: {
+                updateTempWire: vi.fn(),
+                highlightTerminal: vi.fn(),
+                highlightWireNode: vi.fn(),
+                clearTerminalHighlight: vi.fn()
+            }
+        };
+
+        const handled = handleWiringPreviewMouseMove.call(context, { clientX: 300, clientY: 320 }, 100, 120);
+
+        expect(handled).toBe(true);
+        expect(context.renderer.updateTempWire).toHaveBeenCalledWith('TEMP', 10, 20, 131, 141);
+    });
+
     it('returns false when wiring preview is inactive', () => {
         const context = {
-            isWiring: false,
+            wiringActive: false,
             wireStart: null,
             tempWire: null
         };
@@ -480,7 +530,12 @@ describe('InteractionOrchestratorMouseMoveHandlers.handleWiringPreviewMouseMove'
 
     it('updates temp wire and wire-node highlight for segment snap', () => {
         const context = {
-            isWiring: true,
+            interactionModeStore: createInteractionModeStore({
+                pendingTool: 'Wire',
+                mobileMode: 'wire',
+                wireModeSticky: true,
+                wiringActive: true
+            }),
             wireStart: { x: 10, y: 20 },
             tempWire: 'TEMP',
             resolvePointerType: vi.fn(() => 'mouse'),

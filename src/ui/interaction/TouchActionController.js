@@ -1,3 +1,5 @@
+import { readInteractionModeContext } from '../../app/interaction/InteractionModeBridge.js';
+
 const LONG_PRESS_DELAY_MS = 420;
 const MOVE_TOLERANCE_PX = 12;
 const DRAG_MOVE_TOLERANCE_PX = 3;
@@ -73,8 +75,9 @@ export class TouchActionController {
         const pointerType = event?.pointerType || '';
         if (pointerType !== 'touch' && pointerType !== 'pen') return false;
         if (this.interaction?.blockSinglePointerInteraction) return false;
-        if (this.interaction?.pendingToolType) return false;
-        if (this.interaction?.isWiring) return false;
+        const modeContext = readInteractionModeContext(this.interaction);
+        if (modeContext.pendingTool) return false;
+        if (modeContext.wiringActive) return false;
         return true;
     }
 

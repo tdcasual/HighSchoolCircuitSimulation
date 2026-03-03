@@ -9,6 +9,24 @@ import {
     handleWireModeGestureMouseUp
 } from '../src/app/interaction/InteractionOrchestratorMouseUpHandlers.js';
 
+function createInteractionModeStore(modeContext = {}) {
+    return {
+        getState: vi.fn(() => ({
+            mode: modeContext.pendingTool === 'Wire' || modeContext.wiringActive ? 'wire' : 'select',
+            context: {
+                pendingTool: null,
+                mobileMode: 'select',
+                wireModeSticky: false,
+                wiringActive: false,
+                isDraggingWireEndpoint: false,
+                isTerminalExtending: false,
+                isRheostatDragging: false,
+                ...modeContext
+            }
+        }))
+    };
+}
+
 describe('InteractionOrchestratorMouseUpHandlers.handleWireModeGestureMouseUp', () => {
     it('returns false when no deferred wire-mode gesture exists', () => {
         const context = {
@@ -97,9 +115,35 @@ describe('InteractionOrchestratorMouseUpHandlers.handlePanningMouseUp', () => {
 });
 
 describe('InteractionOrchestratorMouseUpHandlers.handleActiveWiringMouseUp', () => {
+    it('uses mode-store wiring state when legacy runtime field is absent', () => {
+        const context = {
+            interactionModeStore: {
+                getState: vi.fn(() => ({
+                    mode: 'wire',
+                    context: {
+                        wiringActive: true
+                    }
+                }))
+            },
+            ignoreNextWireMouseUp: true,
+            finishWiringToPoint: vi.fn(),
+            cancelWiring: vi.fn()
+        };
+        const event = {
+            target: {}
+        };
+
+        const handled = handleActiveWiringMouseUp.call(context, event);
+
+        expect(handled).toBe(true);
+        expect(context.ignoreNextWireMouseUp).toBe(false);
+        expect(context.finishWiringToPoint).not.toHaveBeenCalled();
+        expect(context.cancelWiring).not.toHaveBeenCalled();
+    });
+
     it('returns false when wiring mode is inactive', () => {
         const context = {
-            isWiring: false
+            wiringActive: false
         };
         const event = {
             target: {}
@@ -112,7 +156,12 @@ describe('InteractionOrchestratorMouseUpHandlers.handleActiveWiringMouseUp', () 
 
     it('consumes guarded mouseup without finishing or canceling wiring', () => {
         const context = {
-            isWiring: true,
+            interactionModeStore: createInteractionModeStore({
+                pendingTool: 'Wire',
+                mobileMode: 'wire',
+                wireModeSticky: true,
+                wiringActive: true
+            }),
             ignoreNextWireMouseUp: true,
             finishWiringToPoint: vi.fn(),
             cancelWiring: vi.fn()
@@ -136,7 +185,12 @@ describe('InteractionOrchestratorMouseUpHandlers.handleActiveWiringMouseUp', () 
             closest: (selector) => (selector === '.component' ? componentGroup : null)
         };
         const context = {
-            isWiring: true,
+            interactionModeStore: createInteractionModeStore({
+                pendingTool: 'Wire',
+                mobileMode: 'wire',
+                wireModeSticky: true,
+                wiringActive: true
+            }),
             ignoreNextWireMouseUp: false,
             resolvePointerType: vi.fn(() => 'mouse'),
             resolveTerminalTarget: vi.fn(() => ({ dataset: { terminal: '1' } })),
@@ -161,7 +215,12 @@ describe('InteractionOrchestratorMouseUpHandlers.handleActiveWiringMouseUp', () 
 
     it('cancels wiring when no terminal/endpoint/snap target is found', () => {
         const context = {
-            isWiring: true,
+            interactionModeStore: createInteractionModeStore({
+                pendingTool: 'Wire',
+                mobileMode: 'wire',
+                wireModeSticky: true,
+                wiringActive: true
+            }),
             ignoreNextWireMouseUp: false,
             resolvePointerType: vi.fn(() => 'touch'),
             resolveTerminalTarget: vi.fn(() => null),

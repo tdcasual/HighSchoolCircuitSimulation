@@ -5,9 +5,14 @@ import {
     restorePendingWireToolAfterAction,
     safeClosest
 } from './InteractionOrchestratorHelpers.js';
+import { readInteractionModeContext } from './InteractionModeBridge.js';
 
 export function handlePendingToolMouseDown(e, resolvedTargets = {}) {
-    if (!(this.pendingToolType && e.button === 0)) {
+    const modeContext = readInteractionModeContext(this);
+    const pendingTool = modeContext.pendingTool;
+    const wiringActive = !!modeContext.wiringActive;
+
+    if (!(pendingTool && e.button === 0)) {
         return false;
     }
 
@@ -19,12 +24,12 @@ export function handlePendingToolMouseDown(e, resolvedTargets = {}) {
         ? resolvedTargets.componentGroup
         : safeClosest(target, '.component');
 
-    if (this.pendingToolType === 'Wire') {
+    if (pendingTool === 'Wire') {
         const pointerType = this.resolvePointerType(e);
 
         if (isTouchLikePointer(pointerType)) {
             if (hasClass(target, 'rheostat-slider') && componentGroup) {
-                if (this.isWiring) {
+                if (wiringActive) {
                     this.ignoreNextWireMouseUp = true;
                 }
                 this.startRheostatDrag(componentGroup.dataset.id, e);
@@ -50,7 +55,7 @@ export function handlePendingToolMouseDown(e, resolvedTargets = {}) {
                         screenX: e.clientX,
                         screenY: e.clientY,
                         moveThresholdPx: resolveWireModeGestureThreshold(pointerType, kind),
-                        wasWiring: !!this.isWiring
+                        wasWiring: wiringActive
                     };
                     return true;
                 }
@@ -73,7 +78,7 @@ export function handlePendingToolMouseDown(e, resolvedTargets = {}) {
                             screenX: e.clientX,
                             screenY: e.clientY,
                             moveThresholdPx: resolveWireModeGestureThreshold(pointerType, 'wire-endpoint'),
-                            wasWiring: !!this.isWiring
+                            wasWiring: wiringActive
                         };
                         return true;
                     }
@@ -106,7 +111,7 @@ export function handlePendingToolMouseDown(e, resolvedTargets = {}) {
         };
 
         const wireToolPoint = resolveWireToolPoint();
-        if (this.isWiring) {
+        if (wiringActive) {
             let finishPoint = wireToolPoint;
             const terminalOrEndpointTarget = Boolean(
                 terminalTarget

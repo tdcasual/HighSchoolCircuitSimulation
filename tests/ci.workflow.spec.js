@@ -56,6 +56,10 @@ describe('CI workflow coverage', () => {
         expect(content).toContain('node scripts/ci/assert-release-doc-integrity.mjs');
         expect(content).toContain('Check interaction guide sync');
         expect(content).toContain('node scripts/ci/assert-interaction-guide-sync.mjs');
+        expect(content).toContain('Check observation runtime contract guard');
+        expect(content).toContain('node scripts/ci/assert-observation-runtime-contract.mjs');
+        expect(content).toContain('Check interaction mode runtime contract guard');
+        expect(content).toContain('node scripts/ci/assert-interaction-mode-runtime-contract.mjs');
         expect(content).toContain('Check registry legacy fallback guard');
         expect(content).toContain('node scripts/ci/assert-registry-legacy-fallback-guard.mjs');
         expect(content).toContain('Check CI workflow coverage');
@@ -67,7 +71,15 @@ describe('CI workflow coverage', () => {
         const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
 
         expect(pkg.scripts).toBeDefined();
+        expect(pkg.scripts['check:observation-contract']).toBe(
+            'node scripts/ci/assert-observation-runtime-contract.mjs'
+        );
+        expect(pkg.scripts['check:interaction-mode-contract']).toBe(
+            'node scripts/ci/assert-interaction-mode-runtime-contract.mjs'
+        );
         expect(pkg.scripts['check:ci-workflow']).toBe('node scripts/ci/assert-ci-workflow-coverage.mjs');
+        expect(pkg.scripts.check).toContain('npm run check:observation-contract');
+        expect(pkg.scripts.check).toContain('npm run check:interaction-mode-contract');
         expect(pkg.scripts.check).toContain('npm run check:ci-workflow');
     });
 
@@ -96,6 +108,40 @@ describe('CI workflow coverage', () => {
         expect(output.ok).toBe(false);
         expect(output.output).toContain('missing required step in quality');
         expect(output.output).toContain('Check registry legacy fallback guard');
+    });
+
+    it('fails CI workflow coverage script when observation runtime contract guard step is removed', () => {
+        const output = runScriptInTempWorkspace({
+            scriptRelPath: 'scripts/ci/assert-ci-workflow-coverage.mjs',
+            sourceFiles: ['.github/workflows/ci.yml', 'package.json'],
+            mutateByFile: {
+                '.github/workflows/ci.yml': (content) =>
+                    content
+                        .replace('      - name: Check observation runtime contract guard\n', '')
+                        .replace('        run: node scripts/ci/assert-observation-runtime-contract.mjs\n', '')
+            }
+        });
+
+        expect(output.ok).toBe(false);
+        expect(output.output).toContain('missing required step in quality');
+        expect(output.output).toContain('Check observation runtime contract guard');
+    });
+
+    it('fails CI workflow coverage script when interaction mode runtime contract guard step is removed', () => {
+        const output = runScriptInTempWorkspace({
+            scriptRelPath: 'scripts/ci/assert-ci-workflow-coverage.mjs',
+            sourceFiles: ['.github/workflows/ci.yml', 'package.json'],
+            mutateByFile: {
+                '.github/workflows/ci.yml': (content) =>
+                    content
+                        .replace('      - name: Check interaction mode runtime contract guard\n', '')
+                        .replace('        run: node scripts/ci/assert-interaction-mode-runtime-contract.mjs\n', '')
+            }
+        });
+
+        expect(output.ok).toBe(false);
+        expect(output.output).toContain('missing required step in quality');
+        expect(output.output).toContain('Check interaction mode runtime contract guard');
     });
 
     it('fails CI workflow coverage script when required step run command drifts', () => {

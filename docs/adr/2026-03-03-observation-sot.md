@@ -17,7 +17,7 @@ This mismatch causes false regressions and unstable release gates.
 - Runtime contract: `window.app.chartWorkspace` must exist after bootstrap.
 - Bootstrap must not expose `window.app` when `createApp()` does not provide `chartWorkspace`.
 - New E2E tests must assert behavior through `chartWorkspace` APIs and state.
-- `ObservationPanel` code can remain as migration asset, but it is not a runtime contract target.
+- Legacy `ObservationPanel` module is removed from runtime/test paths and must not be reintroduced.
 
 ## Consequences
 
@@ -26,7 +26,7 @@ Positive:
 - Makes regression gates align with actual production path.
 
 Trade-off:
-- Legacy test code depending on `app.observationPanel` must be migrated.
+- Any test or script that depends on `app.observationPanel` is a contract violation and must fail CI.
 - Some historical docs need correction to avoid mixed terminology.
 
 ## Rollback

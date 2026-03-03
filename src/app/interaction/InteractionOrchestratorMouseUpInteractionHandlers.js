@@ -2,6 +2,7 @@ import {
     restorePendingWireToolAfterAction,
     safeClosest
 } from './InteractionOrchestratorHelpers.js';
+import { readInteractionModeContext } from './InteractionModeBridge.js';
 
 export function handleWireModeGestureMouseUp(e, wireModeGesture) {
     if (!wireModeGesture) {
@@ -38,7 +39,8 @@ export function handlePanningMouseUp() {
 }
 
 export function handleActiveWiringMouseUp(e) {
-    if (!this.isWiring) {
+    const modeContext = readInteractionModeContext(this);
+    if (!modeContext.wiringActive) {
         return false;
     }
 

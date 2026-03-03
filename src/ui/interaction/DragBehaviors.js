@@ -139,6 +139,7 @@ export function startTerminalExtend(componentId, terminalIndex, e) {
     if (!comp) return;
 
     this.beginHistoryTransaction('调整端子长度');
+    this.isTerminalExtending = true;
     setInteractionModeContext(this, {
         isTerminalExtending: true
     }, {
@@ -199,6 +200,7 @@ export function startTerminalExtend(componentId, terminalIndex, e) {
 
     const onUp = () => {
         if (typeof cleanupDrag === 'function') cleanupDrag();
+        this.isTerminalExtending = false;
         setInteractionModeContext(this, {
             isTerminalExtending: false
         }, {
@@ -224,6 +226,7 @@ export function startRheostatDrag(componentId, e) {
     const comp = this.circuit.getComponent(componentId);
     if (!comp || comp.type !== 'Rheostat') return;
     this.beginHistoryTransaction?.('调节滑动变阻器');
+    this.isRheostatDragging = true;
     setInteractionModeContext(this, {
         isRheostatDragging: true
     }, {
@@ -268,6 +271,7 @@ export function startRheostatDrag(componentId, e) {
 
     const onUp = () => {
         if (typeof cleanupDrag === 'function') cleanupDrag();
+        this.isRheostatDragging = false;
         setInteractionModeContext(this, {
             isRheostatDragging: false
         }, {

@@ -28,7 +28,6 @@ export function initializeInteractionState(context, app, options = {}) {
 
     // 交互状态
     context.isDragging = false;
-    context.isWiring = false;
     context.isDraggingComponent = false; // 标记是否正在拖动元器件（而不是从工具箱拖放）
     context.dragTarget = null;
     context.dragGroup = null; // 黑箱拖动时的组移动信息
@@ -69,10 +68,7 @@ export function initializeInteractionState(context, app, options = {}) {
     context.wireModeGesture = null;
 
     // 工具箱触屏放置（点击工具 -> 点击画布落子）
-    context.pendingToolType = null;
     context.pendingToolItem = null;
-    context.mobileInteractionMode = 'select';
-    context.stickyWireTool = false;
     context.endpointAutoBridgeMode = normalizeEndpointAutoBridgeMode(options.endpointAutoBridgeMode);
     context.statusActionTimer = null;
     context.statusActionToken = null;

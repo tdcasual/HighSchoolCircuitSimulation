@@ -285,16 +285,19 @@ async function runWireInteractionRegression(browser, baseUrl) {
 
             interaction.clearSelection();
             interaction.onMouseDown({ ...baseEvent, altKey: false });
-            const defaultSelectsComponent = interaction.selectedComponent === compId && !interaction.isWiring;
+            const defaultModeSnapshot = captureModeSnapshot();
+            const defaultSelectsComponent = interaction.selectedComponent === compId
+                && defaultModeSnapshot?.wireSignals?.activeWiringSession === false;
 
-            interaction.pendingToolType = 'Wire';
+            interaction.setPendingToolType?.('Wire', null, { silentStatus: true });
             interaction.onMouseDown({ ...baseEvent, altKey: false });
-            const wireToolStartsWiring = interaction.isWiring
+            const wireToolModeSnapshot = captureModeSnapshot();
+            const wireToolStartsWiring = wireToolModeSnapshot?.wireSignals?.activeWiringSession === true
                 && interaction.wireStart?.snap?.type === 'terminal'
                 && interaction.wireStart?.snap?.componentId === compId
                 && interaction.wireStart?.snap?.terminalIndex === 0;
             interaction.cancelWiring();
-            interaction.pendingToolType = null;
+            interaction.clearPendingToolType?.({ silent: true });
 
             const originalStartTerminalExtend = interaction.startTerminalExtend;
             let extendCallCount = 0;
@@ -321,16 +324,16 @@ async function runWireInteractionRegression(browser, baseUrl) {
             interaction.setMobileInteractionMode?.('select', { silentStatus: true });
             mobileModeWireButton.click();
             const modeSnapshotAfterWireToggle = captureModeSnapshot();
-            const wireModeArmed = interaction.mobileInteractionMode === 'wire'
-                && interaction.pendingToolType === 'Wire'
-                && interaction.stickyWireTool === true
+            const wireModeArmed = modeSnapshotAfterWireToggle?.mobile?.interactionMode === 'wire'
+                && modeSnapshotAfterWireToggle?.pendingTool === 'Wire'
+                && modeSnapshotAfterWireToggle?.mobile?.wireModeSticky === true
                 && mobileModeWireButton.getAttribute('aria-pressed') === 'true'
                 && mobileModeSelectButton.getAttribute('aria-pressed') === 'false';
             mobileModeSelectButton.click();
             const modeSnapshotAfterSelectToggle = captureModeSnapshot();
-            const selectModeArmed = interaction.mobileInteractionMode === 'select'
-                && interaction.pendingToolType === null
-                && interaction.stickyWireTool === false
+            const selectModeArmed = modeSnapshotAfterSelectToggle?.mobile?.interactionMode === 'select'
+                && modeSnapshotAfterSelectToggle?.pendingTool === null
+                && modeSnapshotAfterSelectToggle?.mobile?.wireModeSticky === false
                 && mobileModeSelectButton.getAttribute('aria-pressed') === 'true'
                 && mobileModeWireButton.getAttribute('aria-pressed') === 'false';
 

@@ -1,6 +1,21 @@
 import { describe, expect, it, vi } from 'vitest';
 import { handleMouseLeave } from '../src/app/interaction/InteractionOrchestratorMouseLeaveHandlers.js';
 
+function createInteractionModeStore(modeContext = {}) {
+    return {
+        getState: vi.fn(() => ({
+            mode: modeContext.pendingTool === 'Wire' || modeContext.wiringActive ? 'wire' : 'select',
+            context: {
+                pendingTool: null,
+                mobileMode: 'select',
+                wireModeSticky: false,
+                wiringActive: false,
+                ...modeContext
+            }
+        }))
+    };
+}
+
 describe('InteractionOrchestratorMouseLeaveHandlers.handleMouseLeave', () => {
     it('stops panning and resets cursor', () => {
         const context = {
@@ -26,7 +41,12 @@ describe('InteractionOrchestratorMouseLeaveHandlers.handleMouseLeave', () => {
         const context = {
             quickActionBar: { notifyActivity: vi.fn() },
             isPanning: false,
-            isWiring: true,
+            interactionModeStore: createInteractionModeStore({
+                pendingTool: 'Wire',
+                mobileMode: 'wire',
+                wireModeSticky: true,
+                wiringActive: true
+            }),
             wireStart: {
                 x: 12,
                 y: 34,

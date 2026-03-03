@@ -1,6 +1,24 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as HistoryFacadeController from '../src/ui/interaction/HistoryFacadeController.js';
 
+function createInteractionModeStore(modeContext = {}) {
+    return {
+        getState: vi.fn(() => ({
+            mode: modeContext.pendingTool === 'Wire' || modeContext.wiringActive ? 'wire' : 'select',
+            context: {
+                pendingTool: null,
+                mobileMode: 'select',
+                wireModeSticky: false,
+                wiringActive: false,
+                isDraggingWireEndpoint: false,
+                isTerminalExtending: false,
+                isRheostatDragging: false,
+                ...modeContext
+            }
+        }))
+    };
+}
+
 describe('HistoryFacadeController', () => {
     it('returns capture state and history key', () => {
         const ctx = {
@@ -72,7 +90,12 @@ describe('HistoryFacadeController', () => {
                 commitTransaction: vi.fn(),
                 transaction: { label: 'drag' }
             },
-            isWiring: true,
+            interactionModeStore: createInteractionModeStore({
+                pendingTool: 'Wire',
+                mobileMode: 'wire',
+                wireModeSticky: true,
+                wiringActive: true
+            }),
             cancelWiring: vi.fn(),
             suspendedWiringSession: { wireStart: { x: 10, y: 20 } },
             wireModeGesture: { kind: 'wire-endpoint' },
@@ -109,7 +132,7 @@ describe('HistoryFacadeController', () => {
             isDraggingWireEndpoint: false,
             isTerminalExtending: false,
             isRheostatDragging: false,
-            isWiring: false,
+            wiringActive: false,
             suspendedWiringSession: null,
             wireModeGesture: null,
             pointerDownInfo: null
@@ -134,7 +157,7 @@ describe('HistoryFacadeController', () => {
             isDraggingWireEndpoint: false,
             isTerminalExtending: true,
             isRheostatDragging: true,
-            isWiring: false,
+            wiringActive: false,
             suspendedWiringSession: null,
             wireModeGesture: null,
             pointerDownInfo: null
@@ -149,6 +172,38 @@ describe('HistoryFacadeController', () => {
                 isRheostatDragging: false
             }
         });
+        expect(ctx.historyManager.undo).toHaveBeenCalledTimes(1);
+    });
+
+    it('detects active wiring from mode store when runtime field is absent before undo', () => {
+        const ctx = {
+            historyManager: {
+                undo: vi.fn(),
+                commitTransaction: vi.fn(),
+                transaction: null
+            },
+            interactionModeStore: {
+                getState: vi.fn(() => ({
+                    mode: 'wire',
+                    context: {
+                        wiringActive: true
+                    }
+                }))
+            },
+            cancelWiring: vi.fn(),
+            isDragging: false,
+            isDraggingWire: false,
+            isDraggingWireEndpoint: false,
+            isTerminalExtending: false,
+            isRheostatDragging: false,
+            suspendedWiringSession: null,
+            wireModeGesture: null,
+            pointerDownInfo: null
+        };
+
+        HistoryFacadeController.undo.call(ctx);
+
+        expect(ctx.cancelWiring).toHaveBeenCalledTimes(1);
         expect(ctx.historyManager.undo).toHaveBeenCalledTimes(1);
     });
 });

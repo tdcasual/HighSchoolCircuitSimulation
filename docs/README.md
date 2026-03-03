@@ -8,6 +8,7 @@
 |---|---|---|
 | `docs/plans/` | 设计与实施计划 | 方案对比、任务拆解、实施步骤 |
 | `docs/audits/` | 质量审计与改进日志 | 移动端交互审计、问题复盘、日更记录 |
+| `docs/adr/` | 架构决策记录 | SOT 决策、不可回退约束、迁移边界 |
 | `docs/releases/` | 发布与验收材料 | release notes、QA checklist、回滚方案 |
 | `docs/process/` | 团队流程规范 | 改进闭环、回归检查清单 |
 | `docs/templates/` | 标准模板 | 改进记录模板、后续可扩展模板 |

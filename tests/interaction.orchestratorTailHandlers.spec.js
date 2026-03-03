@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { InteractionModeStore } from '../src/app/interaction/InteractionModeStore.js';
 import {
     onContextMenu,
     onDoubleClick,
@@ -6,6 +7,31 @@ import {
 } from '../src/app/interaction/InteractionOrchestratorTailHandlers.js';
 
 describe('InteractionOrchestratorTailHandlers.onContextMenu', () => {
+    it('cancels wiring based on mode-store state when legacy runtime field is absent', () => {
+        const preventDefault = vi.fn();
+        const context = {
+            interactionModeStore: {
+                getState: vi.fn(() => ({
+                    mode: 'wire',
+                    context: {
+                        wiringActive: true,
+                        pendingTool: 'Wire'
+                    }
+                }))
+            },
+            touchActionController: { cancel: vi.fn() },
+            resolveProbeMarkerTarget: vi.fn(() => null),
+            cancelWiring: vi.fn(),
+            endPrimaryInteractionForGesture: vi.fn(),
+            hideContextMenu: vi.fn()
+        };
+
+        onContextMenu.call(context, { preventDefault, target: {} });
+
+        expect(preventDefault).toHaveBeenCalledTimes(1);
+        expect(context.cancelWiring).toHaveBeenCalledTimes(1);
+    });
+
     it('opens probe context menu when probe marker is resolved', () => {
         const preventDefault = vi.fn();
         const context = {
@@ -30,13 +56,15 @@ describe('InteractionOrchestratorTailHandlers.onContextMenu', () => {
 describe('InteractionOrchestratorTailHandlers.onDoubleClick', () => {
     it('keeps wire flow semantics and does not open property dialog in wire mode', () => {
         const context = {
-            pendingToolType: 'Wire',
-            mobileInteractionMode: 'wire',
-            stickyWireTool: true,
-            isWiring: false,
-            isDraggingWireEndpoint: false,
-            isTerminalExtending: false,
-            isRheostatDragging: false,
+            interactionModeStore: new InteractionModeStore({
+                mode: 'wire',
+                context: {
+                    pendingTool: 'Wire',
+                    mobileMode: 'wire',
+                    wireModeSticky: true,
+                    wiringActive: false
+                }
+            }),
             resolveProbeMarkerTarget: vi.fn(() => null),
             showPropertyDialog: vi.fn()
         };
@@ -50,27 +78,43 @@ describe('InteractionOrchestratorTailHandlers.onDoubleClick', () => {
 
 describe('InteractionOrchestratorTailHandlers.onKeyDown', () => {
     it('resets pending wire state on Escape', () => {
+        const syncInteractionModeStore = vi.fn(() => ({
+            mode: 'select',
+            context: {
+                pendingTool: null,
+                mobileMode: 'select',
+                wireModeSticky: false,
+                wiringActive: false
+            }
+        }));
         const context = {
-            pendingToolType: 'Wire',
-            mobileInteractionMode: 'wire',
-            stickyWireTool: true,
-            isWiring: true,
+            pendingTool: 'Wire',
+            mobileMode: 'wire',
+            wireModeSticky: true,
+            wiringActive: true,
             isDraggingWireEndpoint: false,
             isTerminalExtending: false,
             isRheostatDragging: false,
             cancelWiring: vi.fn(),
             clearPendingToolType: vi.fn(),
-            clearSelection: vi.fn()
+            clearSelection: vi.fn(),
+            syncInteractionModeStore
         };
 
         onKeyDown.call(context, { key: 'Escape' });
 
         expect(context.cancelWiring).toHaveBeenCalledTimes(1);
         expect(context.clearPendingToolType).toHaveBeenCalledWith({ silent: true });
-        expect(context.pendingToolType).toBe(null);
-        expect(context.mobileInteractionMode).toBe('select');
-        expect(context.stickyWireTool).toBe(false);
-        expect(context.isWiring).toBe(false);
+        expect(syncInteractionModeStore).toHaveBeenCalledWith({
+            mode: 'select',
+            source: 'onKeyDown:escape',
+            context: {
+                pendingTool: null,
+                mobileMode: 'select',
+                wireModeSticky: false,
+                wiringActive: false
+            }
+        });
         expect(context.clearSelection).toHaveBeenCalledTimes(1);
     });
 });

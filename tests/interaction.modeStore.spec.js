@@ -9,28 +9,28 @@ describe('InteractionModeStore', () => {
         const unsubscribe = store.subscribe(listener);
 
         const wireState = store.setMode('wire', {
-            pendingToolType: 'Wire',
-            mobileInteractionMode: 'wire',
-            stickyWireTool: true,
-            isWiring: true
+            pendingTool: 'Wire',
+            mobileMode: 'wire',
+            wireModeSticky: true,
+            wiringActive: true
         });
         expect(wireState.mode).toBe('wire');
         expect(listener).toHaveBeenCalledTimes(1);
 
         const duplicateState = store.setMode('wire', {
-            pendingToolType: 'Wire',
-            mobileInteractionMode: 'wire',
-            stickyWireTool: true,
-            isWiring: true
+            pendingTool: 'Wire',
+            mobileMode: 'wire',
+            wireModeSticky: true,
+            wiringActive: true
         });
         expect(duplicateState.mode).toBe('wire');
         expect(listener).toHaveBeenCalledTimes(1);
 
         const endpointState = store.setMode('endpoint-edit', {
-            pendingToolType: 'Wire',
-            mobileInteractionMode: 'wire',
-            stickyWireTool: true,
-            isWiring: false,
+            pendingTool: 'Wire',
+            mobileMode: 'wire',
+            wireModeSticky: true,
+            wiringActive: false,
             isDraggingWireEndpoint: true
         });
         expect(endpointState.mode).toBe('endpoint-edit');
@@ -47,12 +47,12 @@ describe('InteractionModeStore', () => {
 });
 
 describe('InteractionOrchestrator mode-store integration', () => {
-    it('initializes interaction mode store eagerly from current runtime flags', () => {
+    it('initializes interaction mode store eagerly from canonical defaults', () => {
         const context = {
-            pendingToolType: 'Wire',
-            mobileInteractionMode: 'wire',
-            stickyWireTool: true,
-            isWiring: true,
+            pendingTool: 'Wire',
+            mobileMode: 'wire',
+            wireModeSticky: true,
+            wiringActive: true,
             isDraggingWireEndpoint: false,
             isTerminalExtending: false,
             isRheostatDragging: false
@@ -60,18 +60,24 @@ describe('InteractionOrchestrator mode-store integration', () => {
 
         const state = InteractionOrchestrator.initializeInteractionModeStore(context);
 
-        expect(state.mode).toBe('wire');
-        expect(context.interactionMode).toBe('wire');
+        expect(state.mode).toBe('select');
+        expect(context.interactionMode).toBe('select');
         expect(context.interactionModeStore).toBeInstanceOf(InteractionModeStore);
         expect(context.interactionModeStore.getState().version).toBe(0);
+        expect(state.context).toMatchObject({
+            pendingTool: null,
+            mobileMode: 'select',
+            wireModeSticky: false,
+            wiringActive: false
+        });
     });
 
-    it('syncs conflicting runtime flags into one authoritative mode', () => {
+    it('syncs endpoint-edit runtime flags into one authoritative mode', () => {
         const context = {
-            pendingToolType: 'Wire',
-            mobileInteractionMode: 'wire',
-            stickyWireTool: true,
-            isWiring: true,
+            pendingTool: 'Wire',
+            mobileMode: 'wire',
+            wireModeSticky: true,
+            wiringActive: true,
             isDraggingWireEndpoint: true,
             isTerminalExtending: false,
             isRheostatDragging: false
@@ -82,25 +88,25 @@ describe('InteractionOrchestrator mode-store integration', () => {
         expect(state.mode).toBe('endpoint-edit');
         expect(context.interactionMode).toBe('endpoint-edit');
         expect(context.interactionModeStore.getState().mode).toBe('endpoint-edit');
-        expect(context.interactionModeStore.getState().context.pendingToolType).toBe('Wire');
+        expect(context.interactionModeStore.getState().context.pendingTool).toBe(null);
     });
 
     it('does not mirror store context back into legacy runtime flags on initialize', () => {
         const context = {
-            pendingToolType: null,
-            mobileInteractionMode: 'select',
-            stickyWireTool: false,
-            isWiring: false,
+            pendingTool: null,
+            mobileMode: 'select',
+            wireModeSticky: false,
+            wiringActive: false,
             isDraggingWireEndpoint: false,
             isTerminalExtending: false,
             isRheostatDragging: false,
             interactionModeStore: new InteractionModeStore({
                 mode: 'wire',
                 context: {
-                    pendingToolType: 'Wire',
-                    mobileInteractionMode: 'wire',
-                    stickyWireTool: true,
-                    isWiring: true
+                    pendingTool: 'Wire',
+                    mobileMode: 'wire',
+                    wireModeSticky: true,
+                    wiringActive: true
                 }
             })
         };
@@ -109,18 +115,18 @@ describe('InteractionOrchestrator mode-store integration', () => {
 
         expect(state.mode).toBe('wire');
         expect(context.interactionMode).toBe('wire');
-        expect(context.pendingToolType).toBe(null);
-        expect(context.mobileInteractionMode).toBe('select');
-        expect(context.stickyWireTool).toBe(false);
-        expect(context.isWiring).toBe(false);
+        expect(context.pendingTool).toBe(null);
+        expect(context.mobileMode).toBe('select');
+        expect(context.wireModeSticky).toBe(false);
+        expect(context.wiringActive).toBe(false);
     });
 
     it('does not mirror sync overrides into legacy runtime flags', () => {
         const context = {
-            pendingToolType: null,
-            mobileInteractionMode: 'select',
-            stickyWireTool: false,
-            isWiring: false,
+            pendingTool: null,
+            mobileMode: 'select',
+            wireModeSticky: false,
+            wiringActive: false,
             isDraggingWireEndpoint: false,
             isTerminalExtending: false,
             isRheostatDragging: false
@@ -130,19 +136,19 @@ describe('InteractionOrchestrator mode-store integration', () => {
             mode: 'wire',
             source: 'spec',
             context: {
-                pendingToolType: 'Wire',
-                mobileInteractionMode: 'wire',
-                stickyWireTool: true,
-                isWiring: true
+                pendingTool: 'Wire',
+                mobileMode: 'wire',
+                wireModeSticky: true,
+                wiringActive: true
             }
         });
 
         expect(state.mode).toBe('wire');
         expect(context.interactionMode).toBe('wire');
-        expect(context.interactionModeStore.getState().context.pendingToolType).toBe('Wire');
-        expect(context.pendingToolType).toBe(null);
-        expect(context.mobileInteractionMode).toBe('select');
-        expect(context.stickyWireTool).toBe(false);
-        expect(context.isWiring).toBe(false);
+        expect(context.interactionModeStore.getState().context.pendingTool).toBe('Wire');
+        expect(context.pendingTool).toBe(null);
+        expect(context.mobileMode).toBe('select');
+        expect(context.wireModeSticky).toBe(false);
+        expect(context.wiringActive).toBe(false);
     });
 });

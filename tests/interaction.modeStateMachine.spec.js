@@ -6,12 +6,12 @@ import {
 } from '../src/app/interaction/InteractionModeStateMachine.js';
 
 describe('InteractionModeStateMachine.initializeInteractionModeStore', () => {
-    it('initializes store state from runtime flags', () => {
+    it('initializes store state from canonical defaults and ignores legacy runtime wire flags', () => {
         const context = {
-            pendingToolType: 'Wire',
-            mobileInteractionMode: 'wire',
-            stickyWireTool: true,
-            isWiring: true,
+            pendingTool: 'Wire',
+            mobileMode: 'wire',
+            wireModeSticky: true,
+            wiringActive: true,
             isDraggingWireEndpoint: false,
             isTerminalExtending: false,
             isRheostatDragging: false
@@ -19,19 +19,25 @@ describe('InteractionModeStateMachine.initializeInteractionModeStore', () => {
 
         const state = initializeInteractionModeStore(context);
 
-        expect(state.mode).toBe('wire');
+        expect(state.mode).toBe('select');
         expect(context.interactionModeStore).toBeInstanceOf(InteractionModeStore);
-        expect(context.interactionMode).toBe('wire');
+        expect(context.interactionMode).toBe('select');
+        expect(state.context).toMatchObject({
+            pendingTool: null,
+            mobileMode: 'select',
+            wireModeSticky: false,
+            wiringActive: false
+        });
     });
 });
 
 describe('InteractionModeStateMachine.syncInteractionModeStore', () => {
     it('uses explicit mode/context overrides to resolve next state', () => {
         const context = {
-            pendingToolType: null,
-            mobileInteractionMode: 'select',
-            stickyWireTool: false,
-            isWiring: false,
+            pendingTool: null,
+            mobileMode: 'select',
+            wireModeSticky: false,
+            wiringActive: false,
             isDraggingWireEndpoint: false,
             isTerminalExtending: false,
             isRheostatDragging: false

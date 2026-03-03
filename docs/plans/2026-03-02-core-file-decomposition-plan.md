@@ -1,12 +1,12 @@
-# 核心大文件拆分计划（Circuit / Component / ObservationPanel / InteractionOrchestrator）
+# 核心大文件拆分计划（Circuit / Component / ChartWindowController / InteractionOrchestrator）
 
 ## 背景
 
-当前核心文件规模（chart-workspace 架构）：
+当前核心文件规模（ObservationPanel 已下线）：
 
 - `src/engine/Circuit.js`: 1962 行
 - `src/components/Component.js`: 1650 行
-- `src/ui/ObservationPanel.js`: 1587 行
+- `src/ui/charts/ChartWindowController.js`: 606 行
 - `src/app/interaction/InteractionOrchestrator.js`: 187 行
 
 这些文件继续增长会显著提高回归成本和合并冲突概率。
@@ -17,17 +17,17 @@
 
 - `Circuit.js <= 2000`
 - `Component.js <= 1700`
-- `ObservationPanel.js <= 1650`
+- `ChartWindowController.js <= 700`
 - `InteractionOrchestrator.js <= 400`
 
 目标是先阻止继续膨胀，再进行结构拆分。
 
 ## 拆分顺序与目标
 
-1. `ObservationPanel.js`（优先）
-   - 继续向 `ChartWorkspaceController / ChartWindowController` 迁移行为契约
-   - 将仅 legacy 入口的 UI/渲染路径拆至独立适配层
-   - 目标：降到 `< 1200` 行或完成运行时下线
+1. `ChartWindowController.js`（优先）
+   - 延续窗口交互、渲染、状态编辑职责拆分
+   - 将窗口交互细分到 axis/source/layout 子控制器
+   - 目标：降到 `< 450` 行
 
 2. `Component.js`
    - 拆出几何与命中测试（terminal/segment/collision）

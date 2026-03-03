@@ -2,6 +2,21 @@ import { describe, expect, it, vi } from 'vitest';
 import { Circuit } from '../src/engine/Circuit.js';
 import { InteractionManager } from '../src/ui/Interaction.js';
 
+function createInteractionModeStore(modeContext = {}) {
+    return {
+        getState: vi.fn(() => ({
+            mode: modeContext.pendingTool === 'Wire' || modeContext.wiringActive ? 'wire' : 'select',
+            context: {
+                pendingTool: null,
+                mobileMode: 'select',
+                wireModeSticky: false,
+                wiringActive: false,
+                ...modeContext
+            }
+        }))
+    };
+}
+
 describe('Interaction wire segment snap/split helpers', () => {
     it('enables wire segment snapping when starting wiring from a point', () => {
         const snapPoint = vi.fn(() => ({ x: 20, y: 30, snap: { type: 'wire-segment', wireId: 'W1' } }));
@@ -289,27 +304,38 @@ describe('Interaction wire segment snap/split helpers', () => {
         const clearTerminalHighlight = vi.fn();
         const hideAlignmentGuides = vi.fn();
         const ctx = {
-            isWiring: true,
+            interactionModeStore: createInteractionModeStore({
+                pendingTool: 'Wire',
+                mobileMode: 'wire',
+                wireModeSticky: true,
+                wiringActive: true
+            }),
             wireStart: { x: 20, y: 30, snap: { type: 'terminal', componentId: 'R1', terminalIndex: 0 } },
             tempWire: 'TEMP-2',
             ignoreNextWireMouseUp: true,
             suspendedWiringSession: {
                 wireStart: { x: 11, y: 22, snap: { type: 'terminal', componentId: 'R2', terminalIndex: 1 } },
-                pendingToolType: 'Wire',
+                pendingTool: 'Wire',
                 pendingToolItem: null,
-                mobileInteractionMode: 'wire',
-                stickyWireTool: true
+                mobileMode: 'wire',
+                wireModeSticky: true
             },
             renderer: {
                 removeTempWire,
                 clearTerminalHighlight
             },
-            hideAlignmentGuides
+            hideAlignmentGuides,
+            syncInteractionModeStore: vi.fn()
         };
 
         InteractionManager.prototype.cancelWiring.call(ctx);
 
-        expect(ctx.isWiring).toBe(false);
+        expect(ctx.syncInteractionModeStore).toHaveBeenCalledWith({
+            source: 'wire.cancelWiring',
+            context: {
+                wiringActive: false
+            }
+        });
         expect(ctx.wireStart).toBeNull();
         expect(ctx.tempWire).toBeNull();
         expect(ctx.ignoreNextWireMouseUp).toBe(false);
@@ -483,8 +509,8 @@ describe('Interaction wire segment snap/split helpers', () => {
             }
         };
         const ctx = {
-            pendingToolType: null,
-            isWiring: false,
+            pendingTool: null,
+            wiringActive: false,
             resolvePointerType: () => 'mouse',
             resolveProbeMarkerTarget: () => null,
             resolveTerminalTarget: () => null,
@@ -548,7 +574,12 @@ describe('Interaction wire segment snap/split helpers', () => {
             isDraggingWireEndpoint: false,
             isDraggingWire: false,
             isDragging: false,
-            isWiring: true,
+            interactionModeStore: createInteractionModeStore({
+                pendingTool: 'Wire',
+                mobileMode: 'wire',
+                wireModeSticky: true,
+                wiringActive: true
+            }),
             ignoreNextWireMouseUp: false,
             resolveTerminalTarget: () => null,
             isWireEndpointTarget: () => false,

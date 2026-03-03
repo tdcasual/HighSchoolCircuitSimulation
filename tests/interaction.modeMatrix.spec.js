@@ -6,22 +6,59 @@ afterEach(() => {
     vi.unstubAllGlobals();
 });
 
-function createContext(overrides = {}) {
+function resolveModeFromContext(context = {}) {
+    if (context.isDraggingWireEndpoint || context.isTerminalExtending || context.isRheostatDragging) {
+        return 'endpoint-edit';
+    }
+    if (
+        context.pendingTool === 'Wire'
+        || context.mobileMode === 'wire'
+        || context.wireModeSticky
+        || context.wiringActive
+    ) {
+        return 'wire';
+    }
+    return 'select';
+}
+
+function createModeStoreContextSnapshot(context = {}) {
     return {
+        pendingTool: context.pendingTool ?? null,
+        mobileMode: context.mobileMode === 'wire' ? 'wire' : 'select',
+        wireModeSticky: !!context.wireModeSticky,
+        wiringActive: !!context.wiringActive,
+        isDraggingWireEndpoint: !!context.isDraggingWireEndpoint,
+        isTerminalExtending: !!context.isTerminalExtending,
+        isRheostatDragging: !!context.isRheostatDragging
+    };
+}
+
+function createContext(overrides = {}) {
+    const context = {
         app: {
             classroomMode: { activeLevel: 'off' },
             embedRuntimeBridge: { enabled: false }
         },
-        pendingToolType: null,
-        mobileInteractionMode: 'select',
-        stickyWireTool: false,
+        pendingTool: null,
+        mobileMode: 'select',
+        wireModeSticky: false,
         endpointAutoBridgeMode: 'auto',
-        isWiring: false,
+        wiringActive: false,
         isDraggingWireEndpoint: false,
         isTerminalExtending: false,
         isRheostatDragging: false,
         ...overrides
     };
+    if (!context.interactionModeStore) {
+        const snapshot = createModeStoreContextSnapshot(context);
+        context.interactionModeStore = {
+            getState: () => ({
+                mode: resolveModeFromContext(snapshot),
+                context: snapshot
+            })
+        };
+    }
+    return context;
 }
 
 describe('Interaction mode matrix diagnostics', () => {
@@ -44,10 +81,10 @@ describe('Interaction mode matrix diagnostics', () => {
         });
 
         const context = createContext({
-            pendingToolType: 'Wire',
-            mobileInteractionMode: 'wire',
-            stickyWireTool: true,
-            isWiring: true,
+            pendingTool: 'Wire',
+            mobileMode: 'wire',
+            wireModeSticky: true,
+            wiringActive: true,
             isDraggingWireEndpoint: true
         });
         const snapshot = FakeInteractionManager.prototype.getInteractionModeSnapshot.call(context);
@@ -73,9 +110,9 @@ describe('Interaction mode matrix diagnostics', () => {
                 classroomMode: { activeLevel: 'standard' },
                 embedRuntimeBridge: { enabled: true }
             },
-            pendingToolType: 'Wire',
-            mobileInteractionMode: 'wire',
-            stickyWireTool: true,
+            pendingTool: 'Wire',
+            mobileMode: 'wire',
+            wireModeSticky: true,
             endpointAutoBridgeMode: 'on'
         });
         const snapshot = FakeInteractionManager.prototype.getInteractionModeSnapshot.call(context);
@@ -89,7 +126,7 @@ describe('Interaction mode matrix diagnostics', () => {
         });
         expect(snapshot.mobile).toEqual({
             interactionMode: 'wire',
-            stickyWireTool: true,
+            wireModeSticky: true,
             endpointAutoBridgeMode: 'on'
         });
     });
@@ -106,18 +143,18 @@ describe('Interaction mode matrix diagnostics', () => {
         });
 
         const context = createContext({
-            pendingToolType: null,
-            mobileInteractionMode: 'select',
-            stickyWireTool: false,
-            isWiring: false,
+            pendingTool: null,
+            mobileMode: 'select',
+            wireModeSticky: false,
+            wiringActive: false,
             interactionModeStore: {
                 getState: () => ({
                     mode: 'wire',
                     context: {
-                        pendingToolType: 'Wire',
-                        mobileInteractionMode: 'wire',
-                        stickyWireTool: true,
-                        isWiring: true,
+                        pendingTool: 'Wire',
+                        mobileMode: 'wire',
+                        wireModeSticky: true,
+                        wiringActive: true,
                         isDraggingWireEndpoint: false,
                         isTerminalExtending: false,
                         isRheostatDragging: false
@@ -128,11 +165,11 @@ describe('Interaction mode matrix diagnostics', () => {
 
         const snapshot = FakeInteractionManager.prototype.getInteractionModeSnapshot.call(context);
         expect(snapshot.mode).toBe('wire');
-        expect(snapshot.pendingToolType).toBe('Wire');
+        expect(snapshot.pendingTool).toBe('Wire');
         expect(snapshot.wireSignals).toEqual({
             pendingWireTool: true,
             wireModeSelected: true,
-            stickyWireTool: true,
+            wireModeSticky: true,
             activeWiringSession: true
         });
     });

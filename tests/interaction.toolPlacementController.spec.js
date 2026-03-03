@@ -6,6 +6,21 @@ afterEach(() => {
     vi.unstubAllGlobals();
 });
 
+function createInteractionModeStore(modeContext = {}) {
+    return {
+        getState: vi.fn(() => ({
+            mode: modeContext.pendingTool === 'Wire' || modeContext.wiringActive ? 'wire' : 'select',
+            context: {
+                pendingTool: null,
+                mobileMode: 'select',
+                wireModeSticky: false,
+                wiringActive: false,
+                ...modeContext
+            }
+        }))
+    };
+}
+
 describe('ToolPlacementController.setPendingToolType', () => {
     it('sets pending tool and marks selected item', () => {
         const previous = { classList: { remove: vi.fn() } };
@@ -15,9 +30,9 @@ describe('ToolPlacementController.setPendingToolType', () => {
 
         const item = { classList: { add: vi.fn() } };
         const context = {
-            pendingToolType: null,
+            pendingTool: null,
             pendingToolItem: null,
-            isWiring: false,
+            wiringActive: false,
             clearPendingToolType: vi.fn(),
             cancelWiring: vi.fn(),
             updateStatus: vi.fn(),
@@ -26,12 +41,19 @@ describe('ToolPlacementController.setPendingToolType', () => {
 
         ToolPlacementController.setPendingToolType.call(context, 'Resistor', item);
 
-        expect(context.pendingToolType).toBe('Resistor');
         expect(context.pendingToolItem).toBe(item);
         expect(previous.classList.remove).toHaveBeenCalledWith('tool-item-pending');
         expect(item.classList.add).toHaveBeenCalledWith('tool-item-pending');
         expect(context.updateStatus).toHaveBeenCalledWith(expect.stringContaining('已选择'));
-        expect(context.syncInteractionModeStore).toHaveBeenCalledTimes(1);
+        expect(context.syncInteractionModeStore).toHaveBeenCalledWith({
+            mode: 'select',
+            source: 'toolPlacement.setPendingToolType:select',
+            context: {
+                pendingTool: 'Resistor',
+                mobileMode: 'select',
+                wireModeSticky: false
+            }
+        });
     });
 
     it('toggles off same tool and cancels wiring for wire tool', () => {
@@ -40,9 +62,39 @@ describe('ToolPlacementController.setPendingToolType', () => {
         });
 
         const context = {
-            pendingToolType: 'Wire',
             pendingToolItem: null,
-            isWiring: true,
+            interactionModeStore: createInteractionModeStore({
+                pendingTool: 'Wire',
+                wiringActive: true
+            }),
+            clearPendingToolType: vi.fn(),
+            cancelWiring: vi.fn(),
+            updateStatus: vi.fn()
+        };
+
+        ToolPlacementController.setPendingToolType.call(context, 'Wire', null);
+
+        expect(context.cancelWiring).toHaveBeenCalledTimes(1);
+        expect(context.clearPendingToolType).toHaveBeenCalledTimes(1);
+        expect(context.updateStatus).toHaveBeenCalledWith('已取消工具放置模式');
+    });
+
+    it('toggles off based on store context when legacy runtime mode fields are absent', () => {
+        vi.stubGlobal('document', {
+            querySelectorAll: vi.fn(() => [])
+        });
+
+        const context = {
+            pendingToolItem: null,
+            interactionModeStore: {
+                getState: vi.fn(() => ({
+                    mode: 'wire',
+                    context: {
+                        pendingTool: 'Wire',
+                        wiringActive: true
+                    }
+                }))
+            },
             clearPendingToolType: vi.fn(),
             cancelWiring: vi.fn(),
             updateStatus: vi.fn()
@@ -62,9 +114,9 @@ describe('ToolPlacementController.setPendingToolType', () => {
 
         const closeDrawers = vi.fn();
         const context = {
-            pendingToolType: null,
+            pendingTool: null,
             pendingToolItem: null,
-            isWiring: false,
+            wiringActive: false,
             clearPendingToolType: vi.fn(),
             cancelWiring: vi.fn(),
             updateStatus: vi.fn(),
@@ -90,18 +142,18 @@ describe('ToolPlacementController.setPendingToolType', () => {
         });
 
         const context = {
-            pendingToolType: 'Wire',
+            pendingTool: 'Wire',
             pendingToolItem: null,
-            isWiring: false,
+            wiringActive: false,
             clearPendingToolType: vi.fn(),
             cancelWiring: vi.fn(),
             updateStatus: vi.fn(),
             suspendedWiringSession: {
                 wireStart: { x: 10, y: 20, snap: { type: 'terminal', componentId: 'R1', terminalIndex: 0 } },
-                pendingToolType: 'Wire',
+                pendingTool: 'Wire',
                 pendingToolItem: null,
-                mobileInteractionMode: 'wire',
-                stickyWireTool: true
+                mobileMode: 'wire',
+                wireModeSticky: true
             }
         };
 
@@ -117,9 +169,9 @@ describe('ToolPlacementController.setPendingToolType', () => {
 
         const item = { classList: { add: {} } };
         const context = {
-            pendingToolType: null,
+            pendingTool: null,
             pendingToolItem: null,
-            isWiring: false,
+            wiringActive: false,
             clearPendingToolType: vi.fn(),
             cancelWiring: vi.fn(),
             updateStatus: vi.fn()
@@ -139,15 +191,23 @@ describe('ToolPlacementController.clearPendingToolType', () => {
         });
 
         const context = {
-            pendingToolType: 'Resistor',
-            pendingToolItem: { classList: { remove } }
+            pendingTool: 'Resistor',
+            pendingToolItem: { classList: { remove } },
+            syncInteractionModeStore: vi.fn()
         };
 
         ToolPlacementController.clearPendingToolType.call(context);
 
-        expect(context.pendingToolType).toBe(null);
         expect(context.pendingToolItem).toBe(null);
         expect(remove).toHaveBeenCalledWith('tool-item-pending');
+        expect(context.syncInteractionModeStore).toHaveBeenCalledWith({
+            source: 'toolPlacement.clearPendingToolType',
+            context: {
+                pendingTool: null,
+                wireModeSticky: false,
+                mobileMode: 'select'
+            }
+        });
     });
 
     it('clears suspended pinch wiring session', () => {
@@ -156,14 +216,14 @@ describe('ToolPlacementController.clearPendingToolType', () => {
         });
 
         const context = {
-            pendingToolType: 'Wire',
+            pendingTool: 'Wire',
             pendingToolItem: null,
             suspendedWiringSession: {
                 wireStart: { x: 11, y: 21, snap: { type: 'terminal', componentId: 'R2', terminalIndex: 1 } },
-                pendingToolType: 'Wire',
+                pendingTool: 'Wire',
                 pendingToolItem: null,
-                mobileInteractionMode: 'wire',
-                stickyWireTool: true
+                mobileMode: 'wire',
+                wireModeSticky: true
             }
         };
 
@@ -178,13 +238,21 @@ describe('ToolPlacementController.clearPendingToolType', () => {
         });
 
         const context = {
-            pendingToolType: 'Resistor',
-            pendingToolItem: { classList: { remove: {} } }
+            pendingTool: 'Resistor',
+            pendingToolItem: { classList: { remove: {} } },
+            syncInteractionModeStore: vi.fn()
         };
 
         expect(() => ToolPlacementController.clearPendingToolType.call(context)).not.toThrow();
-        expect(context.pendingToolType).toBe(null);
         expect(context.pendingToolItem).toBe(null);
+        expect(context.syncInteractionModeStore).toHaveBeenCalledWith({
+            source: 'toolPlacement.clearPendingToolType',
+            context: {
+                pendingTool: null,
+                wireModeSticky: false,
+                mobileMode: 'select'
+            }
+        });
     });
 
     it('preserves mobile interaction mode when preserveMobileMode is true', () => {
@@ -193,24 +261,56 @@ describe('ToolPlacementController.clearPendingToolType', () => {
         });
 
         const context = {
-            pendingToolType: 'Wire',
+            pendingTool: 'Wire',
             pendingToolItem: null,
-            mobileInteractionMode: 'wire',
-            stickyWireTool: true
+            mobileMode: 'wire',
+            wireModeSticky: true,
+            syncInteractionModeStore: vi.fn()
         };
 
         ToolPlacementController.clearPendingToolType.call(context, { preserveMobileMode: true });
 
-        expect(context.pendingToolType).toBe(null);
-        expect(context.mobileInteractionMode).toBe('wire');
-        expect(context.stickyWireTool).toBe(true);
+        expect(context.syncInteractionModeStore).toHaveBeenCalledWith({
+            source: 'toolPlacement.clearPendingToolType',
+            context: {
+                pendingTool: null
+            }
+        });
     });
 });
 
 describe('ToolPlacementController.placePendingToolAt', () => {
+    it('places component using store context when legacy runtime mode fields are absent', () => {
+        const context = {
+            interactionModeStore: {
+                getState: vi.fn(() => ({
+                    mode: 'select',
+                    context: {
+                        pendingTool: 'Resistor',
+                        wiringActive: false
+                    }
+                }))
+            },
+            screenToCanvas: vi.fn(() => ({ x: 10.2, y: 19.8 })),
+            addWireAt: vi.fn(),
+            addComponent: vi.fn(),
+            clearPendingToolType: vi.fn()
+        };
+
+        const placed = ToolPlacementController.placePendingToolAt.call(context, 100, 120);
+
+        expect(placed).toBe(true);
+        expect(context.addComponent).toHaveBeenCalledWith('Resistor', 20, 20);
+        expect(context.addWireAt).not.toHaveBeenCalled();
+        expect(context.clearPendingToolType).toHaveBeenCalledWith({ silent: true });
+    });
+
     it('places component and clears pending tool', () => {
         const context = {
-            pendingToolType: 'Resistor',
+            interactionModeStore: createInteractionModeStore({
+                pendingTool: 'Resistor',
+                wiringActive: false
+            }),
             screenToCanvas: vi.fn(() => ({ x: 10.2, y: 19.8 })),
             addWireAt: vi.fn(),
             addComponent: vi.fn(),
@@ -227,7 +327,10 @@ describe('ToolPlacementController.placePendingToolAt', () => {
 
     it('places wire when pending type is wire', () => {
         const context = {
-            pendingToolType: 'Wire',
+            interactionModeStore: createInteractionModeStore({
+                pendingTool: 'Wire',
+                wiringActive: false
+            }),
             screenToCanvas: vi.fn(() => ({ x: 18.6, y: 21.4 })),
             addWireAt: vi.fn(),
             addComponent: vi.fn(),
@@ -251,8 +354,8 @@ describe('ToolPlacementController.setMobileInteractionMode', () => {
         });
 
         const context = {
-            mobileInteractionMode: 'select',
-            stickyWireTool: false,
+            mobileMode: 'select',
+            wireModeSticky: false,
             setPendingToolType: vi.fn(),
             clearPendingToolType: vi.fn(),
             cancelWiring: vi.fn(),
@@ -263,8 +366,6 @@ describe('ToolPlacementController.setMobileInteractionMode', () => {
 
         ToolPlacementController.setMobileInteractionMode.call(context, 'wire');
 
-        expect(context.mobileInteractionMode).toBe('wire');
-        expect(context.stickyWireTool).toBe(true);
         expect(context.setPendingToolType).toHaveBeenCalledWith('Wire', null, expect.objectContaining({
             allowToggleOff: false,
             silentStatus: true
@@ -281,10 +382,21 @@ describe('ToolPlacementController.setMobileInteractionMode', () => {
         });
 
         const context = {
-            pendingToolType: 'Wire',
-            isWiring: true,
-            mobileInteractionMode: 'wire',
-            stickyWireTool: true,
+            pendingTool: 'Wire',
+            wiringActive: true,
+            mobileMode: 'wire',
+            wireModeSticky: true,
+            interactionModeStore: {
+                getState: vi.fn(() => ({
+                    mode: 'wire',
+                    context: {
+                        pendingTool: 'Wire',
+                        mobileMode: 'wire',
+                        wireModeSticky: true,
+                        wiringActive: true
+                    }
+                }))
+            },
             setPendingToolType: vi.fn(),
             clearPendingToolType: vi.fn(),
             cancelWiring: vi.fn(),
@@ -295,8 +407,6 @@ describe('ToolPlacementController.setMobileInteractionMode', () => {
 
         ToolPlacementController.setMobileInteractionMode.call(context, 'select');
 
-        expect(context.mobileInteractionMode).toBe('select');
-        expect(context.stickyWireTool).toBe(false);
         expect(context.cancelWiring).toHaveBeenCalledTimes(1);
         expect(context.clearPendingToolType).toHaveBeenCalledWith(expect.objectContaining({
             silent: true,
@@ -314,10 +424,10 @@ describe('ToolPlacementController.setMobileInteractionMode', () => {
         });
 
         const context = {
-            pendingToolType: 'Wire',
-            isWiring: false,
-            mobileInteractionMode: 'wire',
-            stickyWireTool: true,
+            pendingTool: 'Wire',
+            wiringActive: false,
+            mobileMode: 'wire',
+            wireModeSticky: true,
             setPendingToolType: vi.fn(),
             clearPendingToolType: vi.fn(),
             cancelWiring: vi.fn(),
@@ -325,10 +435,10 @@ describe('ToolPlacementController.setMobileInteractionMode', () => {
             quickActionBar: { update: vi.fn() },
             suspendedWiringSession: {
                 wireStart: { x: 10, y: 20, snap: { type: 'terminal', componentId: 'R1', terminalIndex: 0 } },
-                pendingToolType: 'Wire',
+                pendingTool: 'Wire',
                 pendingToolItem: null,
-                mobileInteractionMode: 'wire',
-                stickyWireTool: true
+                mobileMode: 'wire',
+                wireModeSticky: true
             }
         };
 
@@ -482,7 +592,7 @@ describe('ToolPlacementController endpoint auto-bridge mode controls', () => {
         });
 
         expect(() => ToolPlacementController.syncMobileModeButtons.call({
-            mobileInteractionMode: 'wire',
+            mobileMode: 'wire',
             endpointAutoBridgeMode: 'auto'
         })).not.toThrow();
     });

@@ -7,7 +7,7 @@ const root = process.cwd();
 const budgets = [
     { file: 'src/engine/Circuit.js', maxLines: 2000 },
     { file: 'src/components/Component.js', maxLines: 1700 },
-    { file: 'src/ui/ObservationPanel.js', maxLines: 1650 },
+    { file: 'src/ui/charts/ChartWindowController.js', maxLines: 700 },
     { file: 'src/app/interaction/InteractionOrchestrator.js', maxLines: 400 }
 ];
 

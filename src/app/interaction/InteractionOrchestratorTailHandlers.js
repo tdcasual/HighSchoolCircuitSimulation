@@ -1,5 +1,5 @@
 import { InteractionModes } from './InteractionModeStore.js';
-import { setInteractionModeContext } from './InteractionModeBridge.js';
+import { readInteractionModeContext, setInteractionModeContext } from './InteractionModeBridge.js';
 import { syncInteractionModeStore } from './InteractionModeStateMachine.js';
 import { consumeActionResult, hasClass, safeClosest } from './InteractionOrchestratorHelpers.js';
 
@@ -8,7 +8,8 @@ export function onContextMenu(e) {
     this.touchActionController?.cancel?.();
     this.wireModeGesture = null;
     this.pointerDownInfo = null;
-    if (this.isWiring && typeof this.cancelWiring === 'function') {
+    const modeContext = readInteractionModeContext(this);
+    if (modeContext.wiringActive && typeof this.cancelWiring === 'function') {
         this.cancelWiring();
     }
     if (typeof this.endPrimaryInteractionForGesture === 'function') {
@@ -58,8 +59,8 @@ export function onDoubleClick(e) {
     const modeContext = modeState?.context || null;
     if (
         modeState?.mode === InteractionModes.WIRE
-        || modeContext?.pendingToolType === 'Wire'
-        || modeContext?.isWiring
+        || modeContext?.pendingTool === 'Wire'
+        || modeContext?.wiringActive
     ) {
         return;
     }
@@ -138,10 +139,10 @@ export function onKeyDown(e) {
         this.cancelWiring();
         this.clearPendingToolType({ silent: true });
         setInteractionModeContext(this, {
-            pendingToolType: null,
-            mobileInteractionMode: 'select',
-            stickyWireTool: false,
-            isWiring: false
+            pendingTool: null,
+            mobileMode: 'select',
+            wireModeSticky: false,
+            wiringActive: false
         }, {
             mode: InteractionModes.SELECT,
             source: 'onKeyDown:escape'

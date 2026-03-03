@@ -272,9 +272,6 @@ async function runPhoneTaskScenario(page, taskId) {
             if (Array.isArray(app.chartWorkspace?.windows)) {
                 return app.chartWorkspace.windows.length;
             }
-            if (Array.isArray(app.observationPanel?.plots)) {
-                return app.observationPanel.plots.length;
-            }
             return 0;
         };
 
@@ -858,6 +855,12 @@ async function verifyPhoneTouchFlow(browser, baseUrl, collector) {
                 }
                 return null;
             };
+            const wiringActiveActive = (modeSnapshot) => !!modeSnapshot?.wireSignals?.activeWiringSession;
+            const isWireToolArmed = (modeSnapshot) => !!(
+                modeSnapshot?.wireSignals?.pendingWireTool
+                && modeSnapshot?.wireSignals?.wireModeSelected
+                && modeSnapshot?.wireSignals?.wireModeSticky
+            );
             const getTerminalTarget = (componentId, terminalIndex) =>
                 document.querySelector(
                     `g.component[data-id="${componentId}"] .terminal-hit-area[data-terminal="${terminalIndex}"]`
@@ -887,7 +890,8 @@ async function verifyPhoneTouchFlow(browser, baseUrl, collector) {
 
             const aOutClient = toClient(aOutPos.x, aOutPos.y);
             dispatchTap(aOutTarget, 501, aOutClient.x, aOutClient.y);
-            const tapStartArmsWiring = interaction.isWiring === true
+            const modeSnapshotAfterTapStart = captureModeSnapshot();
+            const tapStartArmsWiring = wiringActiveActive(modeSnapshotAfterTapStart)
                 && interaction.wireStart?.snap?.type === 'terminal'
                 && interaction.wireStart?.snap?.componentId === resistorA
                 && interaction.wireStart?.snap?.terminalIndex === 1;
@@ -896,7 +900,8 @@ async function verifyPhoneTouchFlow(browser, baseUrl, collector) {
             const bInClient = toClient(bInPos.x, bInPos.y);
             dispatchTap(bInTarget, 502, bInClient.x, bInClient.y);
             const wireCountAfterFinish = circuit.wires?.size || 0;
-            const tapFinishCreatesWire = interaction.isWiring === false && wireCountAfterFinish > wireCountBeforeFinish;
+            const modeSnapshotAfterTapFinish = captureModeSnapshot();
+            const tapFinishCreatesWire = !wiringActiveActive(modeSnapshotAfterTapFinish) && wireCountAfterFinish > wireCountBeforeFinish;
 
             const resistorAComp = circuit.getComponent(resistorA);
             const extendTarget = getTerminalTarget(resistorA, 0);
@@ -973,24 +978,25 @@ async function verifyPhoneTouchFlow(browser, baseUrl, collector) {
             const rearmClient = toClient(rearmPos.x, rearmPos.y);
             const extendReClient = toClient(extendRePos.x, extendRePos.y);
             dispatchTap(rearmTarget, 506, rearmClient.x, rearmClient.y);
-            const wiringArmedBeforeEditDrag = interaction.isWiring === true;
+            const modeSnapshotBeforeEditDrag = captureModeSnapshot();
+            const wiringArmedBeforeEditDrag = wiringActiveActive(modeSnapshotBeforeEditDrag);
             dispatchPointer(extendRetarget, 'pointerdown', 507, extendReClient.x, extendReClient.y);
             dispatchPointer(svg, 'pointermove', 507, extendReClient.x - 28, extendReClient.y);
             dispatchPointer(svg, 'pointerup', 507, extendReClient.x - 28, extendReClient.y, { buttons: 0 });
-            const wiringPreservedAfterEditDrag = interaction.isWiring === true;
+            const modeSnapshotAfterEditDrag = captureModeSnapshot();
+            const wiringPreservedAfterEditDrag = wiringActiveActive(modeSnapshotAfterEditDrag);
             const modeSnapshotDuringEditDrag = captureModeSnapshot();
             dispatchPointer(sliderTarget, 'pointerdown', 508, sliderClient.x, sliderClient.y);
             dispatchPointer(svg, 'pointermove', 508, sliderClient.x + 22, sliderClient.y);
             dispatchPointer(svg, 'pointerup', 508, sliderClient.x + 22, sliderClient.y, { buttons: 0 });
-            const wiringPreservedAfterSliderShapeDrag = interaction.isWiring === true;
-            if (interaction.isWiring) {
+            const modeSnapshotAfterSliderShapeDrag = captureModeSnapshot();
+            const wiringPreservedAfterSliderShapeDrag = wiringActiveActive(modeSnapshotAfterSliderShapeDrag);
+            if (wiringActiveActive(modeSnapshotAfterSliderShapeDrag)) {
                 interaction.cancelWiring?.();
             }
 
-            const wireModeStillArmed = interaction.pendingToolType === 'Wire'
-                && interaction.mobileInteractionMode === 'wire'
-                && interaction.stickyWireTool === true;
             const modeSnapshotAtFlowEnd = captureModeSnapshot();
+            const wireModeStillArmed = isWireToolArmed(modeSnapshotAtFlowEnd);
 
             return {
                 ok: true,

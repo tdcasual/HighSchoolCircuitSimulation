@@ -10,7 +10,7 @@ const ENDPOINT_AUTO_BRIDGE_STORAGE_KEY = 'interaction.endpoint_auto_bridge_mode'
 const ENDPOINT_AUTO_BRIDGE_CLASSROOM_LOCK_LABEL = '端点补线: 课堂锁定';
 const ENDPOINT_AUTO_BRIDGE_CLASSROOM_LOCK_NOTE = '课堂模式已锁定端点补线为关闭';
 
-function normalizeMobileInteractionMode(mode) {
+function normalizeMobileMode(mode) {
     return mode === 'wire' ? 'wire' : 'select';
 }
 
@@ -77,10 +77,10 @@ function clearSuspendedWiringSession(context) {
 function readToolModeContext(context) {
     const modeContext = readInteractionModeContext(context);
     return {
-        pendingToolType: modeContext?.pendingToolType ?? null,
-        mobileInteractionMode: normalizeMobileInteractionMode(modeContext?.mobileInteractionMode),
-        stickyWireTool: !!modeContext?.stickyWireTool,
-        isWiring: !!modeContext?.isWiring,
+        pendingTool: modeContext?.pendingTool ?? null,
+        mobileMode: normalizeMobileMode(modeContext?.mobileMode),
+        wireModeSticky: !!modeContext?.wireModeSticky,
+        wiringActive: !!modeContext?.wiringActive,
         isDraggingWireEndpoint: !!modeContext?.isDraggingWireEndpoint,
         isTerminalExtending: !!modeContext?.isTerminalExtending,
         isRheostatDragging: !!modeContext?.isRheostatDragging
@@ -127,7 +127,8 @@ function setTogglePressedState(button, pressed) {
 
 export function syncMobileModeButtons() {
     if (!hasDocument()) return;
-    const mode = normalizeMobileInteractionMode(this.mobileInteractionMode);
+    const modeContext = readToolModeContext(this);
+    const mode = normalizeMobileMode(modeContext.mobileMode);
     const selectButton = document.getElementById('btn-mobile-mode-select');
     const wireButton = document.getElementById('btn-mobile-mode-wire');
     setTogglePressedState(selectButton, mode !== 'wire');
@@ -158,14 +159,14 @@ export function syncEndpointAutoBridgeButton() {
 
 export function getInteractionModeSnapshot() {
     const modeContext = readToolModeContext(this);
-    const mobileInteractionMode = normalizeMobileInteractionMode(modeContext.mobileInteractionMode);
+    const mobileMode = normalizeMobileMode(modeContext.mobileMode);
     const endpointAutoBridgeMode = normalizeEndpointAutoBridgeMode(this.endpointAutoBridgeMode);
 
     const wireSignals = {
-        pendingWireTool: modeContext.pendingToolType === 'Wire',
-        wireModeSelected: mobileInteractionMode === 'wire',
-        stickyWireTool: !!modeContext.stickyWireTool,
-        activeWiringSession: !!modeContext.isWiring
+        pendingWireTool: modeContext.pendingTool === 'Wire',
+        wireModeSelected: mobileMode === 'wire',
+        wireModeSticky: !!modeContext.wireModeSticky,
+        activeWiringSession: !!modeContext.wiringActive
     };
     const endpointSignals = {
         draggingWireEndpoint: !!modeContext.isDraggingWireEndpoint,
@@ -177,7 +178,7 @@ export function getInteractionModeSnapshot() {
     if (
         wireSignals.pendingWireTool
         || wireSignals.wireModeSelected
-        || wireSignals.stickyWireTool
+        || wireSignals.wireModeSticky
         || wireSignals.activeWiringSession
     ) {
         activeModes.push('wire');
@@ -200,12 +201,12 @@ export function getInteractionModeSnapshot() {
         mode: hasConflict ? 'conflict' : uniqueActiveModes[0],
         activeModes: uniqueActiveModes,
         hasConflict,
-        pendingToolType: modeContext.pendingToolType || null,
+        pendingTool: modeContext.pendingTool || null,
         wireSignals,
         endpointSignals,
         mobile: {
-            interactionMode: mobileInteractionMode,
-            stickyWireTool: !!modeContext.stickyWireTool,
+            interactionMode: mobileMode,
+            wireModeSticky: !!modeContext.wireModeSticky,
             endpointAutoBridgeMode
         },
         runtime: {
@@ -260,12 +261,12 @@ export function restoreEndpointAutoBridgeMode(options = {}) {
 
 export function setMobileInteractionMode(mode = 'select', options = {}) {
     clearSuspendedWiringSession(this);
-    const nextMode = normalizeMobileInteractionMode(mode);
+    const nextMode = normalizeMobileMode(mode);
     const isWireMode = nextMode === 'wire';
 
     setInteractionModeContext(this, {
-        mobileInteractionMode: nextMode,
-        stickyWireTool: isWireMode
+        mobileMode: nextMode,
+        wireModeSticky: isWireMode
     }, {
         mode: isWireMode ? 'wire' : 'select',
         source: 'toolPlacement.setMobileInteractionMode'
@@ -281,11 +282,11 @@ export function setMobileInteractionMode(mode = 'select', options = {}) {
             this.updateStatus('已切换到布线模式');
         }
     } else {
-        if (this.isWiring && typeof this.cancelWiring === 'function') {
+        const modeContext = readToolModeContext(this);
+        if (modeContext.wiringActive && typeof this.cancelWiring === 'function') {
             this.cancelWiring();
         }
-        const modeContext = readToolModeContext(this);
-        if (modeContext.pendingToolType === 'Wire' && typeof this.clearPendingToolType === 'function') {
+        if (modeContext.pendingTool === 'Wire' && typeof this.clearPendingToolType === 'function') {
             this.clearPendingToolType({ silent: true, preserveMobileMode: true });
         }
         if (!options.silentStatus) {
@@ -301,12 +302,17 @@ export function setPendingToolType(type, item = null, options = {}) {
     clearSuspendedWiringSession(this);
     if (!type) return;
     const allowToggleOff = options.allowToggleOff !== false;
-    if (this.pendingToolType === type) {
+    const modeContext = readToolModeContext(this);
+    const currentPendingToolType = modeContext.pendingTool;
+    const currentMobileMode = normalizeMobileMode(modeContext.mobileMode);
+    const wiringActive = !!modeContext.wiringActive;
+
+    if (currentPendingToolType === type) {
         if (!allowToggleOff) {
             this.syncMobileModeButtons?.();
             return;
         }
-        if (type === 'Wire' && this.isWiring && typeof this.cancelWiring === 'function') {
+        if (type === 'Wire' && wiringActive && typeof this.cancelWiring === 'function') {
             this.cancelWiring();
         }
         this.clearPendingToolType();
@@ -326,18 +332,18 @@ export function setPendingToolType(type, item = null, options = {}) {
     if (type === 'Wire') {
         const fromMobileMode = options.source === 'mobile-mode';
         setWireToolContext(this, {
-            pendingToolType: type,
-            mobileInteractionMode: fromMobileMode ? 'wire' : normalizeMobileInteractionMode(this.mobileInteractionMode),
-            stickyWireTool: !!fromMobileMode
+            pendingTool: type,
+            mobileMode: fromMobileMode ? 'wire' : currentMobileMode,
+            wireModeSticky: !!fromMobileMode
         }, {
             mode: 'wire',
             source: 'toolPlacement.setPendingToolType:wire'
         });
     } else {
         setWireToolContext(this, {
-            pendingToolType: type,
-            mobileInteractionMode: 'select',
-            stickyWireTool: false
+            pendingTool: type,
+            mobileMode: 'select',
+            wireModeSticky: false
         }, {
             mode: 'select',
             source: 'toolPlacement.setPendingToolType:select'
@@ -369,11 +375,11 @@ export function clearPendingToolType(options = {}) {
         }
     }
     const contextPatch = {
-        pendingToolType: null
+        pendingTool: null
     };
     if (!options.preserveMobileMode) {
-        contextPatch.stickyWireTool = false;
-        contextPatch.mobileInteractionMode = 'select';
+        contextPatch.wireModeSticky = false;
+        contextPatch.mobileMode = 'select';
     }
     setInteractionModeContext(this, contextPatch, {
         source: 'toolPlacement.clearPendingToolType'
@@ -382,14 +388,16 @@ export function clearPendingToolType(options = {}) {
 }
 
 export function placePendingToolAt(clientX, clientY) {
-    if (!this.pendingToolType) return false;
+    const modeContext = readToolModeContext(this);
+    const pendingTool = modeContext.pendingTool;
+    if (!pendingTool) return false;
     const canvas = this.screenToCanvas(clientX, clientY);
     const x = snapToGrid(canvas.x, GRID_SIZE);
     const y = snapToGrid(canvas.y, GRID_SIZE);
-    if (this.pendingToolType === 'Wire') {
+    if (pendingTool === 'Wire') {
         this.addWireAt(x, y);
     } else {
-        this.addComponent(this.pendingToolType, x, y);
+        this.addComponent(pendingTool, x, y);
     }
     this.clearPendingToolType({ silent: true });
     return true;

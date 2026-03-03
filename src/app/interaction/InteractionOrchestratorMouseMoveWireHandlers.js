@@ -1,5 +1,6 @@
 import { GRID_SIZE, snapToGrid, toCanvasInt } from '../../utils/CanvasCoords.js';
 import { resolveLiveWireStart } from './InteractionOrchestratorHelpers.js';
+import { readInteractionModeContext } from './InteractionModeBridge.js';
 export { handleWireEndpointDragMouseMove } from './InteractionOrchestratorMouseMoveWireEndpointHandlers.js';
 
 export function handleWireModeGestureMouseMove(e) {
@@ -85,7 +86,8 @@ export function handleWireDragMouseMove(e, canvasX, canvasY) {
 }
 
 export function handleWiringPreviewMouseMove(e, canvasX, canvasY) {
-    if (!(this.isWiring && this.wireStart && this.tempWire)) {
+    const modeContext = readInteractionModeContext(this);
+    if (!(modeContext.wiringActive && this.wireStart && this.tempWire)) {
         return false;
     }
 

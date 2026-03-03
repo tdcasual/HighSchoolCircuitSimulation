@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as InteractionOrchestrator from '../src/app/interaction/InteractionOrchestrator.js';
+import { InteractionModeStore } from '../src/app/interaction/InteractionModeStore.js';
 import { ErrorCodes } from '../src/core/errors/ErrorCodes.js';
 import { AppError } from '../src/core/errors/AppError.js';
 
@@ -26,14 +27,85 @@ afterEach(() => {
     vi.unstubAllGlobals();
 });
 
+function createInteractionModeStore(modeContext = {}) {
+    return {
+        getState: vi.fn(() => ({
+            mode: modeContext.pendingTool === 'Wire' || modeContext.wiringActive ? 'wire' : 'select',
+            context: {
+                pendingTool: null,
+                mobileMode: 'select',
+                wireModeSticky: false,
+                wiringActive: false,
+                ...modeContext
+            }
+        }))
+    };
+}
+
+function createWireModeStore(modeContext = {}) {
+    return createInteractionModeStore({
+        pendingTool: 'Wire',
+        mobileMode: 'wire',
+        wireModeSticky: true,
+        wiringActive: true,
+        ...modeContext
+    });
+}
+
+function invokeOnMouseDown(context, event) {
+    if (!context.interactionModeStore) {
+        context.interactionModeStore = createInteractionModeStore({
+            pendingTool: context.pendingTool ?? null,
+            mobileMode: context.mobileMode === 'wire' ? 'wire' : 'select',
+            wireModeSticky: !!context.wireModeSticky,
+            wiringActive: !!context.wiringActive
+        });
+    }
+    return InteractionOrchestrator.onMouseDown.call(context, event);
+}
+
 describe('InteractionOrchestrator.onMouseDown', () => {
+    it('short-circuits on active wiring from store context without legacy runtime field', () => {
+        const context = {
+            resolvePointerType: vi.fn(() => 'mouse'),
+            resolveProbeMarkerTarget: vi.fn(() => null),
+            resolveTerminalTarget: vi.fn(() => null),
+            interactionModeStore: {
+                getState: vi.fn(() => ({
+                    mode: 'wire',
+                    context: {
+                        pendingTool: null,
+                        wiringActive: true
+                    }
+                }))
+            },
+            screenToCanvas: vi.fn(() => ({ x: 0, y: 0 })),
+            clearSelection: vi.fn(),
+            startPanning: vi.fn(),
+            startWiringFromPoint: vi.fn(),
+            isWireEndpointTarget: vi.fn(() => false)
+        };
+        const event = {
+            button: 0,
+            target: makeTarget(),
+            preventDefault: vi.fn(),
+            stopPropagation: vi.fn()
+        };
+
+        invokeOnMouseDown(context, event);
+
+        expect(context.clearSelection).not.toHaveBeenCalled();
+        expect(context.startPanning).not.toHaveBeenCalled();
+        expect(context.startWiringFromPoint).not.toHaveBeenCalled();
+    });
+
     it('starts panning on middle button', () => {
         const context = {
             resolvePointerType: vi.fn(() => 'mouse'),
             resolveProbeMarkerTarget: vi.fn(() => null),
             resolveTerminalTarget: vi.fn(() => null),
-            pendingToolType: null,
-            isWiring: false,
+            pendingTool: null,
+            wiringActive: false,
             screenToCanvas: vi.fn(() => ({ x: 0, y: 0 })),
             startPanning: vi.fn(),
             startWiringFromPoint: vi.fn(),
@@ -47,7 +119,7 @@ describe('InteractionOrchestrator.onMouseDown', () => {
             stopPropagation: vi.fn()
         };
 
-        InteractionOrchestrator.onMouseDown.call(context, event);
+        invokeOnMouseDown(context, event);
 
         expect(context.startPanning).toHaveBeenCalledWith(event);
         expect(context.clearSelection).not.toHaveBeenCalled();
@@ -58,8 +130,8 @@ describe('InteractionOrchestrator.onMouseDown', () => {
             resolvePointerType: vi.fn(() => 'mouse'),
             resolveProbeMarkerTarget: vi.fn(() => null),
             resolveTerminalTarget: vi.fn(() => null),
-            pendingToolType: null,
-            isWiring: false,
+            pendingTool: null,
+            wiringActive: false,
             screenToCanvas: vi.fn(() => ({ x: 0, y: 0 })),
             clearSelection: vi.fn(),
             isWireEndpointTarget: vi.fn(() => false),
@@ -76,7 +148,7 @@ describe('InteractionOrchestrator.onMouseDown', () => {
             stopPropagation: vi.fn()
         };
 
-        expect(() => InteractionOrchestrator.onMouseDown.call(context, event)).not.toThrow();
+        expect(() => invokeOnMouseDown(context, event)).not.toThrow();
         expect(context.clearSelection).toHaveBeenCalledTimes(1);
     });
 
@@ -85,8 +157,8 @@ describe('InteractionOrchestrator.onMouseDown', () => {
             resolvePointerType: vi.fn(() => 'touch'),
             resolveProbeMarkerTarget: vi.fn(() => null),
             resolveTerminalTarget: vi.fn(() => null),
-            pendingToolType: 'Wire',
-            isWiring: false,
+            pendingTool: 'Wire',
+            wiringActive: false,
             screenToCanvas: vi.fn(() => ({ x: 0, y: 0 })),
             startWiringFromPoint: vi.fn(),
             updateStatus: vi.fn(),
@@ -106,7 +178,7 @@ describe('InteractionOrchestrator.onMouseDown', () => {
             stopPropagation: vi.fn()
         };
 
-        expect(() => InteractionOrchestrator.onMouseDown.call(context, event)).not.toThrow();
+        expect(() => invokeOnMouseDown(context, event)).not.toThrow();
         expect(context.startWiringFromPoint).toHaveBeenCalledTimes(1);
     });
 
@@ -115,8 +187,8 @@ describe('InteractionOrchestrator.onMouseDown', () => {
             resolvePointerType: vi.fn(() => 'mouse'),
             resolveProbeMarkerTarget: vi.fn(() => null),
             resolveTerminalTarget: vi.fn(() => null),
-            pendingToolType: 'Wire',
-            isWiring: false,
+            pendingTool: 'Wire',
+            wiringActive: false,
             screenToCanvas: vi.fn(() => ({ x: 120, y: 80 })),
             startWiringFromPoint: vi.fn(),
             updateStatus: vi.fn(),
@@ -131,7 +203,7 @@ describe('InteractionOrchestrator.onMouseDown', () => {
             stopPropagation: vi.fn()
         };
 
-        InteractionOrchestrator.onMouseDown.call(context, event);
+        invokeOnMouseDown(context, event);
 
         expect(context.startWiringFromPoint).toHaveBeenCalledWith({ x: 120, y: 80 }, event, true);
         expect(context.updateStatus).toHaveBeenCalledWith('导线模式：选择终点');
@@ -146,8 +218,8 @@ describe('InteractionOrchestrator.onMouseDown', () => {
             resolvePointerType: vi.fn(() => 'mouse'),
             resolveProbeMarkerTarget: vi.fn(() => null),
             resolveTerminalTarget: vi.fn(() => terminalTarget),
-            pendingToolType: 'Wire',
-            isWiring: false,
+            pendingTool: 'Wire',
+            wiringActive: false,
             screenToCanvas: vi.fn(() => ({ x: 5, y: 6 })),
             renderer: {
                 getTerminalPosition: vi.fn(() => ({ x: 210, y: 310 }))
@@ -171,7 +243,7 @@ describe('InteractionOrchestrator.onMouseDown', () => {
             stopPropagation: vi.fn()
         };
 
-        InteractionOrchestrator.onMouseDown.call(context, event);
+        invokeOnMouseDown(context, event);
 
         expect(context.startWiringFromPoint).toHaveBeenCalledWith({ x: 210, y: 310 }, event, true);
         expect(context.screenToCanvas).toHaveBeenCalledTimes(1);
@@ -186,8 +258,8 @@ describe('InteractionOrchestrator.onMouseDown', () => {
             resolvePointerType: vi.fn(() => 'mouse'),
             resolveProbeMarkerTarget: vi.fn(() => null),
             resolveTerminalTarget: vi.fn(() => terminalTarget),
-            pendingToolType: 'Wire',
-            isWiring: true,
+            pendingTool: 'Wire',
+            wiringActive: true,
             renderer: {
                 getTerminalPosition: vi.fn(() => ({ x: 420, y: 180 }))
             },
@@ -212,7 +284,7 @@ describe('InteractionOrchestrator.onMouseDown', () => {
             stopPropagation: vi.fn()
         };
 
-        InteractionOrchestrator.onMouseDown.call(context, event);
+        invokeOnMouseDown(context, event);
 
         expect(context.finishWiringToPoint).toHaveBeenCalledWith({ x: 420, y: 180 }, { pointerType: 'mouse' });
         expect(context.clearPendingToolType).toHaveBeenCalledWith({ silent: true });
@@ -225,9 +297,9 @@ describe('InteractionOrchestrator.onMouseDown', () => {
             resolvePointerType: vi.fn(() => 'mouse'),
             resolveProbeMarkerTarget: vi.fn(() => null),
             resolveTerminalTarget: vi.fn(() => null),
-            pendingToolType: 'Wire',
-            stickyWireTool: false,
-            isWiring: true,
+            pendingTool: 'Wire',
+            wireModeSticky: false,
+            wiringActive: true,
             isWireEndpointTarget: vi.fn(() => false),
             screenToCanvas: vi.fn(() => ({ x: 310, y: 210 })),
             snapPoint: vi.fn(() => ({ x: 310, y: 210, snap: { type: 'grid' } })),
@@ -246,7 +318,7 @@ describe('InteractionOrchestrator.onMouseDown', () => {
             stopPropagation: vi.fn()
         };
 
-        InteractionOrchestrator.onMouseDown.call(context, event);
+        invokeOnMouseDown(context, event);
 
         expect(context.finishWiringToPoint).not.toHaveBeenCalled();
         expect(context.cancelWiring).toHaveBeenCalledTimes(1);
@@ -258,10 +330,21 @@ describe('InteractionOrchestrator.onMouseDown', () => {
             resolvePointerType: vi.fn(() => 'touch'),
             resolveProbeMarkerTarget: vi.fn(() => null),
             resolveTerminalTarget: vi.fn(() => null),
-            pendingToolType: 'Wire',
+            pendingTool: 'Wire',
             pendingToolItem: { classList: { remove: vi.fn() } },
-            stickyWireTool: true,
-            isWiring: true,
+            wireModeSticky: true,
+            interactionModeStore: {
+                getState: vi.fn(() => ({
+                    mode: 'wire',
+                    context: {
+                        pendingTool: 'Wire',
+                        mobileMode: 'wire',
+                        wireModeSticky: true,
+                        wiringActive: true
+                    }
+                }))
+            },
+            wiringActive: true,
             isWireEndpointTarget: vi.fn(() => false),
             screenToCanvas: vi.fn(() => ({ x: 320, y: 220 })),
             snapPoint: vi.fn(() => ({ x: 320, y: 220, snap: { type: 'grid' } })),
@@ -280,11 +363,11 @@ describe('InteractionOrchestrator.onMouseDown', () => {
             stopPropagation: vi.fn()
         };
 
-        InteractionOrchestrator.onMouseDown.call(context, event);
+        invokeOnMouseDown(context, event);
 
         expect(context.cancelWiring).toHaveBeenCalledTimes(1);
         expect(context.clearPendingToolType).not.toHaveBeenCalled();
-        expect(context.pendingToolType).toBe('Wire');
+        expect(context.pendingTool).toBe('Wire');
         expect(context.pendingToolItem).toBe(null);
     });
 
@@ -296,8 +379,8 @@ describe('InteractionOrchestrator.onMouseDown', () => {
             resolvePointerType: vi.fn(() => 'touch'),
             resolveProbeMarkerTarget: vi.fn(() => null),
             resolveTerminalTarget: vi.fn(() => terminalTarget),
-            pendingToolType: 'Wire',
-            isWiring: false,
+            pendingTool: 'Wire',
+            wiringActive: false,
             renderer: {
                 getTerminalPosition: vi.fn(() => ({ x: 210, y: 310 }))
             },
@@ -323,7 +406,7 @@ describe('InteractionOrchestrator.onMouseDown', () => {
             stopPropagation: vi.fn()
         };
 
-        InteractionOrchestrator.onMouseDown.call(context, event);
+        invokeOnMouseDown(context, event);
 
         expect(context.wireModeGesture).toMatchObject({
             kind: 'terminal-extend',
@@ -343,8 +426,8 @@ describe('InteractionOrchestrator.onMouseDown', () => {
             resolvePointerType: vi.fn(() => 'touch'),
             resolveProbeMarkerTarget: vi.fn(() => null),
             resolveTerminalTarget: vi.fn(() => null),
-            pendingToolType: 'Wire',
-            isWiring: false,
+            pendingTool: 'Wire',
+            wiringActive: false,
             isWireEndpointTarget: vi.fn(() => true),
             circuit: {
                 getWire: vi.fn(() => ({
@@ -372,7 +455,7 @@ describe('InteractionOrchestrator.onMouseDown', () => {
             stopPropagation: vi.fn()
         };
 
-        InteractionOrchestrator.onMouseDown.call(context, event);
+        invokeOnMouseDown(context, event);
 
         expect(context.wireModeGesture).toMatchObject({
             kind: 'wire-endpoint',
@@ -391,8 +474,8 @@ describe('InteractionOrchestrator.onMouseDown', () => {
             resolvePointerType: vi.fn(() => 'touch'),
             resolveProbeMarkerTarget: vi.fn(() => null),
             resolveTerminalTarget: vi.fn(() => null),
-            pendingToolType: 'Wire',
-            isWiring: false,
+            pendingTool: 'Wire',
+            wiringActive: false,
             startRheostatDrag: vi.fn(),
             isWireEndpointTarget: vi.fn(() => false),
             screenToCanvas: vi.fn(() => ({ x: 0, y: 0 }))
@@ -406,7 +489,7 @@ describe('InteractionOrchestrator.onMouseDown', () => {
             stopPropagation: vi.fn()
         };
 
-        InteractionOrchestrator.onMouseDown.call(context, event);
+        invokeOnMouseDown(context, event);
 
         expect(context.startRheostatDrag).toHaveBeenCalledWith('RH1', event);
         expect(context.wireModeGesture).toBeNull();
@@ -419,8 +502,8 @@ describe('InteractionOrchestrator.onMouseDown', () => {
             resolvePointerType: vi.fn(() => 'touch'),
             resolveProbeMarkerTarget: vi.fn(() => null),
             resolveTerminalTarget: vi.fn(() => null),
-            pendingToolType: 'Wire',
-            isWiring: true,
+            pendingTool: 'Wire',
+            wiringActive: true,
             startRheostatDrag: vi.fn(),
             isWireEndpointTarget: vi.fn(() => false),
             screenToCanvas: vi.fn(() => ({ x: 0, y: 0 }))
@@ -434,7 +517,7 @@ describe('InteractionOrchestrator.onMouseDown', () => {
             stopPropagation: vi.fn()
         };
 
-        InteractionOrchestrator.onMouseDown.call(context, event);
+        invokeOnMouseDown(context, event);
 
         expect(context.startRheostatDrag).toHaveBeenCalledWith('RH2', event);
         expect(context.ignoreNextWireMouseUp).toBe(true);
@@ -445,8 +528,8 @@ describe('InteractionOrchestrator.onMouseDown', () => {
             resolvePointerType: vi.fn(() => 'mouse'),
             resolveProbeMarkerTarget: vi.fn(() => null),
             resolveTerminalTarget: vi.fn(() => null),
-            pendingToolType: null,
-            isWiring: false,
+            pendingTool: null,
+            wiringActive: false,
             isWireEndpointTarget: vi.fn(() => false),
             screenToCanvas: vi.fn(() => ({ x: 44, y: 33 })),
             selectWire: vi.fn(),
@@ -468,7 +551,7 @@ describe('InteractionOrchestrator.onMouseDown', () => {
             stopPropagation: vi.fn()
         };
 
-        InteractionOrchestrator.onMouseDown.call(context, event);
+        invokeOnMouseDown(context, event);
 
         expect(context.selectWire).toHaveBeenCalledWith('W1');
         expect(context.splitWireAtPoint).toHaveBeenCalledWith('W1', 44, 33);
@@ -485,8 +568,8 @@ describe('InteractionOrchestrator.onMouseDown', () => {
             resolvePointerType: vi.fn(() => 'touch'),
             resolveProbeMarkerTarget: vi.fn(() => null),
             resolveTerminalTarget: vi.fn(() => null),
-            pendingToolType: null,
-            isWiring: false,
+            pendingTool: null,
+            wiringActive: false,
             isWireEndpointTarget: vi.fn(() => false),
             screenToCanvas: vi.fn(() => ({ x: 46, y: 52 })),
             getAdaptiveSnapThreshold: vi.fn(() => 24),
@@ -512,7 +595,7 @@ describe('InteractionOrchestrator.onMouseDown', () => {
             stopPropagation: vi.fn()
         };
 
-        InteractionOrchestrator.onMouseDown.call(context, event);
+        invokeOnMouseDown(context, event);
 
         expect(context.startWireEndpointDrag).toHaveBeenCalledWith('W1', 'a', event);
         expect(context.startWireDrag).not.toHaveBeenCalled();
@@ -526,8 +609,8 @@ describe('InteractionOrchestrator.onMouseDown', () => {
             resolvePointerType: vi.fn(() => 'mouse'),
             resolveProbeMarkerTarget: vi.fn(() => null),
             resolveTerminalTarget: vi.fn(() => terminalTarget),
-            pendingToolType: null,
-            isWiring: false,
+            pendingTool: null,
+            wiringActive: false,
             selectedComponent: null,
             selectComponent: vi.fn(),
             startTerminalExtend: vi.fn(),
@@ -553,7 +636,7 @@ describe('InteractionOrchestrator.onMouseDown', () => {
             stopPropagation: vi.fn()
         };
 
-        InteractionOrchestrator.onMouseDown.call(context, event);
+        invokeOnMouseDown(context, event);
 
         expect(context.selectComponent).toHaveBeenCalledWith('R1');
         expect(context.startWiringFromPoint).not.toHaveBeenCalled();
@@ -568,8 +651,8 @@ describe('InteractionOrchestrator.onMouseDown', () => {
             resolvePointerType: vi.fn(() => 'mouse'),
             resolveProbeMarkerTarget: vi.fn(() => null),
             resolveTerminalTarget: vi.fn(() => terminalTarget),
-            pendingToolType: null,
-            isWiring: false,
+            pendingTool: null,
+            wiringActive: false,
             selectedComponent: 'R2',
             selectComponent: vi.fn(),
             startTerminalExtend: vi.fn(),
@@ -595,7 +678,7 @@ describe('InteractionOrchestrator.onMouseDown', () => {
             stopPropagation: vi.fn()
         };
 
-        InteractionOrchestrator.onMouseDown.call(context, event);
+        invokeOnMouseDown(context, event);
 
         expect(context.startTerminalExtend).toHaveBeenCalledWith('R2', 0, event);
         expect(context.startWiringFromPoint).not.toHaveBeenCalled();
@@ -632,7 +715,7 @@ describe('InteractionOrchestrator.onMouseUp', () => {
             isDraggingWireEndpoint: false,
             isDraggingWire: false,
             isDragging: false,
-            isWiring: false,
+            wiringActive: false,
             resolvePointerType: vi.fn(() => 'mouse')
         };
 
@@ -646,7 +729,7 @@ describe('InteractionOrchestrator.onMouseUp', () => {
 
     it('consumes guarded wire mouseup without canceling active wiring', () => {
         const context = {
-            isWiring: true,
+            interactionModeStore: createWireModeStore(),
             ignoreNextWireMouseUp: true,
             resolveTerminalTarget: vi.fn(() => null),
             isWireEndpointTarget: vi.fn(() => false),
@@ -703,9 +786,20 @@ describe('InteractionOrchestrator.onMouseUp', () => {
                 point: { x: 40, y: 60 },
                 wasWiring: true
             },
-            stickyWireTool: true,
-            pendingToolType: 'Wire',
+            wireModeSticky: true,
+            pendingTool: 'Wire',
             pendingToolItem: { classList: { remove: vi.fn() } },
+            interactionModeStore: {
+                getState: vi.fn(() => ({
+                    mode: 'wire',
+                    context: {
+                        pendingTool: 'Wire',
+                        mobileMode: 'wire',
+                        wireModeSticky: true,
+                        wiringActive: true
+                    }
+                }))
+            },
             finishWiringToPoint: vi.fn(),
             clearPendingToolType: vi.fn(),
             syncMobileModeButtons: vi.fn(),
@@ -719,8 +813,7 @@ describe('InteractionOrchestrator.onMouseUp', () => {
         });
 
         expect(context.finishWiringToPoint).toHaveBeenCalledWith({ x: 40, y: 60 }, { pointerType: 'touch' });
-        expect(context.pendingToolType).toBe('Wire');
-        expect(context.mobileInteractionMode).toBe('wire');
+        expect(context.pendingTool).toBe('Wire');
         expect(context.syncMobileModeButtons).toHaveBeenCalledTimes(1);
         expect(context.clearPendingToolType).not.toHaveBeenCalled();
         expect(context.wireModeGesture).toBeNull();
@@ -758,7 +851,7 @@ describe('InteractionOrchestrator.onMouseUp', () => {
     it('realigns active wire-start endpoint after endpoint drag compaction', () => {
         const context = {
             isPanning: false,
-            isWiring: true,
+            interactionModeStore: createWireModeStore(),
             wireStart: {
                 x: 40,
                 y: 20,
@@ -935,7 +1028,7 @@ describe('InteractionOrchestrator.onMouseUp', () => {
             isDraggingWireEndpoint: false,
             isDraggingWire: false,
             isDragging: false,
-            isWiring: true,
+            interactionModeStore: createWireModeStore(),
             ignoreNextWireMouseUp: false,
             resolveTerminalTarget: vi.fn(() => null),
             isWireEndpointTarget: vi.fn(() => false),
@@ -973,7 +1066,7 @@ describe('InteractionOrchestrator.onMouseUp', () => {
             isDraggingWireEndpoint: false,
             isDraggingWire: false,
             isDragging: false,
-            isWiring: true,
+            interactionModeStore: createWireModeStore(),
             ignoreNextWireMouseUp: false,
             resolveTerminalTarget: vi.fn(() => null),
             isWireEndpointTarget: vi.fn(() => false),
@@ -1031,7 +1124,7 @@ describe('InteractionOrchestrator.onMouseLeave', () => {
     it('realigns active wire-start endpoint after endpoint drag compaction on mouseleave', () => {
         const context = {
             isPanning: false,
-            isWiring: true,
+            interactionModeStore: createWireModeStore(),
             wireStart: {
                 x: 12,
                 y: 34,
@@ -1120,7 +1213,7 @@ describe('InteractionOrchestrator.onContextMenu', () => {
             resolveProbeMarkerTarget: vi.fn(() => null),
             touchActionController: { cancel: vi.fn() },
             endPrimaryInteractionForGesture: vi.fn(),
-            isWiring: true,
+            interactionModeStore: createWireModeStore(),
             cancelWiring: vi.fn(),
             suspendedWiringSession: { wireStart: { x: 10, y: 20 } },
             wireModeGesture: { kind: 'terminal-extend' },
@@ -1203,8 +1296,15 @@ describe('InteractionOrchestrator.onDoubleClick', () => {
         const component = { dataset: { id: 'R3' } };
         const context = {
             resolveProbeMarkerTarget: vi.fn(() => null),
-            pendingToolType: 'Wire',
-            isWiring: true,
+            interactionModeStore: new InteractionModeStore({
+                mode: 'wire',
+                context: {
+                    pendingTool: 'Wire',
+                    mobileMode: 'wire',
+                    wireModeSticky: true,
+                    wiringActive: true
+                }
+            }),
             renameObservationProbe: vi.fn(),
             showPropertyDialog: vi.fn()
         };
@@ -1221,8 +1321,8 @@ describe('InteractionOrchestrator.onDoubleClick', () => {
     it('does not throw when double-click target has no closest method', () => {
         const context = {
             resolveProbeMarkerTarget: vi.fn(() => null),
-            pendingToolType: null,
-            isWiring: false,
+            pendingTool: null,
+            wiringActive: false,
             showPropertyDialog: vi.fn()
         };
         const event = { target: { dataset: {} } };
@@ -1366,7 +1466,7 @@ describe('InteractionOrchestrator.onMouseMove', () => {
             isDraggingWireEndpoint: false,
             isDraggingWire: false,
             isDragging: false,
-            isWiring: true,
+            interactionModeStore: createWireModeStore(),
             wireStart: { x: 10, y: 20 },
             tempWire: 'TEMP',
             resolvePointerType: vi.fn(() => 'mouse'),
@@ -1401,7 +1501,7 @@ describe('InteractionOrchestrator.onMouseMove', () => {
             isDraggingWireEndpoint: false,
             isDraggingWire: false,
             isDragging: false,
-            isWiring: true,
+            interactionModeStore: createWireModeStore(),
             wireStart: {
                 x: 10,
                 y: 20,
@@ -1435,7 +1535,7 @@ describe('InteractionOrchestrator.onMouseMove', () => {
             isDraggingWireEndpoint: false,
             isDraggingWire: false,
             isDragging: false,
-            isWiring: true,
+            interactionModeStore: createWireModeStore(),
             wireStart: {
                 x: 10,
                 y: 20,
@@ -1485,7 +1585,7 @@ describe('InteractionOrchestrator.onMouseMove', () => {
             isDraggingWireEndpoint: false,
             isDraggingWire: false,
             isDragging: false,
-            isWiring: false
+            wiringActive: false
         };
 
         InteractionOrchestrator.onMouseMove.call(context, {
@@ -1504,7 +1604,7 @@ describe('InteractionOrchestrator.onMouseMove', () => {
             isDraggingWireEndpoint: false,
             isDraggingWire: false,
             isDragging: false,
-            isWiring: true,
+            interactionModeStore: createWireModeStore(),
             wireStart: { x: 10, y: 20 },
             tempWire: 'TEMP',
             resolvePointerType: vi.fn(() => 'mouse'),

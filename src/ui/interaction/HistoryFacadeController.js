@@ -1,4 +1,7 @@
-import { setInteractionModeContext } from '../../app/interaction/InteractionModeBridge.js';
+import {
+    readInteractionModeContext,
+    setInteractionModeContext
+} from '../../app/interaction/InteractionModeBridge.js';
 
 function hasActiveEditLikeDrag(context) {
     return !!(
@@ -15,7 +18,8 @@ function hasOpenHistoryTransaction(context) {
 function prepareForHistoryNavigation(context) {
     if (!context) return;
 
-    const hadWiring = !!context.isWiring;
+    const modeContext = readInteractionModeContext(context);
+    const hadWiring = !!modeContext.wiringActive;
     const hadSuspendedWiringSession = !!context.suspendedWiringSession;
     const hadWireModeGesture = !!context.wireModeGesture;
     const hadPointerDownInfo = !!context.pointerDownInfo;
@@ -33,7 +37,7 @@ function prepareForHistoryNavigation(context) {
             context.cancelWiring();
         } else {
             setInteractionModeContext(context, {
-                isWiring: false
+                wiringActive: false
             }, {
                 source: 'history.prepareForNavigation:wiring-clear'
             });
@@ -52,6 +56,7 @@ function prepareForHistoryNavigation(context) {
             }, {
                 source: 'history.prepareForNavigation:drag-clear'
             });
+            context.isDraggingWireEndpoint = false;
             context.wireEndpointDrag = null;
             context.isDraggingWire = false;
             context.wireDrag = null;
@@ -71,6 +76,8 @@ function prepareForHistoryNavigation(context) {
         }, {
             source: 'history.prepareForNavigation:endpoint-edit-clear'
         });
+        context.isTerminalExtending = false;
+        context.isRheostatDragging = false;
         if (hadTerminalExtending) {
             context.circuit?.rebuildNodes?.();
         }

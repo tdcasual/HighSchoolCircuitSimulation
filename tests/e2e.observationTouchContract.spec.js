@@ -11,4 +11,13 @@ describe('observation touch e2e contract', () => {
         expect(source).not.toContain('window.app?.observationPanel');
         expect(source).not.toContain('window.app.observationPanel');
     });
+
+    it('does not use observationPanel runtime fallback in responsive touch regression', () => {
+        const scriptPath = resolve(process.cwd(), 'scripts/e2e/responsive-touch-regression.mjs');
+        const source = readFileSync(scriptPath, 'utf8');
+
+        expect(source).toContain('app.chartWorkspace?.windows');
+        expect(source).not.toContain('app.observationPanel?.plots');
+        expect(source).not.toContain('app.observationPanel.plots');
+    });
 });
