@@ -29,6 +29,7 @@
     "check:ci-workflow": "node scripts/ci/assert-ci-workflow-coverage.mjs",
     "check:bundle-size": "node scripts/ci/assert-bundle-size-budget.mjs",
     "check:core-size": "node scripts/ci/assert-core-file-size-budget.mjs",
+    "report:debt-dashboard": "node scripts/ci/generate-debt-dashboard.mjs",
     "test:reliability": "vitest run tests/failureDiagnostics.spec.js tests/runtimeDiagnostics.spec.js tests/circuit.runtimeDiagnostics.spec.js tests/solver.commonCases.spec.js tests/wireShortCircuit.spec.js tests/solver.inputHardening.spec.js tests/solver.dynamicIntegration.spec.js",
     "test:e2e:responsive": "node scripts/e2e/responsive-touch-regression.mjs",
     "test:e2e:wire": "node scripts/e2e/wire-interaction-regression.mjs",

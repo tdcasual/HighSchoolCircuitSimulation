@@ -4,5 +4,7 @@ output/baselines/*
 output/e2e/*
 output/embed-package/*
 dist/*
+docs/reports/debt-dashboard.json
+docs/reports/debt-dashboard.md
 .DS_Store
 .worktrees/
