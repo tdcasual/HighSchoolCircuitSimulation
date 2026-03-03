@@ -7,6 +7,16 @@ import { CircuitSchemaGateway } from '../src/core/io/CircuitSchemaGateway.js';
 import { getClassroomScenarioPack } from '../src/core/scenarios/ClassroomScenarioPack.js';
 
 describe('Circuit IO gateway', () => {
+    it('round-trips an empty circuit without schema rejection', () => {
+        const circuit = new Circuit();
+        const empty = circuit.toJSON();
+
+        const restored = new Circuit();
+        expect(() => restored.fromJSON(empty)).not.toThrow();
+        expect(restored.components.size).toBe(0);
+        expect(restored.wires.size).toBe(0);
+    });
+
     it('serializes and deserializes circuit with stable schema', () => {
         const circuit = new Circuit();
         const source = createComponent('PowerSource', 100, 100, 'V1');
@@ -215,6 +225,51 @@ describe('Circuit IO gateway', () => {
             id: 'P1',
             wireId: '1'
         });
+    });
+
+    it('does not drop wire/probe when payload uses wire id 0', () => {
+        const payload = {
+            meta: {
+                version: 3,
+                name: 'wire-id-zero',
+                timestamp: 1760000000000
+            },
+            components: [
+                {
+                    id: 'V1',
+                    type: 'PowerSource',
+                    x: 0,
+                    y: 0,
+                    properties: { voltage: 3, internalResistance: 1 }
+                },
+                {
+                    id: 'R1',
+                    type: 'Resistor',
+                    x: 100,
+                    y: 0,
+                    properties: { resistance: 8 }
+                }
+            ],
+            wires: [{
+                id: 0,
+                a: { x: 0, y: 0 },
+                b: { x: 100, y: 0 },
+                aRef: { componentId: 'V1', terminalIndex: 0 },
+                bRef: { componentId: 'R1', terminalIndex: 0 }
+            }],
+            probes: [{
+                id: 'P0',
+                type: 'WireCurrentProbe',
+                wireId: '0'
+            }]
+        };
+
+        const loaded = CircuitDeserializer.deserialize(payload);
+
+        expect(loaded.wires).toHaveLength(1);
+        expect(loaded.wires[0]?.id).toBe('0');
+        expect(loaded.probes).toHaveLength(1);
+        expect(loaded.probes[0]?.wireId).toBe('0');
     });
 
     it('loads and runs all classroom scenario presets', () => {

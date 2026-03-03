@@ -29,14 +29,18 @@ describe('validateCircuitJSON', () => {
         })).toThrow(/meta\.version.*3/u);
     });
 
-    it('throws when components missing', () => {
-        expect(() => validateCircuitJSON({ ...base, components: [] }))
-            .toThrow(/组件列表缺失/);
+    it('throws when components field is missing or non-array', () => {
+        expect(() => validateCircuitJSON({ ...base, components: undefined }))
+            .toThrow(/组件列表缺失或非法/);
+        expect(() => validateCircuitJSON({ ...base, components: null }))
+            .toThrow(/组件列表缺失或非法/);
     });
 
-    it('throws when wires missing', () => {
-        expect(() => validateCircuitJSON({ ...base, wires: [] }))
-            .toThrow(/导线列表缺失/);
+    it('throws when wires field is missing or non-array', () => {
+        expect(() => validateCircuitJSON({ ...base, wires: undefined }))
+            .toThrow(/导线列表缺失或非法/);
+        expect(() => validateCircuitJSON({ ...base, wires: null }))
+            .toThrow(/导线列表缺失或非法/);
     });
 
     it('throws when a wire has no endpoints', () => {
@@ -130,12 +134,27 @@ describe('validateCircuitJSON', () => {
         expect(() => validateCircuitJSON(bad)).toThrow(/不支持的探针类型/);
     });
 
-    it('rejects circuit without power source', () => {
+    it('accepts circuit without power source for storage/round-trip compatibility', () => {
         const bad = {
             ...base,
-            components: [{ id: 'R1', type: 'Resistor', x: 20, y: 0, properties: { resistance: 10 } }]
+            components: [{ id: 'R1', type: 'Resistor', x: 20, y: 0, properties: { resistance: 10 } }],
+            wires: [{
+                id: 'w1',
+                a: { x: 0, y: 0 },
+                b: { x: 20, y: 0 }
+            }]
         };
-        expect(() => validateCircuitJSON(bad)).toThrow(/至少需要一个电源元件/);
+        expect(() => validateCircuitJSON(bad)).not.toThrow();
+    });
+
+    it('accepts an empty circuit payload for round-trip compatibility', () => {
+        const empty = {
+            meta: { version: 3, name: 'empty', timestamp: 0 },
+            components: [],
+            wires: [],
+            probes: []
+        };
+        expect(() => validateCircuitJSON(empty)).not.toThrow();
     });
 
     it('accepts all classroom scenario preset fixtures', () => {

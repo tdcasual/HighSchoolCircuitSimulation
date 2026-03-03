@@ -162,7 +162,12 @@ export class CircuitDeserializer {
         const safePoint = (pt) => normalizeCanvasPoint(pt);
 
         for (const wireData of wireList) {
-            if (!wireData || !wireData.id) continue;
+            if (
+                !wireData
+                || wireData.id === undefined
+                || wireData.id === null
+                || String(wireData.id).trim() === ''
+            ) continue;
 
             if (!wireData.a || !wireData.b) continue;
             const a = safePoint(wireData.a);

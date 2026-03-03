@@ -1,7 +1,6 @@
 import { ComponentDefaults, getComponentTerminalCount } from '../../components/Component.js';
 
 const SUPPORTED_COMPONENT_TYPES = new Set(Object.keys(ComponentDefaults));
-const POWER_COMPONENT_TYPES = new Set(['PowerSource', 'ACVoltageSource']);
 const LEGACY_ALIAS_KEYS = new Set(['templateName', 'bindingMap', 'pendingToolType']);
 const TOP_LEVEL_KEYS = new Set(['meta', 'components', 'wires', 'probes']);
 const META_KEYS = new Set(['version', 'name', 'timestamp']);
@@ -88,18 +87,17 @@ export class CircuitSchemaGateway {
         assertKnownKeys(data.meta, META_KEYS, 'payload.meta');
         validateVersion(data.meta);
 
-        if (!Array.isArray(data.components) || data.components.length === 0) {
-            throw new Error('组件列表缺失或为空');
+        if (!Array.isArray(data.components)) {
+            throw new Error('组件列表缺失或非法');
         }
-        if (!Array.isArray(data.wires) || data.wires.length === 0) {
-            throw new Error('导线列表缺失或为空');
+        if (!Array.isArray(data.wires)) {
+            throw new Error('导线列表缺失或非法');
         }
         if (data.probes !== undefined && !Array.isArray(data.probes)) {
             throw new Error('probes 必须是数组');
         }
 
         const componentsById = new Map();
-        let hasPowerSource = false;
 
         const requireTerminalRef = (ref, label) => {
             if (!ref) return true;
@@ -144,13 +142,6 @@ export class CircuitSchemaGateway {
                 throw new Error(`组件 id 重复: ${id}`);
             }
             componentsById.set(id, { ...comp, type });
-            if (POWER_COMPONENT_TYPES.has(type)) {
-                hasPowerSource = true;
-            }
-        }
-
-        if (!hasPowerSource) {
-            throw new Error('至少需要一个电源元件（PowerSource 或 ACVoltageSource）');
         }
 
         const wireIds = new Set();
