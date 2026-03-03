@@ -22,7 +22,7 @@ import { resolveRuntimeDiagnosticsForUpdate } from './app/RuntimeDiagnosticsPipe
 import { safeRemoveStorageItem } from './app/AppStorage.js';
 import { buildAppSaveData, safeInvokeMethod } from './app/AppSerialization.js';
 import { setSimulationControlsRunning, setStatusText } from './app/SimulationUiState.js';
-import { registerAppBootstrap } from './app/AppBootstrapRuntime.js';
+import { bootstrapV2 } from './v2/main/bootstrapV2.js';
 
 export class CircuitSimulatorApp {
     constructor() {
@@ -508,7 +508,7 @@ export class CircuitSimulatorApp {
     }
 }
 
-// 应用启动
-registerAppBootstrap({
-    createApp: () => new CircuitSimulatorApp()
+// 应用启动（v2 composition root）
+bootstrapV2({
+    AppClass: CircuitSimulatorApp
 });

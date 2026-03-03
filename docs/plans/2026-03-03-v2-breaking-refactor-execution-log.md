@@ -389,3 +389,30 @@ npm run check:v2:runtime-safety
 1. `tests/ui.rendererRegistryV2.spec.js` 通过（3 tests）。
 2. `check:v2:boundaries` 通过（`[v2-architecture] ok`）。
 3. `check:v2:runtime-safety` 通过（`[v2-runtime-safety] ok`）。
+
+### Task 13: Add v2 composition root and runtime bootstrap
+
+- Status: completed
+- Started: 2026-03-03
+- Completed: 2026-03-03
+- Notes:
+  - 新增 `tests/app.bootstrapV2.spec.js`（fail-first），覆盖：
+    - `bootstrapV2` 可注册 app factory 并产出 runtime contract；
+    - `main.js` 入口改为委派给 `bootstrapV2`；
+    - `bootstrapV2` 不直接拼装 v1 monolith 依赖。
+  - 新增 `src/v2/main/AppCompositionRootV2.js` 与 `src/v2/main/bootstrapV2.js`。
+  - 修改 `src/main.js` 启动路径：由 `registerAppBootstrap` 直连切换为 `bootstrapV2`。
+
+**Verification Commands**
+
+```bash
+npm test -- tests/app.bootstrapV2.spec.js tests/aiPanel.lazyLoad.spec.js
+npm run check:v2:boundaries
+npm run check:v2:runtime-safety
+```
+
+**Verification Summary**
+
+1. `tests/app.bootstrapV2.spec.js` 与 `tests/aiPanel.lazyLoad.spec.js` 全通过（4 tests）。
+2. `check:v2:boundaries` 通过（`[v2-architecture] ok`）。
+3. `check:v2:runtime-safety` 通过（`[v2-runtime-safety] ok`）。
