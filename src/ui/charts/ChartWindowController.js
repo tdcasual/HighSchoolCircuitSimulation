@@ -580,6 +580,10 @@ export class ChartWindowController {
             ctx.fillStyle = '#64748b';
             ctx.font = `${12 * dpr}px sans-serif`;
             ctx.fillText('暂无数据，运行模拟后开始采样', 20 * dpr, 24 * dpr);
+            this._latestText = '最新: —';
+            if (this.elements.latest) {
+                this.elements.latest.textContent = this._latestText;
+            }
             this._needsRedraw = false;
             return;
         }

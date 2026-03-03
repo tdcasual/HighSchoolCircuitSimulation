@@ -107,4 +107,80 @@ describe('ChartWindowController.render', () => {
         expect(textCalls.some((text) => text.startsWith('X:') && text.includes('时间'))).toBe(true);
         expect(textCalls.some((text) => text.startsWith('Y:') && text.includes('电流'))).toBe(true);
     });
+
+    it('resets latest readout when frame becomes unavailable', () => {
+        const { canvas } = createCanvasAndContext();
+        const buffer = {
+            length: 2,
+            forEachSampled: (_step, iteratee) => {
+                iteratee(0, 0);
+                iteratee(1, 1);
+            },
+            getPoint: (index) => (index >= 1 ? { x: 1, y: 1 } : { x: 0, y: 0 }),
+            clear: vi.fn()
+        };
+        const frame = {
+            padL: 48,
+            padR: 12,
+            padT: 12,
+            padB: 30,
+            innerW: 240,
+            innerH: 120,
+            xTicks: [0, 0.5, 1],
+            yTicks: [0, 0.5, 1],
+            xToPx: (x) => 48 + x * 240,
+            yToPx: (y) => 12 + (1 - y) * 120,
+            nextAutoRangeWindow: { x: { min: 0, max: 1 }, y: { min: 0, max: 1 } }
+        };
+        const workspace = {
+            circuit: {
+                components: new Map([
+                    ['R1', { id: 'R1', type: 'Resistor', label: '电阻1' }]
+                ])
+            },
+            projectionService: {
+                computeFrame: vi.fn(({ chart }) => (chart.series?.length ? frame : null))
+            },
+            getChartSeriesBuffers: vi.fn(() => new Map([['s1', buffer]])),
+            resolveSourceId: (sourceId) => sourceId || TIME_SOURCE_ID
+        };
+        const state = {
+            id: 'chart_1',
+            axis: {
+                xBinding: {
+                    sourceId: TIME_SOURCE_ID,
+                    quantityId: 't',
+                    transformId: 'identity'
+                }
+            },
+            series: [
+                {
+                    id: 's1',
+                    name: '系列 1',
+                    sourceId: 'R1',
+                    quantityId: 'I',
+                    transformId: 'identity',
+                    color: '#1d4ed8',
+                    visible: true
+                }
+            ]
+        };
+
+        const controller = new ChartWindowController(workspace, state);
+        controller.elements.canvas = canvas;
+        controller.elements.latest = { textContent: '' };
+        controller._needsRedraw = true;
+
+        controller.render();
+        expect(controller.elements.latest.textContent).toContain('最新(系列 1)');
+
+        controller.state = {
+            ...controller.state,
+            series: []
+        };
+        controller.markDirty();
+        controller.render();
+
+        expect(controller.elements.latest.textContent).toBe('最新: —');
+    });
 });
