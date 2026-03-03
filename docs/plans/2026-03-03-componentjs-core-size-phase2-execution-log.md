@@ -74,3 +74,25 @@ npm test -- tests/component.factory.spec.js tests/circuit.io.spec.js tests/simul
 
 1. `component.factory` 新测试通过（2 tests）。
 2. `circuit.io` 与 `simulation.dynamicIntegrator` 回归通过（7 tests）。
+
+### Task 3: Extract SVG Primitives + Wire Renderer
+
+- Status: completed
+- Started: 2026-03-03
+- Completed: 2026-03-03
+- Notes:
+  - 新增 `src/components/render/ComponentSvgPrimitives.js`，迁移 `addLine/addTerminal/addText`。
+  - 新增 `src/components/render/ComponentWireRenderer.js`，迁移 `createWire/updateWirePath/updateWirePathWithGroup`。
+  - `src/components/Component.js` 中对应方法改为 façade 转发，保留原 `SVGRenderer` 方法签名。
+  - 新增 `tests/component.wireRenderer.spec.js`，覆盖 wire group 创建与 classList 安全容错。
+
+**Verification Commands**
+
+```bash
+npm test -- tests/component.wireRenderer.spec.js tests/component.touchTargets.spec.js tests/renderer.valueSnapshot.spec.js
+```
+
+**Verification Summary**
+
+1. `component.wireRenderer` 新测试通过（2 tests）。
+2. `component.touchTargets` 与 `renderer.valueSnapshot` 回归通过（15 tests）。

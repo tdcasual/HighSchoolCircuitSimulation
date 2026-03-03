@@ -18,6 +18,16 @@ import {
 } from './geometry/ComponentGeometry.js';
 import { createValueDisplayShape, readValueDisplayElements } from './render/ComponentShapeFactory.js';
 import {
+    addLine as addSvgLine,
+    addTerminal as addSvgTerminal,
+    addText as addSvgText
+} from './render/ComponentSvgPrimitives.js';
+import {
+    createWire as createWireSvg,
+    updateWirePath as updateWireSvgPath,
+    updateWirePathWithGroup as updateWireSvgPathWithGroup
+} from './render/ComponentWireRenderer.js';
+import {
     updateParallelPlateCapacitorVisualRuntime,
     updateValueDisplayRuntime
 } from './render/ComponentVisualUpdater.js';
@@ -1031,78 +1041,21 @@ export const SVGRenderer = {
      * 辅助方法：添加线段
      */
     addLine(g, x1, y1, x2, y2, strokeWidth = 2) {
-        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-        line.setAttribute('x1', x1);
-        line.setAttribute('y1', y1);
-        line.setAttribute('x2', x2);
-        line.setAttribute('y2', y2);
-        line.setAttribute('stroke', '#333');
-        line.setAttribute('stroke-width', strokeWidth);
-        g.appendChild(line);
-        return line;
+        return addSvgLine(g, x1, y1, x2, y2, strokeWidth);
     },
 
     /**
      * 辅助方法：添加端子
      */
     addTerminal(g, x, y, index, comp = null) {
-        // 获取端子延长偏移
-        let extX = 0, extY = 0;
-        if (comp && comp.terminalExtensions && comp.terminalExtensions[index]) {
-            extX = comp.terminalExtensions[index].x || 0;
-            extY = comp.terminalExtensions[index].y || 0;
-        }
-        
-        // 如果有延长，绘制引出线
-        if (extX !== 0 || extY !== 0) {
-            const extLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-            extLine.setAttribute('x1', x);
-            extLine.setAttribute('y1', y);
-            extLine.setAttribute('x2', x + extX);
-            extLine.setAttribute('y2', y + extY);
-            extLine.setAttribute('stroke', '#333');
-            extLine.setAttribute('stroke-width', 2);
-            extLine.setAttribute('class', 'terminal-extension');
-            g.appendChild(extLine);
-        }
-
-        // 透明触控命中区（不改变可视尺寸）
-        const hitCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        hitCircle.setAttribute('cx', x + extX);
-        hitCircle.setAttribute('cy', y + extY);
-        hitCircle.setAttribute('r', TERMINAL_HIT_RADIUS_PX);
-        hitCircle.setAttribute('class', 'terminal-hit-area');
-        hitCircle.setAttribute('data-terminal', index);
-        hitCircle.style.pointerEvents = 'all';
-        hitCircle.setAttribute('draggable', 'false');
-        g.appendChild(hitCircle);
-
-        const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        circle.setAttribute('cx', x + extX);
-        circle.setAttribute('cy', y + extY);
-        circle.setAttribute('r', 5);
-        circle.setAttribute('class', 'terminal');
-        circle.setAttribute('data-terminal', index);
-        // 确保端子可以接收鼠标事件
-        circle.style.pointerEvents = 'all';
-        circle.setAttribute('draggable', 'false');
-        g.appendChild(circle);
-        return circle;
+        return addSvgTerminal(g, x, y, index, comp, TERMINAL_HIT_RADIUS_PX);
     },
 
     /**
      * 辅助方法：添加文本
      */
     addText(g, x, y, text, fontSize = 10, className = '') {
-        const textEl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        textEl.setAttribute('x', x);
-        textEl.setAttribute('y', y);
-        textEl.setAttribute('text-anchor', 'middle');
-        textEl.setAttribute('font-size', fontSize);
-        textEl.setAttribute('class', className);
-        textEl.textContent = text;
-        g.appendChild(textEl);
-        return textEl;
+        return addSvgText(g, x, y, text, fontSize, className);
     },
 
     /**
@@ -1232,114 +1185,32 @@ export const SVGRenderer = {
      * 创建导线SVG
      */
     createWire(wire, getWireEndpointPosition = null) {
-        const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-        g.setAttribute('class', 'wire-group');
-        g.setAttribute('data-id', wire.id);
-        
-        // 不可见的点击区域（更粗，便于点击）
-        const hitArea = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        hitArea.setAttribute('class', 'wire-hit-area');
-        hitArea.setAttribute('data-id', wire.id);
-        g.appendChild(hitArea);
-        
-        // 主导线路径
-        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        path.setAttribute('class', 'wire');
-        path.setAttribute('data-id', wire.id);
-        g.appendChild(path);
-        
-        this.updateWirePathWithGroup(g, wire, getWireEndpointPosition);
-        
-        return g;
+        return createWireSvg(wire, {
+            getWireEndpointPosition,
+            safeHasClassFn: safeHasClass,
+            wireEndpointHitRadius: WIRE_ENDPOINT_HIT_RADIUS_PX
+        });
     },
 
     /**
      * 更新导线路径
      */
     updateWirePath(pathOrGroup, wire, getWireEndpointPosition = null) {
-        this.updateWirePathWithGroup(pathOrGroup, wire, getWireEndpointPosition);
+        return updateWireSvgPath(pathOrGroup, wire, {
+            getWireEndpointPosition,
+            safeHasClassFn: safeHasClass,
+            wireEndpointHitRadius: WIRE_ENDPOINT_HIT_RADIUS_PX
+        });
     },
 
     /**
      * 更新导线组（路径+端点）
      */
     updateWirePathWithGroup(g, wire, getWireEndpointPosition = null) {
-        const path = g.querySelector('path.wire');
-        const hitArea = g.querySelector('path.wire-hit-area');
-        if (!path) return;
-
-        const getEnd = (which) => {
-            if (typeof getWireEndpointPosition === 'function') {
-                return getWireEndpointPosition(wire, which);
-            }
-            return which === 'a' ? wire?.a : wire?.b;
-        };
-
-        const a = getEnd('a');
-        const b = getEnd('b');
-
-        if (!a || !b) return;
-
-        const d = `M ${a.x} ${a.y} L ${b.x} ${b.y}`;
-        path.setAttribute('d', d);
-        
-        // 更新点击区域
-        if (hitArea) {
-            hitArea.setAttribute('d', d);
-        }
-        
-        // 移除旧的端点与命中圈，避免重绘叠加导致残留交互层。
-        g.querySelectorAll('.wire-endpoint, .wire-endpoint-hit, .wire-endpoint-hint').forEach(el => el.remove());
-
-        const shouldShowEndpointHints = (() => {
-            const body = typeof document !== 'undefined' ? document.body : null;
-            if (safeHasClass(body, 'layout-mode-phone') || safeHasClass(body, 'layout-mode-compact')) {
-                return true;
-            }
-            if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
-                try {
-                    return window.matchMedia('(pointer: coarse)').matches;
-                } catch (_) {
-                    return false;
-                }
-            }
-            return false;
-        })();
-        
-        // 如果导线被选中，显示端点（可拖动）
-        if (safeHasClass(g, 'selected')) {
-            const makeEndpoint = (pt, which) => {
-                const hitCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-                hitCircle.setAttribute('cx', pt.x);
-                hitCircle.setAttribute('cy', pt.y);
-                hitCircle.setAttribute('r', WIRE_ENDPOINT_HIT_RADIUS_PX);
-                hitCircle.setAttribute('class', 'wire-endpoint-hit');
-                hitCircle.setAttribute('data-end', which);
-                hitCircle.style.cursor = 'move';
-                g.appendChild(hitCircle);
-
-                const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-                circle.setAttribute('cx', pt.x);
-                circle.setAttribute('cy', pt.y);
-                circle.setAttribute('r', 7);
-                circle.setAttribute('class', 'wire-endpoint');
-                circle.setAttribute('data-end', which);
-                circle.style.cursor = 'move';
-                g.appendChild(circle);
-            };
-            makeEndpoint(a, 'a');
-            makeEndpoint(b, 'b');
-        } else if (shouldShowEndpointHints) {
-            const makeHint = (pt) => {
-                const hint = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-                hint.setAttribute('cx', pt.x);
-                hint.setAttribute('cy', pt.y);
-                hint.setAttribute('r', 3.5);
-                hint.setAttribute('class', 'wire-endpoint-hint');
-                g.appendChild(hint);
-            };
-            makeHint(a);
-            makeHint(b);
-        }
+        return updateWireSvgPathWithGroup(g, wire, {
+            getWireEndpointPosition,
+            safeHasClassFn: safeHasClass,
+            wireEndpointHitRadius: WIRE_ENDPOINT_HIT_RADIUS_PX
+        });
     }
 };
