@@ -32,13 +32,21 @@ const CategoryHints = Object.freeze({
 });
 
 function normalizeIdList(ids) {
-    if (ids instanceof Set) {
-        return Array.from(ids).filter((id) => typeof id === 'string' && id);
+    const list = ids instanceof Set ? Array.from(ids) : Array.isArray(ids) ? ids : [];
+    return list
+        .map(normalizeId)
+        .filter((id) => typeof id === 'string' && id);
+}
+
+function normalizeId(id) {
+    if (typeof id === 'string') {
+        const normalized = id.trim();
+        return normalized || null;
     }
-    if (Array.isArray(ids)) {
-        return ids.filter((id) => typeof id === 'string' && id);
+    if (typeof id === 'number' && Number.isFinite(id)) {
+        return String(id);
     }
-    return [];
+    return null;
 }
 
 function collectComponentIds(signals, categories) {
@@ -73,6 +81,7 @@ function collectComponentIds(signals, categories) {
             : [];
         issues
             .map((issue) => issue?.componentId)
+            .map(normalizeId)
             .filter((id) => typeof id === 'string' && id)
             .forEach((id) => componentIds.add(id));
     }
@@ -91,6 +100,7 @@ function collectWireIds(signals, categories) {
             : [];
         issues
             .map((issue) => issue?.wireId)
+            .map(normalizeId)
             .filter((id) => typeof id === 'string' && id)
             .forEach((id) => wireIds.add(id));
     }

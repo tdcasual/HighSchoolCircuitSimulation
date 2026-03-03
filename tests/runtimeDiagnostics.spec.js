@@ -76,4 +76,19 @@ describe('runtime diagnostics payload', () => {
         expect(diagnostics.code).toBe(FailureCategories.SingularMatrix);
         expect(diagnostics.hints.every((hint) => /^(检查|确认|恢复|沿|可为|为)/.test(hint))).toBe(true);
     });
+
+    it('normalizes numeric ids in runtime diagnostic payloads', () => {
+        const diagnostics = buildRuntimeDiagnostics({
+            solverShortCircuitDetected: true,
+            shortedSourceIds: new Set([0]),
+            shortedWireIds: new Set([0, 'W2']),
+            invalidParameterIssues: [
+                { componentId: 0, wireId: 0 }
+            ]
+        });
+
+        expect(diagnostics.componentIds).toContain('0');
+        expect(diagnostics.wireIds).toContain('0');
+        expect(diagnostics.wireIds).toContain('W2');
+    });
 });
