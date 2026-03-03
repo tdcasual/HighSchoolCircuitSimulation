@@ -18,6 +18,7 @@ import { createRuntimeLogger } from '../utils/Logger.js';
 import { CircuitPersistenceAdapter } from './runtime/CircuitPersistenceAdapter.js';
 import { CircuitDiagnosticsAdapter } from './runtime/CircuitDiagnosticsAdapter.js';
 import { CircuitTopologyService } from './services/CircuitTopologyService.js';
+import { CircuitSimulationLoopService } from './services/CircuitSimulationLoopService.js';
 import {
     getWireCurrentInfo as getWireCurrentInfoViaService,
     isWireInShortCircuit as isWireInShortCircuitViaService,
@@ -62,6 +63,7 @@ export class Circuit {
         this.wireCompactor = new WireCompactor();
         this.connectivityCache = new ConnectivityCache();
         this.topologyService = new CircuitTopologyService();
+        this.simulationLoopService = new CircuitSimulationLoopService();
         this.componentTerminalTopologyKeys = new Map(); // componentId -> topology key used for terminal geometry cache
         this.terminalWorldPosCache = new Map(); // componentId -> Map(terminalIndex -> {x,y})
         this.simulationState = new SimulationState();
@@ -541,16 +543,7 @@ export class Circuit {
      * @returns {number}
      */
     getSimulationSubstepCount(stepDt = this.dt) {
-        const dt = Number.isFinite(stepDt) && stepDt > 0
-            ? stepDt
-            : (Number.isFinite(this.dt) && this.dt > 0 ? this.dt : 0.01);
-        const maxFrequency = this.getMaxConnectedAcFrequencyHz();
-        if (!Number.isFinite(maxFrequency) || maxFrequency <= 0) return 1;
-
-        const samplesPerCycle = Math.max(4, Math.floor(this.minAcSamplesPerCycle || 40));
-        const maxSubsteps = Math.max(1, Math.floor(this.maxAcSubstepsPerStep || 200));
-        const requiredSubsteps = Math.ceil(dt * maxFrequency * samplesPerCycle);
-        return Math.max(1, Math.min(maxSubsteps, requiredSubsteps));
+        return this.simulationLoopService.getSimulationSubstepCount(this, stepDt);
     }
 
     getAdaptiveDtBounds() {
@@ -573,16 +566,7 @@ export class Circuit {
     }
 
     resolveSimulationStepDt() {
-        const { minDt, maxDt, baseDt } = this.getAdaptiveDtBounds();
-        if (!this.enableAdaptiveTimeStep) {
-            this.currentDt = baseDt;
-            return baseDt;
-        }
-        const current = Number.isFinite(this.currentDt) && this.currentDt > 0
-            ? this.currentDt
-            : baseDt;
-        this.currentDt = Math.max(minDt, Math.min(maxDt, current));
-        return this.currentDt;
+        return this.simulationLoopService.resolveSimulationStepDt(this);
     }
 
     updateAdaptiveTimeStep(results) {
@@ -1031,26 +1015,9 @@ export class Circuit {
         if (!this.isRunning) return;
 
         // 仅在拓扑或关键参数变化后重建 setCircuit，稳定运行时复用已准备结构
-        this.ensureSolverPrepared();
-        this.solver.debugMode = this.debugMode;
-        
-        // 交流电路子步进：避免 dt 与交流周期相位锁定导致采样失真
-        const stepDt = this.resolveSimulationStepDt();
-        const substepCount = this.getSimulationSubstepCount(stepDt);
-        const substepDt = stepDt / substepCount;
-        let latestResults = null;
-
-        for (let index = 0; index < substepCount; index++) {
-            const substepResults = this.solver.solve(substepDt, this.simTime);
-            latestResults = substepResults;
-            if (!substepResults.valid) break;
-
-            this.simTime += substepDt;
-            this.solver.updateDynamicComponents(substepResults.voltages, substepResults.currents);
-            this.syncSimulationStateToComponents();
-        }
-        this.lastResults = latestResults || { voltages: [], currents: new Map(), valid: false };
-        this.updateAdaptiveTimeStep(this.lastResults);
+        // 并按子步推进求解与动态状态更新。
+        const loopResult = this.simulationLoopService.runStep(this);
+        this.lastResults = loopResult.lastResults;
         
         // 调试输出
         if (this.debugMode) {

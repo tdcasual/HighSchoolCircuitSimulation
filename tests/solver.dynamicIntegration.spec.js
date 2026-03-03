@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { addComponent, connectWire, createTestCircuit } from './helpers/circuitTestUtils.js';
 
 function runSteps(circuit, steps) {
@@ -161,5 +161,32 @@ describe('Dynamic integration methods (capacitor/inductor)', () => {
         expect(vCap).toBeCloseTo(vExpected, 6);
         expect(iCap).toBeCloseTo(iExpected, 6);
         circuit.isRunning = false;
+    });
+
+    it('applies adaptive timestep update after each successful solve pass', () => {
+        const circuit = createTestCircuit();
+        circuit.dt = 0.02;
+        circuit.enableAdaptiveTimeStep = true;
+
+        const source = addComponent(circuit, 'ACVoltageSource', 'VAC', {
+            rmsVoltage: 6,
+            frequency: 1200,
+            phase: 0,
+            internalResistance: 1
+        });
+        const resistor = addComponent(circuit, 'Resistor', 'R1', { resistance: 60 });
+        connectWire(circuit, 'W1', source, 0, resistor, 0);
+        connectWire(circuit, 'W2', resistor, 1, source, 1);
+
+        const expectedSubsteps = circuit.getSimulationSubstepCount(circuit.dt);
+        expect(expectedSubsteps).toBeGreaterThan(1);
+
+        const adaptiveSpy = vi.spyOn(circuit, 'updateAdaptiveTimeStep');
+        circuit.isRunning = true;
+        circuit.step();
+        circuit.isRunning = false;
+
+        expect(circuit.lastResults?.valid).toBe(true);
+        expect(adaptiveSpy).toHaveBeenCalledTimes(expectedSubsteps);
     });
 });
