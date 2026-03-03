@@ -17,6 +17,7 @@ import { NetlistBuilder } from '../core/simulation/NetlistBuilder.js';
 import { createRuntimeLogger } from '../utils/Logger.js';
 import { CircuitPersistenceAdapter } from './runtime/CircuitPersistenceAdapter.js';
 import { CircuitDiagnosticsAdapter } from './runtime/CircuitDiagnosticsAdapter.js';
+import { CircuitTopologyService } from './services/CircuitTopologyService.js';
 import {
     getWireCurrentInfo as getWireCurrentInfoViaService,
     isWireInShortCircuit as isWireInShortCircuitViaService,
@@ -60,6 +61,7 @@ export class Circuit {
         this.nodeBuilder = new NodeBuilder();
         this.wireCompactor = new WireCompactor();
         this.connectivityCache = new ConnectivityCache();
+        this.topologyService = new CircuitTopologyService();
         this.componentTerminalTopologyKeys = new Map(); // componentId -> topology key used for terminal geometry cache
         this.terminalWorldPosCache = new Map(); // componentId -> Map(terminalIndex -> {x,y})
         this.simulationState = new SimulationState();
@@ -363,79 +365,7 @@ export class Circuit {
      * 使用并查集算法合并连接的端点
      */
     rebuildNodes() {
-        // Keep any terminal-bound wire endpoints synced to the current terminal geometry
-        // before we rebuild the coordinate-based connectivity graph.
-        this.syncWireEndpointsToTerminalRefs();
-
-        // Invalidate stale terminal geometry cache entries for removed components.
-        for (const cachedId of Array.from(this.componentTerminalTopologyKeys.keys())) {
-            if (!this.components.has(cachedId)) {
-                this.componentTerminalTopologyKeys.delete(cachedId);
-                this.terminalWorldPosCache.delete(cachedId);
-            }
-        }
-
-        // Refresh per-component terminal geometry cache keys.
-        for (const [id, comp] of this.components) {
-            const nextKey = this.buildComponentTerminalTopologyKey(comp);
-            const prevKey = this.componentTerminalTopologyKeys.get(id);
-            if (prevKey !== nextKey) {
-                this.componentTerminalTopologyKeys.set(id, nextKey);
-                this.terminalWorldPosCache.delete(id);
-            }
-        }
-
-        const topology = this.nodeBuilder.build({
-            components: this.components,
-            wires: this.wires,
-            getTerminalWorldPosition: (componentId, terminalIndex, comp) =>
-                this.getTerminalWorldPositionCached(componentId, terminalIndex, comp)
-        });
-        this.terminalConnectionMap = topology.terminalConnectionMap;
-        this.nodes = topology.nodes;
-
-        // Debug: print node to terminal mapping.
-        if (this.debugMode) {
-            this.logger?.debug?.('--- Node mapping ---');
-            const nodeTerminals = Array.from({ length: this.nodes.length }, () => []);
-            for (const [id, comp] of this.components) {
-                const append = (node, terminalIdx) => {
-                    if (node !== undefined && node >= 0) {
-                        nodeTerminals[node].push(`${id}:${terminalIdx}`);
-                    }
-                };
-                (comp.nodes || []).forEach((node, terminalIdx) => append(node, terminalIdx));
-            }
-            nodeTerminals.forEach((ts, idx) => {
-                this.logger?.debug?.(`node ${idx}: ${ts.join(', ')}`);
-            });
-        }
-
-        // Topology changed: clear flow cache
-        this._wireFlowCache = { version: null, map: new Map() };
-
-        // Detect rheostat connection modes (based on terminal degrees)
-        this.detectRheostatConnections();
-
-        // Track nodes that contain a shorted power source (both terminals on the same electrical node).
-        const shorted = new Set();
-        const shortedSources = new Set();
-        for (const comp of this.components.values()) {
-            if (comp.type !== 'PowerSource' && comp.type !== 'ACVoltageSource') continue;
-            const n0 = comp.nodes?.[0];
-            const n1 = comp.nodes?.[1];
-            if (n0 !== undefined && n0 >= 0 && n0 === n1) {
-                shorted.add(n0);
-                shortedSources.add(comp.id);
-            }
-        }
-        this.shortedPowerNodes = shorted;
-        this.shortedSourceIds = shortedSources;
-        this.shortedWireIds = new Set();
-        this.shortCircuitCacheVersion = null;
-        this.topologyVersion += 1;
-        this.refreshComponentConnectivityCache();
-        this.markSolverCircuitDirty();
+        this.topologyService.rebuild(this);
     }
 
     /**

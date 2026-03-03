@@ -4,6 +4,17 @@ import { Circuit } from '../src/engine/Circuit.js';
 import { addComponent, connectWire, createTestCircuit } from './helpers/circuitTestUtils.js';
 
 describe('Circuit runtime diagnostics guard rails', () => {
+    it('routes topology rebuild through topology service once per request', () => {
+        const circuit = createTestCircuit();
+        const rebuildSpy = vi.spyOn(circuit.topologyService, 'rebuild');
+        const startVersion = circuit.topologyVersion;
+
+        circuit.requestTopologyRebuild();
+
+        expect(rebuildSpy).toHaveBeenCalledTimes(1);
+        expect(circuit.topologyVersion).toBe(startVersion + 1);
+    });
+
     it('delegates runtime diagnostics attachment to diagnostics adapter', () => {
         const diagnostics = {
             code: 'manual-diag',
