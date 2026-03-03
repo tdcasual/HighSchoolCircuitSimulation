@@ -113,14 +113,17 @@ export function refreshShortCircuitDiagnostics(circuit, results = null) {
 }
 
 export function isWireInShortCircuit(circuit, wire, results = null) {
-    if (!circuit || !wire) return false;
+    if (!circuit || wire === undefined || wire === null) return false;
     if (results && circuit.shortCircuitCacheVersion !== results) {
         refreshShortCircuitDiagnostics(circuit, results);
     }
 
-    const wireObj = typeof wire === 'string' ? circuit.getWire(wire) : wire;
-    const wireId = typeof wire === 'string' ? wire : wire?.id;
-    if (!wireId) return false;
+    const fromWireObject = wire && typeof wire === 'object';
+    const rawWireId = fromWireObject ? wire?.id : wire;
+    if (rawWireId === undefined || rawWireId === null || String(rawWireId).trim() === '') return false;
+
+    const wireId = String(rawWireId);
+    const wireObj = fromWireObject ? wire : circuit.getWire?.(wireId);
     if (circuit.shortedWireIds && circuit.shortedWireIds.has(wireId)) return true;
 
     // Topology-only fallback for cases where simulation has not produced runtime diagnostics yet.

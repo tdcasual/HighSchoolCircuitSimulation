@@ -73,6 +73,15 @@ describe('CircuitShortCircuitDiagnosticsService', () => {
         expect(isWireInShortCircuit(circuit, circuit.wires.get('W1'))).toBe(false);
     });
 
+    it('accepts numeric wire ids by normalizing them to string keys', () => {
+        const circuit = createBaseCircuitMock();
+        circuit.wires.set('0', { id: '0', nodeIndex: 3 });
+        circuit.shortedWireIds = new Set(['0']);
+        circuit.shortCircuitCacheVersion = {};
+
+        expect(isWireInShortCircuit(circuit, 0)).toBe(true);
+    });
+
     it('builds wire current info from flow cache and voltage table', () => {
         const circuit = createBaseCircuitMock();
         const wire = { id: 'W_flow', nodeIndex: 1 };
