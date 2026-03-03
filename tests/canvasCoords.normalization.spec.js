@@ -39,6 +39,11 @@ describe('Canvas coordinate normalization', () => {
     it('normalizes imported/exported JSON coordinates', () => {
         const circuit = new Circuit();
         circuit.fromJSON({
+            meta: {
+                version: 3,
+                name: 'canvas-normalization',
+                timestamp: 1760000000000
+            },
             components: [
                 {
                     id: 'V1',

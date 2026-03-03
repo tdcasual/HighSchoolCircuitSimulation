@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { safeRemoveStorageItem } from '../src/app/AppStorage.js';
 import { Circuit } from '../src/engine/Circuit.js';
-import { CircuitPersistenceAdapter } from '../src/engine/runtime/CircuitPersistenceAdapter.js';
+import { CircuitPersistenceAdapter } from '../src/core/runtime/CircuitPersistenceAdapter.js';
 
 describe('AppStorage', () => {
     it('CircuitPersistenceAdapter loads and saves solver debug flag safely', () => {

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { Circuit } from '../src/engine/Circuit.js';
+import { createComponent } from '../src/components/Component.js';
 
 describe('Circuit observation probes', () => {
     it('adds and removes probes', () => {
@@ -59,8 +60,24 @@ describe('Circuit observation probes', () => {
 
     it('round-trips probes via toJSON/fromJSON', () => {
         const circuit = new Circuit();
-        circuit.addWire({ id: 'W1', a: { x: 0, y: 0 }, b: { x: 20, y: 0 } });
-        circuit.addWire({ id: 'W2', a: { x: 0, y: 20 }, b: { x: 20, y: 20 } });
+        const source = createComponent('PowerSource', 0, 0, 'V1');
+        const resistor = createComponent('Resistor', 100, 0, 'R1');
+        circuit.addComponent(source);
+        circuit.addComponent(resistor);
+        circuit.addWire({
+            id: 'W1',
+            a: { x: -30, y: 0 },
+            b: { x: 70, y: 0 },
+            aRef: { componentId: 'V1', terminalIndex: 0 },
+            bRef: { componentId: 'R1', terminalIndex: 0 }
+        });
+        circuit.addWire({
+            id: 'W2',
+            a: { x: 130, y: 0 },
+            b: { x: 30, y: 0 },
+            aRef: { componentId: 'R1', terminalIndex: 1 },
+            bRef: { componentId: 'V1', terminalIndex: 1 }
+        });
         circuit.addObservationProbe({ id: 'P1', type: 'NodeVoltageProbe', wireId: 'W1', label: '节点V' });
         circuit.addObservationProbe({ id: 'P2', type: 'WireCurrentProbe', wireId: 'W2', label: '支路I' });
 

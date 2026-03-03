@@ -173,8 +173,38 @@ assertStepRun(
 assertStepRun(
     qualitySteps,
     'quality',
+    'Check renderer no-legacy artifacts',
+    'node scripts/ci/assert-no-legacy-renderer-artifacts.mjs'
+);
+assertStepRun(
+    qualitySteps,
+    'quality',
+    'Check engine no-adapter artifacts',
+    'node scripts/ci/assert-no-engine-adapter-artifacts.mjs'
+);
+assertStepRun(
+    qualitySteps,
+    'quality',
     'Check CI workflow coverage',
     'node scripts/ci/assert-ci-workflow-coverage.mjs'
+);
+assertStepRun(
+    qualitySteps,
+    'quality',
+    'Check v2 architecture boundaries',
+    'node scripts/ci/assert-v2-architecture-boundaries.mjs'
+);
+assertStepRun(
+    qualitySteps,
+    'quality',
+    'Check v2 runtime exclusive entry',
+    'node scripts/ci/assert-v2-runtime-exclusive.mjs'
+);
+assertStepRun(
+    qualitySteps,
+    'quality',
+    'Check v2 component coverage',
+    'node scripts/ci/assert-v2-coverage.mjs'
 );
 assertStepRun(
     qualitySteps,
@@ -207,7 +237,12 @@ assertStepOrder(qualitySteps, 'quality', [
     'Check observation runtime contract guard',
     'Check interaction mode runtime contract guard',
     'Check registry legacy fallback guard',
+    'Check renderer no-legacy artifacts',
+    'Check engine no-adapter artifacts',
     'Check CI workflow coverage',
+    'Check v2 architecture boundaries',
+    'Check v2 runtime exclusive entry',
+    'Check v2 component coverage',
     'Build frontend artifacts',
     'Check bundle size budget',
     'Run reliability regression gate',

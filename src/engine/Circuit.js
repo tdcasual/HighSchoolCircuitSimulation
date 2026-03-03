@@ -15,15 +15,15 @@ import { CircuitDeserializer } from '../core/io/CircuitDeserializer.js';
 import { SimulationState } from '../core/simulation/SimulationState.js';
 import { NetlistBuilder } from '../core/simulation/NetlistBuilder.js';
 import { createRuntimeLogger } from '../utils/Logger.js';
-import { CircuitPersistenceAdapter } from './runtime/CircuitPersistenceAdapter.js';
-import { CircuitDiagnosticsAdapter } from './runtime/CircuitDiagnosticsAdapter.js';
-import { CircuitTopologyService } from './services/CircuitTopologyService.js';
-import { CircuitSimulationLoopService } from './services/CircuitSimulationLoopService.js';
+import { CircuitPersistenceAdapter } from '../core/runtime/CircuitPersistenceAdapter.js';
+import { CircuitDiagnosticsAdapter } from '../core/runtime/CircuitDiagnosticsAdapter.js';
+import { CircuitTopologyService } from '../core/services/CircuitTopologyService.js';
+import { CircuitSimulationLoopService } from '../core/services/CircuitSimulationLoopService.js';
 import {
     getWireCurrentInfo as getWireCurrentInfoViaService,
     isWireInShortCircuit as isWireInShortCircuitViaService,
     refreshShortCircuitDiagnostics as refreshShortCircuitDiagnosticsViaService
-} from './runtime/CircuitShortCircuitDiagnosticsService.js';
+} from '../core/runtime/CircuitShortCircuitDiagnosticsService.js';
 
 export class Circuit {
     constructor(options = {}) {

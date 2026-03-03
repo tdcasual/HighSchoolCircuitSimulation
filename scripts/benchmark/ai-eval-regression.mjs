@@ -6,7 +6,7 @@ import { CircuitExplainer } from '../../src/ai/CircuitExplainer.js';
 import { CircuitAIAgent } from '../../src/ai/agent/CircuitAIAgent.js';
 import { ClaimExtractSkill } from '../../src/ai/skills/ClaimExtractSkill.js';
 import { NumericCheckSkill } from '../../src/ai/skills/NumericCheckSkill.js';
-import { OpenAIClient } from '../../src/ai/OpenAIClient.js';
+import { OpenAIClientV2 } from '../../src/ai/OpenAIClientV2.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -143,7 +143,7 @@ function createLiveAiClient() {
     if (!apiKey) {
         throw new Error('LIVE 模式需要 OPENAI_API_KEY 或 AI_API_KEY');
     }
-    const client = new OpenAIClient();
+    const client = new OpenAIClientV2();
     client.saveConfig({
         ...client.config,
         apiEndpoint: process.env.OPENAI_API_ENDPOINT || client.config.apiEndpoint,

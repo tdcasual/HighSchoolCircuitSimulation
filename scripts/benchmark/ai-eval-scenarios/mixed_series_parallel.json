@@ -4,8 +4,9 @@
   "description": "并联支路后串联电阻的混联结构",
   "circuit": {
     "meta": {
-      "version": "2.0",
-      "name": "Mixed Series Parallel"
+      "version": 3,
+      "name": "Mixed Series Parallel",
+      "timestamp": 1774224000000
     },
     "components": [
       {
@@ -55,11 +56,101 @@
       }
     ],
     "wires": [
-      { "id": "w1", "start": { "componentId": "PowerSource_1", "terminalIndex": 1 }, "end": { "componentId": "Resistor_1", "terminalIndex": 0 } },
-      { "id": "w2", "start": { "componentId": "PowerSource_1", "terminalIndex": 1 }, "end": { "componentId": "Resistor_2", "terminalIndex": 0 } },
-      { "id": "w3", "start": { "componentId": "Resistor_1", "terminalIndex": 1 }, "end": { "componentId": "Resistor_3", "terminalIndex": 0 } },
-      { "id": "w4", "start": { "componentId": "Resistor_2", "terminalIndex": 1 }, "end": { "componentId": "Resistor_3", "terminalIndex": 0 } },
-      { "id": "w5", "start": { "componentId": "Resistor_3", "terminalIndex": 1 }, "end": { "componentId": "PowerSource_1", "terminalIndex": 0 } }
+      {
+        "id": "w1",
+        "a": {
+          "x": 140,
+          "y": 170
+        },
+        "b": {
+          "x": 310,
+          "y": 130
+        },
+        "aRef": {
+          "componentId": "PowerSource_1",
+          "terminalIndex": 1
+        },
+        "bRef": {
+          "componentId": "Resistor_1",
+          "terminalIndex": 0
+        }
+      },
+      {
+        "id": "w2",
+        "a": {
+          "x": 140,
+          "y": 170
+        },
+        "b": {
+          "x": 310,
+          "y": 270
+        },
+        "aRef": {
+          "componentId": "PowerSource_1",
+          "terminalIndex": 1
+        },
+        "bRef": {
+          "componentId": "Resistor_2",
+          "terminalIndex": 0
+        }
+      },
+      {
+        "id": "w3",
+        "a": {
+          "x": 370,
+          "y": 130
+        },
+        "b": {
+          "x": 560,
+          "y": 170
+        },
+        "aRef": {
+          "componentId": "Resistor_1",
+          "terminalIndex": 1
+        },
+        "bRef": {
+          "componentId": "Resistor_3",
+          "terminalIndex": 0
+        }
+      },
+      {
+        "id": "w4",
+        "a": {
+          "x": 370,
+          "y": 270
+        },
+        "b": {
+          "x": 560,
+          "y": 170
+        },
+        "aRef": {
+          "componentId": "Resistor_2",
+          "terminalIndex": 1
+        },
+        "bRef": {
+          "componentId": "Resistor_3",
+          "terminalIndex": 0
+        }
+      },
+      {
+        "id": "w5",
+        "a": {
+          "x": 560,
+          "y": 230
+        },
+        "b": {
+          "x": 140,
+          "y": 230
+        },
+        "aRef": {
+          "componentId": "Resistor_3",
+          "terminalIndex": 1
+        },
+        "bRef": {
+          "componentId": "PowerSource_1",
+          "terminalIndex": 0
+        }
+      }
     ]
   },
   "questions": [
@@ -67,14 +158,20 @@
       "id": "q1",
       "question": "R3 电流大约是多少 A？",
       "targets": [
-        { "component": "R3", "quantity": "current" }
+        {
+          "component": "R3",
+          "quantity": "current"
+        }
       ]
     },
     {
       "id": "q2",
       "question": "R1 两端电压约为多少 V？",
       "targets": [
-        { "component": "R1", "quantity": "voltage" }
+        {
+          "component": "R1",
+          "quantity": "voltage"
+        }
       ]
     }
   ]

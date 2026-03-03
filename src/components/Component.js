@@ -33,7 +33,7 @@ import {
     layoutValueDisplay as layoutValueDisplayRenderer,
     updateValueDisplay as updateValueDisplayRenderer
 } from './render/ComponentValueDisplayRenderer.js';
-import { renderLegacyComponent } from './render/legacy/RendererRegistryLegacy.js';
+import { renderComponentByRegistry } from './render/RendererRegistry.js';
 import {
     updateParallelPlateCapacitorVisualRuntime,
     updateValueDisplayRuntime
@@ -124,7 +124,7 @@ export const SVGRenderer = {
         // 禁用原生拖放，防止触发 drop 事件
         g.setAttribute('draggable', 'false');
         
-        renderLegacyComponent(this, g, comp);
+        renderComponentByRegistry(this, g, comp);
         
         // 添加数值显示
         this.addValueDisplay(g, comp);

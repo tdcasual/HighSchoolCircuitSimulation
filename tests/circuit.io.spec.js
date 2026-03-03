@@ -4,7 +4,7 @@ import { createComponent } from '../src/components/Component.js';
 import { CircuitSerializer } from '../src/core/io/CircuitSerializer.js';
 import { CircuitDeserializer } from '../src/core/io/CircuitDeserializer.js';
 import { CircuitSchemaGateway } from '../src/core/io/CircuitSchemaGateway.js';
-import { getClassroomScenarioPack } from '../src/engine/scenarios/ClassroomScenarioPack.js';
+import { getClassroomScenarioPack } from '../src/core/scenarios/ClassroomScenarioPack.js';
 
 describe('Circuit IO gateway', () => {
     it('serializes and deserializes circuit with stable schema', () => {
@@ -42,6 +42,11 @@ describe('Circuit IO gateway', () => {
 
     it('sanitizes malformed runtime-critical numeric properties on deserialize', () => {
         const json = {
+            meta: {
+                version: 3,
+                name: 'sanitize-case',
+                timestamp: 1760000000000
+            },
             components: [
                 {
                     id: 'V1',
@@ -73,7 +78,13 @@ describe('Circuit IO gateway', () => {
                     }
                 }
             ],
-            wires: []
+            wires: [{
+                id: 'W1',
+                a: { x: 0, y: 0 },
+                b: { x: 120, y: 0 },
+                aRef: { componentId: 'V1', terminalIndex: 0 },
+                bRef: { componentId: 'M1', terminalIndex: 0 }
+            }]
         };
 
         const loaded = CircuitDeserializer.deserialize(json);
@@ -87,6 +98,27 @@ describe('Circuit IO gateway', () => {
         expect(motor.inertia).toBeGreaterThan(0);
         expect(Number.isFinite(ammeter.resistance)).toBe(true);
         expect(ammeter.resistance).toBeGreaterThanOrEqual(0);
+    });
+
+    it('rejects non-v3 payloads during deserialize', () => {
+        const legacy = {
+            meta: {
+                version: '1.0'
+            },
+            components: [
+                { id: 'V1', type: 'PowerSource', x: 0, y: 0, properties: { voltage: 3 } },
+                { id: 'R1', type: 'Resistor', x: 100, y: 0, properties: { resistance: 8 } }
+            ],
+            wires: [{
+                id: 'W1',
+                a: { x: 0, y: 0 },
+                b: { x: 100, y: 0 },
+                aRef: { componentId: 'V1', terminalIndex: 0 },
+                bRef: { componentId: 'R1', terminalIndex: 0 }
+            }]
+        };
+
+        expect(() => CircuitDeserializer.deserialize(legacy)).toThrow(/meta\.version.*3/u);
     });
 
     it('loads and runs all classroom scenario presets', () => {

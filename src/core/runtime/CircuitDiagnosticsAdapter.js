@@ -1,4 +1,4 @@
-import { buildRuntimeDiagnostics } from '../../core/simulation/RuntimeDiagnostics.js';
+import { buildRuntimeDiagnostics } from '../simulation/RuntimeDiagnostics.js';
 
 export class CircuitDiagnosticsAdapter {
     build(payload = {}) {

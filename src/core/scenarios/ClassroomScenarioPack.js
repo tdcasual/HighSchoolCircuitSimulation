@@ -1,5 +1,5 @@
 import { getTerminalWorldPosition } from '../../utils/TerminalGeometry.js';
-import { CircuitSerializer } from '../../core/io/CircuitSerializer.js';
+import { CircuitSerializer } from '../io/CircuitSerializer.js';
 
 function cloneJson(value) {
     return JSON.parse(JSON.stringify(value));
@@ -83,10 +83,7 @@ function buildScenarioJson(definition) {
     json.meta = {
         ...(json.meta || {}),
         timestamp,
-        name: definition.name,
-        scenarioId: definition.id,
-        scenarioPack: 'classroom-v0.9',
-        scenarioDescription: definition.description
+        name: definition.name
     };
     return json;
 }

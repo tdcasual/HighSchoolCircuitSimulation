@@ -16,6 +16,7 @@ module.exports = {
         'boundaries/include': ['src/**/*.js'],
         'boundaries/elements': [
             { type: 'entry', mode: 'full', pattern: 'src/main.js' },
+            { type: 'entry', mode: 'full', pattern: 'src/app/AppRuntimeV2.js' },
             { type: 'ui', mode: 'full', pattern: 'src/ui/**/*.js' },
             { type: 'app', mode: 'full', pattern: 'src/app/**/*.js' },
             { type: 'ai', mode: 'full', pattern: 'src/ai/**/*.js' },
@@ -80,7 +81,7 @@ module.exports = {
         'boundaries/element-types': ['error', {
             default: 'disallow',
             rules: [
-                { from: 'entry', allow: ['ui', 'app', 'ai', 'embed', 'engine', 'core', 'components', 'v2', 'utils'] },
+                { from: 'entry', allow: ['entry', 'ui', 'app', 'ai', 'embed', 'engine', 'core', 'components', 'v2', 'utils'] },
                 { from: 'ui', allow: ['ui', 'app', 'ai', 'core', 'components', 'utils'] },
                 { from: 'app', allow: ['app', 'core', 'utils'] },
                 { from: 'ai', allow: ['ai', 'engine', 'components', 'utils'] },

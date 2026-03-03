@@ -4,7 +4,9 @@ import { createTestCircuit, addComponent, connectWire, solveCircuit } from './he
 describe('BlackBox component', () => {
     it('serializes and restores viewMode/size', () => {
         const circuit = createTestCircuit();
+        const source = addComponent(circuit, 'PowerSource', 'V1', { voltage: 3, internalResistance: 0.1 });
         addComponent(circuit, 'BlackBox', 'B1', { boxWidth: 240, boxHeight: 160, viewMode: 'opaque' });
+        connectWire(circuit, 'Wseed', source, 0, source, 1);
 
         const json = circuit.toJSON();
         const boxJson = json.components.find((c) => c.id === 'B1');

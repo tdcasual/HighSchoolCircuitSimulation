@@ -1,6 +1,7 @@
 import { createComponent } from '../../components/Component.js';
 import { computeOverlapFractionFromOffsetPx, computeParallelPlateCapacitance } from '../../utils/Physics.js';
 import { normalizeCanvasPoint, toCanvasInt } from '../../utils/CanvasCoords.js';
+import { CircuitSchemaGateway } from './CircuitSchemaGateway.js';
 
 function defaultNormalizeObservationProbe(probe) {
     if (!probe || typeof probe !== 'object') return null;
@@ -43,6 +44,7 @@ function sanitizeRuntimeCriticalProperties(comp) {
 
 export class CircuitDeserializer {
     static deserialize(json, options = {}) {
+        CircuitSchemaGateway.validate(json);
         const componentList = Array.isArray(json?.components) ? json.components : [];
         const wireList = Array.isArray(json?.wires) ? json.wires : [];
         const probeList = Array.isArray(json?.probes) ? json.probes : [];

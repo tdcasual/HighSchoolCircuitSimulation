@@ -12,7 +12,7 @@ const legacyTransitionalBudgets = [
 ];
 
 const v2CoreBudgets = [
-    { file: 'src/v2/app/AppRuntimeV2.js', maxLines: 800, track: 'v2 core', optional: true },
+    { file: 'src/app/AppRuntimeV2.js', maxLines: 800, track: 'v2 runtime app', optional: true },
     { file: 'src/v2/domain/CircuitModel.js', maxLines: 800, track: 'v2 core', optional: true },
     { file: 'src/v2/simulation/CircuitSolverV2.js', maxLines: 800, track: 'v2 core', optional: true },
     { file: 'src/v2/infra/io/CircuitDeserializerV3.js', maxLines: 800, track: 'v2 core', optional: true }

@@ -24,7 +24,7 @@ export class CircuitSerializer {
 
         return {
             meta: {
-                version: '2.0',
+                version: 3,
                 timestamp: Date.now(),
                 name: '电路设计'
             },

@@ -1,51 +1,45 @@
 import { describe, it, expect } from 'vitest';
-import { OpenAIClient } from '../src/ai/OpenAIClient.js';
+import { OpenAIClientV2 } from '../src/ai/OpenAIClientV2.js';
 
 const cases = [
     {
-        name: 'OpenAI chat/completions (already set)',
-        endpoint: 'https://api.openai.com/v1/chat/completions',
-        useResponses: false,
-        expected: 'https://api.openai.com/v1/chat/completions'
+        name: 'OpenAI responses (already set)',
+        endpoint: 'https://api.openai.com/v1/responses',
+        expected: 'https://api.openai.com/v1/responses'
     },
     {
-        name: 'OpenAI root domain auto /v1/chat/completions',
+        name: 'OpenAI root domain auto /v1/responses',
         endpoint: 'https://api.openai.com',
-        useResponses: false,
-        expected: 'https://api.openai.com/v1/chat/completions'
+        expected: 'https://api.openai.com/v1/responses'
     },
     {
-        name: 'Dashscope compatible-mode retains single v1',
+        name: 'Dashscope compatible-mode retains single v1 responses',
         endpoint: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-        useResponses: false,
-        expected: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'
+        expected: 'https://dashscope.aliyuncs.com/compatible-mode/v1/responses'
     },
     {
         name: 'DeepSeek root domain',
         endpoint: 'https://api.deepseek.com',
-        useResponses: false,
-        expected: 'https://api.deepseek.com/v1/chat/completions'
+        expected: 'https://api.deepseek.com/v1/responses'
     },
     {
-        name: 'Claude messages endpoint remains unchanged',
+        name: 'messages endpoint normalizes to responses',
         endpoint: 'https://api.anthropic.com/v1/messages',
-        useResponses: false,
-        expected: 'https://api.anthropic.com/v1/chat/completions'
+        expected: 'https://api.anthropic.com/v1/responses'
     },
     {
         name: 'Compatible endpoint with /v1 suffix',
         endpoint: 'https://example.com/v1',
-        useResponses: false,
-        expected: 'https://example.com/v1/chat/completions'
+        expected: 'https://example.com/v1/responses'
     }
 ];
 
-describe('resolveApiEndpoint compatibility', () => {
-    cases.forEach(({ name, endpoint, useResponses, expected }) => {
+describe('resolveApiEndpoint responses-only', () => {
+    cases.forEach(({ name, endpoint, expected }) => {
         it(name, () => {
-            const client = new OpenAIClient();
+            const client = new OpenAIClientV2();
             client.config.apiEndpoint = endpoint;
-            const resolved = client.resolveApiEndpoint(useResponses);
+            const resolved = client.resolveApiEndpoint();
             expect(resolved).toBe(expected);
         });
     });
@@ -72,20 +66,9 @@ const modelCases = [
 describe('listModels base construction', () => {
     modelCases.forEach(({ name, endpoint, expected }) => {
         it(name, () => {
-            const client = new OpenAIClient();
+            const client = new OpenAIClientV2();
             client.config.apiEndpoint = endpoint;
-            const apiEndpoint = client.normalizeEndpoint(endpoint);
-            let base;
-            if (/\/v1\/[^/]+$/.test(apiEndpoint)) {
-                base = apiEndpoint.replace(/\/v1\/[^/]+$/, '/v1/models');
-            } else if (apiEndpoint.endsWith('/v1')) {
-                base = `${apiEndpoint}/models`;
-            } else if (/\/v1\//.test(apiEndpoint)) {
-                base = apiEndpoint.split('/v1/')[0] + '/v1/models';
-            } else {
-                base = apiEndpoint.endsWith('/') ? `${apiEndpoint}v1/models` : `${apiEndpoint}/v1/models`;
-            }
-            expect(base).toBe(expected);
+            expect(client.resolveModelsEndpoint()).toBe(expected);
         });
     });
 });

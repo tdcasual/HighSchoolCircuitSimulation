@@ -3,3 +3,4 @@ export const INSTRUMENT_RENDERER_METHODS = Object.freeze({
     Ammeter: 'renderAmmeter',
     Voltmeter: 'renderVoltmeter'
 });
+

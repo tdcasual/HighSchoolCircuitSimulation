@@ -4,8 +4,9 @@
   "description": "五电阻桥式结构，适合验证节点电压与支路电流推理",
   "circuit": {
     "meta": {
-      "version": "2.0",
-      "name": "Bridge Network"
+      "version": 3,
+      "name": "Bridge Network",
+      "timestamp": 1774224000000
     },
     "components": [
       {
@@ -77,14 +78,158 @@
       }
     ],
     "wires": [
-      { "id": "w1", "start": { "componentId": "PowerSource_1", "terminalIndex": 1 }, "end": { "componentId": "Resistor_1", "terminalIndex": 0 } },
-      { "id": "w2", "start": { "componentId": "PowerSource_1", "terminalIndex": 1 }, "end": { "componentId": "Resistor_2", "terminalIndex": 0 } },
-      { "id": "w3", "start": { "componentId": "Resistor_1", "terminalIndex": 1 }, "end": { "componentId": "Resistor_3", "terminalIndex": 0 } },
-      { "id": "w4", "start": { "componentId": "Resistor_2", "terminalIndex": 1 }, "end": { "componentId": "Resistor_4", "terminalIndex": 0 } },
-      { "id": "w5", "start": { "componentId": "Resistor_3", "terminalIndex": 1 }, "end": { "componentId": "PowerSource_1", "terminalIndex": 0 } },
-      { "id": "w6", "start": { "componentId": "Resistor_4", "terminalIndex": 1 }, "end": { "componentId": "PowerSource_1", "terminalIndex": 0 } },
-      { "id": "w7", "start": { "componentId": "Resistor_1", "terminalIndex": 1 }, "end": { "componentId": "Resistor_5", "terminalIndex": 0 } },
-      { "id": "w8", "start": { "componentId": "Resistor_2", "terminalIndex": 1 }, "end": { "componentId": "Resistor_5", "terminalIndex": 1 } }
+      {
+        "id": "w1",
+        "a": {
+          "x": 120,
+          "y": 190
+        },
+        "b": {
+          "x": 290,
+          "y": 130
+        },
+        "aRef": {
+          "componentId": "PowerSource_1",
+          "terminalIndex": 1
+        },
+        "bRef": {
+          "componentId": "Resistor_1",
+          "terminalIndex": 0
+        }
+      },
+      {
+        "id": "w2",
+        "a": {
+          "x": 120,
+          "y": 190
+        },
+        "b": {
+          "x": 290,
+          "y": 310
+        },
+        "aRef": {
+          "componentId": "PowerSource_1",
+          "terminalIndex": 1
+        },
+        "bRef": {
+          "componentId": "Resistor_2",
+          "terminalIndex": 0
+        }
+      },
+      {
+        "id": "w3",
+        "a": {
+          "x": 350,
+          "y": 130
+        },
+        "b": {
+          "x": 520,
+          "y": 100
+        },
+        "aRef": {
+          "componentId": "Resistor_1",
+          "terminalIndex": 1
+        },
+        "bRef": {
+          "componentId": "Resistor_3",
+          "terminalIndex": 0
+        }
+      },
+      {
+        "id": "w4",
+        "a": {
+          "x": 350,
+          "y": 310
+        },
+        "b": {
+          "x": 520,
+          "y": 280
+        },
+        "aRef": {
+          "componentId": "Resistor_2",
+          "terminalIndex": 1
+        },
+        "bRef": {
+          "componentId": "Resistor_4",
+          "terminalIndex": 0
+        }
+      },
+      {
+        "id": "w5",
+        "a": {
+          "x": 520,
+          "y": 160
+        },
+        "b": {
+          "x": 120,
+          "y": 250
+        },
+        "aRef": {
+          "componentId": "Resistor_3",
+          "terminalIndex": 1
+        },
+        "bRef": {
+          "componentId": "PowerSource_1",
+          "terminalIndex": 0
+        }
+      },
+      {
+        "id": "w6",
+        "a": {
+          "x": 520,
+          "y": 340
+        },
+        "b": {
+          "x": 120,
+          "y": 250
+        },
+        "aRef": {
+          "componentId": "Resistor_4",
+          "terminalIndex": 1
+        },
+        "bRef": {
+          "componentId": "PowerSource_1",
+          "terminalIndex": 0
+        }
+      },
+      {
+        "id": "w7",
+        "a": {
+          "x": 350,
+          "y": 130
+        },
+        "b": {
+          "x": 420,
+          "y": 190
+        },
+        "aRef": {
+          "componentId": "Resistor_1",
+          "terminalIndex": 1
+        },
+        "bRef": {
+          "componentId": "Resistor_5",
+          "terminalIndex": 0
+        }
+      },
+      {
+        "id": "w8",
+        "a": {
+          "x": 350,
+          "y": 310
+        },
+        "b": {
+          "x": 420,
+          "y": 250
+        },
+        "aRef": {
+          "componentId": "Resistor_2",
+          "terminalIndex": 1
+        },
+        "bRef": {
+          "componentId": "Resistor_5",
+          "terminalIndex": 1
+        }
+      }
     ]
   },
   "questions": [
@@ -92,14 +237,20 @@
       "id": "q1",
       "question": "R5 支路电流大约是多少 A？",
       "targets": [
-        { "component": "R5", "quantity": "current" }
+        {
+          "component": "R5",
+          "quantity": "current"
+        }
       ]
     },
     {
       "id": "q2",
       "question": "R3 上的电压大约是多少 V？",
       "targets": [
-        { "component": "R3", "quantity": "voltage" }
+        {
+          "component": "R3",
+          "quantity": "voltage"
+        }
       ]
     }
   ]

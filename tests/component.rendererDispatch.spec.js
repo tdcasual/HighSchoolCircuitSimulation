@@ -1,16 +1,16 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
-    LEGACY_RENDERER_METHODS,
-    renderLegacyComponent
-} from '../src/components/render/legacy/RendererRegistryLegacy.js';
+    COMPONENT_RENDERER_METHODS,
+    renderComponentByRegistry
+} from '../src/components/render/RendererRegistry.js';
 
-describe('RendererRegistryLegacy', () => {
+describe('RendererRegistry', () => {
     it('contains grouped renderer mappings for representative component types', () => {
-        expect(LEGACY_RENDERER_METHODS.PowerSource).toBe('renderPowerSource');
-        expect(LEGACY_RENDERER_METHODS.Resistor).toBe('renderResistor');
-        expect(LEGACY_RENDERER_METHODS.Switch).toBe('renderSwitch');
-        expect(LEGACY_RENDERER_METHODS.Ammeter).toBe('renderAmmeter');
-        expect(LEGACY_RENDERER_METHODS.BlackBox).toBe('renderBlackBox');
+        expect(COMPONENT_RENDERER_METHODS.PowerSource).toBe('renderPowerSource');
+        expect(COMPONENT_RENDERER_METHODS.Resistor).toBe('renderResistor');
+        expect(COMPONENT_RENDERER_METHODS.Switch).toBe('renderSwitch');
+        expect(COMPONENT_RENDERER_METHODS.Ammeter).toBe('renderAmmeter');
+        expect(COMPONENT_RENDERER_METHODS.BlackBox).toBe('renderBlackBox');
     });
 
     it('dispatches to renderer method when component type is registered', () => {
@@ -20,7 +20,7 @@ describe('RendererRegistryLegacy', () => {
         const g = {};
         const comp = { type: 'Resistor' };
 
-        const handled = renderLegacyComponent(renderer, g, comp);
+        const handled = renderComponentByRegistry(renderer, g, comp);
 
         expect(handled).toBe(true);
         expect(renderer.renderResistor).toHaveBeenCalledTimes(1);
@@ -29,6 +29,6 @@ describe('RendererRegistryLegacy', () => {
 
     it('returns false for unknown types without throwing', () => {
         const renderer = {};
-        expect(renderLegacyComponent(renderer, {}, { type: 'UnknownType' })).toBe(false);
+        expect(renderComponentByRegistry(renderer, {}, { type: 'UnknownType' })).toBe(false);
     });
 });

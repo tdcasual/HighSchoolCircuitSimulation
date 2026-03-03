@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { OpenAIClient } from '../src/ai/OpenAIClient.js';
+import { OpenAIClientV2 } from '../src/ai/OpenAIClientV2.js';
 
 const mockFetch = (response, ok = true, status = 200) => {
     global.fetch = vi.fn().mockResolvedValue({
@@ -9,12 +9,14 @@ const mockFetch = (response, ok = true, status = 200) => {
     });
 };
 
-describe('OpenAIClient listModels', () => {
+describe('OpenAIClientV2 listModels', () => {
     let client;
     beforeEach(() => {
-        client = new OpenAIClient();
+        client = new OpenAIClientV2({
+            fetchImpl: (...args) => global.fetch(...args)
+        });
         client.config.apiKey = 'test-key';
-        client.config.apiEndpoint = 'https://api.openai.com/v1/chat/completions';
+        client.config.apiEndpoint = 'https://api.openai.com/v1/responses';
     });
 
     afterEach(() => {
@@ -45,13 +47,15 @@ describe('OpenAIClient listModels', () => {
     });
 });
 
-describe('OpenAIClient callAPI robustness', () => {
+describe('OpenAIClientV2 callAPI robustness', () => {
     let client;
 
     beforeEach(() => {
-        client = new OpenAIClient();
+        client = new OpenAIClientV2({
+            fetchImpl: (...args) => global.fetch(...args)
+        });
         client.config.apiKey = 'test-key';
-        client.config.apiEndpoint = 'https://api.openai.com/v1/chat/completions';
+        client.config.apiEndpoint = 'https://api.openai.com/v1/responses';
         client.config.textModel = 'gpt-4o-mini';
         client.config.requestTimeout = 30;
         client.config.retryAttempts = 1;
@@ -65,6 +69,9 @@ describe('OpenAIClient callAPI robustness', () => {
         global.fetch = vi.fn().mockResolvedValue({
             ok: true,
             status: 200,
+            json: vi.fn().mockImplementation(() => {
+                throw new Error('invalid json');
+            }),
             text: vi.fn().mockResolvedValue('plain text answer')
         });
 
@@ -88,55 +95,49 @@ describe('OpenAIClient callAPI robustness', () => {
         global.fetch = vi.fn().mockResolvedValue({
             ok: true,
             status: 200,
+            json: vi.fn().mockResolvedValue({
+                output: [{ content: [{ text: 'ok' }] }]
+            }),
             text: vi.fn().mockResolvedValue(JSON.stringify({
-                choices: [{ message: { content: 'ok' } }]
+                output: [{ content: [{ text: 'ok' }] }]
             }))
         });
 
         await client.callAPI([{ role: 'user', content: 'hi' }], client.config.textModel, 10);
         const requestBody = JSON.parse(global.fetch.mock.calls[0][1].body);
         expect(requestBody.stream).toBe(false);
+        expect(requestBody).toHaveProperty('input');
+        expect(requestBody).not.toHaveProperty('messages');
     });
 });
 
-describe('OpenAIClient source-specific request strategy', () => {
+describe('OpenAIClientV2 request strategy', () => {
     let client;
 
     beforeEach(() => {
-        client = new OpenAIClient();
-        client.config.apiEndpoint = 'https://api.openai.com/v1/chat/completions';
+        client = new OpenAIClientV2();
+        client.config.apiEndpoint = 'https://api.openai.com/v1/responses';
     });
 
-    it('keeps default temperature for regular text source', () => {
+    it('always uses responses payload with max_output_tokens', () => {
         const requestBody = client.buildRequestBody(
             [{ role: 'user', content: 'chat' }],
             'gpt-4o-mini',
-            800,
-            false,
-            { source: 'openai_client.explain_circuit' }
+            800
         );
 
-        expect(requestBody.temperature).toBe(0.7);
-    });
-
-    it('omits temperature for gpt-5 regardless of source', () => {
-        const requestBody = client.buildRequestBody(
-            [{ role: 'user', content: 'chat' }],
-            'gpt-5-mini',
-            800,
-            true,
-            { source: 'openai_client.explain_circuit' }
-        );
-
-        expect(Object.prototype.hasOwnProperty.call(requestBody, 'temperature')).toBe(false);
+        expect(requestBody).toHaveProperty('input');
+        expect(requestBody).toHaveProperty('max_output_tokens', 800);
     });
 });
 
-describe('OpenAIClient proxy request mode', () => {
+describe('OpenAIClientV2 proxy request mode', () => {
     let client;
 
     beforeEach(() => {
-        client = new OpenAIClient();
+        client = new OpenAIClientV2({
+            fetchImpl: (...args) => global.fetch(...args)
+        });
         client.config.requestMode = 'proxy';
         client.config.proxyEndpoint = 'https://proxy.example.com/openai';
         client.config.apiKey = '';
@@ -153,8 +154,11 @@ describe('OpenAIClient proxy request mode', () => {
         global.fetch = vi.fn().mockResolvedValue({
             ok: true,
             status: 200,
+            json: vi.fn().mockResolvedValue({
+                output: [{ content: [{ text: 'proxy answer' }] }]
+            }),
             text: vi.fn().mockResolvedValue(JSON.stringify({
-                choices: [{ message: { content: 'proxy answer' } }]
+                output: [{ content: [{ text: 'proxy answer' }] }]
             }))
         });
 

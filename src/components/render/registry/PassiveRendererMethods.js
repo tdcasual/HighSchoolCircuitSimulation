@@ -9,3 +9,4 @@ export const PASSIVE_RENDERER_METHODS = Object.freeze({
     Inductor: 'renderInductor',
     ParallelPlateCapacitor: 'renderParallelPlateCapacitor'
 });
+

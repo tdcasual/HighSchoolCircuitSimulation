@@ -1,12 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { validateCircuitJSON } from '../src/engine/CircuitSchema.js';
-import { getClassroomScenarioPack } from '../src/engine/scenarios/ClassroomScenarioPack.js';
+import { validateCircuitJSON } from '../src/core/validation/CircuitSchema.js';
+import { getClassroomScenarioPack } from '../src/core/scenarios/ClassroomScenarioPack.js';
 
 const base = {
-    meta: { version: '1.0' },
+    meta: { version: 3 },
     components: [
-        { id: 'E1', type: 'PowerSource', properties: { voltage: 3, internalResistance: 1 } },
-        { id: 'R1', type: 'Resistor', properties: { resistance: 10 } }
+        { id: 'E1', type: 'PowerSource', x: 0, y: 0, properties: { voltage: 3, internalResistance: 1 } },
+        { id: 'R1', type: 'Resistor', x: 20, y: 0, properties: { resistance: 10 } }
     ],
     wires: [{
         id: 'w1',
@@ -20,6 +20,13 @@ const base = {
 describe('validateCircuitJSON', () => {
     it('accepts a minimal valid circuit', () => {
         expect(validateCircuitJSON(base)).toBe(true);
+    });
+
+    it('rejects non-v3 meta version', () => {
+        expect(() => validateCircuitJSON({
+            ...base,
+            meta: { version: '1.0' }
+        })).toThrow(/meta\.version.*3/u);
     });
 
     it('throws when components missing', () => {
@@ -62,13 +69,13 @@ describe('validateCircuitJSON', () => {
                 end: { componentId: 'R1', terminalIndex: 1 }
             }]
         };
-        expect(() => validateCircuitJSON(legacy)).toThrow(/a\/b 端点坐标/);
+        expect(() => validateCircuitJSON(legacy)).toThrow(/a\/b 端点坐标|未知字段: start/);
     });
 
     it('rejects unknown component type', () => {
         const bad = {
             ...base,
-            components: [{ id: 'X1', type: 'VoltageSource' }]
+            components: [{ id: 'X1', type: 'VoltageSource', x: 0, y: 0 }]
         };
         expect(() => validateCircuitJSON(bad)).toThrow(/不支持的元器件类型/);
     });
@@ -77,8 +84,8 @@ describe('validateCircuitJSON', () => {
         const bad = {
             ...base,
             components: [
-                { id: 'E1', type: 'PowerSource', properties: { voltage: 3, internalResistance: 1 } },
-                { id: 'R1', type: 'Resistor', properties: { resistance: 10 } }
+                { id: 'E1', type: 'PowerSource', x: 0, y: 0, properties: { voltage: 3, internalResistance: 1 } },
+                { id: 'R1', type: 'Resistor', x: 20, y: 0, properties: { resistance: 10 } }
             ],
             wires: [{
                 id: 'w1',
@@ -93,7 +100,7 @@ describe('validateCircuitJSON', () => {
     it('rejects circuit without power source', () => {
         const bad = {
             ...base,
-            components: [{ id: 'R1', type: 'Resistor', properties: { resistance: 10 } }]
+            components: [{ id: 'R1', type: 'Resistor', x: 20, y: 0, properties: { resistance: 10 } }]
         };
         expect(() => validateCircuitJSON(bad)).toThrow(/至少需要一个电源元件/);
     });
@@ -113,6 +120,11 @@ describe('validateCircuitJSON', () => {
         ]);
 
         for (const scenario of scenarios) {
+            expect(Object.keys(scenario.circuit.meta || {}).sort()).toEqual([
+                'name',
+                'timestamp',
+                'version'
+            ]);
             expect(() => validateCircuitJSON(scenario.circuit)).not.toThrow();
         }
     });

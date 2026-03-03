@@ -2,7 +2,7 @@
  * AIPanel.js - AI助手面板控制器
  */
 
-import { OpenAIClient } from '../ai/OpenAIClient.js';
+import { OpenAIClientV2 } from '../ai/OpenAIClientV2.js';
 import { CircuitExplainer } from '../ai/CircuitExplainer.js';
 import { CircuitAIAgent } from '../ai/agent/CircuitAIAgent.js';
 import { AILogService } from '../ai/AILogService.js';
@@ -22,7 +22,7 @@ export class AIPanel {
         this.app = app;
         this.circuit = app.circuit;
         this.aiLogger = new AILogService();
-        this.aiClient = new OpenAIClient();
+        this.aiClient = new OpenAIClientV2();
         this.aiClient.setLogger(this.aiLogger);
         this.explainer = new CircuitExplainer(this.circuit);
         this.aiAgent = new CircuitAIAgent({

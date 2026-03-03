@@ -6,3 +6,4 @@ export const CONTROL_RENDERER_METHODS = Object.freeze({
     Fuse: 'renderFuse',
     BlackBox: 'renderBlackBox'
 });
+

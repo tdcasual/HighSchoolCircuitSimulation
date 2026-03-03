@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { CircuitTopologyService } from '../src/engine/services/CircuitTopologyService.js';
+import { CircuitTopologyService } from '../src/core/services/CircuitTopologyService.js';
 import { addComponent, connectWire, createTestCircuit } from './helpers/circuitTestUtils.js';
 
 describe('CircuitTopologyService', () => {

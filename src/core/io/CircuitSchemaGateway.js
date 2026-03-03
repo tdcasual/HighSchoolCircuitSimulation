@@ -2,36 +2,108 @@ import { ComponentDefaults, getComponentTerminalCount } from '../../components/C
 
 const SUPPORTED_COMPONENT_TYPES = new Set(Object.keys(ComponentDefaults));
 const POWER_COMPONENT_TYPES = new Set(['PowerSource', 'ACVoltageSource']);
+const LEGACY_ALIAS_KEYS = new Set(['templateName', 'bindingMap', 'pendingToolType']);
+const TOP_LEVEL_KEYS = new Set(['meta', 'components', 'wires', 'probes']);
+const META_KEYS = new Set(['version', 'name', 'timestamp']);
+const COMPONENT_KEYS = new Set([
+    'id',
+    'type',
+    'label',
+    'x',
+    'y',
+    'rotation',
+    'properties',
+    'display',
+    'terminalExtensions'
+]);
+const WIRE_KEYS = new Set(['id', 'a', 'b', 'aRef', 'bRef']);
+const POINT_KEYS = new Set(['x', 'y']);
+const TERMINAL_REF_KEYS = new Set(['componentId', 'terminalIndex']);
+const PROBE_KEYS = new Set(['id', 'type', 'wireId', 'label']);
+
+function isPlainObject(value) {
+    return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function assertPlainObject(value, label) {
+    if (!isPlainObject(value)) {
+        throw new Error(`${label} 不是对象`);
+    }
+}
+
+function assertKnownKeys(value, allowed, label) {
+    for (const key of Object.keys(value)) {
+        if (!allowed.has(key)) {
+            throw new Error(`${label} 包含未知字段: ${key}`);
+        }
+    }
+}
+
+function assertFiniteNumber(value, label) {
+    if (!Number.isFinite(Number(value))) {
+        throw new Error(`${label} 坐标非法: ${JSON.stringify(value)}`);
+    }
+}
+
+function assertNoLegacyAliases(value, path = 'payload') {
+    if (Array.isArray(value)) {
+        value.forEach((item, index) => assertNoLegacyAliases(item, `${path}[${index}]`));
+        return;
+    }
+    if (!isPlainObject(value)) return;
+    for (const [key, nested] of Object.entries(value)) {
+        if (LEGACY_ALIAS_KEYS.has(key)) {
+            throw new Error(`legacy field "${key}" is not allowed at ${path}.${key}`);
+        }
+        assertNoLegacyAliases(nested, `${path}.${key}`);
+    }
+}
+
+function validateVersion(meta) {
+    const version = meta.version;
+    const isV3 = version === 3 || version === '3' || version === '3.0';
+    if (!isV3) {
+        throw new Error(`meta.version must be 3, received "${String(version)}"`);
+    }
+}
+
+function validatePoint(point, label) {
+    assertPlainObject(point, label);
+    assertKnownKeys(point, POINT_KEYS, label);
+    assertFiniteNumber(point.x, `${label}.x`);
+    assertFiniteNumber(point.y, `${label}.y`);
+}
 
 export class CircuitSchemaGateway {
     static validate(data) {
-        if (!data || typeof data !== 'object') {
+        if (!isPlainObject(data)) {
             throw new Error('返回结果不是对象');
         }
+
+        assertNoLegacyAliases(data);
+        assertKnownKeys(data, TOP_LEVEL_KEYS, 'payload');
+
+        assertPlainObject(data.meta, 'payload.meta');
+        assertKnownKeys(data.meta, META_KEYS, 'payload.meta');
+        validateVersion(data.meta);
+
         if (!Array.isArray(data.components) || data.components.length === 0) {
             throw new Error('组件列表缺失或为空');
         }
         if (!Array.isArray(data.wires) || data.wires.length === 0) {
             throw new Error('导线列表缺失或为空');
         }
-
-        const requirePoint = (pt, label) => {
-            if (!pt || typeof pt !== 'object') {
-                throw new Error(`${label} 不是坐标点: ${JSON.stringify(pt)}`);
-            }
-            const x = Number(pt.x);
-            const y = Number(pt.y);
-            if (!Number.isFinite(x) || !Number.isFinite(y)) {
-                throw new Error(`${label} 坐标非法: ${JSON.stringify(pt)}`);
-            }
-            return true;
-        };
+        if (data.probes !== undefined && !Array.isArray(data.probes)) {
+            throw new Error('probes 必须是数组');
+        }
 
         const componentsById = new Map();
         let hasPowerSource = false;
 
         const requireTerminalRef = (ref, label) => {
             if (!ref) return true;
+            assertPlainObject(ref, label);
+            assertKnownKeys(ref, TERMINAL_REF_KEYS, label);
             if (ref.componentId === undefined || ref.componentId === null) {
                 throw new Error(`${label} 缺少 componentId: ${JSON.stringify(ref)}`);
             }
@@ -55,6 +127,8 @@ export class CircuitSchemaGateway {
         };
 
         for (const comp of data.components) {
+            assertPlainObject(comp, 'component');
+            assertKnownKeys(comp, COMPONENT_KEYS, `component:${comp?.id || 'unknown'}`);
             if (!comp.id || !comp.type) {
                 throw new Error(`组件缺少 id/type: ${JSON.stringify(comp)}`);
             }
@@ -62,6 +136,8 @@ export class CircuitSchemaGateway {
             if (!SUPPORTED_COMPONENT_TYPES.has(type)) {
                 throw new Error(`不支持的元器件类型: ${type}`);
             }
+            assertFiniteNumber(comp.x, `component:${comp.id}.x`);
+            assertFiniteNumber(comp.y, `component:${comp.id}.y`);
             const id = String(comp.id);
             if (componentsById.has(id)) {
                 throw new Error(`组件 id 重复: ${id}`);
@@ -77,11 +153,13 @@ export class CircuitSchemaGateway {
         }
 
         for (const wire of data.wires) {
+            assertPlainObject(wire, 'wire');
+            assertKnownKeys(wire, WIRE_KEYS, `wire:${wire?.id || 'unknown'}`);
             if (!wire.a || !wire.b) {
                 throw new Error(`导线必须使用 a/b 端点坐标: ${JSON.stringify(wire)}`);
             }
-            requirePoint(wire.a, 'wire.a');
-            requirePoint(wire.b, 'wire.b');
+            validatePoint(wire.a, 'wire.a');
+            validatePoint(wire.b, 'wire.b');
             if (Number(wire.a.x) === Number(wire.b.x) && Number(wire.a.y) === Number(wire.b.y)) {
                 throw new Error(`导线起点与终点重合: ${JSON.stringify(wire)}`);
             }
@@ -89,6 +167,15 @@ export class CircuitSchemaGateway {
             requireTerminalRef(wire.bRef, 'wire.bRef');
         }
 
+        for (const probe of data.probes || []) {
+            assertPlainObject(probe, 'probe');
+            assertKnownKeys(probe, PROBE_KEYS, `probe:${probe?.id || 'unknown'}`);
+            if (!probe.id || !probe.type || !probe.wireId) {
+                throw new Error(`probe 字段不完整: ${JSON.stringify(probe)}`);
+            }
+        }
+
         return true;
     }
 }
+

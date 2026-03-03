@@ -3,7 +3,7 @@ import {
     getWireCurrentInfo,
     isWireInShortCircuit,
     refreshShortCircuitDiagnostics
-} from '../src/engine/runtime/CircuitShortCircuitDiagnosticsService.js';
+} from '../src/core/runtime/CircuitShortCircuitDiagnosticsService.js';
 
 function createBaseCircuitMock() {
     return {

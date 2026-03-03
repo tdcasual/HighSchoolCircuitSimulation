@@ -41,11 +41,23 @@ jobs:
       - name: Check registry legacy fallback guard
         run: node scripts/ci/assert-registry-legacy-fallback-guard.mjs
 
+      - name: Check renderer no-legacy artifacts
+        run: node scripts/ci/assert-no-legacy-renderer-artifacts.mjs
+
+      - name: Check engine no-adapter artifacts
+        run: node scripts/ci/assert-no-engine-adapter-artifacts.mjs
+
       - name: Check CI workflow coverage
         run: node scripts/ci/assert-ci-workflow-coverage.mjs
 
       - name: Check v2 architecture boundaries
         run: node scripts/ci/assert-v2-architecture-boundaries.mjs
+
+      - name: Check v2 runtime exclusive entry
+        run: node scripts/ci/assert-v2-runtime-exclusive.mjs
+
+      - name: Check v2 component coverage
+        run: node scripts/ci/assert-v2-coverage.mjs
 
       - name: Build frontend artifacts
         run: npm run build:frontend

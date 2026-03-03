@@ -16,9 +16,10 @@ const TOTAL_BUNDLE_MAX_BYTES = 520 * 1024;
 
 const CORE_FILE_BUDGETS = [
     { file: 'src/engine/Circuit.js', maxLines: 2000 },
-    { file: 'src/components/Component.js', maxLines: 1700 },
+    { file: 'src/components/Component.js', maxLines: 1500 },
     { file: 'src/ui/charts/ChartWindowController.js', maxLines: 700 },
-    { file: 'src/app/interaction/InteractionOrchestrator.js', maxLines: 400 }
+    { file: 'src/app/interaction/InteractionOrchestrator.js', maxLines: 400 },
+    { file: 'src/app/AppRuntimeV2.js', maxLines: 800 }
 ];
 
 function formatKiB(bytes) {

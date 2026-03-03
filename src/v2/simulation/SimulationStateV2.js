@@ -24,11 +24,19 @@ function buildDefaultState(descriptor = {}) {
         case 'Diode':
         case 'LED':
             return {
-                conducting: false
+                conducting: false,
+                junctionVoltage: 0,
+                junctionCurrent: 0,
+                brightness: 0
             };
         case 'Relay':
             return {
                 energized: false
+            };
+        case 'Fuse':
+            return {
+                i2tAccum: 0,
+                blown: false
             };
         default:
             return {};

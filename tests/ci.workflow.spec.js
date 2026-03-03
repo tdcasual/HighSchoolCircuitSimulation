@@ -62,6 +62,10 @@ describe('CI workflow coverage', () => {
         expect(content).toContain('node scripts/ci/assert-interaction-mode-runtime-contract.mjs');
         expect(content).toContain('Check registry legacy fallback guard');
         expect(content).toContain('node scripts/ci/assert-registry-legacy-fallback-guard.mjs');
+        expect(content).toContain('Check renderer no-legacy artifacts');
+        expect(content).toContain('node scripts/ci/assert-no-legacy-renderer-artifacts.mjs');
+        expect(content).toContain('Check engine no-adapter artifacts');
+        expect(content).toContain('node scripts/ci/assert-no-engine-adapter-artifacts.mjs');
         expect(content).toContain('Check CI workflow coverage');
         expect(content).toContain('node scripts/ci/assert-ci-workflow-coverage.mjs');
     });
@@ -87,9 +91,17 @@ describe('CI workflow coverage', () => {
         expect(pkg.scripts['check:interaction-mode-contract']).toBe(
             'node scripts/ci/assert-interaction-mode-runtime-contract.mjs'
         );
+        expect(pkg.scripts['check:renderer-no-legacy']).toBe(
+            'node scripts/ci/assert-no-legacy-renderer-artifacts.mjs'
+        );
+        expect(pkg.scripts['check:engine-no-adapters']).toBe(
+            'node scripts/ci/assert-no-engine-adapter-artifacts.mjs'
+        );
         expect(pkg.scripts['check:ci-workflow']).toBe('node scripts/ci/assert-ci-workflow-coverage.mjs');
         expect(pkg.scripts.check).toContain('npm run check:observation-contract');
         expect(pkg.scripts.check).toContain('npm run check:interaction-mode-contract');
+        expect(pkg.scripts.check).toContain('npm run check:renderer-no-legacy');
+        expect(pkg.scripts.check).toContain('npm run check:engine-no-adapters');
         expect(pkg.scripts.check).toContain('npm run check:ci-workflow');
     });
 
