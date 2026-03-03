@@ -16,6 +16,30 @@ const WIRE_KEYS = new Set(['id', 'a', 'b', 'aRef', 'bRef']);
 const POINT_KEYS = new Set(['x', 'y']);
 const TERMINAL_REF_KEYS = new Set(['componentId', 'terminalIndex']);
 const PROBE_KEYS = new Set(['id', 'type', 'wireId', 'label']);
+const SUPPORTED_COMPONENT_TYPES = new Set([
+    'Ground',
+    'PowerSource',
+    'ACVoltageSource',
+    'Resistor',
+    'Diode',
+    'LED',
+    'Thermistor',
+    'Photoresistor',
+    'Relay',
+    'Rheostat',
+    'Bulb',
+    'Capacitor',
+    'Inductor',
+    'ParallelPlateCapacitor',
+    'Motor',
+    'Switch',
+    'SPDTSwitch',
+    'Fuse',
+    'Ammeter',
+    'Voltmeter',
+    'BlackBox'
+]);
+const SUPPORTED_PROBE_TYPES = new Set(['NodeVoltageProbe', 'WireCurrentProbe']);
 
 function isPlainObject(value) {
     return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -93,6 +117,9 @@ function validateComponent(component, index) {
     if (typeof component.type !== 'string' || !component.type.trim()) {
         throw new Error(`${label}.type must be a non-empty string`);
     }
+    if (!SUPPORTED_COMPONENT_TYPES.has(component.type)) {
+        throw new Error(`${label}.type unsupported component type: ${component.type}`);
+    }
     assertFiniteNumber(component.x, `${label}.x`);
     assertFiniteNumber(component.y, `${label}.y`);
     if (component.rotation !== undefined) {
@@ -139,6 +166,9 @@ function validateProbe(probe, index) {
     if (typeof probe.type !== 'string' || !probe.type.trim()) {
         throw new Error(`${label}.type must be a non-empty string`);
     }
+    if (!SUPPORTED_PROBE_TYPES.has(probe.type)) {
+        throw new Error(`${label}.type unsupported probe type: ${probe.type}`);
+    }
     if (typeof probe.wireId !== 'string' || !probe.wireId.trim()) {
         throw new Error(`${label}.wireId must be a non-empty string`);
     }
@@ -168,7 +198,14 @@ export function validateCircuitV3(payload) {
 
     payload.components.forEach((component, index) => validateComponent(component, index));
     payload.wires.forEach((wire, index) => validateWire(wire, index));
-    (payload.probes || []).forEach((probe, index) => validateProbe(probe, index));
+
+    const wireIds = new Set(payload.wires.map((wire) => wire.id));
+    (payload.probes || []).forEach((probe, index) => {
+        validateProbe(probe, index);
+        if (!wireIds.has(probe.wireId)) {
+            throw new Error(`probes[${index}].wireId not found: ${probe.wireId}`);
+        }
+    });
 
     return true;
 }

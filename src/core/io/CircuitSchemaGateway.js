@@ -20,6 +20,7 @@ const WIRE_KEYS = new Set(['id', 'a', 'b', 'aRef', 'bRef']);
 const POINT_KEYS = new Set(['x', 'y']);
 const TERMINAL_REF_KEYS = new Set(['componentId', 'terminalIndex']);
 const PROBE_KEYS = new Set(['id', 'type', 'wireId', 'label']);
+const SUPPORTED_PROBE_TYPES = new Set(['NodeVoltageProbe', 'WireCurrentProbe']);
 
 function isPlainObject(value) {
     return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -152,9 +153,18 @@ export class CircuitSchemaGateway {
             throw new Error('至少需要一个电源元件（PowerSource 或 ACVoltageSource）');
         }
 
+        const wireIds = new Set();
         for (const wire of data.wires) {
             assertPlainObject(wire, 'wire');
             assertKnownKeys(wire, WIRE_KEYS, `wire:${wire?.id || 'unknown'}`);
+            if (wire.id === undefined || wire.id === null || String(wire.id).trim() === '') {
+                throw new Error(`导线缺少 id: ${JSON.stringify(wire)}`);
+            }
+            const wireId = String(wire.id).trim();
+            if (wireIds.has(wireId)) {
+                throw new Error(`导线 id 重复: ${wireId}`);
+            }
+            wireIds.add(wireId);
             if (!wire.a || !wire.b) {
                 throw new Error(`导线必须使用 a/b 端点坐标: ${JSON.stringify(wire)}`);
             }
@@ -167,15 +177,31 @@ export class CircuitSchemaGateway {
             requireTerminalRef(wire.bRef, 'wire.bRef');
         }
 
+        const probeIds = new Set();
         for (const probe of data.probes || []) {
             assertPlainObject(probe, 'probe');
             assertKnownKeys(probe, PROBE_KEYS, `probe:${probe?.id || 'unknown'}`);
             if (!probe.id || !probe.type || !probe.wireId) {
                 throw new Error(`probe 字段不完整: ${JSON.stringify(probe)}`);
             }
+            const probeId = String(probe.id).trim();
+            if (!probeId) {
+                throw new Error(`probe.id 非法: ${JSON.stringify(probe.id)}`);
+            }
+            if (probeIds.has(probeId)) {
+                throw new Error(`probe id 重复: ${probeId}`);
+            }
+            probeIds.add(probeId);
+            const probeType = String(probe.type).trim();
+            if (!SUPPORTED_PROBE_TYPES.has(probeType)) {
+                throw new Error(`不支持的探针类型: ${probeType}`);
+            }
+            const wireId = String(probe.wireId).trim();
+            if (!wireIds.has(wireId)) {
+                throw new Error(`probe.wireId 不存在: ${wireId}`);
+            }
         }
 
         return true;
     }
 }
-

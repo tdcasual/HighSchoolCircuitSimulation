@@ -79,4 +79,42 @@ describe('CircuitSchema v3 strict validator', () => {
         expect(() => validateCircuitV3(legacyWire)).toThrow(/wire\.a|wire\.b|start|end/u);
         expect(() => validateCircuitV3(withUnknown)).toThrow(/compatMode/u);
     });
+
+    it('rejects unknown component types', () => {
+        const badTypePayload = {
+            ...validV3Payload,
+            components: [
+                {
+                    id: 'X1',
+                    type: 'FakeComponentType',
+                    x: 0,
+                    y: 0
+                }
+            ]
+        };
+
+        expect(() => validateCircuitV3(badTypePayload)).toThrow(/unsupported component type|不支持的元器件类型/u);
+    });
+
+    it('rejects probe type outside supported probe set', () => {
+        const badProbePayload = {
+            ...validV3Payload,
+            probes: [
+                { id: 'P1', type: 'BadProbeType', wireId: 'W1' }
+            ]
+        };
+
+        expect(() => validateCircuitV3(badProbePayload)).toThrow(/unsupported probe type|不支持的探针类型/u);
+    });
+
+    it('rejects probes that reference unknown wire ids', () => {
+        const badProbeWirePayload = {
+            ...validV3Payload,
+            probes: [
+                { id: 'P1', type: 'WireCurrentProbe', wireId: 'W404' }
+            ]
+        };
+
+        expect(() => validateCircuitV3(badProbeWirePayload)).toThrow(/wireId.*not found|wireId.*不存在/u);
+    });
 });

@@ -47,6 +47,19 @@ describe('validateCircuitJSON', () => {
         expect(() => validateCircuitJSON(bad)).toThrow(/a\/b 端点坐标/);
     });
 
+    it('rejects wire without id to avoid silent wire drop during deserialize', () => {
+        const bad = {
+            ...base,
+            wires: [{
+                a: { x: 0, y: 0 },
+                b: { x: 20, y: 0 },
+                aRef: { componentId: 'E1', terminalIndex: 1 },
+                bRef: { componentId: 'R1', terminalIndex: 0 }
+            }]
+        };
+        expect(() => validateCircuitJSON(bad)).toThrow(/导线缺少 id/);
+    });
+
     it('throws when terminalIndex is missing in endpoint binding', () => {
         const bad = {
             ...base,
@@ -95,6 +108,26 @@ describe('validateCircuitJSON', () => {
             }]
         };
         expect(() => validateCircuitJSON(bad)).toThrow(/terminalIndex 超出范围/);
+    });
+
+    it('rejects probe that references unknown wire id', () => {
+        const bad = {
+            ...base,
+            probes: [
+                { id: 'P1', type: 'WireCurrentProbe', wireId: 'missing_wire' }
+            ]
+        };
+        expect(() => validateCircuitJSON(bad)).toThrow(/wireId 不存在/);
+    });
+
+    it('rejects unsupported probe types instead of silently dropping them', () => {
+        const bad = {
+            ...base,
+            probes: [
+                { id: 'P1', type: 'BadProbeType', wireId: 'w1' }
+            ]
+        };
+        expect(() => validateCircuitJSON(bad)).toThrow(/不支持的探针类型/);
     });
 
     it('rejects circuit without power source', () => {
