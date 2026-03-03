@@ -261,4 +261,29 @@ describe('Rheostat connection modes', () => {
         const vSlider = results.voltages[rheo.nodes[2]] || 0;
         expect(vSlider).toBeCloseTo(9, 6);
     });
+
+    it('keeps all-terminal mode conductive when left/right share one node', () => {
+        const circuit = createTestCircuit();
+        const source = addComponent(circuit, 'PowerSource', 'V1', { voltage: 10, internalResistance: 0 });
+        const rheo = addComponent(circuit, 'Rheostat', 'Rh1', {
+            minResistance: 0,
+            maxResistance: 100,
+            position: 0.25,
+            connectionMode: 'all'
+        });
+        const load = addComponent(circuit, 'Resistor', 'R1', { resistance: 100 });
+
+        connectWire(circuit, 'W1', source, 0, rheo, 0);
+        connectWire(circuit, 'W2', source, 0, rheo, 1);
+        connectWire(circuit, 'W3', rheo, 2, load, 0);
+        connectWire(circuit, 'W4', load, 1, source, 1);
+
+        const results = solveCircuit(circuit);
+        expect(results.valid).toBe(true);
+
+        // R(left-slider)=25, R(slider-right)=75, with left/right shorted => parallel(25,75)=18.75
+        const expectedCurrent = 10 / (100 + (25 * 75) / (25 + 75));
+        const loadCurrent = Math.abs(results.currents.get('R1') || 0);
+        expect(loadCurrent).toBeCloseTo(expectedCurrent, 6);
+    });
 });

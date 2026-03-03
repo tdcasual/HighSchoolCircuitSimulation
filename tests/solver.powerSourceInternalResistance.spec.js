@@ -70,4 +70,26 @@ describe('PowerSource internal resistance (Norton model)', () => {
         expect(vLoad).toBeCloseTo(11, 6);
         expect(vLoad).toBeLessThan(vOpen);
     });
+
+    it('handles internalResistance = 1e-9 as a valid finite source branch', () => {
+        const circuit = createTestCircuit();
+        const source = addComponent(circuit, 'PowerSource', 'V1', {
+            voltage: 10,
+            internalResistance: 1e-9
+        });
+        const load = addComponent(circuit, 'Resistor', 'R1', { resistance: 10 });
+
+        connectWire(circuit, 'W1', source, 0, load, 0);
+        connectWire(circuit, 'W2', load, 1, source, 1);
+
+        const results = solveCircuit(circuit);
+        expect(results.valid).toBe(true);
+
+        const loadCurrent = results.currents.get('R1') || 0;
+        expect(loadCurrent).toBeCloseTo(1, 6);
+
+        const vPlus = results.voltages[source.nodes[0]] || 0;
+        const vMinus = results.voltages[source.nodes[1]] || 0;
+        expect(vPlus - vMinus).toBeCloseTo(10, 6);
+    });
 });

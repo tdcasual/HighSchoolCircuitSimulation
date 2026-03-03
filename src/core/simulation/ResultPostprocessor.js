@@ -2,6 +2,8 @@ import { DynamicIntegrationMethods } from './DynamicIntegrator.js';
 import { DefaultComponentRegistry } from './ComponentRegistry.js';
 import { createRuntimeLogger } from '../../utils/Logger.js';
 
+const IDEAL_SOURCE_RESISTANCE_EPS = 1e-9;
+
 export class ResultPostprocessor {
     constructor(deps = {}) {
         this.deps = deps;
@@ -80,7 +82,7 @@ export class ResultPostprocessor {
 
         const isFiniteResistanceSource = (comp.type === 'PowerSource' || comp.type === 'ACVoltageSource')
             && Number.isFinite(Number(comp.internalResistance))
-            && Number(comp.internalResistance) > 1e-9;
+            && Number(comp.internalResistance) >= IDEAL_SOURCE_RESISTANCE_EPS;
         if (comp._isShorted && !isFiniteResistanceSource) {
             return 0;
         }

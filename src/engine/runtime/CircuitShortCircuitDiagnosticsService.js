@@ -1,7 +1,5 @@
 import { pointKey } from '../../utils/CanvasCoords.js';
 
-const IDEAL_SOURCE_RESISTANCE_EPS = 1e-9;
-
 export function refreshShortCircuitDiagnostics(circuit, results = null) {
     if (!circuit) return;
     const isValidNode = (nodeIdx) => nodeIdx !== undefined && nodeIdx !== null && nodeIdx >= 0;
@@ -41,7 +39,7 @@ export function refreshShortCircuitDiagnostics(circuit, results = null) {
 
         if (hasValidResults && !topologicalShort) {
             const internalResistance = Number(comp.internalResistance);
-            if (Number.isFinite(internalResistance) && internalResistance >= IDEAL_SOURCE_RESISTANCE_EPS) {
+            if (Number.isFinite(internalResistance) && internalResistance > 1e-9) {
                 const sourceVoltage = circuit.solver.getSourceInstantVoltage(comp);
                 const sourceVoltageAbs = Math.abs(sourceVoltage);
                 const shortCurrent = sourceVoltageAbs / internalResistance;

@@ -2,6 +2,8 @@ import { DynamicIntegrationMethods } from './DynamicIntegrator.js';
 import { computeNtcThermistorResistance, computePhotoresistorResistance } from '../../utils/Physics.js';
 import { evaluateJunctionCurrent, linearizeJunctionAt, resolveJunctionParameters } from './JunctionModel.js';
 
+const IDEAL_SOURCE_RESISTANCE_EPS = 1e-9;
+
 export class ComponentRegistry {
     constructor() {
         this.byType = new Map();
@@ -413,7 +415,7 @@ const stampSourceViaMNA = (comp, context, nodes) => {
         ? context.getSourceInstantVoltage(comp)
         : (Number.isFinite(comp.voltage) ? comp.voltage : 0);
     const internalResistance = Number(comp.internalResistance);
-    if (comp._nortonModel && Number.isFinite(internalResistance) && internalResistance > 1e-9) {
+    if (comp._nortonModel && Number.isFinite(internalResistance) && internalResistance >= IDEAL_SOURCE_RESISTANCE_EPS) {
         context.stampResistor(nodes.i1, nodes.i2, internalResistance);
         context.stampCurrentSource(nodes.i2, nodes.i1, sourceVoltage / internalResistance);
         return;
@@ -430,7 +432,7 @@ const currentForSourceViaMNA = (comp, context, nodes) => {
             ? context.getSourceInstantVoltage(comp)
             : (Number.isFinite(comp.voltage) ? comp.voltage : 0);
         const resistance = Number(comp.internalResistance);
-        if (Number.isFinite(resistance) && resistance > 1e-9) {
+        if (Number.isFinite(resistance) && resistance >= IDEAL_SOURCE_RESISTANCE_EPS) {
             return (sourceVoltage - terminalVoltage) / resistance;
         }
         return 0;

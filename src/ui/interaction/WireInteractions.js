@@ -51,11 +51,19 @@ function resolveLiveWireStart(context) {
 
 export function addWireAt(x, y) {
     this.runWithHistory('添加导线', () => {
+        const ensureUniqueWireId = (baseId = `wire_${Date.now()}`) => {
+            if (typeof this.circuit?.getWire !== 'function') return baseId;
+            if (!this.circuit.getWire(baseId)) return baseId;
+            let i = 1;
+            while (this.circuit.getWire(`${baseId}_${i}`)) i += 1;
+            return `${baseId}_${i}`;
+        };
         const cy = toCanvasInt(y);
         const start = { x: toCanvasInt(x - 30), y: cy };
         const end = { x: toCanvasInt(x + 30), y: cy };
+        const baseId = `wire_${Date.now()}`;
         const wire = {
-            id: `wire_${Date.now()}`,
+            id: ensureUniqueWireId(baseId),
             a: start,
             b: end
         };

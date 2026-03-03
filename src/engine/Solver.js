@@ -4,16 +4,14 @@
  */
 
 import { Matrix } from './Matrix.js';
-import { computeNtcThermistorResistance, computePhotoresistorResistance } from '../../utils/Physics.js';
-import { StampDispatcher } from './StampDispatcher.js';
-import { DynamicIntegrator } from './DynamicIntegrator.js';
-import { ResultPostprocessor } from './ResultPostprocessor.js';
-import { SimulationState } from './SimulationState.js';
-import { DefaultComponentRegistry } from './ComponentRegistry.js';
-import { limitJunctionStep, resolveJunctionParameters } from './JunctionModel.js';
-import { createRuntimeLogger } from '../../utils/Logger.js';
-
-const IDEAL_SOURCE_RESISTANCE_EPS = 1e-9;
+import { computeNtcThermistorResistance, computePhotoresistorResistance } from '../utils/Physics.js';
+import { StampDispatcher } from '../core/simulation/StampDispatcher.js';
+import { DynamicIntegrator } from '../core/simulation/DynamicIntegrator.js';
+import { ResultPostprocessor } from '../core/simulation/ResultPostprocessor.js';
+import { SimulationState } from '../core/simulation/SimulationState.js';
+import { DefaultComponentRegistry } from '../core/simulation/ComponentRegistry.js';
+import { limitJunctionStep, resolveJunctionParameters } from '../core/simulation/JunctionModel.js';
+import { createRuntimeLogger } from '../utils/Logger.js';
 
 export class MNASolver {
     constructor() {
@@ -118,10 +116,6 @@ export class MNASolver {
                 if (comp.type === 'Relay') {
                     comp._isShorted = false;
                 }
-                // Rheostat can have left/right shorted while slider branch remains active.
-                if (comp.type === 'Rheostat') {
-                    comp._isShorted = false;
-                }
                 
                 // 电源被短路是危险的
                 if (comp._isShorted && isPowerSource) {
@@ -137,7 +131,7 @@ export class MNASolver {
                 comp.internalResistance = Number.isFinite(internalResistance) && internalResistance >= 0
                     ? internalResistance
                     : 0.5;
-                comp._nortonModel = comp.internalResistance >= IDEAL_SOURCE_RESISTANCE_EPS;
+                comp._nortonModel = comp.internalResistance > 1e-9;
             }
         }
         
@@ -149,7 +143,7 @@ export class MNASolver {
                 const n1 = comp.nodes?.[0];
                 const n2 = comp.nodes?.[1];
                 // 只有零内阻且未被短路的电源才使用电压源模型
-                if (!(Number.isFinite(comp.internalResistance) && comp.internalResistance >= IDEAL_SOURCE_RESISTANCE_EPS)) {
+                if (!comp.internalResistance || comp.internalResistance < 1e-9) {
                     if (!comp._isShorted) {
                         if (isValidNode(n1) && isValidNode(n2)) {
                             comp.vsIndex = this.voltageSourceCount++;
@@ -675,7 +669,7 @@ export class MNASolver {
             }
 
             const internalResistance = Number(comp.internalResistance);
-            if (!(Number.isFinite(internalResistance) && internalResistance >= IDEAL_SOURCE_RESISTANCE_EPS)) {
+            if (!(Number.isFinite(internalResistance) && internalResistance > 1e-9)) {
                 continue;
             }
 
@@ -717,7 +711,7 @@ export class MNASolver {
         // 如果元器件被短路，跳过 stamp（带内阻电源例外，仍需计算其短路电流）
         const isFiniteResistanceSource = (comp.type === 'PowerSource' || comp.type === 'ACVoltageSource')
             && Number.isFinite(Number(comp.internalResistance))
-            && Number(comp.internalResistance) >= IDEAL_SOURCE_RESISTANCE_EPS;
+            && Number(comp.internalResistance) > 1e-9;
         if (comp._isShorted && !isFiniteResistanceSource) {
             // 被短路的元器件不参与电路计算
             // 但需要记录状态以便显示

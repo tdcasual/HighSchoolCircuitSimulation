@@ -37,6 +37,7 @@ export class CircuitSimulationLoopService {
         const substepCount = this.getSimulationSubstepCount(context, stepDt);
         const substepDt = stepDt / substepCount;
         let latestResults = null;
+        let elapsedDt = 0;
 
         for (let index = 0; index < substepCount; index++) {
             const substepResults = context.solver.solve(substepDt, context.simTime);
@@ -48,6 +49,7 @@ export class CircuitSimulationLoopService {
             }
 
             context.simTime += substepDt;
+            elapsedDt += substepDt;
             context.solver.updateDynamicComponents(substepResults.voltages, substepResults.currents);
             context.syncSimulationStateToComponents();
             context.updateAdaptiveTimeStep(substepResults);
@@ -61,7 +63,8 @@ export class CircuitSimulationLoopService {
             lastResults: latestResults,
             stepDt,
             substepCount,
-            substepDt
+            substepDt,
+            elapsedDt
         };
     }
 }
