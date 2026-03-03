@@ -61,4 +61,11 @@ describe('component manifest v2', () => {
         expect(component.nodes).toEqual([-1, -1, -1]);
         expect(component.maxResistance).toBe(100);
     });
+
+    it('preserves numeric zero existingId in v2 component factory', () => {
+        resetV2ComponentIdCounter();
+        const component = createComponentV2('Resistor', 0, 0, 0);
+
+        expect(component.id).toBe('0');
+    });
 });

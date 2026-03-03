@@ -42,7 +42,10 @@ export function generateComponentIdV2(type) {
 
 export function createComponentV2(type, x = 0, y = 0, existingId = null) {
     const manifest = getComponentManifestV2(type);
-    const id = existingId || generateComponentIdV2(type);
+    const hasExistingId = existingId !== null
+        && existingId !== undefined
+        && (typeof existingId !== 'string' || existingId.trim());
+    const id = hasExistingId ? String(existingId) : generateComponentIdV2(type);
     const terminalCount = Number(manifest.terminalCount) || 2;
 
     return {

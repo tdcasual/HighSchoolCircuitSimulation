@@ -60,4 +60,38 @@ describe('CircuitModel v2 immutable commands', () => {
             resistance: 100
         });
     });
+
+    it('removing component also removes wires when wire refs use numeric component ids', () => {
+        const withComponent = addComponent(CircuitModel.empty(), {
+            id: '1',
+            type: 'Resistor'
+        });
+        const withWire = addWire(withComponent, {
+            id: 'W1',
+            aRef: { componentId: 1, terminalIndex: 0 },
+            bRef: { componentId: 'GND', terminalIndex: 0 }
+        });
+
+        const withoutComponent = removeComponent(withWire, '1');
+
+        expect(withoutComponent.components.has('1')).toBe(false);
+        expect(withoutComponent.wires.has('W1')).toBe(false);
+    });
+
+    it('preserves numeric zero ids instead of replacing with fallback ids', () => {
+        const withComponent = addComponent(CircuitModel.empty(), {
+            id: 0,
+            type: 'Resistor'
+        });
+        const withWire = addWire(withComponent, {
+            id: 0,
+            aRef: { componentId: '0', terminalIndex: 0 },
+            bRef: { componentId: 'GND', terminalIndex: 0 }
+        });
+
+        expect(withComponent.components.has('0')).toBe(true);
+        expect(withComponent.components.has('Unknown_0')).toBe(false);
+        expect(withWire.wires.has('0')).toBe(true);
+        expect(withWire.wires.has('Wire_0')).toBe(false);
+    });
 });

@@ -59,7 +59,10 @@ export function createComponent(type, x, y, existingId = null) {
         terminalExtensions[i] = { x: 0, y: 0 };
     }
 
-    const id = existingId || generateId(type);
+    const hasExistingId = existingId !== null
+        && existingId !== undefined
+        && (typeof existingId !== 'string' || existingId.trim());
+    const id = hasExistingId ? String(existingId) : generateId(type);
     const defaultDisplay = {
         current: true,
         voltage: false,

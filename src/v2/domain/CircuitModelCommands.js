@@ -7,7 +7,10 @@ function ensureModel(model) {
 function normalizeEntity(entity, fallbackType, fallbackId) {
     const safeEntity = entity && typeof entity === 'object' ? entity : {};
     const type = typeof safeEntity.type === 'string' && safeEntity.type.trim() ? safeEntity.type : fallbackType;
-    const id = safeEntity.id ? String(safeEntity.id) : fallbackId;
+    const hasId = safeEntity.id !== undefined
+        && safeEntity.id !== null
+        && (typeof safeEntity.id !== 'string' || safeEntity.id.trim());
+    const id = hasId ? String(safeEntity.id) : fallbackId;
     return {
         ...safeEntity,
         id,
@@ -18,8 +21,8 @@ function normalizeEntity(entity, fallbackType, fallbackId) {
 function wireReferencesComponent(wire, componentId) {
     if (!wire || typeof wire !== 'object') return false;
     const target = String(componentId);
-    if (wire.aRef?.componentId === target || wire.bRef?.componentId === target) return true;
-    if (wire.fromComponentId === target || wire.toComponentId === target) return true;
+    if (String(wire.aRef?.componentId) === target || String(wire.bRef?.componentId) === target) return true;
+    if (String(wire.fromComponentId) === target || String(wire.toComponentId) === target) return true;
     return false;
 }
 

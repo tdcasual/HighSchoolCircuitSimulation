@@ -42,4 +42,11 @@ describe('ComponentFactory', () => {
         resetIdCounter();
         expect(generateId('Resistor')).toBe('Resistor_1');
     });
+
+    it('preserves numeric zero existingId when creating components', () => {
+        resetIdCounter();
+        const component = createComponent('Resistor', 0, 0, 0);
+
+        expect(component.id).toBe('0');
+    });
 });
