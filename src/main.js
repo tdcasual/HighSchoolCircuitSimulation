@@ -6,7 +6,7 @@
 import { Circuit } from './engine/Circuit.js';
 import { Renderer } from './ui/Renderer.js';
 import { InteractionManager } from './ui/Interaction.js';
-import { AIPanel } from './ui/AIPanel.js';
+import { loadAIPanelClass } from './ui/ai/loadAIPanel.js';
 import { ChartWorkspaceController } from './ui/charts/ChartWorkspaceController.js';
 import { ExerciseBoard } from './ui/ExerciseBoard.js';
 import { ResponsiveLayoutController } from './ui/ResponsiveLayoutController.js';
@@ -24,7 +24,7 @@ import { buildAppSaveData, safeInvokeMethod } from './app/AppSerialization.js';
 import { setSimulationControlsRunning, setStatusText } from './app/SimulationUiState.js';
 import { registerAppBootstrap } from './app/AppBootstrapRuntime.js';
 
-class CircuitSimulatorApp {
+export class CircuitSimulatorApp {
     constructor() {
         this.runtimeOptions = parseEmbedRuntimeOptionsFromSearch(
             typeof window !== 'undefined' ? window.location.search : ''
@@ -47,8 +47,13 @@ class CircuitSimulatorApp {
         // 初始化图表工作区（画布悬浮窗）
         this.chartWorkspace = new ChartWorkspaceController(this);
         
-        // 初始化 AI 助手面板
-        this.aiPanel = new AIPanel(this);
+        // AI 助手改为延迟加载：首屏不初始化重型面板。
+        this.aiPanel = null;
+        this.aiPanelLoadingPromise = null;
+        this.aiPanelClassLoader = loadAIPanelClass;
+        this.aiLazyTriggerElements = [];
+        this.boundLazyAIOpen = null;
+        this.bindLazyAIPanelTriggers();
 
         // 初始化习题板
         this.exerciseBoard = new ExerciseBoard(this);
@@ -440,6 +445,59 @@ class CircuitSimulatorApp {
         } catch (e) {
             this.logger.error('Failed to load saved circuit:', e);
         }
+    }
+
+    bindLazyAIPanelTriggers() {
+        if (typeof document === 'undefined') return;
+        const triggerIds = ['ai-fab-btn', 'ai-toggle-btn'];
+        this.boundLazyAIOpen = (event) => {
+            if (this.aiPanel) return;
+            event?.preventDefault?.();
+            event?.stopPropagation?.();
+            void this.openAIPanel();
+        };
+
+        this.aiLazyTriggerElements = [];
+        for (const id of triggerIds) {
+            const element = document.getElementById(id);
+            if (!element || typeof element.addEventListener !== 'function') continue;
+            element.addEventListener('click', this.boundLazyAIOpen);
+            this.aiLazyTriggerElements.push(element);
+        }
+    }
+
+    detachLazyAIPanelTriggers() {
+        if (!Array.isArray(this.aiLazyTriggerElements) || !this.boundLazyAIOpen) return;
+        for (const element of this.aiLazyTriggerElements) {
+            if (!element || typeof element.removeEventListener !== 'function') continue;
+            element.removeEventListener('click', this.boundLazyAIOpen);
+        }
+        this.aiLazyTriggerElements = [];
+    }
+
+    async ensureAIPanelLoaded() {
+        if (this.aiPanel) return this.aiPanel;
+        if (this.aiPanelLoadingPromise) return this.aiPanelLoadingPromise;
+
+        this.aiPanelLoadingPromise = (async () => {
+            const AIPanelClass = await this.aiPanelClassLoader();
+            this.aiPanel = new AIPanelClass(this);
+            this.detachLazyAIPanelTriggers();
+            return this.aiPanel;
+        })();
+
+        try {
+            return await this.aiPanelLoadingPromise;
+        } finally {
+            this.aiPanelLoadingPromise = null;
+        }
+    }
+
+    async openAIPanel() {
+        const panel = await this.ensureAIPanelLoaded();
+        panel?.setPanelCollapsed?.(false);
+        panel?.markPanelActive?.();
+        return panel;
     }
 
     setClassroomModeLevel(level, options = {}) {
