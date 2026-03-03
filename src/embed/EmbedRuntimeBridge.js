@@ -99,6 +99,14 @@ function createBridgeError(code, message, details = null) {
     return error;
 }
 
+export function normalizeModeV2Strict(rawMode) {
+    const text = String(rawMode || '').trim().toLowerCase();
+    if (!EMBED_MODES.includes(text)) {
+        throw createBridgeError('INVALID_MODE', `Unsupported embed mode for v2 runtime: ${String(rawMode || '')}`);
+    }
+    return text;
+}
+
 export function parseEmbedRuntimeOptionsFromSearch(search = '') {
     const query = typeof search === 'string' ? search : '';
     const params = new URLSearchParams(query.startsWith('?') ? query.slice(1) : query);
@@ -375,7 +383,8 @@ export class EmbedRuntimeBridge {
 
     handleSetOptions(payload = {}) {
         if (payload.mode !== undefined) {
-            this.mode = normalizeMode(payload.mode);
+            const strictV2 = payload.runtimeVersion === 2 || payload.runtimeVersion === '2';
+            this.mode = strictV2 ? normalizeModeV2Strict(payload.mode) : normalizeMode(payload.mode);
             this.applyMode(this.mode);
             this.featureFlags = normalizeFeatureFlags(this.mode, this.featureFlags);
         }
@@ -385,6 +394,13 @@ export class EmbedRuntimeBridge {
         }
         if (payload.classroomLevel !== undefined) {
             this.applyClassroomLevel(payload.classroomLevel, { announce: !!payload.announce });
+        }
+        if (
+            (payload.runtimeVersion === 2 || payload.runtimeVersion === '2')
+            && payload.features !== undefined
+            && (!payload.features || typeof payload.features !== 'object' || Array.isArray(payload.features))
+        ) {
+            throw createBridgeError('INVALID_PAYLOAD', 'v2 runtime setOptions.features must be an object');
         }
         if (payload.features && typeof payload.features === 'object') {
             this.applyFeatures({

@@ -3,6 +3,12 @@ function normalizePendingTool(type) {
     return String(type);
 }
 
+function createModeBridgeError(code, message) {
+    const error = new Error(message);
+    error.code = code;
+    return error;
+}
+
 function normalizeMobileMode(mode) {
     return mode === 'wire' ? 'wire' : 'select';
 }
@@ -87,10 +93,42 @@ export function readInteractionModeContext(context = null) {
     return normalizeModeContextSnapshot();
 }
 
+export function readInteractionModeContextV2(context = null) {
+    const state = readModeStoreState(context);
+    if (!state || !state.context || typeof state.context !== 'object') {
+        throw createModeBridgeError(
+            'V2_MODE_CONTEXT_REQUIRED',
+            'v2 runtime requires interaction mode store context'
+        );
+    }
+    return normalizeModeContextSnapshot(state.context);
+}
+
 export function setInteractionModeContext(context, patch = {}, options = {}) {
     if (!context) return null;
     const normalizedPatch = normalizeContextPatch(patch);
     return syncModeStore(context, normalizedPatch, options) || readModeStoreState(context);
+}
+
+export function setInteractionModeContextV2(context, patch = {}, options = {}) {
+    if (!context) {
+        throw createModeBridgeError('V2_CONTEXT_REQUIRED', 'v2 runtime requires interaction context');
+    }
+    if (patch && Object.prototype.hasOwnProperty.call(patch, 'pendingToolType')) {
+        throw createModeBridgeError(
+            'V2_LEGACY_ALIAS_FORBIDDEN',
+            'v2 runtime forbids legacy mode alias "pendingToolType"'
+        );
+    }
+    const normalizedPatch = normalizeContextPatch(patch);
+    const syncedState = syncModeStore(context, normalizedPatch, options);
+    if (!syncedState) {
+        throw createModeBridgeError(
+            'V2_MODE_STORE_SYNC_FAILED',
+            'v2 runtime requires mode store sync and does not allow legacy fallback'
+        );
+    }
+    return syncedState;
 }
 
 export function setWireToolContext(context, wireToolPatch = {}, options = {}) {

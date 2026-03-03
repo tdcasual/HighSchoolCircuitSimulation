@@ -447,3 +447,37 @@ npm run check:v2:runtime-safety
 1. `tests/aiClient.v2.responsesOnly.spec.js` 与 `tests/circuitAIAgent.spec.js` 全通过（9 tests）。
 2. `check:v2:boundaries` 通过（`[v2-architecture] ok`）。
 3. `check:v2:runtime-safety` 通过（`[v2-runtime-safety] ok`）。
+
+### Task 15: Remove legacy/fallback branches in v2 runtime paths
+
+- Status: completed
+- Started: 2026-03-03
+- Completed: 2026-03-03
+- Notes:
+  - 新增 `tests/runtime.v2NoLegacyFallback.spec.js`（fail-first），覆盖：
+    - v2 interaction mode 读取在缺少 mode store 时抛错，不读 legacy runtime 字段；
+    - v2 observation template 规范化拒绝 legacy alias；
+    - embed `setOptions` 在 v2 runtime 下对非法 mode 直接抛结构化错误。
+  - 修改 `src/app/interaction/InteractionModeBridge.js`：
+    - 新增 `readInteractionModeContextV2` / `setInteractionModeContextV2` 严格入口；
+    - 禁止 `pendingToolType` legacy alias。
+  - 修改 `src/ui/observation/ObservationState.js`：
+    - 新增 `normalizeObservationTemplateV2` 严格入口；
+    - 显式拒绝 `templateName / bindingMap / pendingToolType`。
+  - 修改 `src/embed/EmbedRuntimeBridge.js`：
+    - 新增 `normalizeModeV2Strict`；
+    - `handleSetOptions` 在 `runtimeVersion=2` 下禁用 mode silent fallback，非法配置改为显式报错。
+
+**Verification Commands**
+
+```bash
+npm test -- tests/runtime.v2NoLegacyFallback.spec.js tests/interaction.modeBridge.spec.js tests/observationState.spec.js tests/embedRuntimeBridge.spec.js
+npm run check:v2:boundaries
+npm run check:v2:runtime-safety
+```
+
+**Verification Summary**
+
+1. 以上 4 个测试文件全通过（28 tests）。
+2. `check:v2:boundaries` 通过（`[v2-architecture] ok`）。
+3. `check:v2:runtime-safety` 通过（`[v2-runtime-safety] ok`）。

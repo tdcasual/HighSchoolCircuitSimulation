@@ -20,6 +20,17 @@ export const ObservationDisplayModes = /** @type {const} */ ({
     Magnitude: 'magnitude'
 });
 const VALID_DISPLAY_MODES = new Set(Object.values(ObservationDisplayModes));
+const LEGACY_TEMPLATE_ALIAS_KEYS = new Set([
+    'templateName',
+    'bindingMap',
+    'pendingToolType'
+]);
+
+function createObservationStateError(code, message) {
+    const error = new Error(message);
+    error.code = code;
+    return error;
+}
 
 function normalizeObservationUI(rawUI) {
     const mode = rawUI?.mode === ObservationUIModes.Advanced
@@ -250,6 +261,24 @@ export function normalizeObservationTemplate(rawTemplate, options = {}) {
         ui: normalizedState.ui,
         bindings: normalizeObservationTemplateBindings(bindingsRaw)
     };
+}
+
+export function assertNoLegacyObservationTemplateAliases(rawTemplate) {
+    const template = rawTemplate && typeof rawTemplate === 'object' ? rawTemplate : {};
+    for (const key of Object.keys(template)) {
+        if (LEGACY_TEMPLATE_ALIAS_KEYS.has(key)) {
+            throw createObservationStateError(
+                'OBS_V2_LEGACY_ALIAS_FORBIDDEN',
+                `v2 observation template forbids legacy alias "${key}"`
+            );
+        }
+    }
+    return true;
+}
+
+export function normalizeObservationTemplateV2(rawTemplate, options = {}) {
+    assertNoLegacyObservationTemplateAliases(rawTemplate);
+    return normalizeObservationTemplate(rawTemplate, options);
 }
 
 export function shouldSampleAtTime(currentTimeSec, lastSampleTimeSec, sampleIntervalMs) {
