@@ -59,12 +59,13 @@ export function handleWireEndpointDragMouseUp(e) {
                 b: targetPoint
             };
             const originRef = drag.primaryOriginRef;
+            const originComponentId = originRef?.componentId;
             const originTerminalIndex = Number(originRef?.terminalIndex);
-            if (originRef && typeof originRef.componentId === 'string'
+            if (originComponentId !== undefined && originComponentId !== null
                 && Number.isInteger(originTerminalIndex)
                 && originTerminalIndex >= 0) {
                 bridgeWire.aRef = {
-                    componentId: originRef.componentId,
+                    componentId: String(originComponentId),
                     terminalIndex: originTerminalIndex
                 };
             }

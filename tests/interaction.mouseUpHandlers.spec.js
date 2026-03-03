@@ -363,6 +363,46 @@ describe('InteractionOrchestratorMouseUpHandlers.handleWireEndpointDragMouseUp',
         expect(context.commitHistoryTransaction).toHaveBeenCalledTimes(1);
         expect(context.pointerDownInfo).toBeNull();
     });
+
+    it('keeps bridge wire terminal binding when origin ref uses numeric componentId', () => {
+        const addWire = vi.fn();
+        const context = {
+            isDraggingWireEndpoint: true,
+            wireEndpointDrag: {
+                wireId: 'W1',
+                end: 'a',
+                affected: [{ wireId: 'W2', end: 'a' }],
+                lastSnap: { type: 'wire-endpoint', wireId: 'W2', end: 'b' },
+                lastPoint: { x: 30, y: 0 },
+                origin: { x: 0, y: 0 },
+                primaryOriginRef: { componentId: 1, terminalIndex: 0 }
+            },
+            endpointAutoBridgeMode: 'on',
+            resolvePointerType: vi.fn(() => 'touch'),
+            renderer: { clearTerminalHighlight: vi.fn(), addWire: vi.fn() },
+            selectedWire: 'W1',
+            compactWiresAndRefresh: vi.fn(() => ({ resolvedWireId: 'W1' })),
+            resolveCompactedWireId: vi.fn((id) => id),
+            circuit: {
+                getWire: vi.fn(() => null),
+                addWire,
+                rebuildNodes: vi.fn()
+            },
+            commitHistoryTransaction: vi.fn(),
+            pointerDownInfo: { componentId: 'R1' },
+            wireStart: null
+        };
+
+        const handled = handleWireEndpointDragMouseUp.call(context, { target: {} });
+
+        expect(handled).toBe(true);
+        expect(addWire).toHaveBeenCalledTimes(1);
+        const bridged = addWire.mock.calls[0][0];
+        expect(bridged.aRef).toEqual({
+            componentId: '1',
+            terminalIndex: 0
+        });
+    });
 });
 
 describe('InteractionOrchestratorMouseUpHandlers.handleWireDragMouseUp', () => {

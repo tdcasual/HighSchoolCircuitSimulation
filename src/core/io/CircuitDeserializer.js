@@ -63,6 +63,17 @@ function applyComponentProperties(comp, properties) {
     }
 }
 
+function normalizeWireTerminalRef(ref) {
+    if (!ref || typeof ref !== 'object') return null;
+    if (ref.componentId === undefined || ref.componentId === null) return null;
+    const terminalIndex = Number(ref.terminalIndex);
+    if (!Number.isInteger(terminalIndex) || terminalIndex < 0) return null;
+    return {
+        componentId: String(ref.componentId),
+        terminalIndex
+    };
+}
+
 export class CircuitDeserializer {
     static deserialize(json, options = {}) {
         CircuitSchemaGateway.validate(json);
@@ -157,10 +168,12 @@ export class CircuitDeserializer {
             const a = safePoint(wireData.a);
             const b = safePoint(wireData.b);
             if (!a || !b) continue;
-            const id = ensureUniqueWireId(wireData.id);
+            const id = ensureUniqueWireId(String(wireData.id));
             const wire = { id, a, b };
-            if (wireData.aRef) wire.aRef = wireData.aRef;
-            if (wireData.bRef) wire.bRef = wireData.bRef;
+            const aRef = normalizeWireTerminalRef(wireData.aRef);
+            const bRef = normalizeWireTerminalRef(wireData.bRef);
+            if (aRef) wire.aRef = aRef;
+            if (bRef) wire.bRef = bRef;
             wires.set(id, wire);
         }
 

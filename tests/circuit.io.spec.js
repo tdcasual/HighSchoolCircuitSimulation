@@ -170,6 +170,53 @@ describe('Circuit IO gateway', () => {
         expect(loaded.components.find((component) => component.id === 'V1')?.x).toBe(0);
     });
 
+    it('keeps probes when payload uses numeric wire ids by normalizing wire ids to strings', () => {
+        const payload = {
+            meta: {
+                version: 3,
+                name: 'numeric-wire-id',
+                timestamp: 1760000000000
+            },
+            components: [
+                {
+                    id: 'V1',
+                    type: 'PowerSource',
+                    x: 0,
+                    y: 0,
+                    properties: { voltage: 3, internalResistance: 1 }
+                },
+                {
+                    id: 'R1',
+                    type: 'Resistor',
+                    x: 100,
+                    y: 0,
+                    properties: { resistance: 8 }
+                }
+            ],
+            wires: [{
+                id: 1,
+                a: { x: 0, y: 0 },
+                b: { x: 100, y: 0 },
+                aRef: { componentId: 'V1', terminalIndex: 0 },
+                bRef: { componentId: 'R1', terminalIndex: 0 }
+            }],
+            probes: [{
+                id: 'P1',
+                type: 'WireCurrentProbe',
+                wireId: '1'
+            }]
+        };
+
+        const loaded = CircuitDeserializer.deserialize(payload);
+
+        expect(loaded.wires[0]?.id).toBe('1');
+        expect(loaded.probes).toHaveLength(1);
+        expect(loaded.probes[0]).toMatchObject({
+            id: 'P1',
+            wireId: '1'
+        });
+    });
+
     it('loads and runs all classroom scenario presets', () => {
         const scenarios = getClassroomScenarioPack();
         expect(scenarios).toHaveLength(6);
