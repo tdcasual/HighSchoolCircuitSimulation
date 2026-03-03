@@ -176,3 +176,35 @@ npm run check:v2:runtime-safety
 1. `tests/domain.circuitModelV2.spec.js` 通过（2 tests）。
 2. `check:v2:boundaries` 通过（`[v2-architecture] ok`）。
 3. `check:v2:runtime-safety` 通过（`[v2-runtime-safety] ok`）。
+
+### Task 6: Add schema v3 strict validator (no legacy aliases)
+
+- Status: completed
+- Started: 2026-03-03
+- Completed: 2026-03-03
+- Notes:
+  - 新增 `tests/circuitSchema.v3.spec.js`（fail-first）：
+    - 接受 canonical schema v3；
+    - 拒绝 legacy 字段 `templateName / bindingMap / pendingToolType`；
+    - 拒绝 legacy wire alias（`start/end`）与未知顶层字段。
+  - 新增 `src/v2/infra/io/CircuitSchemaV3.js`，实现 `validateCircuitV3(payload)` 严格校验：
+    - 顶层/子对象白名单键约束；
+    - 版本必须为 v3；
+    - 全量 legacy alias 递归禁用。
+  - 新增 `src/v2/infra/io/CircuitDeserializerV3.js`：
+    - 反序列化前强制走 `validateCircuitV3`；
+    - 仅接受 canonical 字段并输出规范化 DTO。
+
+**Verification Commands**
+
+```bash
+npm test -- tests/circuitSchema.v3.spec.js
+npm run check:v2:boundaries
+npm run check:v2:runtime-safety
+```
+
+**Verification Summary**
+
+1. `tests/circuitSchema.v3.spec.js` 通过（3 tests）。
+2. `check:v2:boundaries` 通过（`[v2-architecture] ok`）。
+3. `check:v2:runtime-safety` 通过（`[v2-runtime-safety] ok`）。

@@ -1,0 +1,82 @@
+import { describe, expect, it } from 'vitest';
+import { validateCircuitV3 } from '../src/v2/infra/io/CircuitSchemaV3.js';
+import { CircuitDeserializerV3 } from '../src/v2/infra/io/CircuitDeserializerV3.js';
+
+const validV3Payload = {
+    meta: {
+        version: 3,
+        name: 'v3-circuit',
+        timestamp: 1760000000000
+    },
+    components: [
+        {
+            id: 'V1',
+            type: 'PowerSource',
+            x: 120,
+            y: 120,
+            rotation: 0,
+            properties: {
+                voltage: 3,
+                internalResistance: 2
+            }
+        },
+        {
+            id: 'R1',
+            type: 'Resistor',
+            x: 320,
+            y: 120,
+            rotation: 0,
+            properties: {
+                resistance: 8
+            }
+        }
+    ],
+    wires: [
+        {
+            id: 'W1',
+            a: { x: 140, y: 120 },
+            b: { x: 300, y: 120 },
+            aRef: { componentId: 'V1', terminalIndex: 0 },
+            bRef: { componentId: 'R1', terminalIndex: 0 }
+        }
+    ],
+    probes: []
+};
+
+describe('CircuitSchema v3 strict validator', () => {
+    it('accepts canonical schema v3 payload', () => {
+        expect(validateCircuitV3(validV3Payload)).toBe(true);
+        const deserialized = CircuitDeserializerV3.deserialize(validV3Payload);
+        expect(deserialized.meta.version).toBe(3);
+        expect(deserialized.components).toHaveLength(2);
+        expect(deserialized.wires).toHaveLength(1);
+    });
+
+    it('rejects legacy alias fields', () => {
+        const legacyTemplate = { ...validV3Payload, templateName: 'legacy' };
+        const legacyBinding = { ...validV3Payload, bindingMap: [] };
+        const legacyPendingTool = { ...validV3Payload, pendingToolType: 'wire' };
+
+        expect(() => validateCircuitV3(legacyTemplate)).toThrow(/templateName/u);
+        expect(() => validateCircuitV3(legacyBinding)).toThrow(/bindingMap/u);
+        expect(() => validateCircuitV3(legacyPendingTool)).toThrow(/pendingToolType/u);
+    });
+
+    it('rejects legacy wire aliases and unknown top-level keys', () => {
+        const legacyWire = {
+            ...validV3Payload,
+            wires: [{
+                id: 'W1',
+                start: { componentId: 'V1', terminalIndex: 0 },
+                end: { componentId: 'R1', terminalIndex: 0 }
+            }]
+        };
+        const withUnknown = {
+            ...validV3Payload,
+            compatMode: true
+        };
+
+        expect(() => validateCircuitV3(legacyWire)).toThrow(/wire\.a|wire\.b|start|end/u);
+        expect(() => validateCircuitV3(withUnknown)).toThrow(/compatMode/u);
+    });
+});
