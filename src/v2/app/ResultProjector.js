@@ -9,7 +9,13 @@ function toFiniteNumber(value, fallback = 0) {
 }
 
 function resolveCurrentsMap(currents) {
-    if (currents instanceof Map) return new Map(currents);
+    if (currents instanceof Map) {
+        const normalized = new Map();
+        for (const [key, value] of currents.entries()) {
+            normalized.set(String(key), value);
+        }
+        return normalized;
+    }
     if (currents && typeof currents === 'object') {
         return new Map(Object.entries(currents));
     }

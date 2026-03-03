@@ -35,12 +35,21 @@ export function buildObservationExportMetadata(panel, options = {}) {
 
     const plots = Array.isArray(panel.plots) ? panel.plots : [];
     lines.push(`图像数量: ${plots.length}`);
+
+    const normalizeLabelValue = (value) => {
+        if (value === undefined || value === null) return '';
+        return String(value);
+    };
+
     const resolveSourceLabel = typeof panel.resolveSourceLabel === 'function'
         ? panel.resolveSourceLabel.bind(panel)
-        : (sourceId) => String(sourceId || '');
+        : (sourceId) => normalizeLabelValue(sourceId);
     const resolveQuantityLabel = typeof panel.resolveQuantityLabel === 'function'
         ? panel.resolveQuantityLabel.bind(panel)
-        : (_sourceId, quantityId) => String(quantityId || '未知量');
+        : (_sourceId, quantityId) => {
+            const text = normalizeLabelValue(quantityId);
+            return text || '未知量';
+        };
 
     plots.forEach((plot, index) => {
         const title = typeof plot?.name === 'string' && plot.name.trim()

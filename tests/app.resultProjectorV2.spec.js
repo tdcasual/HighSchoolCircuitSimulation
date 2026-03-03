@@ -93,4 +93,28 @@ describe('ResultProjector v2', () => {
         expect(viewModel.components[0].measurements.current).toBe(0);
         expect(viewModel.components[0].measurements.power).toBe(0);
     });
+
+    it('normalizes numeric current-map keys to component string ids', () => {
+        let model = CircuitModel.empty();
+        model = addComponent(model, {
+            id: 0,
+            type: 'Resistor',
+            nodes: [1, 0],
+            resistance: 8
+        });
+
+        const viewModel = projectResultV2({
+            circuitModel: model,
+            solveResult: {
+                valid: true,
+                voltages: [0, 2.4],
+                currents: new Map([[0, 0.3]]),
+                diagnostics: { code: '', warnings: [] }
+            }
+        });
+
+        expect(viewModel.components[0].id).toBe('0');
+        expect(viewModel.components[0].status).toBe('ok');
+        expect(viewModel.components[0].measurements.current).toBeCloseTo(0.3, 12);
+    });
 });
