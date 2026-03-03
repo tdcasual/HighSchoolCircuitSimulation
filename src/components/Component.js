@@ -27,6 +27,7 @@ import {
     updateWirePath as updateWireSvgPath,
     updateWirePathWithGroup as updateWireSvgPathWithGroup
 } from './render/ComponentWireRenderer.js';
+import { renderLegacyComponent } from './render/legacy/RendererRegistryLegacy.js';
 import {
     updateParallelPlateCapacitorVisualRuntime,
     updateValueDisplayRuntime
@@ -117,72 +118,7 @@ export const SVGRenderer = {
         // 禁用原生拖放，防止触发 drop 事件
         g.setAttribute('draggable', 'false');
         
-        // 根据类型渲染不同的元器件
-        switch (comp.type) {
-            case 'Ground':
-                this.renderGround(g, comp);
-                break;
-            case 'PowerSource':
-                this.renderPowerSource(g, comp);
-                break;
-            case 'ACVoltageSource':
-                this.renderACVoltageSource(g, comp);
-                break;
-            case 'Resistor':
-                this.renderResistor(g, comp);
-                break;
-            case 'Diode':
-                this.renderDiode(g, comp);
-                break;
-            case 'LED':
-                this.renderLED(g, comp);
-                break;
-            case 'Thermistor':
-                this.renderThermistor(g, comp);
-                break;
-            case 'Photoresistor':
-                this.renderPhotoresistor(g, comp);
-                break;
-            case 'Relay':
-                this.renderRelay(g, comp);
-                break;
-            case 'Rheostat':
-                this.renderRheostat(g, comp);
-                break;
-            case 'Bulb':
-                this.renderBulb(g, comp);
-                break;
-            case 'Capacitor':
-                this.renderCapacitor(g, comp);
-                break;
-            case 'Inductor':
-                this.renderInductor(g, comp);
-                break;
-            case 'ParallelPlateCapacitor':
-                this.renderParallelPlateCapacitor(g, comp);
-                break;
-            case 'Motor':
-                this.renderMotor(g, comp);
-                break;
-            case 'Switch':
-                this.renderSwitch(g, comp);
-                break;
-            case 'SPDTSwitch':
-                this.renderSPDTSwitch(g, comp);
-                break;
-            case 'Fuse':
-                this.renderFuse(g, comp);
-                break;
-            case 'Ammeter':
-                this.renderAmmeter(g, comp);
-                break;
-            case 'Voltmeter':
-                this.renderVoltmeter(g, comp);
-                break;
-            case 'BlackBox':
-                this.renderBlackBox(g, comp);
-                break;
-        }
+        renderLegacyComponent(this, g, comp);
         
         // 添加数值显示
         this.addValueDisplay(g, comp);

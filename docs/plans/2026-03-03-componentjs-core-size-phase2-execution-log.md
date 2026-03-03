@@ -96,3 +96,29 @@ npm test -- tests/component.wireRenderer.spec.js tests/component.touchTargets.sp
 
 1. `component.wireRenderer` 新测试通过（2 tests）。
 2. `component.touchTargets` 与 `renderer.valueSnapshot` 回归通过（15 tests）。
+
+### Task 4: Split Symbol Renderers by Type Group
+
+- Status: completed
+- Started: 2026-03-03
+- Completed: 2026-03-03
+- Notes:
+  - 新增 legacy renderer 分组映射：
+    - `SourceRenderers.js`
+    - `PassiveRenderers.js`
+    - `ControlRenderers.js`
+    - `InstrumentRenderers.js`
+  - 新增 `RendererRegistryLegacy.js`，统一维护 `type -> methodName` 映射与分派函数。
+  - `Component.js#createComponentGroup` 由大 switch 改为 `renderLegacyComponent(...)` 分派。
+  - 新增 `tests/component.rendererDispatch.spec.js`，锁定 dispatch 契约与未知类型行为。
+
+**Verification Commands**
+
+```bash
+npm test -- tests/component.rendererDispatch.spec.js tests/component.touchTargets.spec.js tests/interaction.measurementReadoutController.spec.js
+```
+
+**Verification Summary**
+
+1. `component.rendererDispatch` 新测试通过（3 tests）。
+2. touch target 与测量读数控制器回归通过（14 tests）。
