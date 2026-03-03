@@ -237,3 +237,35 @@ npm run check:v2:runtime-safety
 1. `tests/simulation.stateV2.spec.js` 通过（3 tests）。
 2. `check:v2:boundaries` 通过（`[v2-architecture] ok`）。
 3. `check:v2:runtime-safety` 通过（`[v2-runtime-safety] ok`）。
+
+### Task 8: Implement pure solve entrypoint
+
+- Status: completed
+- Started: 2026-03-03
+- Completed: 2026-03-03
+- Notes:
+  - 新增 `tests/solver.v2.purity.spec.js`（fail-first）：
+    - `solveCircuitV2` 仅接受 DTO + state + options；
+    - 不改写输入 DTO（含潜在 `source` 泄漏字段）。
+  - 新增 `tests/solver.v2.commonCases.spec.js`（fail-first）：
+    - 验证基准算例（3V + 2Ω 内阻电源串 8Ω 负载）输出稳定。
+  - 新增 `src/v2/simulation/SolveCircuitV2.js`：
+    - 纯函数求解入口，输入 DTO，内部深拷贝后构建 MNA 线性系统；
+    - 支持线性电阻 + 电源（含内阻诺顿等效与理想电压源）；
+    - 输出 `{valid, voltages, currents, nextState, diagnostics}`。
+  - 新增 `src/v2/simulation/ResultPostprocessorV2.js`：
+    - 独立计算分支电流映射，避免依赖 legacy component source。
+
+**Verification Commands**
+
+```bash
+npm test -- tests/solver.v2.purity.spec.js tests/solver.v2.commonCases.spec.js
+npm run check:v2:boundaries
+npm run check:v2:runtime-safety
+```
+
+**Verification Summary**
+
+1. `tests/solver.v2.purity.spec.js` 与 `tests/solver.v2.commonCases.spec.js` 全通过（2 tests）。
+2. `check:v2:boundaries` 通过（`[v2-architecture] ok`）。
+3. `check:v2:runtime-safety` 通过（`[v2-runtime-safety] ok`）。
