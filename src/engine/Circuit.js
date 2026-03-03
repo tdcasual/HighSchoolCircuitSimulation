@@ -17,6 +17,8 @@ import { NetlistBuilder } from '../core/simulation/NetlistBuilder.js';
 import { createRuntimeLogger } from '../utils/Logger.js';
 import { CircuitPersistenceAdapter } from './runtime/CircuitPersistenceAdapter.js';
 import { CircuitDiagnosticsAdapter } from './runtime/CircuitDiagnosticsAdapter.js';
+import { CircuitTopologyService } from './services/CircuitTopologyService.js';
+import { CircuitSimulationLoopService } from './services/CircuitSimulationLoopService.js';
 import {
     getWireCurrentInfo as getWireCurrentInfoViaService,
     isWireInShortCircuit as isWireInShortCircuitViaService,
@@ -60,6 +62,8 @@ export class Circuit {
         this.nodeBuilder = new NodeBuilder();
         this.wireCompactor = new WireCompactor();
         this.connectivityCache = new ConnectivityCache();
+        this.topologyService = new CircuitTopologyService();
+        this.simulationLoopService = new CircuitSimulationLoopService();
         this.componentTerminalTopologyKeys = new Map(); // componentId -> topology key used for terminal geometry cache
         this.terminalWorldPosCache = new Map(); // componentId -> Map(terminalIndex -> {x,y})
         this.simulationState = new SimulationState();
@@ -363,79 +367,7 @@ export class Circuit {
      * 使用并查集算法合并连接的端点
      */
     rebuildNodes() {
-        // Keep any terminal-bound wire endpoints synced to the current terminal geometry
-        // before we rebuild the coordinate-based connectivity graph.
-        this.syncWireEndpointsToTerminalRefs();
-
-        // Invalidate stale terminal geometry cache entries for removed components.
-        for (const cachedId of Array.from(this.componentTerminalTopologyKeys.keys())) {
-            if (!this.components.has(cachedId)) {
-                this.componentTerminalTopologyKeys.delete(cachedId);
-                this.terminalWorldPosCache.delete(cachedId);
-            }
-        }
-
-        // Refresh per-component terminal geometry cache keys.
-        for (const [id, comp] of this.components) {
-            const nextKey = this.buildComponentTerminalTopologyKey(comp);
-            const prevKey = this.componentTerminalTopologyKeys.get(id);
-            if (prevKey !== nextKey) {
-                this.componentTerminalTopologyKeys.set(id, nextKey);
-                this.terminalWorldPosCache.delete(id);
-            }
-        }
-
-        const topology = this.nodeBuilder.build({
-            components: this.components,
-            wires: this.wires,
-            getTerminalWorldPosition: (componentId, terminalIndex, comp) =>
-                this.getTerminalWorldPositionCached(componentId, terminalIndex, comp)
-        });
-        this.terminalConnectionMap = topology.terminalConnectionMap;
-        this.nodes = topology.nodes;
-
-        // Debug: print node to terminal mapping.
-        if (this.debugMode) {
-            this.logger?.debug?.('--- Node mapping ---');
-            const nodeTerminals = Array.from({ length: this.nodes.length }, () => []);
-            for (const [id, comp] of this.components) {
-                const append = (node, terminalIdx) => {
-                    if (node !== undefined && node >= 0) {
-                        nodeTerminals[node].push(`${id}:${terminalIdx}`);
-                    }
-                };
-                (comp.nodes || []).forEach((node, terminalIdx) => append(node, terminalIdx));
-            }
-            nodeTerminals.forEach((ts, idx) => {
-                this.logger?.debug?.(`node ${idx}: ${ts.join(', ')}`);
-            });
-        }
-
-        // Topology changed: clear flow cache
-        this._wireFlowCache = { version: null, map: new Map() };
-
-        // Detect rheostat connection modes (based on terminal degrees)
-        this.detectRheostatConnections();
-
-        // Track nodes that contain a shorted power source (both terminals on the same electrical node).
-        const shorted = new Set();
-        const shortedSources = new Set();
-        for (const comp of this.components.values()) {
-            if (comp.type !== 'PowerSource' && comp.type !== 'ACVoltageSource') continue;
-            const n0 = comp.nodes?.[0];
-            const n1 = comp.nodes?.[1];
-            if (n0 !== undefined && n0 >= 0 && n0 === n1) {
-                shorted.add(n0);
-                shortedSources.add(comp.id);
-            }
-        }
-        this.shortedPowerNodes = shorted;
-        this.shortedSourceIds = shortedSources;
-        this.shortedWireIds = new Set();
-        this.shortCircuitCacheVersion = null;
-        this.topologyVersion += 1;
-        this.refreshComponentConnectivityCache();
-        this.markSolverCircuitDirty();
+        this.topologyService.rebuild(this);
     }
 
     /**
@@ -611,16 +543,7 @@ export class Circuit {
      * @returns {number}
      */
     getSimulationSubstepCount(stepDt = this.dt) {
-        const dt = Number.isFinite(stepDt) && stepDt > 0
-            ? stepDt
-            : (Number.isFinite(this.dt) && this.dt > 0 ? this.dt : 0.01);
-        const maxFrequency = this.getMaxConnectedAcFrequencyHz();
-        if (!Number.isFinite(maxFrequency) || maxFrequency <= 0) return 1;
-
-        const samplesPerCycle = Math.max(4, Math.floor(this.minAcSamplesPerCycle || 40));
-        const maxSubsteps = Math.max(1, Math.floor(this.maxAcSubstepsPerStep || 200));
-        const requiredSubsteps = Math.ceil(dt * maxFrequency * samplesPerCycle);
-        return Math.max(1, Math.min(maxSubsteps, requiredSubsteps));
+        return this.simulationLoopService.getSimulationSubstepCount(this, stepDt);
     }
 
     getAdaptiveDtBounds() {
@@ -643,16 +566,7 @@ export class Circuit {
     }
 
     resolveSimulationStepDt() {
-        const { minDt, maxDt, baseDt } = this.getAdaptiveDtBounds();
-        if (!this.enableAdaptiveTimeStep) {
-            this.currentDt = baseDt;
-            return baseDt;
-        }
-        const current = Number.isFinite(this.currentDt) && this.currentDt > 0
-            ? this.currentDt
-            : baseDt;
-        this.currentDt = Math.max(minDt, Math.min(maxDt, current));
-        return this.currentDt;
+        return this.simulationLoopService.resolveSimulationStepDt(this);
     }
 
     updateAdaptiveTimeStep(results) {
@@ -1101,26 +1015,9 @@ export class Circuit {
         if (!this.isRunning) return;
 
         // 仅在拓扑或关键参数变化后重建 setCircuit，稳定运行时复用已准备结构
-        this.ensureSolverPrepared();
-        this.solver.debugMode = this.debugMode;
-        
-        // 交流电路子步进：避免 dt 与交流周期相位锁定导致采样失真
-        const stepDt = this.resolveSimulationStepDt();
-        const substepCount = this.getSimulationSubstepCount(stepDt);
-        const substepDt = stepDt / substepCount;
-        let latestResults = null;
-
-        for (let index = 0; index < substepCount; index++) {
-            const substepResults = this.solver.solve(substepDt, this.simTime);
-            latestResults = substepResults;
-            if (!substepResults.valid) break;
-
-            this.simTime += substepDt;
-            this.solver.updateDynamicComponents(substepResults.voltages, substepResults.currents);
-            this.syncSimulationStateToComponents();
-        }
-        this.lastResults = latestResults || { voltages: [], currents: new Map(), valid: false };
-        this.updateAdaptiveTimeStep(this.lastResults);
+        // 并按子步推进求解与动态状态更新。
+        const loopResult = this.simulationLoopService.runStep(this);
+        this.lastResults = loopResult.lastResults;
         
         // 调试输出
         if (this.debugMode) {

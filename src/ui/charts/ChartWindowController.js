@@ -1,4 +1,5 @@
 import { createElement } from '../../utils/SafeDOM.js';
+import { safeInvoke } from '../../utils/RuntimeSafety.js';
 import {
     applyTransform,
     computeNiceTicks,
@@ -14,15 +15,7 @@ import {
     TIME_SOURCE_ID
 } from '../observation/ObservationSources.js';
 
-function safeInvokeMethod(target, methodName, ...args) {
-    const fn = target?.[methodName];
-    if (typeof fn !== 'function') return undefined;
-    try {
-        return fn.apply(target, args);
-    } catch (_) {
-        return undefined;
-    }
-}
+const safeInvokeMethod = (target, methodName, ...args) => safeInvoke(target, methodName, args);
 
 function setSelectOptions(selectEl, options, selectedId) {
     if (!selectEl) return null;

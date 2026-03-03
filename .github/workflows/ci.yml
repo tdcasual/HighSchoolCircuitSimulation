@@ -44,6 +44,12 @@ jobs:
       - name: Check CI workflow coverage
         run: node scripts/ci/assert-ci-workflow-coverage.mjs
 
+      - name: Build frontend artifacts
+        run: npm run build:frontend
+
+      - name: Check bundle size budget
+        run: npm run check:bundle-size
+
       - name: Run reliability regression gate
         run: npm run test:reliability
 

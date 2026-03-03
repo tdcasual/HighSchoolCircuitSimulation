@@ -1,6 +1,7 @@
 import {
     safeAddEventListener,
     safeClassListToggle,
+    safeInvoke,
     safeSetAttribute
 } from '../utils/RuntimeSafety.js';
 
@@ -61,6 +62,9 @@ export class TopActionMenuController {
                 ? target.closest('.top-action-more-item')
                 : null;
             if (menuItem) {
+                if (menuItem.id === 'btn-mobile-ai-assistant') {
+                    safeInvoke(this.app, 'openAIPanel');
+                }
                 this.setOpen(false);
             }
         });

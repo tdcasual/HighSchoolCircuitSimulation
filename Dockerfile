@@ -1,20 +1,13 @@
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY . .
+RUN npm run build:frontend
+
 FROM nginx:1.27-alpine
-
-# Set working directory
-WORKDIR /usr/share/nginx/html
-
-# Copy nginx configuration
 COPY nginx.conf /etc/nginx/conf.d/default.conf
-
-# Copy static assets
-COPY index.html ./ 
-COPY viewer.html ./
-COPY embed.html ./
-COPY embed.js ./
-COPY deploycircuit.js ./
-COPY css ./css
-COPY src ./src
-
+COPY --from=builder /app/dist/ /usr/share/nginx/html/
 EXPOSE 80
-
 CMD ["nginx", "-g", "daemon off;"]

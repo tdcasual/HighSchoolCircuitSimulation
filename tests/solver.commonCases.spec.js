@@ -2,6 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { addComponent, connectWire, createTestCircuit, solveCircuit } from './helpers/circuitTestUtils.js';
 
 describe('Solver common circuit cases', () => {
+    it('exposes simulation loop service for step orchestration', () => {
+        const circuit = createTestCircuit();
+        expect(circuit.simulationLoopService).toBeTruthy();
+        expect(typeof circuit.simulationLoopService.runStep).toBe('function');
+    });
+
     it('keeps divider voltage unchanged with an ideal voltmeter', () => {
         const circuit = createTestCircuit();
         const source = addComponent(circuit, 'PowerSource', 'V1', { voltage: 12, internalResistance: 0 });

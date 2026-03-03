@@ -233,28 +233,34 @@ async function runScenario(browser, baseUrl) {
         const page = await context.newPage();
         await installCdnStubs(page);
         await page.goto(baseUrl, { waitUntil: 'domcontentloaded' });
-        await page.waitForFunction(() => Boolean(window.app?.aiPanel && window.app?.responsiveLayout));
+        await page.waitForFunction(() => Boolean(window.app?.openAIPanel && window.app?.responsiveLayout));
 
-        const collapsedState = await measureMobileAiLayout(page);
-        await capture(page, `ai-mobile-${scenario.name}-collapsed.png`);
+        const preOpenState = await page.evaluate(() => {
+            const body = document.body;
+            return {
+                modePhone: body?.classList?.contains('layout-mode-phone') || false,
+                hasLazyOpenAction: typeof window.app?.openAIPanel === 'function',
+                aiPanelLoaded: Boolean(window.app?.aiPanel),
+                hasFabButton: Boolean(document.getElementById('ai-fab-btn'))
+            };
+        });
+        await capture(page, `ai-mobile-${scenario.name}-before-open.png`);
 
-        assertCondition(collapsedState.modePhone, `${scenario.name}: viewport should be phone mode`);
-        assertCondition(collapsedState.panelCollapsed, `${scenario.name}: AI panel should start collapsed`);
-        assertNoOverlap(
-            `${scenario.name}: Collapsed AI panel and mobile controls`,
-            collapsedState.panelRect,
-            collapsedState.controlsRect
-        );
-        assertNoOverlap(
-            `${scenario.name}: Collapsed AI panel and status bar`,
-            collapsedState.panelRect,
-            collapsedState.statusRect
-        );
+        assertCondition(preOpenState.modePhone, `${scenario.name}: viewport should be phone mode`);
+        assertCondition(preOpenState.hasLazyOpenAction, `${scenario.name}: app should expose openAIPanel lazy trigger`);
+        assertCondition(preOpenState.hasFabButton, `${scenario.name}: ai-fab-btn should exist`);
+        assertCondition(!preOpenState.aiPanelLoaded, `${scenario.name}: aiPanel should lazy load on first open`);
 
-        await page.click('#ai-fab-btn');
+        const fabClicked = await page.evaluate(() => {
+            const button = document.getElementById('ai-fab-btn');
+            button?.click?.();
+            return Boolean(button);
+        });
+        assertCondition(fabClicked, `${scenario.name}: ai-fab-btn should exist before opening AI panel`);
         await page.waitForFunction(() => {
+            const app = window.app;
             const panel = document.getElementById('ai-assistant-panel');
-            return panel && !panel.classList.contains('collapsed');
+            return Boolean(app?.aiPanel && panel && !panel.classList.contains('collapsed'));
         });
         await page.waitForFunction(() => {
             const panel = document.getElementById('ai-assistant-panel');

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Circuit } from '../src/engine/Circuit.js';
 import { InteractionManager } from '../src/ui/Interaction.js';
+import { getComponentHitBox } from '../src/components/geometry/ComponentGeometry.js';
 
 function createInteractionModeStore(modeContext = {}) {
     return {
@@ -18,6 +19,16 @@ function createInteractionModeStore(modeContext = {}) {
 }
 
 describe('Interaction wire segment snap/split helpers', () => {
+    it('keeps switch touch hit-box consistent with mobile target budget', () => {
+        const hitBox = getComponentHitBox({ type: 'Switch' });
+        expect(hitBox).toEqual({
+            x: -22,
+            y: -22,
+            width: 44,
+            height: 44
+        });
+    });
+
     it('enables wire segment snapping when starting wiring from a point', () => {
         const snapPoint = vi.fn(() => ({ x: 20, y: 30, snap: { type: 'wire-segment', wireId: 'W1' } }));
         const updateTempWire = vi.fn();

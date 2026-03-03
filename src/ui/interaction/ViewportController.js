@@ -1,12 +1,6 @@
-function safeInvokeMethod(target, methodName, ...args) {
-    const fn = target?.[methodName];
-    if (typeof fn !== 'function') return undefined;
-    try {
-        return fn.apply(target, args);
-    } catch (_) {
-        return undefined;
-    }
-}
+import { safeInvoke } from '../../utils/RuntimeSafety.js';
+
+const safeInvokeMethod = (target, methodName, ...args) => safeInvoke(target, methodName, args);
 
 function safeGetBoundingClientRect(node) {
     const rect = safeInvokeMethod(node, 'getBoundingClientRect');
