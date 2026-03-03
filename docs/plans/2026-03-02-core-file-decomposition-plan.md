@@ -4,10 +4,10 @@
 
 当前核心文件规模（ObservationPanel 已下线）：
 
-- `src/engine/Circuit.js`: 1962 行
-- `src/components/Component.js`: 1650 行
-- `src/ui/charts/ChartWindowController.js`: 606 行
-- `src/app/interaction/InteractionOrchestrator.js`: 187 行
+- `src/engine/Circuit.js`: 1859 行
+- `src/components/Component.js`: 1122 行
+- `src/ui/charts/ChartWindowController.js`: 600 行
+- `src/app/interaction/InteractionOrchestrator.js`: 189 行
 
 这些文件继续增长会显著提高回归成本和合并冲突概率。
 
@@ -16,7 +16,7 @@
 已新增 `scripts/ci/assert-core-file-size-budget.mjs` 并接入 `npm run check`，限制上限：
 
 - `Circuit.js <= 2000`
-- `Component.js <= 1700`
+- `Component.js <= 1500`
 - `ChartWindowController.js <= 700`
 - `InteractionOrchestrator.js <= 400`
 
@@ -57,3 +57,10 @@
 - 目标：清除 `check:core-size` 中 `src/components/Component.js` 95% warning，并将拆分颗粒细化到可独立执行任务。
 - 计划文档：`docs/plans/2026-03-03-componentjs-core-size-phase2-implementation.md`
 - 执行方式：按 Task 0~6 单任务单提交推进，优先顺序 `T1 -> T2 -> T3 -> T4 -> T5 -> T6`。
+
+### Phase2 执行结果（2026-03-03）
+
+1. `Component.js` 已从 1617 行降至 1122 行（`check:core-size` 从 warning 变为 ok）。
+2. `ComponentCatalog` / `ComponentFactory` / `ComponentSvgPrimitives` / `ComponentWireRenderer` / `ComponentValueDisplayRenderer` 已拆出。
+3. `createComponentGroup` 分派已从大 switch 收敛为 registry 映射。
+4. 预算已收紧到 `Component.js <= 1500`，并通过 `check` 与 `check:e2e` 全量验证。

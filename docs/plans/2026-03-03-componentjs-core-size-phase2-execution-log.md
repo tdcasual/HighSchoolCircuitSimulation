@@ -147,3 +147,27 @@ npm test -- tests/component.valueDisplayRenderer.spec.js tests/valueDisplayLayou
 
 1. `component.valueDisplayRenderer` 新测试通过（1 test）。
 2. value layout / render safety / renderer snapshot 回归通过（19 tests）。
+
+### Task 6: Tighten Budget + Closeout
+
+- Status: completed
+- Started: 2026-03-03
+- Completed: 2026-03-03
+- Notes:
+  - 将 `scripts/ci/assert-core-file-size-budget.mjs` 中 `Component.js` 预算从 `1700` 下调至 `1500`。
+  - 更新 `docs/plans/2026-03-02-core-file-decomposition-plan.md`，记录 Phase2 收口结果与最新体积数据。
+  - 全量验证通过，确认 Phase2 已达到“清除 warning + 门禁稳定”目标。
+
+**Verification Commands**
+
+```bash
+npm run check:core-size
+npm run check
+npm run check:e2e
+```
+
+**Verification Summary**
+
+1. `check:core-size` 通过，`Component.js: 1122/1500 (75%)`，无 warning。
+2. `check` 通过（201 files / 1030 tests）；保留 1 条既有 lint warning（`SolveCircuitV2.js` 未使用变量）。
+3. `check:e2e` 通过（wire/responsive/observation/ai-mobile 全绿）。

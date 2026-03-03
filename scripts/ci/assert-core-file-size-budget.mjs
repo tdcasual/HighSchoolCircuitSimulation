@@ -6,7 +6,7 @@ import path from 'node:path';
 const root = process.cwd();
 const legacyTransitionalBudgets = [
     { file: 'src/engine/Circuit.js', maxLines: 2000, track: 'legacy transitional' },
-    { file: 'src/components/Component.js', maxLines: 1700, track: 'legacy transitional' },
+    { file: 'src/components/Component.js', maxLines: 1500, track: 'legacy transitional' },
     { file: 'src/ui/charts/ChartWindowController.js', maxLines: 700, track: 'legacy transitional' },
     { file: 'src/app/interaction/InteractionOrchestrator.js', maxLines: 400, track: 'legacy transitional' }
 ];
