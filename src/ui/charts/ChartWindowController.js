@@ -457,7 +457,11 @@ export class ChartWindowController {
     }
 
     resolveBindingMeaning(binding = {}) {
-        const sourceId = this.workspace.resolveSourceId?.(binding.sourceId || TIME_SOURCE_ID) || TIME_SOURCE_ID;
+        const rawSourceId = binding.sourceId;
+        const hasSourceId = rawSourceId !== undefined
+            && rawSourceId !== null
+            && String(rawSourceId).trim() !== '';
+        const sourceId = this.workspace.resolveSourceId?.(hasSourceId ? rawSourceId : TIME_SOURCE_ID) || TIME_SOURCE_ID;
         const quantityId = String(binding.quantityId || 't');
         const sourceOptions = getSourceOptions(this.workspace.circuit);
         const source = sourceOptions.find((item) => item.id === sourceId);

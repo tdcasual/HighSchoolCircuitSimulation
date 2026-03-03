@@ -183,4 +183,40 @@ describe('ChartWindowController.render', () => {
 
         expect(controller.elements.latest.textContent).toBe('最新: —');
     });
+
+    it('resolves binding meaning for numeric zero source ids', () => {
+        const workspace = {
+            circuit: {
+                components: new Map([
+                    ['0', { id: '0', type: 'Resistor' }]
+                ])
+            },
+            resolveSourceId: (sourceId) => {
+                if (sourceId === undefined || sourceId === null || String(sourceId).trim() === '') {
+                    return TIME_SOURCE_ID;
+                }
+                return String(sourceId).trim();
+            }
+        };
+        const state = {
+            id: 'chart_1',
+            axis: {
+                xBinding: {
+                    sourceId: TIME_SOURCE_ID,
+                    quantityId: 't',
+                    transformId: 'identity'
+                }
+            },
+            series: []
+        };
+
+        const controller = new ChartWindowController(workspace, state);
+        const meaning = controller.resolveBindingMeaning({
+            sourceId: 0,
+            quantityId: 'I'
+        });
+
+        expect(meaning).toContain('0');
+        expect(meaning).toContain('电流');
+    });
 });
