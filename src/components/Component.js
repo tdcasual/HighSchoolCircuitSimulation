@@ -3,7 +3,7 @@
  * 定义各种电路元器件的属性和SVG渲染
  */
 
-import { clamp, computeOverlapFractionFromOffsetPx, computeParallelPlateCapacitance } from '../utils/Physics.js';
+import { clamp } from '../utils/Physics.js';
 import {
     computeDisplayRowGap,
     updateAttributeIfChanged,
@@ -26,44 +26,12 @@ import {
     ComponentNames,
     getComponentTerminalCount
 } from './catalog/ComponentCatalog.js';
-
-// 元器件ID计数器
-let componentIdCounter = 0;
-
-/**
- * 生成唯一ID
- * @param {string} type - 元器件类型
- * @returns {string} 唯一ID
- */
-export function generateId(type) {
-    return `${type}_${++componentIdCounter}`;
-}
-
-/**
- * 重置ID计数器
- */
-export function resetIdCounter() {
-    componentIdCounter = 0;
-}
-
-/**
- * 根据现有ID更新计数器，防止ID冲突
- * @param {string[]} existingIds - 现有的ID列表
- */
-export function updateIdCounterFromExisting(existingIds) {
-    let maxNum = 0;
-    for (const id of existingIds) {
-        // 提取ID中的数字部分
-        const match = id.match(/_(\d+)$/);
-        if (match) {
-            const num = parseInt(match[1], 10);
-            if (num > maxNum) {
-                maxNum = num;
-            }
-        }
-    }
-    componentIdCounter = maxNum;
-}
+import {
+    createComponent,
+    generateId,
+    resetIdCounter,
+    updateIdCounterFromExisting
+} from './factory/ComponentFactory.js';
 
 function safeHasClass(node, className) {
     if (!node || !node.classList || typeof node.classList.contains !== 'function') return false;
@@ -84,6 +52,7 @@ function safeToggleClass(node, className, force) {
 }
 
 export { ComponentDefaults, ComponentNames, getComponentTerminalCount };
+export { createComponent, generateId, resetIdCounter, updateIdCounterFromExisting };
 
 const VALUE_DISPLAY_STACK_ORDER = ['power', 'voltage', 'current'];
 const DEFAULT_VALUE_DISPLAY_ANCHOR = Object.freeze({ x: 0, y: -14 });
@@ -119,85 +88,6 @@ export function computeValueDisplayRowOffsets(visibleRows = [], rowGap = 15) {
         rowOffsets[row] = firstRowY + index * safeRowGap;
     });
     return rowOffsets;
-}
-
-/**
- * 创建元器件对象
- * @param {string} type - 元器件类型
- * @param {number} x - X坐标
- * @param {number} y - Y坐标
- * @param {string} existingId - 可选，使用现有的ID（用于加载保存的电路）
- * @returns {Object} 元器件对象
- */
-export function createComponent(type, x, y, existingId = null) {
-    const defaults = ComponentDefaults[type] || {};
-    
-    // 确定端子数量
-    const terminalCount = getComponentTerminalCount(type);
-    
-    // 初始化端子延长数据
-    const terminalExtensions = {};
-    for (let i = 0; i < terminalCount; i++) {
-        terminalExtensions[i] = { x: 0, y: 0 }; // 相对于默认位置的偏移
-    }
-    
-    const id = existingId || generateId(type);
-    
-    const defaultDisplay = {
-        current: true,
-        voltage: false,
-        power: false
-    };
-    // 仪表默认显示其“主读数”
-    if (type === 'Voltmeter') {
-        defaultDisplay.current = false;
-        defaultDisplay.voltage = true;
-    }
-    // 开关默认不显示数值（避免干扰）
-    if (type === 'Switch' || type === 'SPDTSwitch' || type === 'Ground') {
-        defaultDisplay.current = false;
-        defaultDisplay.voltage = false;
-        defaultDisplay.power = false;
-    }
-    // 黑箱仅用于封装/遮挡，默认不显示数值
-    if (type === 'BlackBox') {
-        defaultDisplay.current = false;
-        defaultDisplay.voltage = false;
-        defaultDisplay.power = false;
-    }
-
-    const component = {
-        id: id,
-        type: type,
-        label: null,           // 自定义标签 (如 V1, R1, R2 等)
-        x: x,
-        y: y,
-        rotation: 0,
-        // 节点数组长度与端子数一致，避免三端器件节点丢失
-        nodes: Array.from({ length: terminalCount }, () => -1),
-        currentValue: 0,       // 当前电流
-        voltageValue: 0,       // 当前电压
-        powerValue: 0,         // 当前功率
-        // 数值显示开关：每个元器件单独配置
-        // 默认仅显示电流，电压/功率默认隐藏
-        display: defaultDisplay,
-        terminalExtensions: terminalExtensions, // 端子延长偏移
-        ...defaults
-    };
-
-    // 平行板电容：根据物理参数计算初始电容值
-    if (type === 'ParallelPlateCapacitor') {
-        const plateLengthPx = 24;
-        const overlapFraction = computeOverlapFractionFromOffsetPx(component.plateOffsetYPx || 0, plateLengthPx);
-        component.capacitance = computeParallelPlateCapacitance({
-            plateArea: component.plateArea,
-            plateDistance: component.plateDistance,
-            dielectricConstant: component.dielectricConstant,
-            overlapFraction
-        });
-    }
-
-    return component;
 }
 
 /**

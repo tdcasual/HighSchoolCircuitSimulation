@@ -53,3 +53,24 @@ npm test -- tests/component.catalog.spec.js tests/simulation.componentRegistry.s
 
 1. `component.catalog` 新测试通过（3 tests）。
 2. 组件注册表和交互组件动作回归通过（32 tests）。
+
+### Task 2: Extract Component Factory + ID Counter
+
+- Status: completed
+- Started: 2026-03-03
+- Completed: 2026-03-03
+- Notes:
+  - 新增 `src/components/factory/ComponentFactory.js`，迁移 `createComponent` 与 ID 计数器逻辑。
+  - 新增 `tests/component.factory.spec.js`，覆盖特殊类型 display 默认值与计数器语义。
+  - `src/components/Component.js` 改为 re-export 工厂与计数器 API，保持旧导出兼容。
+
+**Verification Commands**
+
+```bash
+npm test -- tests/component.factory.spec.js tests/circuit.io.spec.js tests/simulation.dynamicIntegrator.spec.js
+```
+
+**Verification Summary**
+
+1. `component.factory` 新测试通过（2 tests）。
+2. `circuit.io` 与 `simulation.dynamicIntegrator` 回归通过（7 tests）。
