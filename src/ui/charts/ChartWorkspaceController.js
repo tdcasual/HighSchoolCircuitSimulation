@@ -1,4 +1,5 @@
 import { createElement } from '../../utils/SafeDOM.js';
+import { safeAddEventListener, safeClassListToggle } from '../../utils/RuntimeSafety.js';
 import {
     DEFAULT_SAMPLE_INTERVAL_MS,
     normalizeSampleIntervalMs,
@@ -11,16 +12,6 @@ import {
     serializeChartWorkspaceState
 } from './ChartWorkspaceState.js';
 import { ChartWindowController } from './ChartWindowController.js';
-
-function safeInvokeMethod(target, methodName, ...args) {
-    const fn = target?.[methodName];
-    if (typeof fn !== 'function') return undefined;
-    try {
-        return fn.apply(target, args);
-    } catch (_) {
-        return undefined;
-    }
-}
 
 export class ChartWorkspaceController {
     constructor(app) {
@@ -106,13 +97,13 @@ export class ChartWorkspaceController {
         this.runtimeStatusEl = runtimeStatusEl;
         this.windowLayer = windowLayer;
 
-        safeInvokeMethod(addBtn, 'addEventListener', 'click', () => {
+        safeAddEventListener(addBtn, 'click', () => {
             this.addWindow();
         });
-        safeInvokeMethod(clearBtn, 'addEventListener', 'click', () => {
+        safeAddEventListener(clearBtn, 'click', () => {
             this.clearAllPlots();
         });
-        safeInvokeMethod(sampleInput, 'addEventListener', 'change', () => {
+        safeAddEventListener(sampleInput, 'change', () => {
             const next = normalizeSampleIntervalMs(sampleInput.value, this.sampleIntervalMs);
             this.sampleIntervalMs = next;
             sampleInput.value = String(next);
@@ -120,7 +111,7 @@ export class ChartWorkspaceController {
         });
 
         if (typeof window !== 'undefined') {
-            safeInvokeMethod(window, 'addEventListener', 'resize', () => {
+            safeAddEventListener(window, 'resize', () => {
                 this.applyWindowRects();
                 this.requestRender();
             });
@@ -149,7 +140,7 @@ export class ChartWorkspaceController {
 
     onLayoutModeChanged(mode = 'desktop') {
         this.layoutMode = String(mode || 'desktop');
-        safeInvokeMethod(this.root?.classList, 'toggle', 'chart-workspace-phone', this.layoutMode === 'phone');
+        safeClassListToggle(this.root, 'chart-workspace-phone', this.layoutMode === 'phone');
     }
 
     resolveSourceId(sourceId) {

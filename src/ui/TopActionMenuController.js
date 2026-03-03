@@ -1,3 +1,9 @@
+import {
+    safeAddEventListener,
+    safeClassListToggle,
+    safeSetAttribute
+} from '../utils/RuntimeSafety.js';
+
 function safeNodeContains(node, target) {
     if (!node || typeof node.contains !== 'function') return false;
     try {
@@ -14,20 +20,6 @@ function safeHasClass(node, className) {
     } catch (_) {
         return false;
     }
-}
-
-function safeInvokeMethod(target, methodName, ...args) {
-    const fn = target?.[methodName];
-    if (typeof fn !== 'function') return undefined;
-    try {
-        return fn.apply(target, args);
-    } catch (_) {
-        return undefined;
-    }
-}
-
-function safeToggleClass(node, className, force) {
-    safeInvokeMethod(node?.classList, 'toggle', className, force);
 }
 
 export class TopActionMenuController {
@@ -60,10 +52,10 @@ export class TopActionMenuController {
 
     initialize() {
         if (!this.button || !this.menu) return;
-        safeInvokeMethod(this.button, 'addEventListener', 'click', this.boundToggle);
-        safeInvokeMethod(document, 'addEventListener', 'pointerdown', this.boundDocumentPointerDown);
-        safeInvokeMethod(document, 'addEventListener', 'keydown', this.boundDocumentKeyDown);
-        safeInvokeMethod(this.menu, 'addEventListener', 'click', (event) => {
+        safeAddEventListener(this.button, 'click', this.boundToggle);
+        safeAddEventListener(document, 'pointerdown', this.boundDocumentPointerDown);
+        safeAddEventListener(document, 'keydown', this.boundDocumentKeyDown);
+        safeAddEventListener(this.menu, 'click', (event) => {
             const target = event?.target;
             const menuItem = target && typeof target.closest === 'function'
                 ? target.closest('.top-action-more-item')
@@ -74,7 +66,7 @@ export class TopActionMenuController {
         });
         const closeBtn = document.getElementById('btn-top-action-close');
         if (closeBtn) {
-            safeInvokeMethod(closeBtn, 'addEventListener', 'click', this.boundClose);
+            safeAddEventListener(closeBtn, 'click', this.boundClose);
         }
         this.setSelectionMode('none');
         this.sync();
@@ -90,8 +82,8 @@ export class TopActionMenuController {
         const open = !!nextOpen;
         this.isOpen = open;
         this.menu.hidden = !open;
-        safeToggleClass(this.menu, 'open', open);
-        safeInvokeMethod(this.button, 'setAttribute', 'aria-expanded', open ? 'true' : 'false');
+        safeClassListToggle(this.menu, 'open', open);
+        safeSetAttribute(this.button, 'aria-expanded', open ? 'true' : 'false');
     }
 
     toggle() {
@@ -122,7 +114,7 @@ export class TopActionMenuController {
     setSelectionMode(mode = 'none') {
         const normalizedMode = mode === 'component' || mode === 'wire' ? mode : 'none';
         this.selectionMode = normalizedMode;
-        safeInvokeMethod(this.button, 'setAttribute', 'data-selection-mode', normalizedMode);
+        safeSetAttribute(this.button, 'data-selection-mode', normalizedMode);
         if (normalizedMode !== 'none' && this.isOpen) {
             this.setOpen(false);
         }

@@ -1,3 +1,10 @@
+import {
+    safeClassListAdd,
+    safeClassListRemove,
+    safeClassListToggle,
+    safeInvoke
+} from '../utils/RuntimeSafety.js';
+
 const MODE_DESKTOP = 'desktop';
 const MODE_TABLET = 'tablet';
 const MODE_COMPACT = 'compact';
@@ -13,25 +20,19 @@ const DRAWER_SWIPE_CLOSE_THRESHOLD_PX = 40;
 const MODE_CLASS_PREFIX = 'layout-mode-';
 
 function safeInvokeMethod(target, methodName, ...args) {
-    const fn = target?.[methodName];
-    if (typeof fn !== 'function') return undefined;
-    try {
-        return fn.apply(target, args);
-    } catch (_) {
-        return undefined;
-    }
+    return safeInvoke(target, methodName, args);
 }
 
 function safeAddClass(node, className) {
-    safeInvokeMethod(node?.classList, 'add', className);
+    safeClassListAdd(node, className);
 }
 
 function safeRemoveClass(node, className) {
-    safeInvokeMethod(node?.classList, 'remove', className);
+    safeClassListRemove(node, className);
 }
 
 function safeToggleClass(node, className, force) {
-    safeInvokeMethod(node?.classList, 'toggle', className, force);
+    safeClassListToggle(node, className, force);
 }
 
 export class ResponsiveLayoutController {
