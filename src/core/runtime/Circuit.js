@@ -276,8 +276,8 @@ export class Circuit {
         if (!probe || typeof probe !== 'object') return null;
         const type = probe.type;
         if (type !== 'NodeVoltageProbe' && type !== 'WireCurrentProbe') return null;
-        if (!probe.id) return null;
-        if (!probe.wireId) return null;
+        if (probe.id === undefined || probe.id === null || String(probe.id).trim() === '') return null;
+        if (probe.wireId === undefined || probe.wireId === null || String(probe.wireId).trim() === '') return null;
         return {
             id: String(probe.id),
             type,

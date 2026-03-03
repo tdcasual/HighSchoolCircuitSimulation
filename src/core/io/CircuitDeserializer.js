@@ -16,12 +16,16 @@ const RESERVED_COMPONENT_PROPERTY_KEYS = new Set([
     'properties'
 ]);
 
+function hasNonEmptyIdentifier(value) {
+    return value !== undefined && value !== null && String(value).trim() !== '';
+}
+
 function defaultNormalizeObservationProbe(probe) {
     if (!probe || typeof probe !== 'object') return null;
     const type = probe.type;
     if (type !== 'NodeVoltageProbe' && type !== 'WireCurrentProbe') return null;
-    if (!probe.id) return null;
-    if (!probe.wireId) return null;
+    if (!hasNonEmptyIdentifier(probe.id)) return null;
+    if (!hasNonEmptyIdentifier(probe.wireId)) return null;
     return {
         id: String(probe.id),
         type,

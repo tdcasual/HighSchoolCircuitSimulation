@@ -45,6 +45,10 @@ function assertFiniteNumber(value, label) {
     }
 }
 
+function isPresentIdentifier(value) {
+    return value !== undefined && value !== null && String(value).trim() !== '';
+}
+
 function assertNoLegacyAliases(value, path = 'payload') {
     if (Array.isArray(value)) {
         value.forEach((item, index) => assertNoLegacyAliases(item, `${path}[${index}]`));
@@ -128,7 +132,7 @@ export class CircuitSchemaGateway {
         for (const comp of data.components) {
             assertPlainObject(comp, 'component');
             assertKnownKeys(comp, COMPONENT_KEYS, `component:${comp?.id || 'unknown'}`);
-            if (!comp.id || !comp.type) {
+            if (!isPresentIdentifier(comp.id) || !isPresentIdentifier(comp.type)) {
                 throw new Error(`组件缺少 id/type: ${JSON.stringify(comp)}`);
             }
             const type = String(comp.type);
@@ -172,7 +176,9 @@ export class CircuitSchemaGateway {
         for (const probe of data.probes || []) {
             assertPlainObject(probe, 'probe');
             assertKnownKeys(probe, PROBE_KEYS, `probe:${probe?.id || 'unknown'}`);
-            if (!probe.id || !probe.type || !probe.wireId) {
+            if (!isPresentIdentifier(probe.id)
+                || !isPresentIdentifier(probe.type)
+                || !isPresentIdentifier(probe.wireId)) {
                 throw new Error(`probe 字段不完整: ${JSON.stringify(probe)}`);
             }
             const probeId = String(probe.id).trim();
