@@ -68,4 +68,18 @@ describe('SimulationStateV2', () => {
         state.reset();
         expect(state.size).toBe(0);
     });
+
+    it('accepts numeric zero as a valid component id', () => {
+        const state = new SimulationStateV2();
+        const entry = state.ensure({ id: 0, type: 'Capacitor' });
+
+        expect(entry).toEqual({
+            prevVoltage: 0,
+            prevCharge: 0,
+            prevCurrent: 0,
+            dynamicHistoryReady: false
+        });
+        expect(state.get(0)).toBe(entry);
+        expect(state.get('0')).toBe(entry);
+    });
 });

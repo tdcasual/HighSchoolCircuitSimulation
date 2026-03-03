@@ -45,15 +45,17 @@ function buildDefaultState(descriptor = {}) {
 
 function normalizeDescriptor(componentOrId, type) {
     if (componentOrId && typeof componentOrId === 'object') {
+        const rawId = componentOrId.id;
         return {
-            id: String(componentOrId.id || ''),
+            id: rawId === undefined || rawId === null ? '' : String(rawId),
             type: typeof componentOrId.type === 'string' ? componentOrId.type : 'Unknown',
             initialCurrent: componentOrId.initialCurrent
         };
     }
 
+    const rawId = componentOrId;
     return {
-        id: String(componentOrId || ''),
+        id: rawId === undefined || rawId === null ? '' : String(rawId),
         type: typeof type === 'string' ? type : 'Unknown'
     };
 }
