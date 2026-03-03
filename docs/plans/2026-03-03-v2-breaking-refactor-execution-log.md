@@ -90,3 +90,30 @@ npm test -- tests/observation.runtimeContractGuard.spec.js
    - `src/components/Component.js` 95%（warning）；
    - v2 预算条目当前均为 `skip (pending v2 core)`。
 3. `tests/observation.runtimeContractGuard.spec.js` 通过（6 tests），确认未回退到 ObservationPanel 旧路径。
+
+### Task 3: Enforce no local safeInvokeMethod in v2 scope
+
+- Status: completed
+- Started: 2026-03-03
+- Completed: 2026-03-03
+- Notes:
+  - 新增 `tests/ci.v2RuntimeSafetyDedupe.spec.js`，先验证脚本 wiring 与 guard 约束（fail-first）。
+  - 新增 `scripts/ci/assert-v2-runtime-safety-dedupe.mjs`：
+    - 扫描 `src/v2/**` 中的 JS 文件；
+    - 禁止本地 `function safeInvokeMethod(` 定义；
+    - `src/v2` 尚未落地时输出 `ok (src/v2 not present yet)`。
+  - `package.json` 已增加 `check:v2:runtime-safety` 并接入 `check` 流水线。
+  - `scripts/ci/generate-debt-dashboard.mjs` 新增 `v2RuntimeSafety` 指标，单独统计 v2 域内重复定义债务。
+
+**Verification Commands**
+
+```bash
+npm test -- tests/ci.v2RuntimeSafetyDedupe.spec.js && npm run check:v2:runtime-safety
+npm test -- tests/debtDashboard.spec.js tests/runtimeSafety.dedupe.spec.js
+```
+
+**Verification Summary**
+
+1. `tests/ci.v2RuntimeSafetyDedupe.spec.js` 通过（2 tests）。
+2. `check:v2:runtime-safety` 通过（当前 `src/v2` 不存在，输出 `ok (src/v2 not present yet)`）。
+3. `tests/debtDashboard.spec.js` 与 `tests/runtimeSafety.dedupe.spec.js` 全部通过（3 tests）。

@@ -10,6 +10,7 @@ const outputMarkdownRelPath = 'docs/reports/debt-dashboard.md';
 const bundleReportRelPath = 'dist/bundle-size-report.json';
 
 const SAFE_INVOKE_MAX = 15;
+const V2_LOCAL_SAFE_INVOKE_MAX = 0;
 const MAIN_BUNDLE_MAX_BYTES = 400 * 1024;
 const TOTAL_BUNDLE_MAX_BYTES = 520 * 1024;
 
@@ -78,6 +79,41 @@ async function collectSafeInvokeDebt() {
         status: count > SAFE_INVOKE_MAX ? 'fail' : 'ok',
         count,
         max: SAFE_INVOKE_MAX,
+        files: matches
+    };
+}
+
+async function collectV2SafeInvokeDebt() {
+    const v2RootStat = await stat(path.resolve(root, 'src/v2')).catch(() => null);
+    if (!v2RootStat || !v2RootStat.isDirectory()) {
+        return {
+            status: 'ok',
+            count: 0,
+            max: V2_LOCAL_SAFE_INVOKE_MAX,
+            files: [],
+            note: 'src/v2 not present yet'
+        };
+    }
+
+    const files = await listFilesRecursive('src/v2');
+    const matches = [];
+    let count = 0;
+    for (const absPath of files) {
+        const source = readFileSync(absPath, 'utf8');
+        const hitCount = countPattern(source, /function safeInvokeMethod\(/gu);
+        if (hitCount > 0) {
+            matches.push({
+                file: path.relative(root, absPath).replaceAll('\\', '/'),
+                count: hitCount
+            });
+            count += hitCount;
+        }
+    }
+
+    return {
+        status: count > V2_LOCAL_SAFE_INVOKE_MAX ? 'fail' : 'ok',
+        count,
+        max: V2_LOCAL_SAFE_INVOKE_MAX,
         files: matches
     };
 }
@@ -227,6 +263,22 @@ function buildMarkdown(report) {
         }
     }
 
+    lines.push(
+        '',
+        '## V2 Runtime Safety Dedupe',
+        '',
+        `- v2 local \`safeInvokeMethod\` count: ${report.v2RuntimeSafety.count}/${report.v2RuntimeSafety.max} (${report.v2RuntimeSafety.status})`
+    );
+    if (report.v2RuntimeSafety.note) {
+        lines.push(`- Note: ${report.v2RuntimeSafety.note}`);
+    }
+    if (report.v2RuntimeSafety.files.length > 0) {
+        lines.push('- Files:');
+        for (const item of report.v2RuntimeSafety.files) {
+            lines.push(`  - ${item.file}: ${item.count}`);
+        }
+    }
+
     lines.push('', '## Core File Budgets', '', '| File | Lines | Budget | Status |', '|---|---:|---:|---|');
     for (const item of report.coreFiles) {
         const linesValue = item.lines == null ? 'n/a' : String(item.lines);
@@ -256,12 +308,14 @@ function buildMarkdown(report) {
 
 async function main() {
     const runtimeSafety = await collectSafeInvokeDebt();
+    const v2RuntimeSafety = await collectV2SafeInvokeDebt();
     const coreFiles = collectCoreFileDebt();
     const bundle = collectBundleDebt();
     const legacyObservation = await collectLegacyObservationDebt();
 
     const statusSummary = countByStatus([
         runtimeSafety.status,
+        v2RuntimeSafety.status,
         bundle.status,
         legacyObservation.status,
         ...coreFiles.map((entry) => entry.status)
@@ -270,6 +324,7 @@ async function main() {
     const report = {
         generatedAt: new Date().toISOString(),
         runtimeSafety,
+        v2RuntimeSafety,
         coreFiles,
         bundle,
         legacyObservation,
