@@ -179,6 +179,18 @@ assertStepRun(
 assertStepRun(
     qualitySteps,
     'quality',
+    'Build frontend artifacts',
+    'npm run build:frontend'
+);
+assertStepRun(
+    qualitySteps,
+    'quality',
+    'Check bundle size budget',
+    'npm run check:bundle-size'
+);
+assertStepRun(
+    qualitySteps,
+    'quality',
     'Run reliability regression gate',
     'npm run test:reliability'
 );
@@ -196,6 +208,8 @@ assertStepOrder(qualitySteps, 'quality', [
     'Check interaction mode runtime contract guard',
     'Check registry legacy fallback guard',
     'Check CI workflow coverage',
+    'Build frontend artifacts',
+    'Check bundle size budget',
     'Run reliability regression gate',
     'Run quality checks and regressions'
 ]);

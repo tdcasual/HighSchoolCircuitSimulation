@@ -66,6 +66,16 @@ describe('CI workflow coverage', () => {
         expect(content).toContain('node scripts/ci/assert-ci-workflow-coverage.mjs');
     });
 
+    it('runs bundle size budget check in quality job', () => {
+        const workflowPath = resolve(process.cwd(), '.github/workflows/ci.yml');
+        const content = readFileSync(workflowPath, 'utf8');
+
+        expect(content).toContain('Build frontend artifacts');
+        expect(content).toContain('npm run build:frontend');
+        expect(content).toContain('Check bundle size budget');
+        expect(content).toContain('npm run check:bundle-size');
+    });
+
     it('wires CI workflow guard script in package check pipeline', () => {
         const pkgPath = resolve(process.cwd(), 'package.json');
         const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
