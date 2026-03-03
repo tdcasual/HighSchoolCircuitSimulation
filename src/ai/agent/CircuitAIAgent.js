@@ -11,6 +11,7 @@ import { AnswerVerifySkill } from '../skills/AnswerVerifySkill.js';
 import { QuestionPlanningSkill } from '../skills/QuestionPlanningSkill.js';
 import { SimulationRefreshSkill } from '../skills/SimulationRefreshSkill.js';
 import { LocalKnowledgeResourceProvider } from '../resources/KnowledgeResourceProvider.js';
+import { OpenAIClientV2 } from '../OpenAIClientV2.js';
 
 const DEFAULT_CHAT_TURNS = 4;
 const DEFAULT_KNOWLEDGE_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -29,11 +30,8 @@ export class CircuitAIAgent {
         knowledgeCacheLimit = DEFAULT_KNOWLEDGE_CACHE_LIMIT,
         knowledgeAccessLogLimit = DEFAULT_KNOWLEDGE_ACCESS_LOG_LIMIT
     } = {}) {
-        if (!aiClient) {
-            throw new Error('CircuitAIAgent requires aiClient');
-        }
-        this.aiClient = aiClient;
-        this.logger = logger || aiClient?.logger || null;
+        this.aiClient = aiClient || new OpenAIClientV2();
+        this.logger = logger || this.aiClient?.logger || null;
         this.explainer = explainer || null;
         this.circuit = circuit || explainer?.circuit || null;
         this.knowledgeProvider = knowledgeProvider || new LocalKnowledgeResourceProvider();

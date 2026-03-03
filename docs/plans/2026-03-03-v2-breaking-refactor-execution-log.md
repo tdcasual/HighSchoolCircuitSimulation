@@ -416,3 +416,34 @@ npm run check:v2:runtime-safety
 1. `tests/app.bootstrapV2.spec.js` 与 `tests/aiPanel.lazyLoad.spec.js` 全通过（4 tests）。
 2. `check:v2:boundaries` 通过（`[v2-architecture] ok`）。
 3. `check:v2:runtime-safety` 通过（`[v2-runtime-safety] ok`）。
+
+### Task 14: Responses-only OpenAI client
+
+- Status: completed
+- Started: 2026-03-03
+- Completed: 2026-03-03
+- Notes:
+  - 新增 `tests/aiClient.v2.responsesOnly.spec.js`（fail-first），覆盖：
+    - `OpenAIClientV2` 仅使用 `/v1/responses`；
+    - 请求体仅使用 `input` + `max_output_tokens`；
+    - v2 client 中不存在 chat/completions 回退路径。
+  - 新增 `src/ai/OpenAIClientV2.js`：
+    - responses-only endpoint 归一化；
+    - 保留超时与重试；
+    - 统一响应文本提取逻辑。
+  - 修改 `src/ai/agent/CircuitAIAgent.js`：
+    - 默认注入 `OpenAIClientV2`（外部传入 aiClient 时优先使用外部实例）。
+
+**Verification Commands**
+
+```bash
+npm test -- tests/aiClient.v2.responsesOnly.spec.js tests/circuitAIAgent.spec.js
+npm run check:v2:boundaries
+npm run check:v2:runtime-safety
+```
+
+**Verification Summary**
+
+1. `tests/aiClient.v2.responsesOnly.spec.js` 与 `tests/circuitAIAgent.spec.js` 全通过（9 tests）。
+2. `check:v2:boundaries` 通过（`[v2-architecture] ok`）。
+3. `check:v2:runtime-safety` 通过（`[v2-runtime-safety] ok`）。
