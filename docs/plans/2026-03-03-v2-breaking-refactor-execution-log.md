@@ -145,3 +145,34 @@ npm run check:v2:runtime-safety
 1. `tests/simulation.netlistBuilderV2.spec.js` 通过（2 tests）。
 2. `check:v2:boundaries` 通过（`[v2-architecture] ok`）。
 3. `check:v2:runtime-safety` 通过（`[v2-runtime-safety] ok`）。
+
+### Task 5: Introduce immutable CircuitModel APIs
+
+- Status: completed
+- Started: 2026-03-03
+- Completed: 2026-03-03
+- Notes:
+  - 新增 `tests/domain.circuitModelV2.spec.js`（fail-first），覆盖：
+    - `addComponent/removeComponent/addWire/removeWire` 返回新模型并递增 `version`；
+    - 外部不可直接改写内部 `Map` 与实体对象。
+  - 新增 `src/v2/domain/CircuitModel.js`：
+    - 封装 `components/wires/version`；
+    - 提供只读快照 getter 与 `withState` 复制更新入口；
+    - 内部对对象/Map 做深拷贝规整。
+  - 新增 `src/v2/domain/CircuitModelCommands.js`：
+    - 实现 v2 命令式更新 API（返回新 `CircuitModel`）；
+    - `removeComponent` 同步清理关联导线。
+
+**Verification Commands**
+
+```bash
+npm test -- tests/domain.circuitModelV2.spec.js
+npm run check:v2:boundaries
+npm run check:v2:runtime-safety
+```
+
+**Verification Summary**
+
+1. `tests/domain.circuitModelV2.spec.js` 通过（2 tests）。
+2. `check:v2:boundaries` 通过（`[v2-architecture] ok`）。
+3. `check:v2:runtime-safety` 通过（`[v2-runtime-safety] ok`）。
