@@ -14,4 +14,24 @@ describe('ConnectivityCache', () => {
 
         expect(connected).toBe(true);
     });
+
+    it('normalizes numeric component ids for cached connectivity lookup', () => {
+        const cache = new ConnectivityCache();
+        const resistor = createComponent('Resistor', 0, 0, '0');
+        resistor.nodes = [0, 1];
+        const components = new Map([['0', resistor]]);
+        const terminalConnectionMap = new Map([
+            ['0:0', 1],
+            ['0:1', 1]
+        ]);
+
+        const connected = cache.isComponentConnected(
+            0,
+            components,
+            1,
+            terminalConnectionMap
+        );
+
+        expect(connected).toBe(true);
+    });
 });

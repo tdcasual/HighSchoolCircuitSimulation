@@ -69,7 +69,11 @@ export class ConnectivityCache {
         computeComponentConnectedState = null
     ) {
         const componentMap = components instanceof Map ? components : new Map();
-        const comp = componentMap.get(componentId);
+        if (componentId === undefined || componentId === null || String(componentId).trim() === '') {
+            return false;
+        }
+        const normalizedId = String(componentId);
+        const comp = componentMap.get(normalizedId);
         if (!comp || !Array.isArray(comp.nodes)) return false;
 
         if (comp._connectionTopologyVersion === topologyVersion
@@ -80,7 +84,7 @@ export class ConnectivityCache {
         const compute = typeof computeComponentConnectedState === 'function'
             ? computeComponentConnectedState
             : (id, component) => this.computeComponentConnectedState(id, component, terminalConnectionMap);
-        const connected = compute(componentId, comp);
+        const connected = compute(normalizedId, comp);
         comp._isConnectedCached = connected;
         comp._connectionTopologyVersion = topologyVersion;
         return connected;
