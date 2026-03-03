@@ -109,12 +109,21 @@ export function downloadCanvasImage(_panel, canvas, fileName = 'observation_expo
     if (!dataUrl || typeof dataUrl !== 'string') return false;
 
     const anchor = document.createElement('a');
+    if (!anchor || typeof anchor !== 'object' || typeof anchor.click !== 'function') {
+        return false;
+    }
     anchor.href = dataUrl;
     anchor.download = fileName;
     safeAppendToBody(anchor);
-    safeInvokeMethod(anchor, 'click');
+    let clicked = false;
+    try {
+        anchor.click();
+        clicked = true;
+    } catch (_) {
+        clicked = false;
+    }
     safeInvokeMethod(anchor, 'remove');
-    return true;
+    return clicked;
 }
 
 export function exportObservationSnapshot(panel, options = {}) {

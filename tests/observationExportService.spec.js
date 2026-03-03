@@ -1,5 +1,12 @@
-import { describe, expect, it } from 'vitest';
-import { buildObservationExportMetadata } from '../src/ui/observation/ObservationExportService.js';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+    buildObservationExportMetadata,
+    downloadCanvasImage
+} from '../src/ui/observation/ObservationExportService.js';
+
+afterEach(() => {
+    vi.unstubAllGlobals();
+});
 
 describe('ObservationExportService', () => {
     it('preserves numeric zero source ids in fallback metadata labels', () => {
@@ -23,5 +30,20 @@ describe('ObservationExportService', () => {
 
         expect(lines).toContain('X: 0 · t');
         expect(lines).toContain('Y: 0 · I');
+    });
+
+    it('returns false when download anchor cannot click', () => {
+        const canvas = {
+            toDataURL: () => 'data:image/png;base64,abc'
+        };
+        vi.stubGlobal('document', {
+            body: {
+                appendChild: () => {}
+            },
+            createElement: () => ({})
+        });
+
+        const ok = downloadCanvasImage({}, canvas, 'export.png');
+        expect(ok).toBe(false);
     });
 });
