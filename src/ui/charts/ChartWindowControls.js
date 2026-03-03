@@ -46,9 +46,16 @@ export function isInteractiveTarget(node) {
 }
 
 function createScatterBinding(controller, scatterSourceSelect, scatterQuantitySelect) {
+    const sourceId = controller.workspace.resolveSourceId(scatterSourceSelect.value || TIME_SOURCE_ID);
+    const quantities = getQuantitiesForSource(sourceId, controller.workspace.circuit);
+    const rawQuantityId = scatterQuantitySelect.value || 't';
+    const quantityId = quantities.some((item) => item.id === rawQuantityId)
+        ? rawQuantityId
+        : (quantities[0]?.id || 't');
+
     return {
-        sourceId: controller.workspace.resolveSourceId(scatterSourceSelect.value || TIME_SOURCE_ID),
-        quantityId: scatterQuantitySelect.value || 't',
+        sourceId,
+        quantityId,
         transformId: 'identity'
     };
 }
@@ -209,11 +216,7 @@ export function rebuildSeriesControls(controller) {
             const xMode = xModeSelect.value === 'scatter-override' ? 'scatter-override' : 'shared-x';
             const patch = { xMode };
             if (xMode === 'scatter-override') {
-                patch.scatterXBinding = {
-                    sourceId: scatterSourceSelect.value || TIME_SOURCE_ID,
-                    quantityId: scatterQuantitySelect.value || 't',
-                    transformId: 'identity'
-                };
+                patch.scatterXBinding = createScatterBinding(controller, scatterSourceSelect, scatterQuantitySelect);
             }
             controller.workspace.commandService.updateSeries(controller.state.id, series.id, patch);
         });
