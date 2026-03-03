@@ -104,18 +104,25 @@ export function resolveLiveWireStart(context) {
 
     const snap = wireStart.snap || null;
     if (snap?.type === 'terminal') {
-        const componentId = snap.componentId;
+        const rawComponentId = snap.componentId;
         const terminalIndex = Number(snap.terminalIndex);
-        if (componentId && Number.isInteger(terminalIndex) && terminalIndex >= 0) {
+        const hasComponentId = rawComponentId !== undefined
+            && rawComponentId !== null
+            && String(rawComponentId).trim() !== '';
+        if (hasComponentId && Number.isInteger(terminalIndex) && terminalIndex >= 0) {
+            const componentId = String(rawComponentId);
             const pos = context?.renderer?.getTerminalPosition?.(componentId, terminalIndex);
             if (pos && Number.isFinite(pos.x) && Number.isFinite(pos.y)) {
                 return { x: pos.x, y: pos.y, snap };
             }
         }
     } else if (snap?.type === 'wire-endpoint') {
-        const wireId = snap.wireId;
+        const rawWireId = snap.wireId;
         const end = snap.end;
-        const wire = wireId ? context?.circuit?.getWire?.(wireId) : null;
+        const hasWireId = rawWireId !== undefined
+            && rawWireId !== null
+            && String(rawWireId).trim() !== '';
+        const wire = hasWireId ? context?.circuit?.getWire?.(String(rawWireId)) : null;
         const point = wire && (end === 'a' || end === 'b') ? wire[end] : null;
         if (point && Number.isFinite(point.x) && Number.isFinite(point.y)) {
             return { x: point.x, y: point.y, snap };
