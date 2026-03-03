@@ -208,3 +208,32 @@ npm run check:v2:runtime-safety
 1. `tests/circuitSchema.v3.spec.js` 通过（3 tests）。
 2. `check:v2:boundaries` 通过（`[v2-architecture] ok`）。
 3. `check:v2:runtime-safety` 通过（`[v2-runtime-safety] ok`）。
+
+### Task 7: Add SimulationStateV2 as sole runtime mutable state
+
+- Status: completed
+- Started: 2026-03-03
+- Completed: 2026-03-03
+- Notes:
+  - 新增 `tests/simulation.stateV2.spec.js`（fail-first），覆盖：
+    - `ensure/applyPatch` 行为可预测；
+    - `reset` 支持按组件描述重建状态与清空状态；
+    - 不回写传入组件对象字段。
+  - 新增 `src/v2/simulation/SimulationStateV2.js`：
+    - Map-based 状态容器（`byId`）；
+    - 组件类型默认状态工厂；
+    - 提供 `ensure/get/applyPatch/reset` 运行态 API。
+
+**Verification Commands**
+
+```bash
+npm test -- tests/simulation.stateV2.spec.js
+npm run check:v2:boundaries
+npm run check:v2:runtime-safety
+```
+
+**Verification Summary**
+
+1. `tests/simulation.stateV2.spec.js` 通过（3 tests）。
+2. `check:v2:boundaries` 通过（`[v2-architecture] ok`）。
+3. `check:v2:runtime-safety` 通过（`[v2-runtime-safety] ok`）。
