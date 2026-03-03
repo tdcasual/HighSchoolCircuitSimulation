@@ -19,9 +19,7 @@ const DRAWER_SWIPE_CLOSE_THRESHOLD_PX = 40;
 
 const MODE_CLASS_PREFIX = 'layout-mode-';
 
-function safeInvokeMethod(target, methodName, ...args) {
-    return safeInvoke(target, methodName, args);
-}
+const safeInvokeMethod = (target, methodName, ...args) => safeInvoke(target, methodName, args);
 
 function safeAddClass(node, className) {
     safeClassListAdd(node, className);

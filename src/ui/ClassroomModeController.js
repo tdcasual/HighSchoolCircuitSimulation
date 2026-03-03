@@ -1,3 +1,5 @@
+import { safeInvoke } from '../utils/RuntimeSafety.js';
+
 const CLASSROOM_MODE_STORAGE_KEY = 'ui.classroom_mode_level';
 const CLASSROOM_MODE_CLASS = 'classroom-mode';
 const CLASSROOM_MODE_ENHANCED_CLASS = 'classroom-mode-enhanced';
@@ -37,15 +39,7 @@ function writeStoredPreference(storageKey, level) {
     }
 }
 
-function safeInvokeMethod(target, methodName, ...args) {
-    const fn = target?.[methodName];
-    if (typeof fn !== 'function') return undefined;
-    try {
-        return fn.apply(target, args);
-    } catch (_) {
-        return undefined;
-    }
-}
+const safeInvokeMethod = (target, methodName, ...args) => safeInvoke(target, methodName, args);
 
 function safeToggleClass(node, className, force) {
     safeInvokeMethod(node?.classList, 'toggle', className, force);

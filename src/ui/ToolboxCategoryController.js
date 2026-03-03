@@ -1,3 +1,5 @@
+import { safeInvoke } from '../utils/RuntimeSafety.js';
+
 const TOOLBOX_CATEGORY_STORAGE_KEY = 'ui.toolbox_category_collapsed_v1';
 
 function readStoredState(storageKey) {
@@ -31,15 +33,7 @@ function isToggleKey(key) {
     return key === 'Enter' || key === ' ' || key === 'Spacebar';
 }
 
-function safeInvokeMethod(target, methodName, ...args) {
-    const fn = target?.[methodName];
-    if (typeof fn !== 'function') return undefined;
-    try {
-        return fn.apply(target, args);
-    } catch (_) {
-        return undefined;
-    }
-}
+const safeInvokeMethod = (target, methodName, ...args) => safeInvoke(target, methodName, args);
 
 function safeToggleClass(node, className, force) {
     const toggle = node?.classList?.toggle;

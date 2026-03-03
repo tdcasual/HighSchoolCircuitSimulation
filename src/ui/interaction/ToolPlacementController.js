@@ -1,5 +1,6 @@
 import { ComponentNames } from '../../components/Component.js';
 import { GRID_SIZE, snapToGrid } from '../../utils/CanvasCoords.js';
+import { safeInvoke } from '../../utils/RuntimeSafety.js';
 import {
     readInteractionModeContext,
     setInteractionModeContext,
@@ -51,15 +52,7 @@ function isPhoneLikeLayout() {
         || safeClassListContains(bodyClassList, 'layout-mode-compact');
 }
 
-function safeInvokeMethod(target, methodName, ...args) {
-    const fn = target?.[methodName];
-    if (typeof fn !== 'function') return undefined;
-    try {
-        return fn.apply(target, args);
-    } catch (_) {
-        return undefined;
-    }
-}
+const safeInvokeMethod = (target, methodName, ...args) => safeInvoke(target, methodName, args);
 
 function safeAddClass(node, className) {
     safeInvokeMethod(node?.classList, 'add', className);

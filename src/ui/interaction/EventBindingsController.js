@@ -1,14 +1,7 @@
 import * as InteractionOrchestrator from '../../app/interaction/InteractionOrchestrator.js';
+import { safeInvoke } from '../../utils/RuntimeSafety.js';
 
-function safeInvokeMethod(target, methodName, ...args) {
-    const fn = target?.[methodName];
-    if (typeof fn !== 'function') return undefined;
-    try {
-        return fn.apply(target, args);
-    } catch (_) {
-        return undefined;
-    }
-}
+const safeInvokeMethod = (target, methodName, ...args) => safeInvoke(target, methodName, args);
 
 /**
  * 绑定所有事件
