@@ -34,6 +34,7 @@
     "test:e2e:wire": "node scripts/e2e/wire-interaction-regression.mjs",
     "mode-conflict-matrix": "node scripts/e2e/mode-conflict-matrix.mjs",
     "test:e2e:observation": "node scripts/e2e/observation-touch-regression.mjs",
+    "test:e2e:compat": "node scripts/e2e/browser-compat-smoke.mjs",
     "test:e2e:ai-mobile": "node scripts/e2e/ai-mobile-layout-regression.mjs",
     "check:e2e": "npm run test:e2e:wire && npm run test:e2e:responsive && npm run test:e2e:observation && npm run test:e2e:ai-mobile"
   },

@@ -49,6 +49,7 @@
 ## 🛡️ v0.10 稳定性门禁（2026-03）
 
 - 稳定性清单：[`docs/releases/v0.10-stability-checklist.md`](docs/releases/v0.10-stability-checklist.md)
+- 浏览器兼容矩阵：[`docs/releases/browser-compat-matrix.md`](docs/releases/browser-compat-matrix.md)
 - 本轮报告：[`docs/reports/2026-03-02-architecture-derisk-report.md`](docs/reports/2026-03-02-architecture-derisk-report.md)
 - 新增矩阵命令：`npm run mode-conflict-matrix`
 
@@ -90,6 +91,7 @@ python3 -m http.server 8080
 npm test
 npm run baseline:p0
 npm run baseline:circuitjs
+npm run test:e2e:compat
 ```
 
 ## 🔌 嵌入发布（类似 deployggb.js）
