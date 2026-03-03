@@ -161,4 +161,53 @@ describe('CircuitSchema v3 strict validator', () => {
 
         expect(() => validateCircuitV3(duplicateProbePayload)).toThrow(/duplicate probe id|probe id 重复/u);
     });
+
+    it('rejects zero-length wires (same start/end point)', () => {
+        const badWirePayload = {
+            ...validV3Payload,
+            wires: [
+                {
+                    id: 'W1',
+                    a: { x: 120, y: 120 },
+                    b: { x: 120, y: 120 }
+                }
+            ]
+        };
+
+        expect(() => validateCircuitV3(badWirePayload)).toThrow(/wire endpoints overlap|导线起点与终点重合/u);
+    });
+
+    it('rejects wire terminal refs pointing to unknown components', () => {
+        const badRefPayload = {
+            ...validV3Payload,
+            wires: [
+                {
+                    id: 'W1',
+                    a: { x: 140, y: 120 },
+                    b: { x: 300, y: 120 },
+                    aRef: { componentId: 'NOT_EXISTS', terminalIndex: 0 },
+                    bRef: { componentId: 'R1', terminalIndex: 0 }
+                }
+            ]
+        };
+
+        expect(() => validateCircuitV3(badRefPayload)).toThrow(/componentId.*not found|componentId.*不存在/u);
+    });
+
+    it('rejects wire terminal refs with out-of-range terminalIndex', () => {
+        const badTerminalIndexPayload = {
+            ...validV3Payload,
+            wires: [
+                {
+                    id: 'W1',
+                    a: { x: 140, y: 120 },
+                    b: { x: 300, y: 120 },
+                    aRef: { componentId: 'V1', terminalIndex: 99 },
+                    bRef: { componentId: 'R1', terminalIndex: 0 }
+                }
+            ]
+        };
+
+        expect(() => validateCircuitV3(badTerminalIndexPayload)).toThrow(/terminalIndex.*out of range|terminalIndex.*超出范围/u);
+    });
 });

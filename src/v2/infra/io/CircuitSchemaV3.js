@@ -40,6 +40,29 @@ const SUPPORTED_COMPONENT_TYPES = new Set([
     'BlackBox'
 ]);
 const SUPPORTED_PROBE_TYPES = new Set(['NodeVoltageProbe', 'WireCurrentProbe']);
+const COMPONENT_TERMINAL_COUNTS = Object.freeze({
+    Ground: 1,
+    PowerSource: 2,
+    ACVoltageSource: 2,
+    Resistor: 2,
+    Diode: 2,
+    LED: 2,
+    Thermistor: 2,
+    Photoresistor: 2,
+    Relay: 4,
+    Rheostat: 3,
+    Bulb: 2,
+    Capacitor: 2,
+    Inductor: 2,
+    ParallelPlateCapacitor: 2,
+    Motor: 2,
+    Switch: 2,
+    SPDTSwitch: 3,
+    Fuse: 2,
+    Ammeter: 2,
+    Voltmeter: 2,
+    BlackBox: 2
+});
 
 function isPlainObject(value) {
     return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -156,6 +179,22 @@ function validateWire(wire, index) {
     validateTerminalRef(wire.bRef, `${label}.bRef`);
 }
 
+function validateTerminalRefBinding(ref, label, componentTypeById) {
+    if (!ref) return;
+    const componentId = String(ref.componentId);
+    if (!componentTypeById.has(componentId)) {
+        throw new Error(`${label}.componentId not found: ${componentId}`);
+    }
+    const componentType = componentTypeById.get(componentId);
+    const terminalCount = Number(COMPONENT_TERMINAL_COUNTS[componentType]);
+    if (!Number.isInteger(terminalCount) || terminalCount <= 0) {
+        throw new Error(`${label}.component type has invalid terminal count: ${componentType}`);
+    }
+    if (ref.terminalIndex >= terminalCount) {
+        throw new Error(`${label}.terminalIndex out of range: ${ref.terminalIndex}`);
+    }
+}
+
 function validateProbe(probe, index) {
     const label = `probes[${index}]`;
     assertPlainObject(probe, label);
@@ -197,12 +236,14 @@ export function validateCircuitV3(payload) {
     }
 
     const componentIds = new Set();
+    const componentTypeById = new Map();
     payload.components.forEach((component, index) => {
         validateComponent(component, index);
         if (componentIds.has(component.id)) {
             throw new Error(`components[${index}].id duplicate component id: ${component.id}`);
         }
         componentIds.add(component.id);
+        componentTypeById.set(component.id, component.type);
     });
 
     const wireIds = new Set();
@@ -211,6 +252,11 @@ export function validateCircuitV3(payload) {
         if (wireIds.has(wire.id)) {
             throw new Error(`wires[${index}].id duplicate wire id: ${wire.id}`);
         }
+        if (Number(wire.a.x) === Number(wire.b.x) && Number(wire.a.y) === Number(wire.b.y)) {
+            throw new Error(`wires[${index}] wire endpoints overlap`);
+        }
+        validateTerminalRefBinding(wire.aRef, `wires[${index}].aRef`, componentTypeById);
+        validateTerminalRefBinding(wire.bRef, `wires[${index}].bRef`, componentTypeById);
         wireIds.add(wire.id);
     });
 
