@@ -4,6 +4,12 @@
  */
 
 import { clamp, computeOverlapFractionFromOffsetPx, computeParallelPlateCapacitance } from '../utils/Physics.js';
+import {
+    getComponentHitBox,
+    getTerminalLocalOffset,
+    TOUCH_TARGET_RADIUS_PX,
+    TOUCH_TARGET_SIZE_PX
+} from './geometry/ComponentGeometry.js';
 import { createValueDisplayShape, readValueDisplayElements } from './render/ComponentShapeFactory.js';
 import {
     updateParallelPlateCapacitorVisualRuntime,
@@ -244,17 +250,9 @@ const VALUE_DISPLAY_ANCHOR_BY_TYPE = Object.freeze({
     Motor: Object.freeze({ x: 0, y: -18 }),
     ParallelPlateCapacitor: Object.freeze({ x: 0, y: -16 })
 });
-export const TOUCH_TARGET_SIZE_PX = 44;
-export const TOUCH_TARGET_RADIUS_PX = TOUCH_TARGET_SIZE_PX / 2;
+export { TOUCH_TARGET_SIZE_PX, TOUCH_TARGET_RADIUS_PX };
 export const TERMINAL_HIT_RADIUS_PX = TOUCH_TARGET_RADIUS_PX;
 export const WIRE_ENDPOINT_HIT_RADIUS_PX = TOUCH_TARGET_RADIUS_PX;
-
-const SWITCH_TOUCH_RECT = Object.freeze({
-    x: -TOUCH_TARGET_RADIUS_PX,
-    y: -TOUCH_TARGET_RADIUS_PX,
-    width: TOUCH_TARGET_SIZE_PX,
-    height: TOUCH_TARGET_SIZE_PX
-});
 
 export function resolveValueDisplayAnchor(comp = {}) {
     if (comp?.type === 'BlackBox') {
@@ -750,12 +748,11 @@ export const SVGRenderer = {
         rect.setAttribute('class', 'body');
         g.appendChild(rect);
         
-        // 滑块位置 - 限制在电阻体范围内，避免穿模
-        // position may be 0; do not use || 0.5
+        // 滑块位置采用统一几何模型，保证渲染与拓扑计算一致。
+        const sliderLocal = getTerminalLocalOffset('Rheostat', 2, 0, comp);
+        const sliderX = sliderLocal.x;
         const posRaw = comp.position !== undefined ? comp.position : 0.5;
         const pos = Math.min(Math.max(posRaw, 0), 1);
-        // keep terminal coordinates integer to avoid hidden rounding in connectivity
-        const sliderX = Math.round(-20 + 40 * pos); // 从 -20 到 +20，留出边距
         
         // 滑动杆（横跨电阻体上方）
         this.addLine(g, -25, -12, 25, -12, 1.5);
@@ -1035,11 +1032,12 @@ export const SVGRenderer = {
         g.appendChild(rightDot);
         
         // 透明的触摸区域（便于点击切换）
+        const switchHitBox = getComponentHitBox({ type: 'Switch', ...comp });
         const touchArea = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-        touchArea.setAttribute('x', SWITCH_TOUCH_RECT.x);
-        touchArea.setAttribute('y', SWITCH_TOUCH_RECT.y);
-        touchArea.setAttribute('width', SWITCH_TOUCH_RECT.width);
-        touchArea.setAttribute('height', SWITCH_TOUCH_RECT.height);
+        touchArea.setAttribute('x', switchHitBox.x);
+        touchArea.setAttribute('y', switchHitBox.y);
+        touchArea.setAttribute('width', switchHitBox.width);
+        touchArea.setAttribute('height', switchHitBox.height);
         touchArea.setAttribute('fill', 'transparent');
         touchArea.setAttribute('class', 'switch-touch');
         touchArea.style.cursor = 'pointer';
@@ -1109,11 +1107,12 @@ export const SVGRenderer = {
         g.appendChild(bottomDot);
 
         // 透明触摸区域（沿用 switch-touch，便于复用交互逻辑）
+        const switchHitBox = getComponentHitBox({ type: 'Switch', ...comp });
         const touchArea = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-        touchArea.setAttribute('x', SWITCH_TOUCH_RECT.x);
-        touchArea.setAttribute('y', SWITCH_TOUCH_RECT.y);
-        touchArea.setAttribute('width', SWITCH_TOUCH_RECT.width);
-        touchArea.setAttribute('height', SWITCH_TOUCH_RECT.height);
+        touchArea.setAttribute('x', switchHitBox.x);
+        touchArea.setAttribute('y', switchHitBox.y);
+        touchArea.setAttribute('width', switchHitBox.width);
+        touchArea.setAttribute('height', switchHitBox.height);
         touchArea.setAttribute('fill', 'transparent');
         touchArea.setAttribute('class', 'switch-touch');
         touchArea.style.cursor = 'pointer';
