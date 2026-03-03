@@ -137,6 +137,7 @@ describe('Circuit IO gateway', () => {
                     properties: {
                         id: 'V_HIJACK',
                         type: 'Resistor',
+                        x: 999,
                         voltage: 6,
                         internalResistance: 2
                     }
@@ -166,6 +167,7 @@ describe('Circuit IO gateway', () => {
         expect(ids).toContain('V1');
         expect(ids).not.toContain('V_HIJACK');
         expect(loaded.components.find((component) => component.id === 'V1')?.type).toBe('PowerSource');
+        expect(loaded.components.find((component) => component.id === 'V1')?.x).toBe(0);
     });
 
     it('loads and runs all classroom scenario presets', () => {

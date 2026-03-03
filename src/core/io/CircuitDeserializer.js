@@ -3,7 +3,18 @@ import { computeOverlapFractionFromOffsetPx, computeParallelPlateCapacitance } f
 import { normalizeCanvasPoint, toCanvasInt } from '../../utils/CanvasCoords.js';
 import { CircuitSchemaGateway } from './CircuitSchemaGateway.js';
 
-const RESERVED_COMPONENT_PROPERTY_KEYS = new Set(['id', 'type', 'nodes']);
+const RESERVED_COMPONENT_PROPERTY_KEYS = new Set([
+    'id',
+    'type',
+    'nodes',
+    'label',
+    'x',
+    'y',
+    'rotation',
+    'display',
+    'terminalExtensions',
+    'properties'
+]);
 
 function defaultNormalizeObservationProbe(probe) {
     if (!probe || typeof probe !== 'object') return null;
