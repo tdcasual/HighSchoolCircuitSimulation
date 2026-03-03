@@ -45,6 +45,19 @@ describe('ObservationSources', () => {
         expect(evaluateSourceQuantity(circuit, 'C1', QuantityIds.Charge)).toBeCloseTo(6e-6, 12);
     });
 
+    it('supports numeric zero source ids by normalizing to string keys', () => {
+        const circuit = {
+            simTime: 0,
+            components: new Map([
+                ['0', { id: '0', type: 'Resistor', currentValue: 0.7, voltageValue: 7, powerValue: 4.9, resistance: 10 }]
+            ])
+        };
+
+        const list = getQuantitiesForSource(0, circuit).map((q) => q.id);
+        expect(list).toContain(QuantityIds.Resistance);
+        expect(evaluateSourceQuantity(circuit, 0, QuantityIds.Current)).toBeCloseTo(0.7, 12);
+    });
+
     it('includes probe sources with prefixed ids', () => {
         const circuit = {
             components: new Map([
@@ -60,6 +73,19 @@ describe('ObservationSources', () => {
         const options = getSourceOptions(circuit);
         expect(options.some((opt) => opt.id === `${PROBE_SOURCE_PREFIX}P1`)).toBe(true);
         expect(options.some((opt) => opt.id === `${PROBE_SOURCE_PREFIX}P2`)).toBe(true);
+    });
+
+    it('keeps numeric zero probe ids in source options', () => {
+        const circuit = {
+            components: new Map(),
+            getAllObservationProbes: () => ([
+                { id: 0, type: 'NodeVoltageProbe', wireId: 'W0', label: '节点0' }
+            ]),
+            getWire: (wireId) => (wireId === 'W0' ? { id: 'W0' } : null)
+        };
+
+        const options = getSourceOptions(circuit);
+        expect(options.some((opt) => opt.id === `${PROBE_SOURCE_PREFIX}0`)).toBe(true);
     });
 
     it('returns dedicated quantities for probe sources', () => {

@@ -41,14 +41,23 @@ const baseQuantityDefs = [
     { id: QuantityIds.Power, label: '功率 P (W)', unit: 'W' }
 ];
 
+function hasNonEmptyIdentifier(value) {
+    return value !== undefined && value !== null && String(value).trim() !== '';
+}
+
+function normalizeSourceId(sourceId) {
+    if (!hasNonEmptyIdentifier(sourceId)) return '';
+    return String(sourceId).trim();
+}
+
 function toProbeSourceId(probeId) {
-    return `${PROBE_SOURCE_PREFIX}${probeId}`;
+    return `${PROBE_SOURCE_PREFIX}${normalizeSourceId(probeId)}`;
 }
 
 function parseProbeSourceId(sourceId) {
-    if (typeof sourceId !== 'string') return null;
-    if (!sourceId.startsWith(PROBE_SOURCE_PREFIX)) return null;
-    const probeId = sourceId.slice(PROBE_SOURCE_PREFIX.length).trim();
+    const normalized = normalizeSourceId(sourceId);
+    if (!normalized.startsWith(PROBE_SOURCE_PREFIX)) return null;
+    const probeId = normalized.slice(PROBE_SOURCE_PREFIX.length).trim();
     return probeId || null;
 }
 
@@ -60,12 +69,14 @@ function getProbeTypeLabel(type) {
 
 function resolveObservationProbe(circuit, sourceId) {
     if (!circuit || typeof circuit.getObservationProbe !== 'function') return null;
-    const prefixedId = parseProbeSourceId(sourceId);
+    const normalizedSourceId = normalizeSourceId(sourceId);
+    if (!normalizedSourceId) return null;
+    const prefixedId = parseProbeSourceId(normalizedSourceId);
     if (prefixedId) {
         return circuit.getObservationProbe(prefixedId) || null;
     }
-    if (circuit.components?.get?.(sourceId)) return null;
-    return circuit.getObservationProbe(sourceId) || null;
+    if (circuit.components?.get?.(normalizedSourceId)) return null;
+    return circuit.getObservationProbe(normalizedSourceId) || null;
 }
 
 export function getSourceOptions(circuit) {
@@ -73,10 +84,12 @@ export function getSourceOptions(circuit) {
     if (!circuit || !circuit.components) return options;
 
     for (const comp of circuit.components.values()) {
-        const label = comp.label ? `${comp.label} (${comp.id})` : comp.id;
+        const componentId = normalizeSourceId(comp?.id);
+        if (!componentId) continue;
+        const label = comp.label ? `${comp.label} (${componentId})` : componentId;
         const typeName = ComponentNames[comp.type] || comp.type;
         options.push({
-            id: comp.id,
+            id: componentId,
             label: `${label} · ${typeName}`
         });
     }
@@ -85,13 +98,15 @@ export function getSourceOptions(circuit) {
         ? circuit.getAllObservationProbes()
         : [];
     for (const probe of probes) {
-        if (!probe?.id || !probe?.type) continue;
+        const probeId = normalizeSourceId(probe?.id);
+        if (!probeId || !probe?.type) continue;
         const typeLabel = getProbeTypeLabel(probe.type);
-        const probeLabel = probe.label?.trim() || probe.id;
-        const wireExists = !!circuit.getWire?.(probe.wireId);
-        const wireLabel = wireExists ? probe.wireId : `${probe.wireId}（导线不存在）`;
+        const probeLabel = probe.label?.trim() || probeId;
+        const wireId = normalizeSourceId(probe?.wireId);
+        const wireExists = wireId ? !!circuit.getWire?.(wireId) : false;
+        const wireLabel = wireExists ? wireId : `${wireId || '未知导线'}（导线不存在）`;
         options.push({
-            id: toProbeSourceId(probe.id),
+            id: toProbeSourceId(probeId),
             label: `${probeLabel} · ${typeLabel} · ${wireLabel}`
         });
     }
@@ -99,11 +114,12 @@ export function getSourceOptions(circuit) {
 }
 
 export function getQuantitiesForSource(sourceId, circuit) {
-    if (sourceId === TIME_SOURCE_ID) {
+    const normalizedSourceId = normalizeSourceId(sourceId);
+    if (normalizedSourceId === TIME_SOURCE_ID) {
         return [{ id: QuantityIds.Time, label: '时间 t', unit: 's' }];
     }
 
-    const probe = resolveObservationProbe(circuit, sourceId);
+    const probe = resolveObservationProbe(circuit, normalizedSourceId);
     if (probe) {
         if (probe.type === 'NodeVoltageProbe') {
             return [{ id: QuantityIds.Voltage, label: '节点电压 U', unit: 'V' }];
@@ -113,7 +129,7 @@ export function getQuantitiesForSource(sourceId, circuit) {
         }
     }
 
-    const comp = circuit?.components?.get(sourceId);
+    const comp = circuit?.components?.get(normalizedSourceId);
     if (!comp) {
         return baseQuantityDefs.slice();
     }
@@ -184,11 +200,12 @@ export function getQuantitiesForSource(sourceId, circuit) {
 }
 
 export function evaluateSourceQuantity(circuit, sourceId, quantityId) {
-    if (sourceId === TIME_SOURCE_ID) {
+    const normalizedSourceId = normalizeSourceId(sourceId);
+    if (normalizedSourceId === TIME_SOURCE_ID) {
         return Number.isFinite(circuit?.simTime) ? circuit.simTime : 0;
     }
 
-    const probe = resolveObservationProbe(circuit, sourceId);
+    const probe = resolveObservationProbe(circuit, normalizedSourceId);
     if (probe) {
         const wire = circuit?.getWire?.(probe.wireId);
         const results = circuit?.lastResults;
@@ -214,7 +231,7 @@ export function evaluateSourceQuantity(circuit, sourceId, quantityId) {
         }
     }
 
-    const comp = circuit?.components?.get(sourceId);
+    const comp = circuit?.components?.get(normalizedSourceId);
     if (!comp) return null;
 
     switch (quantityId) {
