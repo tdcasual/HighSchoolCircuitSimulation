@@ -58,6 +58,11 @@ function normalizeComponent(component, index) {
         .filter((node) => node !== null);
 
     const params = clonePlainValue(safeComponent.params || {});
+    if (params && typeof params === 'object') {
+        delete params.id;
+        delete params.type;
+        delete params.nodes;
+    }
     return {
         id,
         type,

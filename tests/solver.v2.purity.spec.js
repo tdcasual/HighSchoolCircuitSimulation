@@ -36,4 +36,40 @@ describe('SolveCircuitV2 purity contract', () => {
         expect(JSON.stringify(dto)).toBe(inputSnapshot);
         expect(JSON.stringify(leakedSource)).toBe(sourceSnapshot);
     });
+
+    it('does not allow params payload to override component id/type/nodes', () => {
+        const dto = {
+            meta: { version: 2 },
+            nodes: [{ id: '0' }, { id: '1' }],
+            components: [
+                {
+                    id: 'V1',
+                    type: 'PowerSource',
+                    nodes: [1, 0],
+                    params: { voltage: 3, internalResistance: 2 }
+                },
+                {
+                    id: 'R1',
+                    type: 'Resistor',
+                    nodes: [1, 0],
+                    params: {
+                        resistance: 8,
+                        id: 'R_INJECTED',
+                        type: 'PowerSource',
+                        nodes: [0, 0],
+                        voltage: 9,
+                        internalResistance: 1
+                    }
+                }
+            ]
+        };
+
+        const result = solveCircuitV2(dto, new SimulationStateV2(), { dt: 0.01 });
+
+        expect(result.valid).toBe(true);
+        expect(result.currents.has('R1')).toBe(true);
+        expect(result.currents.has('R_INJECTED')).toBe(false);
+        expect(result.currents.get('R1')).toBeCloseTo(0.3, 6);
+        expect(result.voltages[1]).toBeCloseTo(2.4, 6);
+    });
 });
