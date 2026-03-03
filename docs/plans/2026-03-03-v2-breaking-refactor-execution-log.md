@@ -357,3 +357,35 @@ npm run check:v2:runtime-safety
 1. `tests/components.manifestV2.spec.js` 通过（3 tests）。
 2. `check:v2:boundaries` 通过（`[v2-architecture] ok`）。
 3. `check:v2:runtime-safety` 通过（`[v2-runtime-safety] ok`）。
+
+### Task 12: Split renderers by type-group
+
+- Status: completed
+- Started: 2026-03-03
+- Completed: 2026-03-03
+- Notes:
+  - 新增 `tests/ui.rendererRegistryV2.spec.js`（fail-first），覆盖：
+    - registry 按类型返回 renderer；
+    - 未注册类型抛明确错误；
+    - 保留待迁移类型 TODO 清单。
+  - 新增 `src/v2/ui/renderers/base/SvgPrimitives.js`，抽象基础图元描述。
+  - 新增分组渲染模块：
+    - `src/v2/ui/renderers/electrical/PassiveRenderers.js`
+    - `src/v2/ui/renderers/electrical/SourceRenderers.js`
+    - `src/v2/ui/renderers/controls/SwitchRenderers.js`
+  - 新增 `src/v2/ui/renderers/RendererRegistryV2.js`，迁移首批 6 个高频类型：
+    - `PowerSource / Resistor / Switch / Capacitor / Inductor / Voltmeter`。
+
+**Verification Commands**
+
+```bash
+npm test -- tests/ui.rendererRegistryV2.spec.js
+npm run check:v2:boundaries
+npm run check:v2:runtime-safety
+```
+
+**Verification Summary**
+
+1. `tests/ui.rendererRegistryV2.spec.js` 通过（3 tests）。
+2. `check:v2:boundaries` 通过（`[v2-architecture] ok`）。
+3. `check:v2:runtime-safety` 通过（`[v2-runtime-safety] ok`）。
