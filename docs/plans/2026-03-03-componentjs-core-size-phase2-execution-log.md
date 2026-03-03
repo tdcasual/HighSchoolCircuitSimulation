@@ -32,3 +32,24 @@ npm test -- tests/component.touchTargets.spec.js tests/component.renderSafety.sp
 
 1. `check:core-size` 通过，`src/components/Component.js: 1617/1700 (95%, warning)`。
 2. 三个组件相关回归测试文件通过（`14 tests`）。
+
+### Task 1: Extract Component Catalog (Metadata)
+
+- Status: completed
+- Started: 2026-03-03
+- Completed: 2026-03-03
+- Notes:
+  - 新增 `src/components/catalog/ComponentCatalog.js`，外提 `ComponentDefaults / ComponentNames / getComponentTerminalCount`。
+  - 新增 `tests/component.catalog.spec.js`，覆盖目录导出与关键条目契约。
+  - `src/components/Component.js` 改为从 catalog 导入并 re-export，保持原调用路径兼容。
+
+**Verification Commands**
+
+```bash
+npm test -- tests/component.catalog.spec.js tests/simulation.componentRegistry.spec.js tests/interaction.componentActions.spec.js
+```
+
+**Verification Summary**
+
+1. `component.catalog` 新测试通过（3 tests）。
+2. 组件注册表和交互组件动作回归通过（32 tests）。
