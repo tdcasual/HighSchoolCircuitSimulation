@@ -1,3 +1,6 @@
+import { safeGetStorageItem, safeRemoveStorageItem, safeSetStorageItem } from '../app/AppStorage.js';
+import { RuntimeStorageEntries } from '../app/RuntimeStorageRegistry.js';
+
 const DEFAULT_REQUEST_TIMEOUT_MS = 180000;
 
 export class OpenAIClientV2 {
@@ -14,27 +17,11 @@ export class OpenAIClientV2 {
     }
 
     get PUBLIC_CONFIG_KEY() {
-        return 'ai_config';
+        return RuntimeStorageEntries.aiPublicConfig.key;
     }
 
     get SESSION_KEY_KEY() {
-        return 'ai_session_key';
-    }
-
-    safeGetStorage(getter, fallback = null) {
-        try {
-            return getter();
-        } catch (_) {
-            return fallback;
-        }
-    }
-
-    safeSetStorage(writer) {
-        try {
-            writer();
-        } catch (_) {
-            // ignore storage errors in non-browser/runtime-restricted envs
-        }
+        return RuntimeStorageEntries.aiSessionKey.key;
     }
 
     normalizePositiveNumber(value, fallbackValue) {
@@ -113,14 +100,8 @@ export class OpenAIClientV2 {
             retryDelayMs: 600
         };
 
-        const savedPublic = this.safeGetStorage(
-            () => localStorage.getItem(this.PUBLIC_CONFIG_KEY),
-            null
-        );
-        const sessionKey = this.safeGetStorage(
-            () => sessionStorage.getItem(this.SESSION_KEY_KEY),
-            ''
-        ) || '';
+        const savedPublic = safeGetStorageItem(RuntimeStorageEntries.aiPublicConfig) || null;
+        const sessionKey = safeGetStorageItem(RuntimeStorageEntries.aiSessionKey) || '';
 
         let persisted = {};
         if (savedPublic) {
@@ -193,42 +174,36 @@ export class OpenAIClientV2 {
                 : String(this.config.apiKey || '')
         };
 
-        this.safeSetStorage(() => {
-            const publicConfig = {
-                apiEndpoint: this.config.apiEndpoint,
-                requestMode: this.config.requestMode,
-                proxyEndpoint: this.config.proxyEndpoint,
-                textModel: this.config.textModel,
-                knowledgeSource: this.config.knowledgeSource,
-                knowledgeMcpEndpoint: this.config.knowledgeMcpEndpoint,
-                knowledgeMcpServer: this.config.knowledgeMcpServer,
-                knowledgeMcpMode: this.config.knowledgeMcpMode,
-                knowledgeMcpMethod: this.config.knowledgeMcpMethod,
-                knowledgeMcpResource: this.config.knowledgeMcpResource,
-                maxOutputTokens: this.config.maxOutputTokens,
-                requestTimeout: this.config.requestTimeout,
-                retryAttempts: this.config.retryAttempts,
-                retryDelayMs: this.config.retryDelayMs
-            };
-            localStorage.setItem(this.PUBLIC_CONFIG_KEY, JSON.stringify(publicConfig));
-        });
+        const publicConfig = {
+            apiEndpoint: this.config.apiEndpoint,
+            requestMode: this.config.requestMode,
+            proxyEndpoint: this.config.proxyEndpoint,
+            textModel: this.config.textModel,
+            knowledgeSource: this.config.knowledgeSource,
+            knowledgeMcpEndpoint: this.config.knowledgeMcpEndpoint,
+            knowledgeMcpServer: this.config.knowledgeMcpServer,
+            knowledgeMcpMode: this.config.knowledgeMcpMode,
+            knowledgeMcpMethod: this.config.knowledgeMcpMethod,
+            knowledgeMcpResource: this.config.knowledgeMcpResource,
+            maxOutputTokens: this.config.maxOutputTokens,
+            requestTimeout: this.config.requestTimeout,
+            retryAttempts: this.config.retryAttempts,
+            retryDelayMs: this.config.retryDelayMs
+        };
+        safeSetStorageItem(RuntimeStorageEntries.aiPublicConfig, JSON.stringify(publicConfig));
 
         if (config.apiKey !== undefined) {
-            this.safeSetStorage(() => {
-                if (this.config.apiKey) {
-                    sessionStorage.setItem(this.SESSION_KEY_KEY, this.config.apiKey);
-                } else {
-                    sessionStorage.removeItem(this.SESSION_KEY_KEY);
-                }
-            });
+            if (this.config.apiKey) {
+                safeSetStorageItem(RuntimeStorageEntries.aiSessionKey, this.config.apiKey);
+            } else {
+                safeRemoveStorageItem(RuntimeStorageEntries.aiSessionKey);
+            }
         }
     }
 
     clearApiKey() {
         this.config.apiKey = '';
-        this.safeSetStorage(() => {
-            sessionStorage.removeItem(this.SESSION_KEY_KEY);
-        });
+        safeRemoveStorageItem(RuntimeStorageEntries.aiSessionKey);
     }
 
     isProxyMode() {

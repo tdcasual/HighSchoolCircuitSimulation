@@ -70,4 +70,46 @@ describe('Circuit runtime diagnostics guard rails', () => {
         expect(circuit.lastResults.runtimeDiagnostics.fatal).toBe(true);
         expect(Array.isArray(circuit.lastResults.runtimeDiagnostics.hints)).toBe(true);
     });
+
+    it('defers topology-derived validation while topology batch rebuild is still pending', () => {
+        const circuit = createTestCircuit();
+        const originalRebuild = circuit.rebuildNodes.bind(circuit);
+        let rebuildCount = 0;
+        circuit.rebuildNodes = (...args) => {
+            rebuildCount += 1;
+            return originalRebuild(...args);
+        };
+
+        circuit.beginTopologyBatch();
+        circuit.addWire({ id: 'W1', a: { x: 0, y: 0 }, b: { x: 20, y: 0 } });
+
+        const diagnostics = circuit.collectRuntimeDiagnostics({
+            valid: false,
+            voltages: [],
+            currents: new Map(),
+            meta: { invalidReason: 'factorization_failed' }
+        }, 0);
+
+        expect(rebuildCount).toBe(0);
+        expect(circuit.topologyBatchDepth).toBe(1);
+        expect(circuit.topologyRebuildPending).toBe(true);
+        expect(diagnostics.topologyValidationDeferred).toBe(true);
+        expect(diagnostics.code).toBe(FailureCategories.SingularMatrix);
+    });
+
+
+    it('stamps topology and simulation freshness versions on collected diagnostics', () => {
+        const circuit = createTestCircuit();
+        circuit.simulationStepId = 12;
+
+        const diagnostics = circuit.collectRuntimeDiagnostics({
+            valid: false,
+            voltages: [],
+            currents: new Map(),
+            meta: { invalidReason: 'factorization_failed' }
+        }, 0);
+
+        expect(diagnostics.topologyVersion).toBe(circuit.topologyVersion);
+        expect(diagnostics.simulationVersion).toBe(12);
+    });
 });

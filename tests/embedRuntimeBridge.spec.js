@@ -127,7 +127,7 @@ describe('parseEmbedRuntimeOptionsFromSearch', () => {
 });
 
 describe('EmbedRuntimeBridge', () => {
-    it('applies readonly defaults and handles core API methods', () => {
+    it('applies readonly defaults and handles read-only API methods', () => {
         const fixture = createBridgeFixture();
         const bridge = new EmbedRuntimeBridge(
             fixture.app,
@@ -152,12 +152,38 @@ describe('EmbedRuntimeBridge', () => {
             circuit: { components: [], wires: [] }
         });
 
+        const state = bridge.handleRequest('getState');
+        expect(state.mode).toBe('readonly');
+        expect(state.readOnly).toBe(true);
+        expect(state.isRunning).toBe(false);
+    });
+
+    it('handles mutation API methods in edit mode', () => {
+        const fixture = createBridgeFixture();
+        const bridge = new EmbedRuntimeBridge(
+            fixture.app,
+            {
+                enabled: true,
+                mode: 'edit',
+                targetOrigin: 'https://host.example'
+            },
+            {
+                window: fixture.win,
+                document: fixture.doc
+            }
+        );
+
         bridge.handleRequest('run');
         expect(fixture.app.startSimulation).toHaveBeenCalledTimes(1);
 
-        const state = bridge.handleRequest('getState');
-        expect(state.mode).toBe('readonly');
-        expect(state.isRunning).toBe(true);
+        const loadResult = bridge.handleRequest('loadCircuit', {
+            circuit: { components: [], wires: [] }
+        });
+        expect(fixture.app.loadCircuitData).toHaveBeenCalledTimes(1);
+        expect(loadResult.summary).toEqual({ componentCount: 1, wireCount: 0 });
+
+        bridge.handleRequest('clearCircuit');
+        expect(fixture.app.clearCircuit).toHaveBeenCalledTimes(1);
     });
 
     it('initialize keeps running when message listener registration throws', () => {

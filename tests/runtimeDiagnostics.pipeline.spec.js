@@ -2,10 +2,21 @@ import { describe, expect, it, vi } from 'vitest';
 import { resolveRuntimeDiagnosticsForUpdate } from '../src/app/RuntimeDiagnosticsPipeline.js';
 
 describe('runtime diagnostics pipeline', () => {
-    it('keeps existing diagnostics payload without recompute', () => {
-        const existing = { code: 'SHORT_CIRCUIT', summary: 'x', hints: ['h1'] };
+    it('keeps existing diagnostics payload without recompute when freshness versions still match', () => {
+        const existing = {
+            code: 'SHORT_CIRCUIT',
+            summary: 'x',
+            hints: ['h1'],
+            topologyVersion: 3,
+            simulationVersion: 7
+        };
         const collectRuntimeDiagnostics = vi.fn();
-        const circuit = { collectRuntimeDiagnostics, simTime: 1.2 };
+        const circuit = {
+            collectRuntimeDiagnostics,
+            simTime: 1.2,
+            topologyVersion: 3,
+            simulationStepId: 7
+        };
         const results = { valid: false, runtimeDiagnostics: existing };
 
         const diagnostics = resolveRuntimeDiagnosticsForUpdate({ results, circuit });
@@ -43,5 +54,28 @@ describe('runtime diagnostics pipeline', () => {
         expect(diagnostics.code).toBe('SHORT_CIRCUIT');
         expect(results.runtimeDiagnostics).toBeTruthy();
         expect(Array.isArray(diagnostics.hints)).toBe(true);
+    });
+
+    it('preserves deferred topology marker from circuit collector when batch rebuild is pending', () => {
+        const collected = {
+            code: 'SINGULAR_MATRIX',
+            summary: 'x',
+            hints: ['h1'],
+            topologyValidationDeferred: true
+        };
+        const collectRuntimeDiagnostics = vi.fn(() => collected);
+        const circuit = {
+            collectRuntimeDiagnostics,
+            simTime: 3.4,
+            topologyBatchDepth: 1,
+            topologyRebuildPending: true
+        };
+        const results = { valid: false };
+
+        const diagnostics = resolveRuntimeDiagnosticsForUpdate({ results, circuit });
+
+        expect(collectRuntimeDiagnostics).toHaveBeenCalledTimes(1);
+        expect(diagnostics.topologyValidationDeferred).toBe(true);
+        expect(results.runtimeDiagnostics.topologyValidationDeferred).toBe(true);
     });
 });

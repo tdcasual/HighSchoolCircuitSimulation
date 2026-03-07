@@ -6,16 +6,13 @@ afterEach(() => {
     vi.unstubAllGlobals();
 });
 
-describe('AIPanel local storage safety', () => {
-    it('saveCircuitToLocalStorage falls back when buildSaveData is non-callable', () => {
-        const setItem = vi.fn();
-        vi.stubGlobal('localStorage', {
-            setItem
-        });
-
+describe('AIPanel storage ownership safety', () => {
+    it('saveCircuitToLocalStorage delegates to app storage owner when buildSaveData is non-callable', () => {
+        const saveCircuitToStorage = vi.fn(() => true);
         const panel = {
             app: {
                 buildSaveData: {},
+                saveCircuitToStorage,
                 logger: {
                     error: vi.fn()
                 }
@@ -24,33 +21,19 @@ describe('AIPanel local storage safety', () => {
         };
         const payload = { components: [{ id: 'R1' }], wires: [] };
 
-        expect(() => AIPanel.prototype.saveCircuitToLocalStorage.call(panel, payload)).not.toThrow();
-        expect(setItem).toHaveBeenCalledWith('saved_circuit', JSON.stringify(payload));
+        let saved = null;
+        expect(() => {
+            saved = AIPanel.prototype.saveCircuitToLocalStorage.call(panel, payload);
+        }).not.toThrow();
+        expect(saved).toBe(true);
+        expect(saveCircuitToStorage).toHaveBeenCalledWith(payload);
     });
 
-    it('loadCircuitFromLocalStorage ignores non-callable exerciseBoard.fromJSON', () => {
-        vi.stubGlobal('localStorage', {
-            getItem: vi.fn(() => JSON.stringify({
-                components: [],
-                wires: [],
-                meta: {
-                    exerciseBoard: { enabled: true }
-                }
-            }))
-        });
-
+    it('loadCircuitFromLocalStorage delegates to app runtime storage loader', () => {
+        const loadCircuitFromStorage = vi.fn(() => true);
         const panel = {
-            circuit: {
-                fromJSON: vi.fn()
-            },
             app: {
-                renderer: {
-                    render: vi.fn()
-                },
-                exerciseBoard: {
-                    fromJSON: {}
-                },
-                updateStatus: vi.fn(),
+                loadCircuitFromStorage,
                 logger: {
                     error: vi.fn()
                 }
@@ -63,8 +46,8 @@ describe('AIPanel local storage safety', () => {
             loaded = AIPanel.prototype.loadCircuitFromLocalStorage.call(panel);
         }).not.toThrow();
         expect(loaded).toBe(true);
-        expect(panel.circuit.fromJSON).toHaveBeenCalledTimes(1);
-        expect(panel.app.renderer.render).toHaveBeenCalledTimes(1);
-        expect(panel.app.updateStatus).toHaveBeenCalledWith('已从缓存恢复电路');
+        expect(loadCircuitFromStorage).toHaveBeenCalledWith({
+            statusText: '已从缓存恢复电路'
+        });
     });
 });

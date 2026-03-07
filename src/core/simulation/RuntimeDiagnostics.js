@@ -139,6 +139,12 @@ function collectHints(categories) {
 export function buildRuntimeDiagnostics(signals = {}) {
     const categories = collectFailureCategories(signals);
     const primaryCode = categories[0] || '';
+    const topologyVersion = Number.isFinite(signals?.topologyVersion)
+        ? Number(signals.topologyVersion)
+        : undefined;
+    const simulationVersion = Number.isFinite(signals?.simulationVersion)
+        ? Number(signals.simulationVersion)
+        : undefined;
 
     return {
         code: primaryCode,
@@ -147,6 +153,8 @@ export function buildRuntimeDiagnostics(signals = {}) {
         summary: primaryCode ? (CategorySummary[primaryCode] || '') : '',
         hints: collectHints(categories),
         componentIds: collectComponentIds(signals, categories),
-        wireIds: collectWireIds(signals, categories)
+        wireIds: collectWireIds(signals, categories),
+        topologyVersion,
+        simulationVersion
     };
 }

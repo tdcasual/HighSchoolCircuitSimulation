@@ -13,15 +13,16 @@ import { ResponsiveLayoutController } from '../ui/ResponsiveLayoutController.js'
 import { ClassroomModeController } from '../ui/ClassroomModeController.js';
 import { ToolboxCategoryController } from '../ui/ToolboxCategoryController.js';
 import { TopActionMenuController } from '../ui/TopActionMenuController.js';
+import { MobileRestoreBroker } from '../ui/mobile/MobileRestoreBroker.js';
+import { MobileRestoreEntryController } from '../ui/mobile/MobileRestoreEntryController.js';
 import { FirstRunGuideController } from '../ui/FirstRunGuideController.js';
 import { EmbedRuntimeBridge, parseEmbedRuntimeOptionsFromSearch } from '../embed/EmbedRuntimeBridge.js';
-import { resetIdCounter, updateIdCounterFromExisting } from '../components/Component.js';
+import { RuntimeActionRouter } from '../app/RuntimeActionRouter.js';
+import { RuntimeUiBridge } from '../app/RuntimeUiBridge.js';
 import { createRuntimeLogger } from '../utils/Logger.js';
-import { buildRuntimeDiagnostics } from '../core/simulation/RuntimeDiagnostics.js';
-import { resolveRuntimeDiagnosticsForUpdate } from '../app/RuntimeDiagnosticsPipeline.js';
-import { safeRemoveStorageItem } from '../app/AppStorage.js';
-import { buildAppSaveData, safeInvokeMethod } from '../app/AppSerialization.js';
-import { setSimulationControlsRunning, setStatusText } from '../app/SimulationUiState.js';
+import { RuntimeStorageEntries } from '../app/RuntimeStorageRegistry.js';
+import { buildAppSaveData } from '../app/AppSerialization.js';
+import { safeGetStorageItem, safeSetStorageItem } from '../app/AppStorage.js';
 
 export class AppRuntimeV2 {
     constructor() {
@@ -63,6 +64,10 @@ export class AppRuntimeV2 {
         // 初始化手机端顶部更多菜单
         this.topActionMenu = new TopActionMenuController(this);
 
+        // 初始化手机端统一恢复入口
+        this.mobileRestoreBroker = new MobileRestoreBroker();
+        this.mobileRestoreEntry = new MobileRestoreEntryController(this, this.mobileRestoreBroker);
+
         // 初始化工具箱分类折叠控制
         this.toolboxCategoryController = new ToolboxCategoryController(this);
 
@@ -72,6 +77,11 @@ export class AppRuntimeV2 {
         // 初始化首开引导（嵌入模式默认关闭）
         this.firstRunGuide = new FirstRunGuideController(this, {
             enabled: !this.runtimeOptions.enabled
+        });
+
+        this.runtimeUiBridge = new RuntimeUiBridge(this);
+        this.actionRouter = new RuntimeActionRouter(this, {
+            uiBridge: this.runtimeUiBridge
         });
         
         // 尝试从 localStorage 恢复电路
@@ -183,208 +193,70 @@ export class AppRuntimeV2 {
      * 电路更新回调
      */
     onCircuitUpdate(results) {
-        const runtimeDiagnostics = resolveRuntimeDiagnosticsForUpdate({
-            results,
-            circuit: this.circuit
-        });
-
-        // Always refresh value labels so the UI never stays blank.
-        this.renderer.updateValues();
-
-        // Update wire animations; short-circuit warnings can show even when solve is invalid.
-        this.renderer.updateWireAnimations(this.circuit.isRunning, results);
-
-        // 更新图表工作区（采样、绘制与无效解提示）
-        this.chartWorkspace?.onCircuitUpdate(results);
-
-        if (runtimeDiagnostics.summary) {
-            const shouldShow = !results?.valid || runtimeDiagnostics.code === 'SHORT_CIRCUIT';
-            if (shouldShow) {
-                this.chartWorkspace?.setRuntimeStatus?.(runtimeDiagnostics.summary);
-                this.updateStatus(runtimeDiagnostics.summary);
-            }
-        }
-
-        if (results.valid) {
-            // 更新选中元器件的属性面板
-            if (this.interaction.selectedComponent) {
-                const comp = this.circuit.getComponent(this.interaction.selectedComponent);
-                if (comp) {
-                    this.interaction.updateSelectedComponentReadouts(comp);
-                }
-            }
-        }
+        const runtimeUiBridge = this.runtimeUiBridge || new RuntimeUiBridge(this);
+        return runtimeUiBridge.onCircuitUpdate(results);
     }
 
     /**
      * 开始模拟
      */
     startSimulation() {
-        // 检查电路是否有效
-        if (this.circuit.components.size === 0) {
-            this.updateStatus('请先添加元器件');
-            return;
-        }
-
-        // 检查是否有电源
-        let hasPower = false;
-        for (const comp of this.circuit.components.values()) {
-            if (comp.type === 'PowerSource') {
-                hasPower = true;
-                break;
-            }
-        }
-        
-        if (!hasPower) {
-            this.updateStatus('电路中需要至少一个电源');
-            return;
-        }
-
-        const topologyReport = this.circuit.validateSimulationTopology(0);
-        const topologyDiagnostics = buildRuntimeDiagnostics({
-            topologyReport
-        });
-        if (!topologyReport.ok) {
-            const message = topologyDiagnostics.summary
-                || topologyReport.error?.message
-                || '电路拓扑校验失败，无法开始模拟';
-            this.chartWorkspace?.setRuntimeStatus?.(message);
-            this.updateStatus(message);
-            return;
-        }
-
-        const topologyWarning = topologyDiagnostics.code === 'FLOATING_SUBCIRCUIT'
-            ? topologyDiagnostics.summary
-            : '';
-
-        this.circuit.startSimulation();
-
-        // 更新UI状态（在嵌入/裁剪DOM场景下安全降级）
-        setSimulationControlsRunning(true);
-        
-        this.renderer.updateWireAnimations(true);
-        this.chartWorkspace?.setRuntimeStatus?.(topologyWarning || '');
-        this.updateStatus(topologyWarning ? `模拟运行中（${topologyWarning}）` : '模拟运行中');
+        const runtimeUiBridge = this.runtimeUiBridge || new RuntimeUiBridge(this);
+        const actionRouter = this.actionRouter || new RuntimeActionRouter(this, { uiBridge: runtimeUiBridge });
+        return actionRouter.startSimulation();
     }
 
     /**
      * 停止模拟
      */
     stopSimulation() {
-        this.circuit.stopSimulation();
-
-        // 更新UI状态（在嵌入/裁剪DOM场景下安全降级）
-        setSimulationControlsRunning(false);
-        
-        this.renderer.updateWireAnimations(false);
-        this.chartWorkspace?.setRuntimeStatus?.('');
-        this.updateStatus('模拟已停止');
+        const runtimeUiBridge = this.runtimeUiBridge || new RuntimeUiBridge(this);
+        const actionRouter = this.actionRouter || new RuntimeActionRouter(this, { uiBridge: runtimeUiBridge });
+        return actionRouter.stopSimulation();
     }
 
     /**
      * 清空电路
      */
     clearCircuit() {
-        this.stopSimulation();
-        this.circuit.clear();
-        this.renderer.clear();
-        resetIdCounter();
-        this.interaction.clearSelection();
-        this.chartWorkspace?.clearAllPlots();
-        this.chartWorkspace?.refreshDialGauges();
-        this.exerciseBoard?.reset();
-            
-        // 清除缓存
-        safeRemoveStorageItem('saved_circuit');
-        
-        this.updateStatus('电路已清空');
+        const runtimeUiBridge = this.runtimeUiBridge || new RuntimeUiBridge(this);
+        const actionRouter = this.actionRouter || new RuntimeActionRouter(this, { uiBridge: runtimeUiBridge });
+        return actionRouter.clearCircuit();
     }
 
     /**
      * 程序化加载电路 JSON（供导入流程与嵌入 API 共用）
      */
     loadCircuitData(data, options = {}) {
-        const {
-            statusText = '',
-            silent = false
-        } = options;
-        if (!data || !Array.isArray(data.components) || !Array.isArray(data.wires)) {
-            throw new Error('无效的电路 JSON：缺少 components/wires');
-        }
-
-        this.stopSimulation();
-        this.circuit.fromJSON(data);
-        safeInvokeMethod(this.exerciseBoard, 'fromJSON', data.meta?.exerciseBoard);
-
-        const allIds = [
-            ...data.components.map((component) => component.id),
-            ...data.wires.map((wire) => wire.id)
-        ];
-        updateIdCounterFromExisting(allIds);
-
-        this.renderer.render();
-        this.interaction.clearSelection();
-        this.chartWorkspace?.refreshComponentOptions();
-        this.chartWorkspace?.refreshDialGauges();
-        safeInvokeMethod(this.chartWorkspace, 'fromJSON', data.meta?.chartWorkspace);
-
-        if (!silent) {
-            this.updateStatus(statusText || `已加载电路 (${data.components.length} 个元器件)`);
-        }
-        return {
-            componentCount: data.components.length,
-            wireCount: data.wires.length
-        };
+        const runtimeUiBridge = this.runtimeUiBridge || new RuntimeUiBridge(this);
+        const actionRouter = this.actionRouter || new RuntimeActionRouter(this, { uiBridge: runtimeUiBridge });
+        return actionRouter.loadCircuitData(data, options);
     }
 
     /**
      * 导出电路
      */
     exportCircuit() {
-        const data = this.buildSaveData();
-        const json = JSON.stringify(data, null, 2);
-        
-        // 创建下载链接
-        const blob = new Blob([json], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `circuit_${new Date().toISOString().slice(0, 10)}.json`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        
-        this.updateStatus('电路已导出');
+        const runtimeUiBridge = this.runtimeUiBridge || new RuntimeUiBridge(this);
+        const actionRouter = this.actionRouter || new RuntimeActionRouter(this, { uiBridge: runtimeUiBridge });
+        return actionRouter.exportCircuit();
     }
 
     /**
      * 导入电路
      */
     importCircuit(file) {
-        const reader = new FileReader();
-        
-        reader.onload = (e) => {
-            try {
-                const data = JSON.parse(e.target.result);
-                this.loadCircuitData(data, {
-                    statusText: `已导入电路: ${data.meta?.name || '未命名'}`
-                });
-            } catch (err) {
-                this.logger.error('Import error:', err);
-                this.updateStatus('导入失败: ' + err.message);
-                alert('导入失败: ' + err.message);
-            }
-        };
-        
-        reader.readAsText(file);
+        const runtimeUiBridge = this.runtimeUiBridge || new RuntimeUiBridge(this);
+        const actionRouter = this.actionRouter || new RuntimeActionRouter(this, { uiBridge: runtimeUiBridge });
+        return actionRouter.importCircuit(file);
     }
 
     /**
      * 更新状态栏
      */
     updateStatus(text) {
-        setStatusText(text);
+        const runtimeUiBridge = this.runtimeUiBridge || new RuntimeUiBridge(this);
+        return runtimeUiBridge.updateStatus(text);
     }
     
     /**
@@ -397,8 +269,10 @@ export class AppRuntimeV2 {
         const saveCircuit = () => {
             if (!enabled) return;
             try {
-                const payload = this.buildSaveData();
-                localStorage.setItem('saved_circuit', JSON.stringify(payload));
+                const saved = this.saveCircuitToStorage();
+                if (!saved) {
+                    throw new Error('autosave_storage_unavailable');
+                }
             } catch (e) {
                 this.logger.error('Auto-save failed:', e);
             }
@@ -428,21 +302,32 @@ export class AppRuntimeV2 {
             chartWorkspace: this.chartWorkspace
         });
     }
+
+    saveCircuitToStorage(circuitJSON = null) {
+        const payload = circuitJSON ?? this.buildSaveData();
+        return safeSetStorageItem(
+            RuntimeStorageEntries.circuitAutosave,
+            JSON.stringify(payload)
+        );
+    }
     
     /**
      * 从 localStorage 加载电路
      */
-    loadCircuitFromStorage() {
+    loadCircuitFromStorage(options = {}) {
         try {
-            const saved = localStorage.getItem('saved_circuit');
-            if (saved) {
-                const circuitJSON = JSON.parse(saved);
-                this.loadCircuitData(circuitJSON, {
-                    statusText: `已从缓存恢复电路 (${circuitJSON.components.length} 个元器件)`
-                });
-            }
+            const saved = safeGetStorageItem(RuntimeStorageEntries.circuitAutosave);
+            if (!saved) return false;
+
+            const circuitJSON = JSON.parse(saved);
+            const statusText = typeof options.statusText === 'string' && options.statusText
+                ? options.statusText
+                : `已从缓存恢复电路 (${circuitJSON.components.length} 个元器件)`;
+            this.loadCircuitData(circuitJSON, { statusText });
+            return true;
         } catch (e) {
             this.logger.error('Failed to load saved circuit:', e);
+            return false;
         }
     }
 
@@ -497,6 +382,39 @@ export class AppRuntimeV2 {
         panel?.setPanelCollapsed?.(false);
         panel?.markPanelActive?.();
         return panel;
+    }
+
+    markMobilePrimaryTask(taskId = 'build') {
+        this.mobilePrimaryTask = taskId === 'observe' ? 'observe' : 'build';
+        return this.mobilePrimaryTask;
+    }
+
+    getMobileRestoreLabel() {
+        if (this.mobilePrimaryTask === 'observe') {
+            return '回到观察';
+        }
+        return '返回编辑';
+    }
+
+    runMobileRestoreAction(action = {}) {
+        switch (action?.type) {
+        case 'show-guide':
+            return this.firstRunGuide?.show?.() || false;
+        case 'open-ai':
+            return this.openAIPanel();
+        case 'open-toolbox':
+            return this.responsiveLayout?.openDrawer?.('toolbox') || false;
+        case 'open-side-panel-tab':
+            this.responsiveLayout?.openDrawer?.('side-panel');
+            this.interaction?.activateSidePanelTab?.(action?.panel || 'properties');
+            return true;
+        case 'focus-canvas':
+            this.aiPanel?.setPanelCollapsed?.(true);
+            return this.responsiveLayout?.focusCanvas?.() || false;
+        default:
+            this.aiPanel?.setPanelCollapsed?.(true);
+            return this.responsiveLayout?.focusCanvas?.() || false;
+        }
     }
 
     setClassroomModeLevel(level, options = {}) {

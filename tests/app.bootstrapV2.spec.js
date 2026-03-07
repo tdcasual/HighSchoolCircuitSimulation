@@ -30,6 +30,23 @@ describe('bootstrapV2 composition root', () => {
         expect(typeof app.openAIPanel).toBe('function');
     });
 
+    it('app runtime source exposes mobile restore runtime contract hooks', () => {
+        const runtimePath = resolve(process.cwd(), 'src/app/AppRuntimeV2.js');
+        const source = readFileSync(runtimePath, 'utf8');
+        expect(source).toContain('mobileRestoreBroker');
+        expect(source).toContain('runMobileRestoreAction');
+    });
+
+
+    it('app runtime source composes runtime action router and ui bridge', () => {
+        const runtimePath = resolve(process.cwd(), 'src/app/AppRuntimeV2.js');
+        const source = readFileSync(runtimePath, 'utf8');
+        expect(source).toContain('RuntimeActionRouter');
+        expect(source).toContain('RuntimeUiBridge');
+        expect(source).toContain('this.actionRouter');
+        expect(source).toContain('this.runtimeUiBridge');
+    });
+
     it('main entry delegates startup to bootstrapV2', () => {
         const mainPath = resolve(process.cwd(), 'src/main.js');
         const source = readFileSync(mainPath, 'utf8');

@@ -21,6 +21,7 @@ const EMBED_MODES = Object.freeze([
 const CLASSROOM_LEVEL_OFF = 'off';
 const CLASSROOM_LEVEL_STANDARD = 'standard';
 const CLASSROOM_LEVEL_ENHANCED = 'enhanced';
+const READONLY_BLOCKED_METHODS = Object.freeze(['run', 'clearCircuit', 'loadCircuit']);
 
 function parseBooleanFlag(rawValue, fallbackValue) {
     if (rawValue === null || rawValue === undefined || rawValue === '') {
@@ -256,12 +257,30 @@ export class EmbedRuntimeBridge {
         }
     }
 
+    isReadOnlyActive() {
+        return this.mode === EMBED_MODE_READONLY || this.readOnly;
+    }
+
+    assertMutableRequestAllowed(method) {
+        if (!READONLY_BLOCKED_METHODS.includes(method) || !this.isReadOnlyActive()) {
+            return;
+        }
+        throw createBridgeError(
+            'READONLY_MUTATION_BLOCKED',
+            'Readonly embed runtime blocked mutation request',
+            {
+                method,
+                readOnly: true
+            }
+        );
+    }
+
     getStateSnapshot() {
         const componentCount = this.app?.circuit?.components?.size || 0;
         const wireCount = this.app?.circuit?.wires?.size || 0;
         return {
             mode: this.mode,
-            readOnly: this.mode === EMBED_MODE_READONLY || this.readOnly,
+            readOnly: this.isReadOnlyActive(),
             classroomLevel: this.app?.classroomMode?.activeLevel || CLASSROOM_LEVEL_OFF,
             isRunning: !!this.app?.circuit?.isRunning,
             componentCount,
@@ -338,6 +357,7 @@ export class EmbedRuntimeBridge {
     }
 
     handleRequest(method, payload = {}) {
+        this.assertMutableRequestAllowed(method);
         switch (method) {
             case 'ping':
                 return { pong: true, now: Date.now() };

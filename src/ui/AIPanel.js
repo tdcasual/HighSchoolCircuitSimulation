@@ -556,42 +556,40 @@ export class AIPanel {
     }
 
     /**
-     * 保存电路到 localStorage
+     * 通过 AppRuntime 统一保存电路缓存
      */
     saveCircuitToLocalStorage(circuitJSON) {
-        try {
-            // Prefer app-level serializer so extra UI state (e.g. 习题板) can be persisted together.
-            const appPayload = safeInvoke(this.app, 'buildSaveData');
-            const payload = appPayload ?? circuitJSON;
-            localStorage.setItem('saved_circuit', JSON.stringify(payload));
-        } catch (e) {
-            this.logPanelEvent?.('error', 'save_circuit_failed', {
-                error: e?.message || String(e)
-            });
-            this.app?.logger?.error?.('Failed to save circuit:', e);
+        const appPayload = safeInvoke(this.app, 'buildSaveData');
+        const payload = appPayload ?? circuitJSON;
+        const saved = safeInvoke(this.app, 'saveCircuitToStorage', [payload], false);
+        if (saved) {
+            return true;
         }
+
+        const error = new Error('circuit_storage_delegate_unavailable');
+        this.logPanelEvent?.('error', 'save_circuit_failed', {
+            error: error.message
+        });
+        this.app?.logger?.error?.('Failed to save circuit:', error);
+        return false;
     }
 
     /**
-     * 从 localStorage 加载电路
+     * 通过 AppRuntime 统一加载电路缓存
      */
     loadCircuitFromLocalStorage() {
-        try {
-            const saved = localStorage.getItem('saved_circuit');
-            if (saved) {
-                const circuitJSON = JSON.parse(saved);
-                this.circuit.fromJSON(circuitJSON);
-                this.app.renderer.render();
-                safeInvoke(this.app?.exerciseBoard, 'fromJSON', circuitJSON.meta?.exerciseBoard);
-                this.app.updateStatus('已从缓存恢复电路');
-                return true;
-            }
-        } catch (e) {
-            this.logPanelEvent?.('error', 'load_circuit_failed', {
-                error: e?.message || String(e)
-            });
-            this.app?.logger?.error?.('Failed to load circuit:', e);
+        const loaded = safeInvoke(this.app, 'loadCircuitFromStorage', [{
+            statusText: '已从缓存恢复电路'
+        }], false);
+        if (loaded) {
+            return true;
         }
+
+        const error = new Error('circuit_storage_delegate_unavailable');
+        this.logPanelEvent?.('error', 'load_circuit_failed', {
+            error: error.message
+        });
+        this.app?.logger?.error?.('Failed to load circuit:', error);
         return false;
     }
 
