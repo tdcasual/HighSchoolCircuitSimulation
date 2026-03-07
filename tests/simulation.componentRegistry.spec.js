@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ComponentRegistry, DefaultComponentRegistry } from '../src/core/simulation/ComponentRegistry.js';
 import { ComponentDefaults } from '../src/components/Component.js';
+import { listComponentDefinitionTypes } from '../src/components/ComponentDefinitionRegistry.js';
 import { computeNtcThermistorResistance, computePhotoresistorResistance } from '../src/utils/Physics.js';
 import { evaluateJunctionCurrent, linearizeJunctionAt, resolveJunctionParameters } from '../src/core/simulation/JunctionModel.js';
 
@@ -12,9 +13,11 @@ describe('ComponentRegistry', () => {
         expect(registry.get('Unknown')).toBe(null);
     });
 
-    it('covers all ComponentDefaults types with stamp/current handlers in default registry', () => {
-        const supportedTypes = Object.keys(ComponentDefaults);
+    it('covers all canonical component definition types with stamp/current handlers in default registry', () => {
+        const supportedTypes = listComponentDefinitionTypes();
         const missing = [];
+
+        expect(supportedTypes.sort()).toEqual(Object.keys(ComponentDefaults).sort());
 
         for (const type of supportedTypes) {
             const handler = DefaultComponentRegistry.get(type);

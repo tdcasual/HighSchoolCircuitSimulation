@@ -9,6 +9,7 @@ import { getTerminalWorldPosition } from '../../utils/TerminalGeometry.js';
 import { normalizeCanvasPoint, pointKey, toCanvasInt } from '../../utils/CanvasCoords.js';
 import { NodeBuilder } from '../topology/NodeBuilder.js';
 import { WireCompactor } from '../topology/WireCompactor.js';
+import { getTopologyStateSnapshot, setTopologyReplacementState } from '../topology/TopologyState.js';
 import { ConnectivityCache } from '../topology/ConnectivityCache.js';
 import { CircuitSerializer } from '../io/CircuitSerializer.js';
 import { CircuitDeserializer } from '../io/CircuitDeserializer.js';
@@ -59,6 +60,8 @@ export class Circuit {
         this.topologyBatchDepth = 0;
         this.topologyRebuildPending = false;
         this.topologyVersion = 0;
+        this.topologyReplacementByRemovedId = {};
+        this.simulationStepId = 0;
         this.solverPreparedTopologyVersion = -1;
         this.solverCircuitDirty = true;
         this.nodeBuilder = new NodeBuilder();
@@ -370,6 +373,8 @@ export class Circuit {
             syncWireEndpointsToTerminalRefs: () => this.syncWireEndpointsToTerminalRefs()
         });
 
+        setTopologyReplacementState(this, replacementByRemovedId);
+
         if (changed) {
             for (const removedId of removedIds) {
                 if (!replacementByRemovedId[removedId]) {
@@ -388,6 +393,11 @@ export class Circuit {
      */
     rebuildNodes() {
         this.topologyService.rebuild(this);
+    }
+
+
+    getTopologyState() {
+        return getTopologyStateSnapshot(this);
     }
 
     /**
@@ -964,7 +974,11 @@ export class Circuit {
     }
 
     resetSimulationState() {
+        this.simulationState = new SimulationState();
         this.simulationState.resetForComponents(Array.from(this.components.values()));
+        if (typeof this.solver.setSimulationState === 'function') {
+            this.solver.setSimulationState(this.simulationState);
+        }
     }
 
     syncSimulationStateToComponents() {
@@ -1011,18 +1025,25 @@ export class Circuit {
         const normalizedResults = (results && typeof results === 'object')
             ? results
             : { voltages: [], currents: new Map(), valid: false };
+        const topologyValidationDeferred = this.topologyBatchDepth > 0 || this.topologyRebuildPending;
         this.refreshShortCircuitDiagnostics(normalizedResults);
-        const topologyReport = normalizedResults.valid
+        const topologyReport = normalizedResults.valid || topologyValidationDeferred
             ? null
             : this.validateSimulationTopology(simTime);
-        return this.diagnosticsAdapter.build({
+        const diagnostics = this.diagnosticsAdapter.build({
             topologyReport,
             results: normalizedResults,
+            topologyVersion: this.topologyVersion,
+            simulationVersion: this.simulationStepId,
             solverShortCircuitDetected: !!this.solver?.shortCircuitDetected,
             shortedSourceIds: this.shortedSourceIds,
             shortedWireIds: this.shortedWireIds,
             invalidParameterIssues: this.invalidParameterIssues
         });
+        if (topologyValidationDeferred && diagnostics && typeof diagnostics === 'object') {
+            diagnostics.topologyValidationDeferred = true;
+        }
+        return diagnostics;
     }
 
     attachRuntimeDiagnostics(results = this.lastResults, simTime = this.simTime) {
@@ -1048,6 +1069,7 @@ export class Circuit {
         // 并按子步推进求解与动态状态更新。
         const loopResult = this.simulationLoopService.runStep(this);
         this.lastResults = loopResult.lastResults;
+        this.simulationStepId += 1;
         const elapsedStepDt = Number.isFinite(loopResult.elapsedDt) && loopResult.elapsedDt > 0
             ? loopResult.elapsedDt
             : (Number.isFinite(loopResult.stepDt) && loopResult.stepDt > 0 ? loopResult.stepDt : this.dt);
@@ -1699,10 +1721,16 @@ export class Circuit {
         this.topologyBatchDepth = 0;
         this.topologyRebuildPending = false;
         this.topologyVersion = 0;
+        this.topologyReplacementByRemovedId = {};
+        this.simulationStepId = 0;
         this.solverPreparedTopologyVersion = -1;
         this.solverCircuitDirty = true;
         this.componentTerminalTopologyKeys = new Map();
         this.terminalWorldPosCache = new Map();
+        this.simulationState = new SimulationState();
+        if (typeof this.solver.setSimulationState === 'function') {
+            this.solver.setSimulationState(this.simulationState);
+        }
     }
 
     /**

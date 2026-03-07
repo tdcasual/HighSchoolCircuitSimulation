@@ -4,12 +4,24 @@ import {
     ComponentNames,
     getComponentTerminalCount
 } from '../src/components/catalog/ComponentCatalog.js';
+import { getComponentDefinition, listComponentDefinitionTypes } from '../src/components/ComponentDefinitionRegistry.js';
 
 describe('ComponentCatalog', () => {
     it('exports canonical component metadata collections', () => {
         expect(ComponentDefaults).toBeTruthy();
         expect(ComponentNames).toBeTruthy();
         expect(typeof getComponentTerminalCount).toBe('function');
+    });
+
+    it('derives catalog maps from the canonical component definition registry', () => {
+        expect(Object.keys(ComponentDefaults).sort()).toEqual(listComponentDefinitionTypes().sort());
+
+        for (const type of listComponentDefinitionTypes()) {
+            const definition = getComponentDefinition(type);
+            expect(ComponentDefaults[type]).toEqual(definition.defaults);
+            expect(ComponentNames[type]).toBe(definition.displayName);
+            expect(getComponentTerminalCount(type)).toBe(definition.terminalCount);
+        }
     });
 
     it('contains required high-impact component entries', () => {

@@ -3,6 +3,30 @@ import { Circuit } from '../src/core/runtime/Circuit.js';
 import { createComponent } from '../src/components/Component.js';
 
 describe('Solver uses SimulationState', () => {
+    it('drops stale dynamic entries after clear + reset', () => {
+        const circuit = new Circuit();
+        const capacitor = createComponent('Capacitor', 0, 0, 'C1');
+        capacitor.nodes = [0, 1];
+
+        circuit.addComponent(capacitor);
+        circuit.resetSimulationState();
+        expect(circuit.simulationState.get('C1')).toBeTruthy();
+
+        circuit.clear();
+
+        const inductor = createComponent('Inductor', 0, 0, 'L1');
+        inductor.nodes = [0, 1];
+        circuit.addComponent(inductor);
+        circuit.resetSimulationState();
+
+        expect(circuit.simulationState.get('C1')).toBeUndefined();
+        expect(circuit.simulationState.get('L1')).toEqual({
+            prevCurrent: 0,
+            prevVoltage: 0,
+            _dynamicHistoryReady: false
+        });
+    });
+
     it('stores diode conduction state in SimulationState', () => {
         const circuit = new Circuit();
         const diode = createComponent('Diode', 0, 0, 'D1');

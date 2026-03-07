@@ -5,6 +5,7 @@ import {
     listComponentTypesV2
 } from '../src/v2/domain/components/ComponentManifest.js';
 import { createComponentV2, resetV2ComponentIdCounter } from '../src/v2/domain/components/createComponentV2.js';
+import { getComponentDefinition, listComponentDefinitionTypes } from '../src/components/ComponentDefinitionRegistry.js';
 
 const EXPECTED_TYPES = [
     'Ground',
@@ -39,6 +40,19 @@ describe('component manifest v2', () => {
             expect(COMPONENT_MANIFEST_V2[type].displayName.length).toBeGreaterThan(0);
             expect(COMPONENT_MANIFEST_V2[type].terminalCount).toBeGreaterThanOrEqual(1);
             expect(COMPONENT_MANIFEST_V2[type].defaults).toBeTypeOf('object');
+        }
+    });
+
+    it('matches the canonical component definition registry one-to-one', () => {
+        expect(listComponentTypesV2().sort()).toEqual(listComponentDefinitionTypes().sort());
+
+        for (const type of listComponentDefinitionTypes()) {
+            const manifest = getComponentManifestV2(type);
+            const definition = getComponentDefinition(type);
+
+            expect(manifest.displayName).toBe(definition.displayName);
+            expect(manifest.terminalCount).toBe(definition.terminalCount);
+            expect(manifest.defaults).toEqual(definition.defaults);
         }
     });
 

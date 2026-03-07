@@ -1,4 +1,5 @@
 import { validateCircuitV3 } from './CircuitSchemaV3.js';
+import { requireComponentDefinition } from '../components/ComponentDefinitionRegistry.js';
 
 function clonePlainValue(value) {
     if (value == null) return value;
@@ -36,9 +37,10 @@ function normalizeTerminalRef(ref) {
 }
 
 function normalizeComponent(component) {
+    const definition = requireComponentDefinition(component.type);
     return {
         id: String(component.id),
-        type: String(component.type),
+        type: definition.type,
         label: typeof component.label === 'string' ? component.label : null,
         x: Number(component.x),
         y: Number(component.y),

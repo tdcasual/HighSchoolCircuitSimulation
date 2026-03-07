@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { addComponent, connectWire, createTestCircuit, solveCircuit } from './helpers/circuitTestUtils.js';
+import { buildRuntimeCircuit, getCanonicalSolverCase } from './helpers/solverParityHarness.js';
 
 describe('Solver common circuit cases', () => {
     it('exposes simulation loop service for step orchestration', () => {
@@ -74,12 +75,7 @@ describe('Solver common circuit cases', () => {
     });
 
     it('reports invalid for conflicting ideal voltage sources in parallel', () => {
-        const circuit = createTestCircuit();
-        const v1 = addComponent(circuit, 'PowerSource', 'V1', { voltage: 5, internalResistance: 0 });
-        const v2 = addComponent(circuit, 'PowerSource', 'V2', { voltage: 12, internalResistance: 0 });
-
-        connectWire(circuit, 'W1', v1, 0, v2, 0);
-        connectWire(circuit, 'W2', v1, 1, v2, 1);
+        const { circuit } = buildRuntimeCircuit(getCanonicalSolverCase('conflicting-ideal-sources'));
 
         const results = solveCircuit(circuit);
         expect(results.valid).toBe(false);
