@@ -98,12 +98,26 @@ export class FirstRunGuideController {
     handleOverlayClick(event) {
         const action = event.target?.dataset?.guideAction;
         if (!action) return;
+        const remember = !!this.rememberCheckboxEl?.checked;
         if (action === 'skip') {
-            this.dismiss({ remember: !!this.rememberCheckboxEl?.checked, announce: false });
+            if (remember) {
+                this.app?.mobileRestoreBroker?.clear?.('guide');
+            } else {
+                this.app?.mobileRestoreBroker?.register?.({
+                    id: 'guide-resume',
+                    source: 'guide',
+                    label: '继续上手',
+                    priority: 90,
+                    action: { type: 'show-guide' }
+                });
+            }
+            this.dismiss({ remember, announce: false });
             return;
         }
         if (action === 'start') {
-            this.dismiss({ remember: !!this.rememberCheckboxEl?.checked, announce: true });
+            this.app?.mobileRestoreBroker?.clear?.('guide');
+            this.dismiss({ remember, announce: false });
+            this.app?.runMobileRestoreAction?.({ type: 'open-toolbox' });
         }
     }
 

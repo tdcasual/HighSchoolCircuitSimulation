@@ -366,6 +366,25 @@ async function runScenario(browser, baseUrl) {
             `${scenario.name}: long assistant message should be relaxed density`
         );
 
+        const restoreState = await page.evaluate(() => {
+            const entry = document.getElementById('mobile-restore-entry');
+            return {
+                exists: !!entry,
+                hidden: entry?.hidden ?? true,
+                label: entry?.textContent?.trim() || ''
+            };
+        });
+        assertCondition(restoreState.exists, `${scenario.name}: restore anchor element should exist`);
+        assertCondition(!restoreState.hidden, `${scenario.name}: restore anchor should be visible while AI panel is open`);
+        assertCondition(restoreState.label.length > 0, `${scenario.name}: restore anchor should expose a label`);
+
+        await page.click('#mobile-restore-entry');
+        await page.waitForFunction(() => {
+            const panel = document.getElementById('ai-assistant-panel');
+            const body = document.body;
+            return !!panel && panel.classList.contains('collapsed') && !body.classList.contains('ai-panel-open');
+        });
+
         await context.close();
     }
 }

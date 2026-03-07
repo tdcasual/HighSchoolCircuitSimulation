@@ -23,6 +23,16 @@ function extractPxValue(block, property) {
 }
 
 describe('mobile css touch targets', () => {
+    it('keeps phone restore anchor touch height >= 40px', () => {
+        const css = readStyleSheet();
+        const block = extractRuleBlock(css, 'body.layout-mode-phone #mobile-restore-entry');
+        const minHeightPx = extractPxValue(block, 'min-height');
+
+        expect(block.length).toBeGreaterThan(0);
+        expect(Number.isFinite(minHeightPx)).toBe(true);
+        expect(minHeightPx).toBeGreaterThanOrEqual(40);
+    });
+
     it('keeps phone top more button touch height >= 40px', () => {
         const css = readStyleSheet();
         const block = extractRuleBlock(css, 'body.layout-mode-phone .top-action-btn-more');

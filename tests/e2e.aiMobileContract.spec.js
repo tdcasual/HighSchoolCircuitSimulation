@@ -8,6 +8,7 @@ describe('ai mobile e2e contract', () => {
         const source = readFileSync(scriptPath, 'utf8');
 
         expect(source).toContain('window.app?.openAIPanel');
+        expect(source).toContain('mobile-restore-entry');
         expect(source).not.toContain('window.app?.aiPanel && window.app?.responsiveLayout');
     });
 });

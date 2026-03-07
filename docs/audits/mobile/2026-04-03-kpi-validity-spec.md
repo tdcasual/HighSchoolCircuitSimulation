@@ -23,6 +23,15 @@ Behavior KPIs describe user-facing quality signals independent from script succe
 - `p90DurationMs`: p90 completion time across tasks (nearest-rank percentile)
 - `destructiveCancelRate`: ratio of tasks marked `destructiveCancel=true`
 
+### Task KPI Tier
+
+Task KPIs describe whether a teaching-critical flow was actually finished and observed:
+
+- `averageInteractionCount`: mean interaction count per measured task
+- `completionRate`: proportion of tasks that completed all required steps successfully
+- `observationRate`: proportion of tasks that reached a confirmed observation step
+- `stepCompletionRate`: ratio of completed required steps across all measured tasks
+
 ## Data Contract
 
 `summary` from `summarizeMobileFlowMetrics(report)` now returns:
@@ -39,6 +48,12 @@ Behavior KPIs describe user-facing quality signals independent from script succe
     "medianDurationMs": 0,
     "p90DurationMs": 0,
     "destructiveCancelRate": 0
+  },
+  "taskKpi": {
+    "averageInteractionCount": 0,
+    "completionRate": 0,
+    "observationRate": 0,
+    "stepCompletionRate": 0
   }
 }
 ```
@@ -50,7 +65,8 @@ Backward-compatibility fields (`averageTapCount`, `successRate`, `maxTapCount`, 
 Executed:
 
 ```bash
-npm test -- tests/mobileFlowMetrics.validity.spec.js tests/mobileFlowMetrics.spec.js
+npm test -- tests/mobileFlowMetrics.validity.spec.js tests/mobileFlowMetrics.spec.js tests/e2e.mobileCoreLearningContract.spec.js
+node scripts/e2e/mobile-core-learning-flow.mjs
 npm run test:e2e:responsive
 ```
 
@@ -58,4 +74,5 @@ Result:
 
 - Validity tier tests passed.
 - Existing metrics tests passed.
-- Responsive touch E2E passed and generated updated baseline artifact.
+- Core learning KPI flow passed and generated a dedicated KPI report.
+- Responsive touch E2E remained available for synthetic baseline output.

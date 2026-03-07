@@ -380,11 +380,24 @@ export class ResponsiveLayoutController {
         this.syncLayoutUI();
     }
 
+    openDrawer(target) {
+        if (!this.isOverlayMode()) return false;
+        this.toolboxOpen = target === 'toolbox';
+        this.sidePanelOpen = target === 'side-panel';
+        this.syncLayoutUI();
+        return true;
+    }
+
     closeDrawers() {
         if (!this.isOverlayMode()) return;
         this.toolboxOpen = false;
         this.sidePanelOpen = false;
         this.syncLayoutUI();
+    }
+
+    focusCanvas() {
+        this.closeDrawers();
+        return true;
     }
 
     onKeyDown(event) {

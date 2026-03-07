@@ -350,6 +350,7 @@ async function collectMobileTaskBaselines(page, collector) {
         const result = await runPhoneTaskScenario(page, taskId);
         collector.recordTaskResult(taskId, {
             tapCount: result.tapCount,
+            interactionCount: result.tapCount,
             durationMs: result.durationMs,
             success: !!result.ok,
             destructiveCancel: !!result.destructiveCancel,
@@ -594,6 +595,7 @@ async function verifyPhoneTouchFlow(browser, baseUrl, collector) {
             };
             return {
                 moreVisible: isVisible('btn-top-action-more'),
+                restoreExists: !!document.getElementById('mobile-restore-entry'),
                 clearVisible: isVisible('btn-clear'),
                 exportVisible: isVisible('btn-export'),
                 importVisible: isVisible('btn-import'),
@@ -601,6 +603,7 @@ async function verifyPhoneTouchFlow(browser, baseUrl, collector) {
             };
         });
         assertCondition(topActionState.moreVisible, 'phone mode should display top more button');
+        assertCondition(topActionState.restoreExists, 'phone mode should render mobile restore anchor element');
         assertCondition(!topActionState.clearVisible, 'desktop clear button should be hidden in phone mode');
         assertCondition(!topActionState.exportVisible, 'desktop export button should be hidden in phone mode');
         assertCondition(!topActionState.importVisible, 'desktop import button should be hidden in phone mode');
@@ -998,6 +1001,69 @@ async function verifyPhoneTouchFlow(browser, baseUrl, collector) {
             const modeSnapshotAtFlowEnd = captureModeSnapshot();
             const wireModeStillArmed = isWireToolArmed(modeSnapshotAtFlowEnd);
 
+            const makeEdgeBiasedClientPoint = (target, direction = 'right') => {
+                const rect = target?.getBoundingClientRect?.();
+                if (!rect || rect.width <= 0 || rect.height <= 0) return null;
+                const centerX = rect.left + rect.width / 2;
+                const centerY = rect.top + rect.height / 2;
+                const preferredOffset = Math.max(6, Math.min(12, rect.width * 0.3));
+                const boundedOffset = Math.min(preferredOffset, Math.max(0, rect.width / 2 - 4));
+                const sign = direction === 'left' ? -1 : 1;
+                return {
+                    x: Math.round(centerX + sign * boundedOffset),
+                    y: Math.round(centerY)
+                };
+            };
+            const resolveHitTargetAt = (clientX, clientY) => document.elementFromPoint(clientX, clientY) || svg;
+
+            app.clearCircuit?.();
+            interaction.scale = 0.75;
+            interaction.viewOffset = { x: 0, y: 0 };
+            interaction.updateViewTransform?.();
+            interaction.setMobileInteractionMode?.('wire', { silentStatus: true });
+
+            const edgeBiasedResistorA = add('Resistor', 120, 220);
+            const edgeBiasedResistorB = add('Resistor', 260, 220);
+            if (!edgeBiasedResistorA || !edgeBiasedResistorB) {
+                return { ok: false, error: 'edge_biased_add_component_failed' };
+            }
+
+            const edgeBiasedStartTarget = getTerminalTarget(edgeBiasedResistorA, 1);
+            const edgeBiasedFinishTarget = getTerminalTarget(edgeBiasedResistorB, 0);
+            const edgeBiasedStartPos = renderer.getTerminalPosition(edgeBiasedResistorA, 1);
+            const edgeBiasedFinishPos = renderer.getTerminalPosition(edgeBiasedResistorB, 0);
+            if (!edgeBiasedStartTarget || !edgeBiasedFinishTarget || !edgeBiasedStartPos || !edgeBiasedFinishPos) {
+                return { ok: false, error: 'edge_biased_terminal_target_missing' };
+            }
+
+            const edgeBiasedStartClient = makeEdgeBiasedClientPoint(edgeBiasedStartTarget, 'right')
+                || toClient(edgeBiasedStartPos.x, edgeBiasedStartPos.y);
+            const edgeBiasedFinishClient = makeEdgeBiasedClientPoint(edgeBiasedFinishTarget, 'left')
+                || toClient(edgeBiasedFinishPos.x, edgeBiasedFinishPos.y);
+
+            const edgeBiasedStartHitTarget = resolveHitTargetAt(edgeBiasedStartClient.x, edgeBiasedStartClient.y);
+            dispatchTap(edgeBiasedStartHitTarget, 509, edgeBiasedStartClient.x, edgeBiasedStartClient.y);
+            const edgeBiasedStartSnapshot = captureModeSnapshot();
+            const edgeBiasedTapStartArmsWiring = wiringActiveActive(edgeBiasedStartSnapshot)
+                && interaction.wireStart?.snap?.type === 'terminal'
+                && interaction.wireStart?.snap?.componentId === edgeBiasedResistorA
+                && interaction.wireStart?.snap?.terminalIndex === 1;
+
+            const edgeBiasedWireCountBeforeFinish = circuit.wires?.size || 0;
+            const edgeBiasedFinishHitTarget = resolveHitTargetAt(edgeBiasedFinishClient.x, edgeBiasedFinishClient.y);
+            dispatchTap(edgeBiasedFinishHitTarget, 510, edgeBiasedFinishClient.x, edgeBiasedFinishClient.y);
+            const edgeBiasedFinishSnapshot = captureModeSnapshot();
+            const edgeBiasedWireCountAfterFinish = circuit.wires?.size || 0;
+            const edgeBiasedTapFinishCreatesWire = !wiringActiveActive(edgeBiasedFinishSnapshot)
+                && edgeBiasedWireCountAfterFinish > edgeBiasedWireCountBeforeFinish;
+            if (wiringActiveActive(edgeBiasedFinishSnapshot)) {
+                interaction.cancelWiring?.();
+            }
+
+            interaction.scale = 1;
+            interaction.viewOffset = { x: 0, y: 0 };
+            interaction.updateViewTransform?.();
+
             return {
                 ok: true,
                 tapStartArmsWiring,
@@ -1009,6 +1075,10 @@ async function verifyPhoneTouchFlow(browser, baseUrl, collector) {
                 wiringPreservedAfterEditDrag,
                 wiringPreservedAfterSliderShapeDrag,
                 wireModeStillArmed,
+                edgeBiasedTapStartArmsWiring,
+                edgeBiasedTapFinishCreatesWire,
+                edgeBiasedStartHitTag: edgeBiasedStartHitTarget?.getAttribute?.('class') || edgeBiasedStartHitTarget?.tagName || '',
+                edgeBiasedFinishHitTag: edgeBiasedFinishHitTarget?.getAttribute?.('class') || edgeBiasedFinishHitTarget?.tagName || '',
                 modeSnapshotAtWireEntry,
                 modeSnapshotDuringEditDrag,
                 modeSnapshotAtFlowEnd
@@ -1024,6 +1094,8 @@ async function verifyPhoneTouchFlow(browser, baseUrl, collector) {
         assertCondition(weakMergeState.wiringPreservedAfterEditDrag, 'edit-drag during active wiring should not cancel wiring');
         assertCondition(weakMergeState.wiringPreservedAfterSliderShapeDrag, 'slider-shape drag during active wiring should not cancel wiring');
         assertCondition(weakMergeState.wireModeStillArmed, 'wire mode should remain armed after weak-merge edit gestures');
+        assertCondition(weakMergeState.edgeBiasedTapStartArmsWiring, 'wire mode edge-biased touch inside terminal hit budget should arm wiring');
+        assertCondition(weakMergeState.edgeBiasedTapFinishCreatesWire, 'wire mode edge-biased finish touch inside terminal hit budget should create wire');
 
         const editMeasureSetup = await page.evaluate(() => {
             const app = window.app;
@@ -1104,6 +1176,12 @@ async function verifyPhoneTouchFlow(browser, baseUrl, collector) {
                 atWireEntry: weakMergeState.modeSnapshotAtWireEntry || null,
                 duringEditDrag: weakMergeState.modeSnapshotDuringEditDrag || null,
                 atFlowEnd: weakMergeState.modeSnapshotAtFlowEnd || null
+            },
+            touchHitBudget: {
+                edgeBiasedTapStartArmsWiring: !!weakMergeState.edgeBiasedTapStartArmsWiring,
+                edgeBiasedTapFinishCreatesWire: !!weakMergeState.edgeBiasedTapFinishCreatesWire,
+                edgeBiasedStartHitTag: weakMergeState.edgeBiasedStartHitTag || '',
+                edgeBiasedFinishHitTag: weakMergeState.edgeBiasedFinishHitTag || ''
             }
         };
     } catch (error) {
@@ -1135,8 +1213,9 @@ async function main() {
             metricsSummary
                 && typeof metricsSummary === 'object'
                 && metricsSummary.synthetic
-                && metricsSummary.behavior,
-            'mobile flow summary must include synthetic and behavior KPI tiers'
+                && metricsSummary.behavior
+                && metricsSummary.taskKpi,
+            'mobile flow summary must include synthetic, behavior, and taskKpi KPI tiers'
         );
         const baselinePath = path.join(outputDir, 'mobile-flow-baseline.json');
         await writeFile(

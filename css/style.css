@@ -147,6 +147,16 @@ body.embed-readonly #circuit-canvas {
     color: #0f172a;
 }
 
+
+.mobile-restore-entry {
+    display: none;
+    max-width: 0;
+}
+
+#mobile-restore-entry[hidden] {
+    display: none !important;
+}
+
 .top-action-more-menu {
     position: fixed;
     top: calc(var(--top-action-bar-height) + max(6px, env(safe-area-inset-top)));
@@ -2469,6 +2479,20 @@ body.layout-mode-phone .top-action-btn-more {
     min-width: 52px;
     min-height: 42px;
     padding: 8px 12px;
+}
+
+
+body.layout-mode-phone #mobile-restore-entry {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 72px;
+    min-height: 40px;
+    max-width: 132px;
+    padding: 8px 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 body.layout-mode-phone #zoom-level {

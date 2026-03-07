@@ -49,9 +49,11 @@ export function bindButtonEvents() {
 
     // 手机端交互模式切换（选择 / 布线）
     const handleMobileModeSelect = () => {
+        this.app?.markMobilePrimaryTask?.('build');
         this.setMobileInteractionMode?.('select');
     };
     const handleMobileModeWire = () => {
+        this.app?.markMobilePrimaryTask?.('build');
         this.setMobileInteractionMode?.('wire');
     };
     bindClick('btn-mobile-mode-select', handleMobileModeSelect);
@@ -197,6 +199,7 @@ export function bindButtonEvents() {
 
     // 图表按钮（全局创建）
     const handleAddChart = () => {
+        this.app?.markMobilePrimaryTask?.('observe');
         const chart = this.app?.chartWorkspace?.addChart?.();
         if (!chart) {
             this.updateStatus?.('图表工作区不可用');

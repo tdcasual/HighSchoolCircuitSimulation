@@ -156,6 +156,17 @@ describe('ResponsiveLayoutController', () => {
         expect(backdrop.hidden).toBe(true);
     });
 
+
+    it('opens toolbox explicitly without toggling side panel state', () => {
+        const { toolbox, sidePanel } = setupLayoutFixture(640);
+        const controller = new ResponsiveLayoutController({});
+
+        controller.openDrawer('toolbox');
+
+        expect(toolbox.classList.contains('layout-open')).toBe(true);
+        expect(sidePanel.classList.contains('layout-open')).toBe(false);
+    });
+
     it('switches to phone mode when viewport is narrow', () => {
         const { body, win, toolboxToggleBtn } = setupLayoutFixture(760);
         new ResponsiveLayoutController({});

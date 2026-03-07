@@ -515,8 +515,20 @@ function rememberExpandedPanelSizeImpl() {
 
 function syncPanelCollapsedUIImpl() {
     const collapsed = this.isPanelCollapsed();
+    const phoneLayout = isPhoneLayout(this);
     const bodyClassList = getBodyClassList();
-    safeInvokeMethod(bodyClassList, 'toggle', 'ai-panel-open', isPhoneLayout(this) && !collapsed);
+    safeInvokeMethod(bodyClassList, 'toggle', 'ai-panel-open', phoneLayout && !collapsed);
+    if (phoneLayout && !collapsed) {
+        this.app?.mobileRestoreBroker?.register?.({
+            id: 'ai-return-to-edit',
+            source: 'ai',
+            label: this.app?.getMobileRestoreLabel?.() || '返回编辑',
+            priority: 70,
+            action: { type: 'focus-canvas' }
+        });
+    } else {
+        this.app?.mobileRestoreBroker?.clear?.('ai');
+    }
     if (this.toggleBtn) {
         this.toggleBtn.textContent = collapsed ? '展开' : '最小化';
         this.toggleBtn.title = collapsed ? '展开面板' : '最小化面板';

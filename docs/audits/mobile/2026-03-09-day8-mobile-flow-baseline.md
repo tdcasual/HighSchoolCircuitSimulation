@@ -11,6 +11,9 @@ Baseline synthetic tap-cost collection for three canonical phone workflows:
 Collector output source:
 - `output/e2e/responsive-touch/mobile-flow-baseline.json`
 
+Follow-up task KPI source:
+- `output/e2e/mobile-core-learning/mobile-core-learning-kpi.json`
+
 ## Method
 
 - Environment: Playwright mobile context (`390x844`, touch enabled).
@@ -34,4 +37,7 @@ Summary:
 ## Notes
 
 - Durations are scripted execution times, so they are useful for regression deltas but not human UX latency.
-- Week 2 Day 9-12 should focus on reducing tap count and preserving success rate.
+- This baseline remains a synthetic regression guard, not the sole mobile quality gate.
+- Dedicated task KPI follow-up now covers the primary teaching loop (`place -> wire -> run -> observe`) with completion and observation checks.
+- Latest dedicated KPI snapshot (2026-03-07): `interactionCount=7`, `completionRate=1`, `observationRate=1`, `stepCompletionRate=1`.
+- See `docs/audits/mobile/2026-03-07-mobile-core-learning-kpi-followup.md` for the task-oriented audit result.
