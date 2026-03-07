@@ -51,7 +51,21 @@ function normalizeModeContextSnapshot(raw = {}) {
     };
 }
 
+
+function isModeStateSnapshot(value) {
+    return !!value
+        && typeof value === 'object'
+        && typeof value.mode === 'string'
+        && !!value.context
+        && typeof value.context === 'object';
+}
+
 function readModeStoreState(context) {
+    const snapshot = context?.interactionModeSnapshot;
+    if (isModeStateSnapshot(snapshot)) {
+        return snapshot;
+    }
+
     const getState = context?.interactionModeStore?.getState;
     if (typeof getState !== 'function') return null;
     try {

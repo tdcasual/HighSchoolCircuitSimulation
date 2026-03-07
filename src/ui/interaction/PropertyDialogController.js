@@ -1,3 +1,4 @@
+import { presentLocalFeedback } from './UIStateController.js';
 import { ComponentNames } from '../../components/Component.js';
 import {
     createElement,
@@ -41,7 +42,9 @@ export function showPropertyDialog(id) {
     const content = document.getElementById('dialog-content');
     if (!dialog || !title || !content) {
         this.editingComponent = null;
-        this.updateStatus?.('属性对话框不可用');
+        presentLocalFeedback.call(this, '属性对话框不可用', {
+            scope: 'property-panel'
+        });
         return;
     }
 

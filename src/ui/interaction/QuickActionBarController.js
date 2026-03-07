@@ -1,3 +1,4 @@
+import { getSelectionSnapshot, presentLocalFeedback } from './UIStateController.js';
 import { normalizeCanvasPoint, toCanvasInt } from '../../utils/CanvasCoords.js';
 
 const COMPONENT_ACTIONS = Object.freeze([
@@ -303,37 +304,32 @@ export class QuickActionBarController {
     }
 
     resolveSelectionState() {
-        const rawComponentId = this.interaction?.selectedComponent;
-        const rawWireId = this.interaction?.selectedWire;
-        const componentId = rawComponentId === undefined
-            || rawComponentId === null
-            || String(rawComponentId).trim() === ''
-            ? null
-            : String(rawComponentId);
-        const wireId = rawWireId === undefined
-            || rawWireId === null
-            || String(rawWireId).trim() === ''
-            ? null
-            : String(rawWireId);
+        const snapshot = typeof this.interaction?.getSelectionSnapshot === 'function'
+            ? this.interaction.getSelectionSnapshot()
+            : getSelectionSnapshot.call(this.interaction);
+        const componentId = snapshot?.componentId ? String(snapshot.componentId) : null;
+        const wireId = snapshot?.wireId ? String(snapshot.wireId) : null;
         const hasComponent = componentId
             ? this.interaction?.circuit?.getComponent?.(componentId)
             : null;
         const hasWire = wireId
             ? this.interaction?.circuit?.getWire?.(wireId)
             : null;
+        const preferredMode = snapshot?.mode === 'wire'
+            ? 'wire'
+            : (snapshot?.mode === 'component' ? 'component' : 'none');
 
-        if (componentId && !hasComponent) {
-            this.interaction.selectedComponent = null;
+        if (preferredMode === 'component' && hasComponent) {
+            return { mode: 'component', componentId, wireId: null };
         }
-        if (wireId && !hasWire) {
-            this.interaction.selectedWire = null;
+        if (preferredMode === 'wire' && hasWire) {
+            return { mode: 'wire', componentId: null, wireId };
         }
-
         if (hasComponent) {
-            return { mode: 'component', componentId };
+            return { mode: 'component', componentId, wireId: null };
         }
         if (hasWire) {
-            return { mode: 'wire', wireId };
+            return { mode: 'wire', componentId: null, wireId };
         }
         return { mode: 'none', componentId: null, wireId: null };
     }
@@ -510,8 +506,22 @@ export class QuickActionBarController {
         const componentId = selection.componentId;
         const wireId = selection.wireId;
 
-        if (actionId.startsWith('component-') && mode !== 'component') return;
-        if (actionId.startsWith('wire-') && mode !== 'wire') return;
+        if (actionId.startsWith('component-') && mode !== 'component') {
+            presentLocalFeedback.call(this.interaction, '请先选择一个元件', {
+                scope: 'quick-action',
+                target: this,
+                durationMs: 2200
+            });
+            return;
+        }
+        if (actionId.startsWith('wire-') && mode !== 'wire') {
+            presentLocalFeedback.call(this.interaction, '请先选择一条导线', {
+                scope: 'quick-action',
+                target: this,
+                durationMs: 2200
+            });
+            return;
+        }
 
         switch (actionId) {
             case 'component-edit':

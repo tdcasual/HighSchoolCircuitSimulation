@@ -1,3 +1,4 @@
+import { syncSelectionSnapshot } from './UIStateController.js';
 import {
     createElement,
     createHintParagraph,
@@ -61,6 +62,7 @@ export function clearSelection() {
     this.renderer.clearSelection();
     this.selectedComponent = null;
     this.selectedWire = null;
+    syncSelectionSnapshot.call(this);
 
     renderDefaultPropertyHint();
     this.quickActionBar?.notifyActivity?.();
@@ -71,6 +73,7 @@ export function selectComponent(id) {
     this.clearSelection();
     this.selectedComponent = id;
     this.selectedWire = null;
+    syncSelectionSnapshot.call(this);
     this.renderer.setSelected(id, true);
 
     if (typeof this.activateSidePanelTab === 'function' && !this.isObservationTabActive()) {
@@ -93,6 +96,7 @@ export function selectWire(id) {
     this.clearSelection();
     this.selectedWire = id;
     this.selectedComponent = null;
+    syncSelectionSnapshot.call(this);
     this.renderer.setWireSelected(id, true);
 
     if (typeof this.activateSidePanelTab === 'function' && !this.isObservationTabActive()) {
@@ -105,6 +109,7 @@ export function selectWire(id) {
             if (this.selectedWire === id) {
                 this.renderer.setWireSelected(id, false);
                 this.selectedWire = null;
+                syncSelectionSnapshot.call(this);
                 renderDefaultPropertyHint();
                 this.quickActionBar?.update?.();
             }

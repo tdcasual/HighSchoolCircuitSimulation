@@ -86,6 +86,34 @@ describe('PropertyDialogController.showPropertyDialog', () => {
         expect(updateStatus).toHaveBeenCalledTimes(1);
     });
 
+
+    it('prefers local property-panel feedback before status fallback when dialog shell is unavailable', () => {
+        const comp = { id: 'R1', type: 'Resistor', resistance: 100 };
+        const updateStatus = vi.fn();
+        const localFeedbackPresenter = {
+            show: vi.fn(() => true)
+        };
+
+        vi.stubGlobal('document', {
+            getElementById: vi.fn(() => null)
+        });
+
+        const ctx = {
+            circuit: {
+                getComponent: vi.fn(() => comp)
+            },
+            updateStatus,
+            localFeedbackPresenter
+        };
+
+        expect(() => PropertyDialogController.showPropertyDialog.call(ctx, 'R1')).not.toThrow();
+        expect(ctx.editingComponent).toBe(null);
+        expect(localFeedbackPresenter.show).toHaveBeenCalledWith('属性对话框不可用', {
+            scope: 'property-panel'
+        });
+        expect(updateStatus).not.toHaveBeenCalled();
+    });
+
     it('does not throw when dialog classList.remove is non-callable', () => {
         const comp = { id: 'G1', type: 'Ground' };
         const titleNode = { textContent: '' };

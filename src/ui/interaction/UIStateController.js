@@ -1,3 +1,5 @@
+import { LocalFeedbackPresenter } from './LocalFeedbackPresenter.js';
+
 export const FIRST_RUN_GUIDE_DISMISSED_STORAGE_KEY = 'ui.first_run_guide_dismissed';
 
 function safeHasClass(node, className) {
@@ -26,6 +28,42 @@ function resolveStorage(storage) {
     return null;
 }
 
+
+function normalizeSelectionId(value) {
+    if (value === undefined || value === null) return null;
+    const normalized = String(value).trim();
+    return normalized === '' ? null : normalized;
+}
+
+function buildSelectionSnapshot(context = {}) {
+    const componentId = normalizeSelectionId(context?.selectedComponent);
+    const wireId = normalizeSelectionId(context?.selectedWire);
+    if (componentId) {
+        return Object.freeze({ mode: 'component', componentId, wireId: null });
+    }
+    if (wireId) {
+        return Object.freeze({ mode: 'wire', componentId: null, wireId });
+    }
+    return Object.freeze({ mode: 'none', componentId: null, wireId: null });
+}
+
+function isSelectionSnapshot(value) {
+    return !!value
+        && typeof value === 'object'
+        && (value.mode === 'none' || value.mode === 'component' || value.mode === 'wire');
+}
+
+function getLocalFeedbackPresenter(context) {
+    if (context?.localFeedbackPresenter && typeof context.localFeedbackPresenter.show === 'function') {
+        return context.localFeedbackPresenter;
+    }
+    if (!context || typeof context !== 'object') {
+        return new LocalFeedbackPresenter();
+    }
+    context.localFeedbackPresenter = new LocalFeedbackPresenter(context);
+    return context.localFeedbackPresenter;
+}
+
 export function isObservationTabActive() {
     const observationPage = document.getElementById('panel-observation');
     return safeHasClass(observationPage, 'active');
@@ -45,6 +83,37 @@ export function getActiveInteractionMode() {
         }
     }
     return 'select';
+}
+
+
+export function getSelectionSnapshot() {
+    const context = this || {};
+    if (isSelectionSnapshot(context.selectionSnapshot)) {
+        return context.selectionSnapshot;
+    }
+    return buildSelectionSnapshot(context);
+}
+
+export function syncSelectionSnapshot() {
+    const context = this || {};
+    const snapshot = buildSelectionSnapshot(context);
+    if (context && typeof context === 'object') {
+        context.selectionSnapshot = snapshot;
+    }
+    return snapshot;
+}
+
+export function presentLocalFeedback(message, options = {}) {
+    const context = this || {};
+    const presenter = options.presenter && typeof options.presenter.show === 'function'
+        ? options.presenter
+        : getLocalFeedbackPresenter(context);
+    const shown = presenter.show(String(message || ''), options) === true;
+    if (!shown && typeof context.updateStatus === 'function') {
+        context.updateStatus(String(message || ''));
+        return true;
+    }
+    return shown;
 }
 
 export function isFirstRunGuideDismissed(options = {}) {

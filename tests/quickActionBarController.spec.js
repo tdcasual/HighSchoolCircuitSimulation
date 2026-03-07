@@ -440,6 +440,71 @@ describe('QuickActionBarController', () => {
         expect(interaction.deleteComponent).not.toHaveBeenCalled();
     });
 
+
+    it('prefers shared selection snapshot over stale raw selection fields', () => {
+        setupEnvironment();
+        const setSelectionMode = vi.fn();
+        const interaction = {
+            selectedComponent: 'R1',
+            selectedWire: null,
+            selectionSnapshot: Object.freeze({
+                mode: 'wire',
+                componentId: null,
+                wireId: 'W1'
+            }),
+            app: {
+                responsiveLayout: {
+                    isOverlayMode: () => false
+                },
+                topActionMenu: {
+                    setSelectionMode
+                }
+            },
+            circuit: {
+                getComponent: vi.fn(() => ({ id: 'R1', label: '电阻R1' })),
+                getWire: vi.fn(() => ({ id: 'W1', a: { x: 0, y: 0 }, b: { x: 20, y: 0 } }))
+            }
+        };
+        const controller = new QuickActionBarController(interaction);
+
+        controller.update();
+
+        expect(controller.label.textContent).toBe('导线 W1');
+        expect(setSelectionMode).toHaveBeenCalledWith('wire');
+    });
+
+    it('shows near-field feedback when action mode mismatches current shared selection', () => {
+        setupEnvironment();
+        const interaction = {
+            selectedComponent: 'R1',
+            selectedWire: null,
+            selectionSnapshot: Object.freeze({
+                mode: 'none',
+                componentId: null,
+                wireId: null
+            }),
+            app: {
+                responsiveLayout: {
+                    isOverlayMode: () => false
+                }
+            },
+            circuit: {
+                getComponent: vi.fn(() => ({ id: 'R1', label: '电阻R1' })),
+                getWire: vi.fn(() => null)
+            }
+        };
+        const controller = new QuickActionBarController(interaction);
+        controller.showHint = vi.fn();
+
+        controller.onActionClick({
+            target: {
+                closest: () => ({ dataset: { action: 'component-edit' } })
+            }
+        });
+
+        expect(controller.showHint).toHaveBeenCalledWith('请先选择一个元件', 2200);
+    });
+
     it('syncs current selection mode to top action menu', () => {
         setupEnvironment();
         const setSelectionMode = vi.fn();

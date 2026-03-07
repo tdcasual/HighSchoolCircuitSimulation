@@ -34,6 +34,7 @@ function applyInteractionModeStateToContext(context, state) {
     // Week10: interactionModeStore becomes authoritative for mode context.
     // Do not mirror store context back into legacy runtime flags.
     context.interactionMode = state.mode;
+    context.interactionModeSnapshot = state;
 }
 
 function ensureInteractionModeStore(context) {

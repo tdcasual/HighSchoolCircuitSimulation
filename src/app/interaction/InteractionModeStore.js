@@ -35,12 +35,23 @@ function assertSupportedMode(mode) {
     return mode;
 }
 
-function cloneState(state) {
-    return {
+function createLegacyFlags(context = {}) {
+    return Object.freeze({
+        pendingToolType: normalizePendingTool(context.pendingTool),
+        mobileInteractionMode: normalizeMobileMode(context.mobileMode),
+        stickyWireTool: !!context.wireModeSticky,
+        isWiring: !!context.wiringActive
+    });
+}
+
+function createSnapshot(state) {
+    const context = Object.freeze({ ...state.context });
+    return Object.freeze({
         mode: state.mode,
-        context: { ...state.context },
-        version: state.version
-    };
+        context,
+        version: state.version,
+        legacyFlags: createLegacyFlags(context)
+    });
 }
 
 function isContextEqual(a, b) {
@@ -62,11 +73,12 @@ export class InteractionModeStore {
             context: normalizeModeContext(initialState.context || initialState),
             version: 0
         };
+        this.snapshot = createSnapshot(this.state);
         this.listeners = new Set();
     }
 
     getState() {
-        return cloneState(this.state);
+        return this.snapshot;
     }
 
     setMode(mode, context = {}) {
@@ -79,16 +91,17 @@ export class InteractionModeStore {
         const modeChanged = nextMode !== this.state.mode;
         const contextChanged = !isContextEqual(nextContext, this.state.context);
         if (!modeChanged && !contextChanged) {
-            return cloneState(this.state);
+            return this.snapshot;
         }
 
-        const previous = cloneState(this.state);
+        const previous = this.snapshot;
         this.state = {
             mode: nextMode,
             context: nextContext,
             version: this.state.version + 1
         };
-        const current = cloneState(this.state);
+        this.snapshot = createSnapshot(this.state);
+        const current = this.snapshot;
 
         this.listeners.forEach((listener) => {
             try {

@@ -13,7 +13,7 @@ import { initializeInteractionModeStore } from '../app/interaction/InteractionOr
 export class InteractionManager {
     constructor(app) {
         initializeInteractionState(this, app);
-        initializeInteractionModeStore(this);
+        this.interactionModeSnapshot = initializeInteractionModeStore(this);
         this.hideContextMenuHandler = () => {
             this.hideContextMenu();
         };

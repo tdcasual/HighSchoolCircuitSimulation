@@ -287,3 +287,54 @@ describe('UIStateController first-run guide preference', () => {
         expect(UIStateController.shouldShowFirstRunGuide({ storage })).toBe(true);
     });
 });
+
+
+describe('UIStateController selection snapshot helpers', () => {
+    it('prefers shared selection snapshot over stale raw fields', () => {
+        const snapshot = Object.freeze({ mode: 'wire', componentId: null, wireId: 'W1' });
+        const context = {
+            selectionSnapshot: snapshot,
+            selectedComponent: 'R1',
+            selectedWire: null
+        };
+
+        expect(UIStateController.getSelectionSnapshot.call(context)).toBe(snapshot);
+    });
+
+    it('syncs canonical selection snapshot from raw fields', () => {
+        const context = {
+            selectedComponent: 0,
+            selectedWire: null
+        };
+
+        const snapshot = UIStateController.syncSelectionSnapshot.call(context);
+        expect(snapshot).toEqual({
+            mode: 'component',
+            componentId: '0',
+            wireId: null
+        });
+        expect(Object.isFrozen(snapshot)).toBe(true);
+        expect(context.selectionSnapshot).toBe(snapshot);
+    });
+
+    it('prefers local feedback presenter before status fallback', () => {
+        const presenter = {
+            show: vi.fn(() => true)
+        };
+        const updateStatus = vi.fn();
+        const context = {
+            localFeedbackPresenter: presenter,
+            updateStatus
+        };
+
+        const shown = UIStateController.presentLocalFeedback.call(context, '局部错误', {
+            scope: 'property-panel'
+        });
+
+        expect(shown).toBe(true);
+        expect(presenter.show).toHaveBeenCalledWith('局部错误', {
+            scope: 'property-panel'
+        });
+        expect(updateStatus).not.toHaveBeenCalled();
+    });
+});
