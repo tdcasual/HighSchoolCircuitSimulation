@@ -2,7 +2,7 @@
 
 - Date: 2026-03-08
 - Scope: Week0 ~ Week4 closure evidence review
-- Note: `CLOSURE_COMMIT_TBD` 将在本轮收尾提交后替换为实际 commit hash。
+- Note: `686e857` 将在本轮收尾提交后替换为实际 commit hash。
 
 ## Historical Commits Already On Branch
 
@@ -17,7 +17,7 @@
 
 | wave | commit | coverage | test evidence |
 |---|---|---|---|
-| Remaining remediation closure | `CLOSURE_COMMIT_TBD` | `PRJ-005`, `PRJ-006`, `PRJ-011`, `PRJ-014`, `PRJ-015`, `PRJ-016`, `PRJ-018`, `PRJ-022`, `PRJ-023`, `PRJ-024`, `PRJ-025`, `PRJ-029` 以及 2026-03-08 follow-up 审计稿回填 | Week2 / Week3 / Week4 targeted gates + final `npm test` |
+| Remaining remediation closure | `686e857` | `PRJ-005`, `PRJ-006`, `PRJ-011`, `PRJ-014`, `PRJ-015`, `PRJ-016`, `PRJ-018`, `PRJ-022`, `PRJ-023`, `PRJ-024`, `PRJ-025`, `PRJ-029` 以及 2026-03-08 follow-up 审计稿回填 | Week2 / Week3 / Week4 targeted gates + final `npm test` |
 
 ## Command Evidence
 

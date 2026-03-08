@@ -90,5 +90,5 @@ Plan: `docs/plans/2026-03-08-confirmed-audit-remediation-implementation.md`
 
 - [x] 运行 `npm test`
 - [x] 复核 `docs/audits/project/top30.md` 已无需继续推进的遗漏项。
-- [ ] 复核每条已完成项都有对应 commit 和测试证据。
-- [ ] 形成最终整改总结或下一轮 backlog。
+- [x] 复核每条已完成项都有对应 commit 和测试证据。
+- [x] 形成最终整改总结或下一轮 backlog。
