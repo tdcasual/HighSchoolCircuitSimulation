@@ -97,3 +97,71 @@ describe('SelectionPanelController.selectWire safety', () => {
         expect(() => SelectionPanelController.selectWire.call(context, 'W1')).not.toThrow();
     });
 });
+
+
+describe('SelectionPanelController stale selection cleanup', () => {
+    it('does not retain a missing component as selected state', () => {
+        const context = {
+            clearSelection: SelectionPanelController.clearSelection,
+            renderer: {
+                clearSelection: vi.fn(),
+                setSelected: vi.fn()
+            },
+            circuit: {
+                getComponent: vi.fn(() => null)
+            },
+            quickActionBar: {
+                notifyActivity: vi.fn(),
+                maybeShowLongPressHint: vi.fn(),
+                update: vi.fn()
+            },
+            updatePropertyPanel: vi.fn(),
+            activateSidePanelTab: vi.fn(),
+            isObservationTabActive: vi.fn(() => false)
+        };
+
+        vi.stubGlobal('document', {
+            getElementById: vi.fn(() => null)
+        });
+
+        SelectionPanelController.selectComponent.call(context, 'MISSING');
+
+        expect(context.selectedComponent).toBe(null);
+        expect(context.selectedWire).toBe(null);
+    });
+
+    it('does not retain a missing wire as selected state', () => {
+        vi.stubGlobal('document', {
+            body: {
+                classList: {
+                    contains: vi.fn(() => false)
+                }
+            },
+            getElementById: vi.fn(() => null)
+        });
+        vi.stubGlobal('window', {
+            matchMedia: vi.fn(() => ({ matches: false }))
+        });
+
+        const context = {
+            clearSelection: SelectionPanelController.clearSelection,
+            renderer: {
+                clearSelection: vi.fn(),
+                setWireSelected: vi.fn()
+            },
+            circuit: {
+                getWire: vi.fn(() => null)
+            },
+            quickActionBar: {
+                notifyActivity: vi.fn(),
+                maybeShowLongPressHint: vi.fn(),
+                update: vi.fn()
+            }
+        };
+
+        SelectionPanelController.selectWire.call(context, 'W404');
+
+        expect(context.selectedComponent).toBe(null);
+        expect(context.selectedWire).toBe(null);
+    });
+});

@@ -11,10 +11,12 @@ describe('RuntimeActionRouter', () => {
         const applyChartWorkspace = vi.fn();
         const applyExerciseBoard = vi.fn();
         const updateIdCounterFromExistingImpl = vi.fn();
+        const beginCircuitStorageOwnership = vi.fn();
         const uiBridge = {
             showCircuitLoaded: vi.fn()
         };
         const app = {
+            beginCircuitStorageOwnership,
             circuit: { fromJSON },
             renderer: { render },
             interaction: { clearSelection },
@@ -41,8 +43,12 @@ describe('RuntimeActionRouter', () => {
             }
         };
 
-        const summary = router.loadCircuitData(data, { statusText: '已加载测试电路' });
+        const summary = router.loadCircuitData(data, {
+            statusText: '已加载测试电路',
+            storageSource: 'manual-import'
+        });
 
+        expect(beginCircuitStorageOwnership).toHaveBeenCalledWith('manual-import');
         expect(fromJSON).toHaveBeenCalledWith(data);
         expect(updateIdCounterFromExistingImpl).toHaveBeenCalledWith(['R1', 'W1']);
         expect(render).toHaveBeenCalledTimes(1);

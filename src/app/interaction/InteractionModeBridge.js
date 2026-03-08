@@ -66,10 +66,16 @@ function readModeStoreState(context) {
         return snapshot;
     }
 
-    const getState = context?.interactionModeStore?.getState;
+    const appSnapshot = context?.app?.interactionModeSnapshot;
+    if (isModeStateSnapshot(appSnapshot)) {
+        return appSnapshot;
+    }
+
+    const store = context?.interactionModeStore || context?.app?.interactionModeStore || null;
+    const getState = store?.getState;
     if (typeof getState !== 'function') return null;
     try {
-        return getState.call(context.interactionModeStore);
+        return getState.call(store);
     } catch (_) {
         return null;
     }

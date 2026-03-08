@@ -210,4 +210,19 @@ describe('TopActionMenuController', () => {
         expect(() => controller.setOpen(true)).not.toThrow();
         expect(() => controller.setOpen(false)).not.toThrow();
     });
+
+    it('delegates overlay arbitration before opening the menu', () => {
+        const { button } = setupFixture();
+        const claimPhoneSurface = vi.fn();
+        const controller = new TopActionMenuController({
+            responsiveLayout: {
+                claimPhoneSurface
+            }
+        });
+
+        button.trigger('click', { preventDefault: vi.fn(), stopPropagation: vi.fn() });
+
+        expect(claimPhoneSurface).toHaveBeenCalledWith('top-action-menu');
+        expect(controller.isOpen).toBe(true);
+    });
 });

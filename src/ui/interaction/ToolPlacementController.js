@@ -3,6 +3,7 @@ import { GRID_SIZE, snapToGrid } from '../../utils/CanvasCoords.js';
 import { safeInvoke } from '../../utils/RuntimeSafety.js';
 import {
     readInteractionModeContext,
+    readInteractionModeState,
     setInteractionModeContext,
     setWireToolContext
 } from '../../app/interaction/InteractionModeBridge.js';
@@ -152,6 +153,7 @@ export function syncEndpointAutoBridgeButton() {
 
 export function getInteractionModeSnapshot() {
     const modeContext = readToolModeContext(this);
+    const modeState = readInteractionModeState(this);
     const mobileMode = normalizeMobileMode(modeContext.mobileMode);
     const endpointAutoBridgeMode = normalizeEndpointAutoBridgeMode(this.endpointAutoBridgeMode);
 
@@ -188,11 +190,14 @@ export function getInteractionModeSnapshot() {
     }
 
     const uniqueActiveModes = Array.from(new Set(activeModes));
-    const hasConflict = uniqueActiveModes.length > 1;
+    const authoritativeMode = typeof modeState?.mode === 'string' && modeState.mode
+        ? modeState.mode
+        : null;
+    const hasConflict = !authoritativeMode && uniqueActiveModes.length > 1;
 
     return {
-        mode: hasConflict ? 'conflict' : uniqueActiveModes[0],
-        activeModes: uniqueActiveModes,
+        mode: authoritativeMode || (hasConflict ? 'conflict' : uniqueActiveModes[0]),
+        activeModes: authoritativeMode ? [authoritativeMode] : uniqueActiveModes,
         hasConflict,
         pendingTool: modeContext.pendingTool || null,
         wireSignals,

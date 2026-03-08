@@ -1,6 +1,15 @@
 import { getComponentTerminalCount } from '../../components/Component.js';
 
 export class ConnectivityCache {
+    invalidateComponentConnectivityCache(components) {
+        const componentMap = components instanceof Map ? components : new Map();
+        for (const comp of componentMap.values()) {
+            if (!comp || typeof comp !== 'object') continue;
+            delete comp._isConnectedCached;
+            comp._connectionTopologyVersion = -1;
+        }
+    }
+
     computeComponentConnectedState(componentId, comp, terminalConnectionMap = new Map()) {
         if (!comp || !Array.isArray(comp.nodes)) return false;
         const terminalCount = getComponentTerminalCount(comp.type);

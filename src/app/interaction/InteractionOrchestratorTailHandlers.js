@@ -15,6 +15,10 @@ export function onContextMenu(e) {
     if (typeof this.endPrimaryInteractionForGesture === 'function') {
         this.endPrimaryInteractionForGesture();
     }
+    this.cancelPointerSession?.({
+        source: 'onContextMenu',
+        preserveSuspendedWiringSession: false
+    });
     this.suspendedWiringSession = null;
     syncInteractionModeStore(this, { source: 'onContextMenu' });
 

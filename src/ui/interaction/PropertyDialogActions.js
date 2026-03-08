@@ -1,3 +1,5 @@
+import { applyComponentPropertyDialogChanges } from './ComponentPropertySchema.js';
+
 function readFieldValue(id, fallback = '') {
     const element = document.getElementById(id);
     if (!element || !('value' in element)) {
@@ -22,7 +24,13 @@ export function applyDialogChanges() {
 
     try {
         this.runWithHistory('修改属性', () => {
-            switch (comp.type) {
+            const appliedBySharedSchema = applyComponentPropertyDialogChanges({
+                component: comp,
+                readFieldValue,
+                safeParseFloat: this.safeParseFloat
+            });
+
+            if (!appliedBySharedSchema) switch (comp.type) {
             case 'Ground':
                 break;
 

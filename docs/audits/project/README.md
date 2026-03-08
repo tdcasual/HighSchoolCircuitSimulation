@@ -16,10 +16,28 @@
 3. `docs/audits/observation-ui/`
 4. `docs/audits/mobile/`
 
+## Current Progress
+
+- 当前项目级状态（截至 2026-03-08）：`30 covered / 0 confirmed / 0 seed-hypothesis`。
+- Week0 ~ Week4 已完成：`PRJ-001`~`PRJ-006`、`PRJ-011`、`PRJ-014`~`PRJ-016`、`PRJ-018`、`PRJ-022`~`PRJ-025`、`PRJ-029` 已由自动化合同收口。
+- 当前 Top30 已无开放 confirmed 项，后续仅保留 commit 整理与下一轮 backlog 管理。
+
 ## Main Files
 
 - `docs/audits/project/top30.md`：项目总问题池与优先级总表。
 - `docs/audits/project/2026-03-07-top30-closure-review.md`：本轮 Top30 全量闭环结论与剩余开放项。
+- `docs/audits/project/2026-03-08-final-remediation-summary.md`：本轮 confirmed audit 整改最终总结与下一轮 backlog。
+- `docs/audits/project/2026-03-08-remediation-evidence-matrix.md`：提交与测试证据矩阵。
+- `docs/plans/2026-03-08-confirmed-audit-remediation-implementation.md`：`19 confirmed` 项的 4 周整改执行计划。
+- `docs/plans/2026-03-08-confirmed-audit-remediation-checklist.md`：逐项执行与周验收清单。
+- `docs/audits/reliability/2026-03-08-z0-runtime-sot-followup.md`：Week2 运行时单源整改回填。
+- `docs/audits/reliability/2026-03-08-z1-topology-transaction-followup.md`：Week2 拓扑事务化整改回填。
+- `docs/audits/reliability/2026-03-08-z3-schema-contract-followup.md`：Week3 schema / migration / property contract 回填。
+- `docs/audits/reliability/2026-03-08-z2-solver-transition-followup.md`：Week4 求解步进平滑回填。
+- `docs/audits/observation-ui/2026-03-08-z5-property-selection-followup.md`：Week3 属性面板与选择态回填。
+- `docs/audits/observation-ui/2026-03-08-z5-observation-feedback-followup.md`：Week4 观测交互与近场反馈回填。
+- `docs/audits/wire-interaction/2026-03-08-z4-mode-store-followup.md`：Week2 模式互斥回填。
+- `docs/audits/mobile/2026-03-08-z7-gesture-arbitration-followup.md`：Week4 移动端手势仲裁回填。
 
 ## Template Map
 

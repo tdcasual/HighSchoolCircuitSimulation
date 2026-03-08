@@ -352,6 +352,19 @@ export class Circuit {
         return Array.from(this.observationProbes.values());
     }
 
+    getRuntimeReadSnapshot() {
+        return {
+            topologyVersion: Number.isFinite(this.topologyVersion) ? this.topologyVersion : null,
+            simulationVersion: Number.isFinite(this.simulationStepId) ? this.simulationStepId : null,
+            components: new Map(Array.from(this.components.entries()).map(([id, component]) => [id, { ...component }])),
+            observationProbes: this.getAllObservationProbes(),
+            solverShortCircuitDetected: !!this.solver?.shortCircuitDetected,
+            shortedSourceIds: Array.isArray(this.shortedSourceIds) ? [...this.shortedSourceIds] : null,
+            shortedWireIds: Array.isArray(this.shortedWireIds) ? [...this.shortedWireIds] : null,
+            topologyValidationDeferred: this.topologyBatchDepth > 0 || this.topologyRebuildPending
+        };
+    }
+
     /**
      * 压缩导线段：
      * 1) 删除零长度导线
@@ -366,25 +379,41 @@ export class Circuit {
      * @returns {{changed:boolean, removedIds:string[], replacementByRemovedId:Object<string,string>}}
      */
     compactWires(options = {}) {
-        const { changed, removedIds, replacementByRemovedId } = this.wireCompactor.compact({
-            components: this.components,
-            wires: this.wires,
-            scopeWireIds: options.scopeWireIds || null,
-            syncWireEndpointsToTerminalRefs: () => this.syncWireEndpointsToTerminalRefs()
-        });
+        const autoPublishBatch = this.topologyBatchDepth === 0;
+        let result = { changed: false, removedIds: [], replacementByRemovedId: {} };
 
-        setTopologyReplacementState(this, replacementByRemovedId);
-
-        if (changed) {
-            for (const removedId of removedIds) {
-                if (!replacementByRemovedId[removedId]) {
-                    this.removeObservationProbesByWireId(removedId);
-                }
-            }
-            this.remapObservationProbeWireIds(replacementByRemovedId);
+        if (autoPublishBatch) {
+            this.beginTopologyBatch();
         }
 
-        return { changed, removedIds, replacementByRemovedId };
+        try {
+            const { changed, removedIds, replacementByRemovedId } = this.wireCompactor.compact({
+                components: this.components,
+                wires: this.wires,
+                scopeWireIds: options.scopeWireIds || null,
+                syncWireEndpointsToTerminalRefs: () => this.syncWireEndpointsToTerminalRefs()
+            });
+
+            setTopologyReplacementState(this, replacementByRemovedId);
+
+            if (changed) {
+                for (const removedId of removedIds) {
+                    if (!replacementByRemovedId[removedId]) {
+                        this.removeObservationProbesByWireId(removedId);
+                    }
+                }
+                this.remapObservationProbeWireIds(replacementByRemovedId);
+                this.connectivityCache.invalidateComponentConnectivityCache(this.components);
+                this.requestTopologyRebuild();
+            }
+
+            result = { changed, removedIds, replacementByRemovedId };
+            return result;
+        } finally {
+            if (autoPublishBatch) {
+                this.endTopologyBatch();
+            }
+        }
     }
 
     /**

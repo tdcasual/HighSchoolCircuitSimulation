@@ -78,6 +78,46 @@ function validatePoint(point, label) {
     assertFiniteNumber(point.y, `${label}.y`);
 }
 
+
+function validateRuntimeCriticalComponentProperties(component, label) {
+    const properties = isPlainObject(component?.properties) ? component.properties : {};
+    const readValue = (key) => (Object.prototype.hasOwnProperty.call(properties, key) ? properties[key] : component?.[key]);
+    const ensureFinite = (key) => {
+        const value = readValue(key);
+        if (value === undefined) return null;
+        const numeric = Number(value);
+        if (!Number.isFinite(numeric)) {
+            throw new Error(`${label}.properties.${key} 非法: ${JSON.stringify(value)}`);
+        }
+        return numeric;
+    };
+
+    if (component.type === 'PowerSource' || component.type === 'ACVoltageSource') {
+        const internalResistance = ensureFinite('internalResistance');
+        if (internalResistance !== null && internalResistance < 0) {
+            throw new Error(`${label}.properties.internalResistance 非法: ${JSON.stringify(readValue('internalResistance'))}`);
+        }
+    }
+
+    if (component.type === 'Ammeter') {
+        const resistance = ensureFinite('resistance');
+        if (resistance !== null && resistance < 0) {
+            throw new Error(`${label}.properties.resistance 非法: ${JSON.stringify(readValue('resistance'))}`);
+        }
+    }
+
+    if (component.type === 'Motor') {
+        const resistance = ensureFinite('resistance');
+        const inertia = ensureFinite('inertia');
+        if (resistance !== null && resistance <= 0) {
+            throw new Error(`${label}.properties.resistance 非法: ${JSON.stringify(readValue('resistance'))}`);
+        }
+        if (inertia !== null && inertia <= 0) {
+            throw new Error(`${label}.properties.inertia 非法: ${JSON.stringify(readValue('inertia'))}`);
+        }
+    }
+}
+
 export class CircuitSchemaGateway {
     static validate(data) {
         if (!isPlainObject(data)) {
@@ -145,6 +185,7 @@ export class CircuitSchemaGateway {
             if (componentsById.has(id)) {
                 throw new Error(`组件 id 重复: ${id}`);
             }
+            validateRuntimeCriticalComponentProperties(comp, `component:${id}`);
             componentsById.set(id, { ...comp, type });
         }
 

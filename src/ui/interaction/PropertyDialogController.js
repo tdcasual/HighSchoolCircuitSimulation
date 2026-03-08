@@ -1,5 +1,6 @@
 import { presentLocalFeedback } from './UIStateController.js';
 import { ComponentNames } from '../../components/Component.js';
+import { getComponentPropertyDialogFields } from './ComponentPropertySchema.js';
 import {
     createElement,
     createFormGroup,
@@ -33,6 +34,31 @@ function safeRemoveClass(node, className) {
     safeInvokeMethod(node?.classList, 'remove', className);
 }
 
+
+function renderDialogFields(content, fields) {
+    if (!Array.isArray(fields) || fields.length === 0) return false;
+    for (const field of fields) {
+        if (field.kind === 'select') {
+            content.appendChild(createSelectFormGroup(field.label, {
+                id: field.id,
+                value: field.value,
+                options: field.options || []
+            }, field.hint || null));
+            continue;
+        }
+        content.appendChild(createFormGroup(field.label, {
+            id: field.id,
+            value: field.value,
+            min: field.min,
+            max: field.max,
+            step: field.step,
+            unit: field.unit,
+            placeholder: field.placeholder || ''
+        }, field.hint || null));
+    }
+    return true;
+}
+
 export function showPropertyDialog(id) {
     const comp = this.circuit.getComponent(id);
     if (!comp) return;
@@ -54,6 +80,8 @@ export function showPropertyDialog(id) {
     
     // 使用安全的 DOM 操作构建对话框内容
     clearElement(content);
+    const sharedDialogFields = getComponentPropertyDialogFields(comp);
+    const renderSharedDialogFields = () => renderDialogFields(content, sharedDialogFields);
     
     switch (comp.type) {
         case 'Ground':
@@ -61,6 +89,7 @@ export function showPropertyDialog(id) {
             break;
 
         case 'PowerSource':
+            if (renderSharedDialogFields()) break;
             content.appendChild(createFormGroup('电动势 (V)', {
                 id: 'edit-voltage',
                 value: comp.voltage,
@@ -78,6 +107,7 @@ export function showPropertyDialog(id) {
             break;
 
         case 'ACVoltageSource':
+            if (renderSharedDialogFields()) break;
             content.appendChild(createFormGroup('有效值 (V)', {
                 id: 'edit-rms-voltage',
                 value: comp.rmsVoltage,
@@ -114,6 +144,7 @@ export function showPropertyDialog(id) {
             break;
             
         case 'Resistor':
+            if (renderSharedDialogFields()) break;
             content.appendChild(createFormGroup('电阻值 (Ω)', {
                 id: 'edit-resistance',
                 value: comp.resistance,
@@ -471,6 +502,7 @@ export function showPropertyDialog(id) {
         }
             
         case 'Ammeter':
+            if (renderSharedDialogFields()) break;
             content.appendChild(createFormGroup('内阻 (Ω)', {
                 id: 'edit-resistance',
                 value: comp.resistance,
@@ -488,6 +520,7 @@ export function showPropertyDialog(id) {
             break;
             
         case 'Voltmeter':
+            if (renderSharedDialogFields()) break;
             content.appendChild(createFormGroup('内阻 (Ω)', {
                 id: 'edit-resistance',
                 value: comp.resistance === Infinity ? '' : comp.resistance,
@@ -506,6 +539,7 @@ export function showPropertyDialog(id) {
             break;
 
         case 'BlackBox': {
+            if (renderSharedDialogFields()) break;
             const w = Math.max(80, comp.boxWidth || 180);
             const h = Math.max(60, comp.boxHeight || 110);
             content.appendChild(createFormGroup('宽度 (px)', {

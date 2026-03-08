@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as PropertyDialogActions from '../src/ui/interaction/PropertyDialogActions.js';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 afterEach(() => {
     vi.restoreAllMocks();
@@ -186,5 +188,14 @@ describe('PropertyDialogActions.applyDialogChanges', () => {
         expect(comp.closed).toBe(false);
         expect(ctx.circuit.markSolverCircuitDirty).toHaveBeenCalledTimes(1);
         expect(ctx.hideDialog).toHaveBeenCalledTimes(1);
+    });
+});
+
+
+describe('PropertyDialogActions shared property contract', () => {
+    it('uses shared component property schema for numeric parsing and defaults', () => {
+        const source = readFileSync(resolve(process.cwd(), 'src/ui/interaction/PropertyDialogActions.js'), 'utf8');
+        expect(source).toContain('ComponentPropertySchema');
+        expect(source).toContain('applyComponentPropertyDialogChanges');
     });
 });

@@ -1,7 +1,14 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { safeRemoveStorageItem } from '../src/app/AppStorage.js';
+import { RuntimeStorageEntries } from '../src/app/RuntimeStorageRegistry.js';
+import { AppRuntimeV2 } from '../src/app/AppRuntimeV2.js';
 import { Circuit } from '../src/core/runtime/Circuit.js';
 import { CircuitPersistenceAdapter } from '../src/core/runtime/CircuitPersistenceAdapter.js';
+
+afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+});
 
 describe('AppStorage', () => {
     it('CircuitPersistenceAdapter loads and saves solver debug flag safely', () => {
@@ -66,5 +73,80 @@ describe('AppStorage', () => {
 
         expect(removed).toBe(false);
         expect(storage.removeItem).toHaveBeenCalledWith('saved_circuit');
+    });
+
+    it('writes autosave metadata alongside circuit payload when ownership sequence matches', () => {
+        const storage = {
+            setItem: vi.fn()
+        };
+        const runtime = {
+            buildSaveData: vi.fn(() => ({ components: [{ id: 'R1' }], wires: [] })),
+            circuitStorageOwnership: { source: 'manual-import', sequence: 3 }
+        };
+
+        const saved = AppRuntimeV2.prototype.saveCircuitToStorage.call(runtime, null, {
+            storage,
+            source: 'autosave',
+            expectedSequence: 3
+        });
+
+        expect(saved).toBe(true);
+        expect(storage.setItem).toHaveBeenCalledWith(
+            RuntimeStorageEntries.circuitAutosave.key,
+            JSON.stringify({ components: [{ id: 'R1' }], wires: [] })
+        );
+        expect(storage.setItem).toHaveBeenCalledWith(
+            RuntimeStorageEntries.circuitAutosaveMeta.key,
+            JSON.stringify({
+                owner: RuntimeStorageEntries.circuitAutosave.owner,
+                source: 'autosave',
+                sequence: 3
+            })
+        );
+    });
+
+    it('rejects stale autosave writes when ownership sequence changed before debounce flush', () => {
+        const storage = {
+            setItem: vi.fn()
+        };
+        const runtime = {
+            buildSaveData: vi.fn(() => ({ components: [{ id: 'R1' }], wires: [] })),
+            circuitStorageOwnership: { source: 'manual-import', sequence: 4 }
+        };
+
+        const saved = AppRuntimeV2.prototype.saveCircuitToStorage.call(runtime, null, {
+            storage,
+            source: 'autosave',
+            expectedSequence: 3
+        });
+
+        expect(saved).toBe(false);
+        expect(storage.setItem).not.toHaveBeenCalled();
+    });
+
+    it('captures ownership sequence when scheduling autosave writes', () => {
+        vi.useFakeTimers();
+        const saveCircuitToStorage = vi.fn(() => true);
+        const onCircuitUpdate = vi.fn();
+        const runtime = {
+            circuit: {},
+            circuitStorageOwnership: { source: 'runtime-load', sequence: 7 },
+            onCircuitUpdate,
+            saveCircuitToStorage,
+            logger: {
+                error: vi.fn()
+            }
+        };
+
+        AppRuntimeV2.prototype.setupAutoSave.call(runtime, { enabled: true });
+        runtime.circuit.onUpdate({ valid: true });
+        runtime.circuitStorageOwnership = { source: 'manual-import', sequence: 8 };
+        vi.advanceTimersByTime(1000);
+
+        expect(onCircuitUpdate).toHaveBeenCalledWith({ valid: true });
+        expect(saveCircuitToStorage).toHaveBeenCalledWith(null, {
+            source: 'autosave',
+            expectedSequence: 7
+        });
     });
 });

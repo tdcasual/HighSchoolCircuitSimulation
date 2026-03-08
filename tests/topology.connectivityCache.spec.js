@@ -34,4 +34,26 @@ describe('ConnectivityCache', () => {
 
         expect(connected).toBe(true);
     });
+
+    it('invalidates cached connectivity versions deterministically before topology publish', () => {
+        const cache = new ConnectivityCache();
+        const resistor = createComponent('Resistor', 0, 0, 'R1');
+        const ammeter = createComponent('Ammeter', 0, 0, 'A1');
+        resistor.nodes = [0, 1];
+        ammeter.nodes = [1, 2];
+        resistor._isConnectedCached = true;
+        resistor._connectionTopologyVersion = 7;
+        ammeter._isConnectedCached = false;
+        ammeter._connectionTopologyVersion = 7;
+
+        cache.invalidateComponentConnectivityCache(new Map([
+            ['R1', resistor],
+            ['A1', ammeter]
+        ]));
+
+        expect(resistor._connectionTopologyVersion).toBe(-1);
+        expect(ammeter._connectionTopologyVersion).toBe(-1);
+        expect('_isConnectedCached' in resistor).toBe(false);
+        expect('_isConnectedCached' in ammeter).toBe(false);
+    });
 });

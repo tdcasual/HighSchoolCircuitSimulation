@@ -35,18 +35,41 @@ function applyInteractionModeStateToContext(context, state) {
     // Do not mirror store context back into legacy runtime flags.
     context.interactionMode = state.mode;
     context.interactionModeSnapshot = state;
+    if (context.app && typeof context.app === 'object') {
+        context.app.interactionMode = state.mode;
+        context.app.interactionModeSnapshot = state;
+        if (context.interactionModeStore instanceof InteractionModeStore) {
+            context.app.interactionModeStore = context.interactionModeStore;
+        }
+    }
 }
 
 function ensureInteractionModeStore(context) {
     if (!context) return null;
-    if (!(context.interactionModeStore instanceof InteractionModeStore)) {
-        const initialContext = captureRuntimeInteractionModeContext(context);
-        context.interactionModeStore = new InteractionModeStore({
-            mode: resolveInteractionMode(initialContext),
-            context: initialContext
-        });
+
+    if (context.interactionModeStore instanceof InteractionModeStore) {
+        if (context.app && typeof context.app === 'object') {
+            context.app.interactionModeStore = context.interactionModeStore;
+        }
+        return context.interactionModeStore;
     }
-    return context.interactionModeStore;
+
+    if (context.app?.interactionModeStore instanceof InteractionModeStore) {
+        context.interactionModeStore = context.app.interactionModeStore;
+        return context.interactionModeStore;
+    }
+
+    const initialContext = captureRuntimeInteractionModeContext(context);
+    const store = new InteractionModeStore({
+        mode: resolveInteractionMode(initialContext),
+        context: initialContext
+    });
+
+    if (context.app && typeof context.app === 'object') {
+        context.app.interactionModeStore = store;
+    }
+    context.interactionModeStore = store;
+    return store;
 }
 
 export function initializeInteractionModeStore(context) {

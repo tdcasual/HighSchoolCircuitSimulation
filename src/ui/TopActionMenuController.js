@@ -81,7 +81,7 @@ export class TopActionMenuController {
         return safeHasClass(document.body, 'layout-mode-phone');
     }
 
-    setOpen(nextOpen) {
+    setOpen(nextOpen, _options = {}) {
         if (!this.button || !this.menu) return;
         const open = !!nextOpen;
         this.isOpen = open;
@@ -92,7 +92,13 @@ export class TopActionMenuController {
 
     toggle() {
         if (!this.isPhoneMode()) return;
-        this.setOpen(!this.isOpen);
+        const nextOpen = !this.isOpen;
+        if (nextOpen) {
+            this.app?.responsiveLayout?.claimPhoneSurface?.('top-action-menu');
+        }
+        this.setOpen(nextOpen, {
+            source: 'topActionMenu.toggle'
+        });
     }
 
     onDocumentPointerDown(event) {

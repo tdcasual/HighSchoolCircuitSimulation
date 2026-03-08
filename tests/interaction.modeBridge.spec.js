@@ -31,6 +31,33 @@ describe('InteractionModeBridge', () => {
         });
     });
 
+    it('reads shared app-owned mode store when local interaction context has not mirrored it yet', () => {
+        const state = {
+            mode: 'wire',
+            context: {
+                pendingTool: 'Wire',
+                mobileMode: 'wire',
+                wireModeSticky: true,
+                wiringActive: true,
+                isDraggingWireEndpoint: false,
+                isTerminalExtending: false,
+                isRheostatDragging: false
+            },
+            version: 3
+        };
+        const context = {
+            app: {
+                runtimeVersion: 2,
+                interactionModeStore: {
+                    getState: () => state
+                }
+            }
+        };
+
+        expect(readInteractionModeState(context)).toBe(state);
+        expect(readInteractionModeContext(context)).toEqual(state.context);
+    });
+
     it('writes normalized context to mode store without mutating legacy runtime flags', () => {
         const syncInteractionModeStore = vi.fn(() => ({ mode: 'wire', context: {}, version: 1 }));
         const context = {

@@ -7,6 +7,14 @@ export const RuntimeStorageEntries = Object.freeze({
         retention: 'persistent',
         storageArea: 'local'
     }),
+    circuitAutosaveMeta: Object.freeze({
+        id: 'circuitAutosaveMeta',
+        key: 'saved_circuit_meta',
+        owner: 'app-runtime',
+        scope: 'project',
+        retention: 'persistent',
+        storageArea: 'local'
+    }),
     aiPublicConfig: Object.freeze({
         id: 'aiPublicConfig',
         key: 'ai_config',

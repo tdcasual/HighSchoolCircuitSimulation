@@ -344,4 +344,17 @@ describe('ResponsiveLayoutController', () => {
 
         expect(() => new ResponsiveLayoutController({})).not.toThrow();
     });
+
+    it('closes top action menu before opening overlay drawers', () => {
+        setupLayoutFixture(640);
+        const topActionMenu = {
+            setOpen: vi.fn(),
+            sync: vi.fn()
+        };
+        const controller = new ResponsiveLayoutController({ topActionMenu });
+
+        controller.openDrawer('toolbox');
+
+        expect(topActionMenu.setOpen).toHaveBeenCalledWith(false, expect.any(Object));
+    });
 });

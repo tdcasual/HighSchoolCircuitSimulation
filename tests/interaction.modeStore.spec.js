@@ -72,6 +72,38 @@ describe('InteractionOrchestrator mode-store integration', () => {
         });
     });
 
+    it('reuses app-owned interaction mode store as the shared writable source', () => {
+        const sharedStore = new InteractionModeStore({
+            mode: 'wire',
+            context: {
+                pendingTool: 'Wire',
+                mobileMode: 'wire',
+                wireModeSticky: true,
+                wiringActive: true,
+                isDraggingWireEndpoint: false,
+                isTerminalExtending: false,
+                isRheostatDragging: false
+            }
+        });
+        const context = {
+            app: {
+                runtimeVersion: 2,
+                interactionModeStore: sharedStore
+            },
+            interactionModeStore: null,
+            isDraggingWireEndpoint: false,
+            isTerminalExtending: false,
+            isRheostatDragging: false
+        };
+
+        const state = InteractionOrchestrator.initializeInteractionModeStore(context);
+
+        expect(state.mode).toBe('wire');
+        expect(context.interactionModeStore).toBe(sharedStore);
+        expect(context.app.interactionModeStore).toBe(sharedStore);
+        expect(context.app.interactionModeSnapshot).toBe(state);
+    });
+
     it('syncs endpoint-edit runtime flags into one authoritative mode', () => {
         const context = {
             pendingTool: 'Wire',

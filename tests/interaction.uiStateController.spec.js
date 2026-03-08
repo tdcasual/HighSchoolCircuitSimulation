@@ -290,6 +290,24 @@ describe('UIStateController first-run guide preference', () => {
 
 
 describe('UIStateController selection snapshot helpers', () => {
+    it('drops stale shared selection snapshot when referenced entity no longer exists', () => {
+        const context = {
+            selectionSnapshot: Object.freeze({ mode: 'wire', componentId: null, wireId: 'W404' }),
+            selectedComponent: null,
+            selectedWire: null,
+            circuit: {
+                getComponent: vi.fn(() => null),
+                getWire: vi.fn(() => null)
+            }
+        };
+
+        expect(UIStateController.getSelectionSnapshot.call(context)).toEqual({
+            mode: 'none',
+            componentId: null,
+            wireId: null
+        });
+    });
+
     it('prefers shared selection snapshot over stale raw fields', () => {
         const snapshot = Object.freeze({ mode: 'wire', componentId: null, wireId: 'W1' });
         const context = {

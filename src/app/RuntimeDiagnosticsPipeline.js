@@ -4,18 +4,34 @@ function isObject(value) {
     return !!value && typeof value === 'object';
 }
 
+function getCircuitRuntimeReadSnapshot(circuit = null) {
+    if (typeof circuit?.getRuntimeReadSnapshot !== 'function') return null;
+    try {
+        const snapshot = circuit.getRuntimeReadSnapshot();
+        return isObject(snapshot) ? snapshot : null;
+    } catch (_) {
+        return null;
+    }
+}
+
 function getExpectedRuntimeDiagnosticsFreshness(circuit = null, results = null) {
     const target = isObject(results) ? results : null;
+    const runtimeSnapshot = getCircuitRuntimeReadSnapshot(circuit);
     const topologyVersion = Number.isFinite(target?.topologyVersion)
         ? Number(target.topologyVersion)
-        : (Number.isFinite(circuit?.topologyVersion) ? Number(circuit.topologyVersion) : null);
+        : (Number.isFinite(runtimeSnapshot?.topologyVersion)
+            ? Number(runtimeSnapshot.topologyVersion)
+            : (Number.isFinite(circuit?.topologyVersion) ? Number(circuit.topologyVersion) : null));
     const simulationVersion = Number.isFinite(target?.simulationVersion)
         ? Number(target.simulationVersion)
-        : (Number.isFinite(circuit?.simulationStepId) ? Number(circuit.simulationStepId) : null);
+        : (Number.isFinite(runtimeSnapshot?.simulationVersion)
+            ? Number(runtimeSnapshot.simulationVersion)
+            : (Number.isFinite(circuit?.simulationStepId) ? Number(circuit.simulationStepId) : null));
 
     return {
         topologyVersion,
-        simulationVersion
+        simulationVersion,
+        runtimeSnapshot
     };
 }
 
@@ -34,6 +50,7 @@ export function resolveRuntimeDiagnosticsForUpdate({ results = null, circuit = n
     const target = isObject(results) ? results : null;
     const existing = target?.runtimeDiagnostics;
     const freshness = getExpectedRuntimeDiagnosticsFreshness(circuit, target);
+    const runtimeSnapshot = freshness.runtimeSnapshot;
     if (isRuntimeDiagnosticsFresh(existing, freshness)) {
         return existing;
     }
@@ -46,9 +63,9 @@ export function resolveRuntimeDiagnosticsForUpdate({ results = null, circuit = n
             results: target || results,
             topologyVersion: freshness.topologyVersion,
             simulationVersion: freshness.simulationVersion,
-            solverShortCircuitDetected: !!circuit?.solver?.shortCircuitDetected,
-            shortedSourceIds: circuit?.shortedSourceIds || null,
-            shortedWireIds: circuit?.shortedWireIds || null
+            solverShortCircuitDetected: !!runtimeSnapshot?.solverShortCircuitDetected || !!circuit?.solver?.shortCircuitDetected,
+            shortedSourceIds: runtimeSnapshot?.shortedSourceIds || circuit?.shortedSourceIds || null,
+            shortedWireIds: runtimeSnapshot?.shortedWireIds || circuit?.shortedWireIds || null
         });
     }
 

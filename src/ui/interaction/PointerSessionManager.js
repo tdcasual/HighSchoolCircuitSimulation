@@ -150,6 +150,41 @@ function restoreWiringAfterPinch(context) {
     context.updateStatus?.('导线模式：选择终点');
 }
 
+function clearTrackedPointers(context, options = {}) {
+    const preserveSuspendedWiringSession = options.preserveSuspendedWiringSession === true;
+    const pointerIds = Array.from(context?.activePointers?.keys?.() || []);
+    for (const pointerId of pointerIds) {
+        context.releasePointerCaptureSafe?.(pointerId);
+    }
+    context.activePointers?.clear?.();
+    context.primaryPointerId = null;
+    context.pinchGesture = null;
+    context.blockSinglePointerInteraction = false;
+    context.lastPrimaryPointerType = 'mouse';
+    context.pointerDownInfo = null;
+    context.wireModeGesture = null;
+    if (!preserveSuspendedWiringSession) {
+        context.suspendedWiringSession = null;
+    }
+}
+
+export function suspendPointerSession(options = {}) {
+    this.touchActionController?.cancel?.();
+    clearTrackedPointers(this, options);
+}
+
+export function cancelPointerSession(options = {}) {
+    suspendPointerSession.call(this, {
+        ...options,
+        preserveSuspendedWiringSession: false
+    });
+}
+
+export function resumePointerSession(options = {}) {
+    if (options.restoreSuspendedWiringSession === false) return;
+    restoreWiringAfterPinch(this);
+}
+
 export function isIntentionalDestructiveTap(pointerStart = null, pointerEnd = null, options = {}) {
     const start = normalizePointerSample(pointerStart || pointerEnd || {});
     const end = normalizePointerSample(pointerEnd || pointerStart || {});
@@ -171,6 +206,7 @@ export function isIntentionalDestructiveTap(pointerStart = null, pointerEnd = nu
 }
 
 export function onPointerDown(e) {
+    this.app?.responsiveLayout?.claimPhoneSurface?.('canvas');
     const pointerType = e.pointerType || 'mouse';
     if (pointerType !== 'mouse') {
         e.preventDefault();
@@ -549,5 +585,7 @@ export function endPinchGestureIfNeeded() {
     const p2 = this.activePointers.has(this.pinchGesture.pointerBId);
     if (p1 && p2) return;
     this.pinchGesture = null;
-    restoreWiringAfterPinch(this);
+    resumePointerSession.call(this, {
+        source: 'pointerSession.endPinchGestureIfNeeded'
+    });
 }

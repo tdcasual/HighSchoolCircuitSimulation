@@ -61,8 +61,16 @@ export class ObservationInteractionController {
             plot._needsRedraw = true;
             panel?.requestRender?.({ onlyIfActive: true });
         });
-        safeAddEventListener(canvas, 'pointerup', () => {
-            plot.chartInteraction?.onPointerUp();
+        safeAddEventListener(canvas, 'pointerup', (event) => {
+            const point = getPoint(event) || { pointerType: event?.pointerType || 'mouse' };
+            plot.chartInteraction?.onPointerUp(point);
+            panel?.syncLinkedCursorSnapshot?.(plot);
+            plot._needsRedraw = true;
+            panel?.requestRender?.({ onlyIfActive: true });
+        });
+        safeAddEventListener(canvas, 'pointercancel', (event) => {
+            const point = getPoint(event) || { pointerType: event?.pointerType || 'mouse' };
+            plot.chartInteraction?.onPointerCancel?.(point);
             panel?.syncLinkedCursorSnapshot?.(plot);
             plot._needsRedraw = true;
             panel?.requestRender?.({ onlyIfActive: true });

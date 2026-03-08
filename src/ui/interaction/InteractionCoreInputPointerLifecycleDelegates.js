@@ -24,6 +24,18 @@ export function installInteractionCoreInputPointerLifecycleDelegates(Interaction
 
         releasePointerCaptureSafe(pointerId) {
             return PointerSessionManager.releasePointerCaptureSafe.call(this, pointerId);
+        },
+
+        suspendPointerSession(options) {
+            return PointerSessionManager.suspendPointerSession.call(this, options);
+        },
+
+        cancelPointerSession(options) {
+            return PointerSessionManager.cancelPointerSession.call(this, options);
+        },
+
+        resumePointerSession(options) {
+            return PointerSessionManager.resumePointerSession.call(this, options);
         }
     });
 }

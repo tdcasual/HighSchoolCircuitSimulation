@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as PropertyDialogController from '../src/ui/interaction/PropertyDialogController.js';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 afterEach(() => {
     vi.restoreAllMocks();
@@ -222,5 +224,14 @@ describe('PropertyDialogController.showPropertyDialog', () => {
         PropertyDialogController.showPropertyDialog.call(ctx, 'S1');
         expect(() => switchOpen.trigger('click')).not.toThrow();
         expect(() => switchClose.trigger('click')).not.toThrow();
+    });
+});
+
+
+describe('PropertyDialogController shared property contract', () => {
+    it('derives editable field metadata from shared component property schema', () => {
+        const source = readFileSync(resolve(process.cwd(), 'src/ui/interaction/PropertyDialogController.js'), 'utf8');
+        expect(source).toContain('ComponentPropertySchema');
+        expect(source).toContain('getComponentPropertyDialogFields');
     });
 });

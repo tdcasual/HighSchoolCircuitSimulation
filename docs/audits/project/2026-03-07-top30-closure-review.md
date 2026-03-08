@@ -74,8 +74,20 @@
 - 本轮 `Top30` 已无剩余 `seed-hypothesis` 开放项。
 - 本轮 `Top30` 已无剩余审计开放项，也无待回灌的项目级实现项。
 
+## 后续执行基线
+
+- 项目级后续整改统一以 `docs/plans/2026-03-08-confirmed-audit-remediation-implementation.md` 与 `docs/plans/2026-03-08-confirmed-audit-remediation-checklist.md` 为执行基线。
+- 本文继续保留闭环视图定义，不再承担逐项实施排期职责。
+
 ## 本轮结论
 
 - 项目级 `Top30` 已完成“文档路径、状态、证据归属、开放项去零”的全量闭环。
 - 闭环后当前状态为：`19 confirmed / 11 covered / 0 seed-hypothesis`。
 - 下一阶段无需再做项目级回灌收口；可直接转向更细分的移动端体验优化或新需求。
+
+## Follow-up Note (2026-03-08)
+
+- 本文中的 `19 confirmed / 11 covered` 是 2026-03-07 建档时的基线快照。
+- Week2 / Week3 整改完成后，项目级当前进度已更新为 `25 covered / 5 confirmed / 0 seed-hypothesis`。
+- 最新状态以 `docs/audits/project/top30.md`、`docs/plans/2026-03-08-confirmed-audit-remediation-checklist.md` 和 2026-03-08 follow-up 审计稿为准。
+- 截至 2026-03-08 Week4 收口后，项目级当前进度已更新为 `30 covered / 0 confirmed / 0 seed-hypothesis`。

@@ -1,3 +1,16 @@
+function getAdaptiveSeverity(results = {}) {
+    const meta = results?.meta || {};
+    const valid = results?.valid !== false;
+    const converged = !!(valid && meta.converged !== false);
+    const iterations = Number.isFinite(meta.iterations) ? meta.iterations : 0;
+    const maxIterations = Number.isFinite(meta.maxIterations) ? meta.maxIterations : 0;
+    const nearIterationLimit = maxIterations > 0 && iterations >= Math.max(3, maxIterations - 1);
+    if (!converged || nearIterationLimit) {
+        return 1_000_000 + iterations;
+    }
+    return iterations;
+}
+
 export class CircuitSimulationLoopService {
     getSimulationSubstepCount(context, stepDt = context?.dt) {
         const dt = Number.isFinite(stepDt) && stepDt > 0
@@ -37,14 +50,17 @@ export class CircuitSimulationLoopService {
         const substepCount = this.getSimulationSubstepCount(context, stepDt);
         const substepDt = stepDt / substepCount;
         let latestResults = null;
+        let adaptiveDecisionResults = null;
         let elapsedDt = 0;
 
         for (let index = 0; index < substepCount; index++) {
             const substepResults = context.solver.solve(substepDt, context.simTime);
             latestResults = substepResults;
+            if (!adaptiveDecisionResults || getAdaptiveSeverity(substepResults) >= getAdaptiveSeverity(adaptiveDecisionResults)) {
+                adaptiveDecisionResults = substepResults;
+            }
 
             if (!substepResults.valid) {
-                context.updateAdaptiveTimeStep(substepResults);
                 break;
             }
 
@@ -52,7 +68,10 @@ export class CircuitSimulationLoopService {
             elapsedDt += substepDt;
             context.solver.updateDynamicComponents(substepResults.voltages, substepResults.currents);
             context.syncSimulationStateToComponents();
-            context.updateAdaptiveTimeStep(substepResults);
+        }
+
+        if (adaptiveDecisionResults) {
+            context.updateAdaptiveTimeStep(adaptiveDecisionResults);
         }
 
         if (!latestResults) {

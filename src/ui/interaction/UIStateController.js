@@ -53,6 +53,38 @@ function isSelectionSnapshot(value) {
         && (value.mode === 'none' || value.mode === 'component' || value.mode === 'wire');
 }
 
+function normalizeSelectionSnapshotAgainstCircuit(context = {}, snapshot) {
+    if (!isSelectionSnapshot(snapshot)) return buildSelectionSnapshot(context);
+    const circuit = context?.circuit;
+    const componentId = normalizeSelectionId(snapshot.componentId);
+    const wireId = normalizeSelectionId(snapshot.wireId);
+
+    if (snapshot.mode === 'component') {
+        if (componentId && typeof circuit?.getComponent === 'function' && !circuit.getComponent(componentId)) {
+            return Object.freeze({ mode: 'none', componentId: null, wireId: null });
+        }
+        if (snapshot.componentId === componentId && snapshot.wireId === null) {
+            return snapshot;
+        }
+        return Object.freeze({ mode: 'component', componentId, wireId: null });
+    }
+
+    if (snapshot.mode === 'wire') {
+        if (wireId && typeof circuit?.getWire === 'function' && !circuit.getWire(wireId)) {
+            return Object.freeze({ mode: 'none', componentId: null, wireId: null });
+        }
+        if (snapshot.componentId === null && snapshot.wireId === wireId) {
+            return snapshot;
+        }
+        return Object.freeze({ mode: 'wire', componentId: null, wireId });
+    }
+
+    if (snapshot.componentId === null && snapshot.wireId === null) {
+        return snapshot;
+    }
+    return Object.freeze({ mode: 'none', componentId: null, wireId: null });
+}
+
 function getLocalFeedbackPresenter(context) {
     if (context?.localFeedbackPresenter && typeof context.localFeedbackPresenter.show === 'function') {
         return context.localFeedbackPresenter;
@@ -89,14 +121,18 @@ export function getActiveInteractionMode() {
 export function getSelectionSnapshot() {
     const context = this || {};
     if (isSelectionSnapshot(context.selectionSnapshot)) {
-        return context.selectionSnapshot;
+        const normalizedSnapshot = normalizeSelectionSnapshotAgainstCircuit(context, context.selectionSnapshot);
+        if (context && typeof context === 'object') {
+            context.selectionSnapshot = normalizedSnapshot;
+        }
+        return normalizedSnapshot;
     }
     return buildSelectionSnapshot(context);
 }
 
 export function syncSelectionSnapshot() {
     const context = this || {};
-    const snapshot = buildSelectionSnapshot(context);
+    const snapshot = normalizeSelectionSnapshotAgainstCircuit(context, buildSelectionSnapshot(context));
     if (context && typeof context === 'object') {
         context.selectionSnapshot = snapshot;
     }

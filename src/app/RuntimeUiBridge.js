@@ -52,18 +52,16 @@ export class RuntimeUiBridge {
                 this.updateStatus(runtimeStatusMessage);
 
                 const primaryHint = getPrimaryRuntimeHint(runtimeDiagnostics);
-                if (primaryHint) {
-                    this.app?.interaction?.showStatusAction?.({
-                        label: '排查建议',
-                        ariaLabel: '查看当前诊断建议',
-                        statusText: runtimeStatusMessage,
-                        durationMs: 6000,
-                        onAction: () => {
-                            this.app?.chartWorkspace?.setRuntimeStatus?.(runtimeStatusMessage);
-                            this.updateStatus(runtimeStatusMessage);
-                        }
-                    });
-                }
+                this.app?.interaction?.showStatusAction?.({
+                    label: primaryHint ? '排查建议' : '运行状态',
+                    ariaLabel: primaryHint ? '查看当前诊断建议' : '查看当前运行状态',
+                    statusText: runtimeStatusMessage,
+                    durationMs: primaryHint ? 6000 : 4200,
+                    onAction: () => {
+                        this.app?.chartWorkspace?.setRuntimeStatus?.(runtimeStatusMessage);
+                        this.updateStatus(runtimeStatusMessage);
+                    }
+                });
             }
         }
 

@@ -50,7 +50,7 @@ describe('Circuit IO gateway', () => {
         expect(loaded.wires.length).toBeGreaterThan(0);
     });
 
-    it('sanitizes malformed runtime-critical numeric properties on deserialize', () => {
+    it('rejects malformed runtime-critical numeric properties on deserialize instead of silently sanitizing', () => {
         const json = {
             meta: {
                 version: 3,
@@ -97,17 +97,7 @@ describe('Circuit IO gateway', () => {
             }]
         };
 
-        const loaded = CircuitDeserializer.deserialize(json);
-        const source = loaded.components.find((comp) => comp.id === 'V1');
-        const motor = loaded.components.find((comp) => comp.id === 'M1');
-        const ammeter = loaded.components.find((comp) => comp.id === 'A1');
-
-        expect(Number.isFinite(source.internalResistance)).toBe(true);
-        expect(source.internalResistance).toBeGreaterThan(0);
-        expect(motor.resistance).toBeGreaterThan(0);
-        expect(motor.inertia).toBeGreaterThan(0);
-        expect(Number.isFinite(ammeter.resistance)).toBe(true);
-        expect(ammeter.resistance).toBeGreaterThanOrEqual(0);
+        expect(() => CircuitDeserializer.deserialize(json)).toThrow(/internalResistance|resistance|inertia/u);
     });
 
     it('rejects non-v3 payloads during deserialize', () => {

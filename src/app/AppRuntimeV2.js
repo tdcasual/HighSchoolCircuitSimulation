@@ -23,6 +23,7 @@ import { createRuntimeLogger } from '../utils/Logger.js';
 import { RuntimeStorageEntries } from '../app/RuntimeStorageRegistry.js';
 import { buildAppSaveData } from '../app/AppSerialization.js';
 import { safeGetStorageItem, safeSetStorageItem } from '../app/AppStorage.js';
+import { InteractionModeStore } from './interaction/InteractionModeStore.js';
 
 export class AppRuntimeV2 {
     constructor() {
@@ -31,8 +32,15 @@ export class AppRuntimeV2 {
         );
 
         // 获取SVG画布
+        this.runtimeVersion = 2;
         this.svg = document.getElementById('circuit-canvas');
         this.logger = createRuntimeLogger({ scope: 'app' });
+        this.interactionModeStore = new InteractionModeStore();
+        this.interactionModeSnapshot = this.interactionModeStore.getState();
+        this.circuitStorageOwnership = {
+            source: 'boot',
+            sequence: 0
+        };
         
         // 初始化电路引擎
         this.circuit = new Circuit();
@@ -197,10 +205,35 @@ export class AppRuntimeV2 {
         return runtimeUiBridge.onCircuitUpdate(results);
     }
 
+    getRuntimeCapabilityFlags() {
+        const runtimeOptions = this.runtimeOptions || {};
+        const embedEnabled = !!runtimeOptions.enabled;
+        const readOnly = embedEnabled && (runtimeOptions.mode === 'readonly' || runtimeOptions.readOnly === true);
+        const classroomEmbedMode = embedEnabled && runtimeOptions.mode === 'classroom';
+        return {
+            embedEnabled,
+            readOnly,
+            classroomEmbedMode,
+            allowsCircuitMutation: !readOnly,
+            allowsStorageMutation: !readOnly,
+            allowsClassroomLevelControl: !embedEnabled || classroomEmbedMode
+        };
+    }
+
+    reportRuntimeCapabilityBlock(message = '当前模式不允许修改电路') {
+        const runtimeUiBridge = this.runtimeUiBridge || new RuntimeUiBridge(this);
+        runtimeUiBridge.updateStatus(message);
+        return false;
+    }
+
     /**
      * 开始模拟
      */
     startSimulation() {
+        const runtimeCapabilities = AppRuntimeV2.prototype.getRuntimeCapabilityFlags.call(this);
+        if (!runtimeCapabilities.allowsCircuitMutation) {
+            return AppRuntimeV2.prototype.reportRuntimeCapabilityBlock.call(this, '当前模式不允许修改电路');
+        }
         const runtimeUiBridge = this.runtimeUiBridge || new RuntimeUiBridge(this);
         const actionRouter = this.actionRouter || new RuntimeActionRouter(this, { uiBridge: runtimeUiBridge });
         return actionRouter.startSimulation();
@@ -219,6 +252,10 @@ export class AppRuntimeV2 {
      * 清空电路
      */
     clearCircuit() {
+        const runtimeCapabilities = AppRuntimeV2.prototype.getRuntimeCapabilityFlags.call(this);
+        if (!runtimeCapabilities.allowsCircuitMutation) {
+            return AppRuntimeV2.prototype.reportRuntimeCapabilityBlock.call(this, '当前模式不允许修改电路');
+        }
         const runtimeUiBridge = this.runtimeUiBridge || new RuntimeUiBridge(this);
         const actionRouter = this.actionRouter || new RuntimeActionRouter(this, { uiBridge: runtimeUiBridge });
         return actionRouter.clearCircuit();
@@ -228,6 +265,10 @@ export class AppRuntimeV2 {
      * 程序化加载电路 JSON（供导入流程与嵌入 API 共用）
      */
     loadCircuitData(data, options = {}) {
+        const runtimeCapabilities = AppRuntimeV2.prototype.getRuntimeCapabilityFlags.call(this);
+        if (!runtimeCapabilities.allowsCircuitMutation) {
+            return AppRuntimeV2.prototype.reportRuntimeCapabilityBlock.call(this, '当前模式不允许修改电路');
+        }
         const runtimeUiBridge = this.runtimeUiBridge || new RuntimeUiBridge(this);
         const actionRouter = this.actionRouter || new RuntimeActionRouter(this, { uiBridge: runtimeUiBridge });
         return actionRouter.loadCircuitData(data, options);
@@ -246,6 +287,10 @@ export class AppRuntimeV2 {
      * 导入电路
      */
     importCircuit(file) {
+        const runtimeCapabilities = AppRuntimeV2.prototype.getRuntimeCapabilityFlags.call(this);
+        if (!runtimeCapabilities.allowsCircuitMutation) {
+            return AppRuntimeV2.prototype.reportRuntimeCapabilityBlock.call(this, '当前模式不允许修改电路');
+        }
         const runtimeUiBridge = this.runtimeUiBridge || new RuntimeUiBridge(this);
         const actionRouter = this.actionRouter || new RuntimeActionRouter(this, { uiBridge: runtimeUiBridge });
         return actionRouter.importCircuit(file);
@@ -266,10 +311,10 @@ export class AppRuntimeV2 {
         const {
             enabled = true
         } = options;
-        const saveCircuit = () => {
+        const saveCircuit = (saveOptions = {}) => {
             if (!enabled) return;
             try {
-                const saved = this.saveCircuitToStorage();
+                const saved = this.saveCircuitToStorage(null, saveOptions);
                 if (!saved) {
                     throw new Error('autosave_storage_unavailable');
                 }
@@ -283,7 +328,15 @@ export class AppRuntimeV2 {
         this.scheduleSave = (delayMs = 1000) => {
             if (!enabled) return;
             clearTimeout(saveTimeout);
-            saveTimeout = setTimeout(saveCircuit, delayMs);
+            const expectedSequence = Number.isFinite(this.circuitStorageOwnership?.sequence)
+                ? this.circuitStorageOwnership.sequence
+                : 0;
+            saveTimeout = setTimeout(() => {
+                saveCircuit({
+                    source: 'autosave',
+                    expectedSequence
+                });
+            }, delayMs);
         };
 
         this.circuit.onUpdate = (results) => {
@@ -303,11 +356,59 @@ export class AppRuntimeV2 {
         });
     }
 
-    saveCircuitToStorage(circuitJSON = null) {
+    getRuntimeReadSnapshot() {
+        const circuitSnapshot = typeof this.circuit?.getRuntimeReadSnapshot === 'function'
+            ? this.circuit.getRuntimeReadSnapshot()
+            : {};
+        return {
+            ...circuitSnapshot,
+            saveData: this.buildSaveData()
+        };
+    }
+
+    beginCircuitStorageOwnership(source = 'runtime-load') {
+        const currentSequence = Number.isFinite(this.circuitStorageOwnership?.sequence)
+            ? this.circuitStorageOwnership.sequence
+            : 0;
+        this.circuitStorageOwnership = {
+            source: typeof source === 'string' && source ? source : 'runtime-load',
+            sequence: currentSequence + 1
+        };
+        return this.circuitStorageOwnership;
+    }
+
+    saveCircuitToStorage(circuitJSON = null, options = {}) {
+        const runtimeCapabilities = AppRuntimeV2.prototype.getRuntimeCapabilityFlags.call(this);
+        if (!runtimeCapabilities.allowsStorageMutation) {
+            return AppRuntimeV2.prototype.reportRuntimeCapabilityBlock.call(this, '当前模式不允许修改电路');
+        }
         const payload = circuitJSON ?? this.buildSaveData();
-        return safeSetStorageItem(
+        const currentOwnership = this.circuitStorageOwnership || { source: 'manual-save', sequence: 0 };
+        const expectedSequence = Number.isFinite(options.expectedSequence)
+            ? options.expectedSequence
+            : currentOwnership.sequence;
+        if (
+            Number.isFinite(options.expectedSequence)
+            && Number.isFinite(currentOwnership.sequence)
+            && options.expectedSequence !== currentOwnership.sequence
+        ) {
+            return false;
+        }
+        const storageOptions = options.storage ? { storage: options.storage } : {};
+        const payloadSaved = safeSetStorageItem(
             RuntimeStorageEntries.circuitAutosave,
-            JSON.stringify(payload)
+            JSON.stringify(payload),
+            storageOptions
+        );
+        if (!payloadSaved) return false;
+        return safeSetStorageItem(
+            RuntimeStorageEntries.circuitAutosaveMeta,
+            JSON.stringify({
+                owner: RuntimeStorageEntries.circuitAutosave.owner,
+                source: typeof options.source === 'string' && options.source ? options.source : currentOwnership.source,
+                sequence: expectedSequence
+            }),
+            storageOptions
         );
     }
     
@@ -316,14 +417,18 @@ export class AppRuntimeV2 {
      */
     loadCircuitFromStorage(options = {}) {
         try {
-            const saved = safeGetStorageItem(RuntimeStorageEntries.circuitAutosave);
+            const storageOptions = options.storage ? { storage: options.storage } : {};
+            const saved = safeGetStorageItem(RuntimeStorageEntries.circuitAutosave, storageOptions);
             if (!saved) return false;
 
             const circuitJSON = JSON.parse(saved);
             const statusText = typeof options.statusText === 'string' && options.statusText
                 ? options.statusText
                 : `已从缓存恢复电路 (${circuitJSON.components.length} 个元器件)`;
-            this.loadCircuitData(circuitJSON, { statusText });
+            this.loadCircuitData(circuitJSON, {
+                statusText,
+                storageSource: options.storageSource || 'storage-restore'
+            });
             return true;
         } catch (e) {
             this.logger.error('Failed to load saved circuit:', e);
@@ -418,6 +523,15 @@ export class AppRuntimeV2 {
     }
 
     setClassroomModeLevel(level, options = {}) {
+        const runtimeCapabilities = AppRuntimeV2.prototype.getRuntimeCapabilityFlags.call(this);
+        if (!runtimeCapabilities.allowsClassroomLevelControl) {
+            AppRuntimeV2.prototype.reportRuntimeCapabilityBlock.call(this, '当前嵌入模式不允许切换课堂模式');
+            return {
+                preferredLevel: 'off',
+                activeLevel: this.classroomMode?.activeLevel || 'off',
+                supported: false
+            };
+        }
         if (!this.classroomMode || typeof this.classroomMode.setPreferredLevel !== 'function') {
             return null;
         }

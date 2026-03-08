@@ -42,4 +42,40 @@ describe('AppRuntimeV2 runtime diagnostics UI bridge', () => {
             statusText: expect.stringContaining(diagnostics.hints[0])
         }));
     });
+
+    it('surfaces summary-only fatal diagnostics into near-field UI feedback', () => {
+        const diagnostics = {
+            code: 'OPEN_CIRCUIT',
+            fatal: true,
+            summary: '当前电路未形成有效回路，观测结果已暂停。',
+            hints: []
+        };
+        const results = {
+            valid: false,
+            runtimeDiagnostics: diagnostics
+        };
+        const app = {
+            circuit: {},
+            renderer: {
+                updateValues: vi.fn(),
+                updateWireAnimations: vi.fn()
+            },
+            chartWorkspace: {
+                onCircuitUpdate: vi.fn(),
+                setRuntimeStatus: vi.fn()
+            },
+            interaction: {
+                selectedComponent: null,
+                showStatusAction: vi.fn()
+            },
+            updateStatus: vi.fn()
+        };
+
+        AppRuntimeV2.prototype.onCircuitUpdate.call(app, results);
+
+        expect(app.chartWorkspace.setRuntimeStatus).toHaveBeenCalledWith(expect.stringContaining(diagnostics.summary));
+        expect(app.interaction.showStatusAction).toHaveBeenCalledWith(expect.objectContaining({
+            statusText: expect.stringContaining(diagnostics.summary)
+        }));
+    });
 });

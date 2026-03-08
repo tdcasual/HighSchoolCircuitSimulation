@@ -23,15 +23,37 @@ function safeInvokeMethod(target, methodName, ...args) {
     }
 }
 
+
+function resolveRuntimeReadSnapshot(panel) {
+    const panelSnapshot = safeInvokeMethod(panel, 'getRuntimeReadSnapshot');
+    if (panelSnapshot && typeof panelSnapshot === 'object') return panelSnapshot;
+
+    const appSnapshot = safeInvokeMethod(panel?.app, 'getRuntimeReadSnapshot');
+    if (appSnapshot && typeof appSnapshot === 'object') return appSnapshot;
+
+    const circuitSnapshot = safeInvokeMethod(panel?.circuit, 'getRuntimeReadSnapshot');
+    if (circuitSnapshot && typeof circuitSnapshot === 'object') return circuitSnapshot;
+
+    return null;
+}
+
 export function buildObservationExportMetadata(panel, options = {}) {
     const exportedAt = options.exportedAt instanceof Date && Number.isFinite(options.exportedAt.getTime())
         ? options.exportedAt
         : new Date();
+    const runtimeSnapshot = resolveRuntimeReadSnapshot(panel);
     const timestamp = exportedAt.toISOString().replace('T', ' ').replace('Z', ' UTC');
     const lines = [
         `导出时间: ${timestamp}`,
         `采样间隔: ${normalizeSampleIntervalMs(panel.sampleIntervalMs, DEFAULT_SAMPLE_INTERVAL_MS)} ms`
     ];
+
+    if (Number.isFinite(runtimeSnapshot?.topologyVersion)) {
+        lines.push(`拓扑版本: ${runtimeSnapshot.topologyVersion}`);
+    }
+    if (Number.isFinite(runtimeSnapshot?.simulationVersion)) {
+        lines.push(`仿真步: ${runtimeSnapshot.simulationVersion}`);
+    }
 
     const plots = Array.isArray(panel.plots) ? panel.plots : [];
     lines.push(`图像数量: ${plots.length}`);
@@ -63,8 +85,23 @@ export function buildObservationExportMetadata(panel, options = {}) {
         }
     });
 
+    const componentSource = runtimeSnapshot?.components instanceof Map
+        ? runtimeSnapshot.components
+        : panel.circuit?.components;
+    if (componentSource instanceof Map) {
+        for (const comp of componentSource.values()) {
+            const label = typeof comp?.label === 'string' && comp.label.trim()
+                ? comp.label.trim()
+                : (comp?.id || '未命名元件');
+            const type = typeof comp?.type === 'string' && comp.type.trim()
+                ? comp.type.trim()
+                : 'Unknown';
+            lines.push(`元器件: ${label} (${type})`);
+        }
+    }
+
     const meterComponents = [];
-    for (const comp of panel.circuit?.components?.values?.() || []) {
+    for (const comp of componentSource?.values?.() || []) {
         if ((comp.type === 'Ammeter' || comp.type === 'Voltmeter') && comp.selfReading) {
             meterComponents.push(comp);
         }

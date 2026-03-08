@@ -104,4 +104,48 @@ describe('Adaptive simulation timestep', () => {
         const expectedI2t = current * current * elapsedSimTime;
         expect(fuse.i2tAccum).toBeCloseTo(expectedI2t, 12);
     });
+
+    it('counts easy-convergence streak once per AC outer step instead of once per substep', () => {
+        const circuit = createTestCircuit();
+        circuit.dt = 0.01;
+        circuit.enableAdaptiveTimeStep = true;
+        circuit.currentDt = 0.00125;
+        circuit.maxAdaptiveDt = 0.01;
+
+        const acSource = addComponent(circuit, 'ACVoltageSource', 'VAC', {
+            rmsVoltage: 10,
+            frequency: 50,
+            phase: 0,
+            offset: 0,
+            internalResistance: 0
+        });
+        const resistor = addComponent(circuit, 'Resistor', 'R1', { resistance: 10 });
+
+        connectWire(circuit, 'W1', acSource, 0, resistor, 0);
+        connectWire(circuit, 'W2', resistor, 1, acSource, 1);
+
+        const originalSolve = circuit.solver.solve.bind(circuit.solver);
+        circuit.solver.solve = () => ({
+            valid: true,
+            voltages: [0, 10],
+            currents: new Map([
+                ['VAC', 1],
+                ['R1', 1]
+            ]),
+            meta: {
+                converged: true,
+                iterations: 1,
+                maxIterations: 40
+            }
+        });
+
+        circuit.isRunning = true;
+        for (let i = 0; i < 3; i += 1) {
+            circuit.step();
+        }
+        circuit.isRunning = false;
+        circuit.solver.solve = originalSolve;
+
+        expect(circuit.currentDt).toBeCloseTo(0.001875, 12);
+    });
 });

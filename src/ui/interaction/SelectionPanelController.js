@@ -71,6 +71,11 @@ export function clearSelection() {
 
 export function selectComponent(id) {
     this.clearSelection();
+    const comp = this.circuit.getComponent(id);
+    if (!comp) {
+        this.quickActionBar?.update?.();
+        return;
+    }
     this.selectedComponent = id;
     this.selectedWire = null;
     syncSelectionSnapshot.call(this);
@@ -80,7 +85,6 @@ export function selectComponent(id) {
         this.activateSidePanelTab('properties');
     }
 
-    const comp = this.circuit.getComponent(id);
     if (comp) {
         this.updatePropertyPanel(comp);
     }
@@ -94,6 +98,11 @@ export function selectComponent(id) {
  */
 export function selectWire(id) {
     this.clearSelection();
+    const wire = this.circuit.getWire(id);
+    if (!wire) {
+        this.quickActionBar?.update?.();
+        return;
+    }
     this.selectedWire = id;
     this.selectedComponent = null;
     syncSelectionSnapshot.call(this);
@@ -116,7 +125,6 @@ export function selectWire(id) {
         }, 10000);
     }
 
-    const wire = this.circuit.getWire(id);
     const fmtEnd = (which) => {
         const ref = which === 'a' ? wire?.aRef : wire?.bRef;
         if (ref && ref.componentId !== undefined && ref.componentId !== null) {

@@ -37,6 +37,17 @@ describe('bootstrapV2 composition root', () => {
         expect(source).toContain('runMobileRestoreAction');
     });
 
+    it('app runtime source provisions shared interaction mode store before interaction bootstrap', () => {
+        const runtimePath = resolve(process.cwd(), 'src/app/AppRuntimeV2.js');
+        const source = readFileSync(runtimePath, 'utf8');
+        const storeIndex = source.indexOf('this.interactionModeStore');
+        const interactionIndex = source.indexOf('new InteractionManager(this)');
+
+        expect(source).toContain('this.runtimeVersion = 2');
+        expect(storeIndex).toBeGreaterThan(-1);
+        expect(interactionIndex).toBeGreaterThan(-1);
+        expect(storeIndex).toBeLessThan(interactionIndex);
+    });
 
     it('app runtime source composes runtime action router and ui bridge', () => {
         const runtimePath = resolve(process.cwd(), 'src/app/AppRuntimeV2.js');

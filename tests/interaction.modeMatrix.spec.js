@@ -69,7 +69,7 @@ describe('Interaction mode matrix diagnostics', () => {
         expect(typeof FakeInteractionManager.prototype.getInteractionModeSnapshot).toBe('function');
     });
 
-    it('reports mode conflict when wire mode and endpoint edit are both active', () => {
+    it('keeps endpoint-edit authoritative even when wire restore config is retained', () => {
         class FakeInteractionManager {}
         installInteractionCoreInputPlacementDelegates(FakeInteractionManager);
         vi.stubGlobal('document', {
@@ -81,17 +81,38 @@ describe('Interaction mode matrix diagnostics', () => {
         });
 
         const context = createContext({
-            pendingTool: 'Wire',
-            mobileMode: 'wire',
-            wireModeSticky: true,
-            wiringActive: true,
-            isDraggingWireEndpoint: true
+            pendingTool: null,
+            mobileMode: 'select',
+            wireModeSticky: false,
+            wiringActive: false,
+            isDraggingWireEndpoint: false,
+            interactionModeStore: {
+                getState: () => ({
+                    mode: 'endpoint-edit',
+                    context: {
+                        pendingTool: 'Wire',
+                        mobileMode: 'wire',
+                        wireModeSticky: true,
+                        wiringActive: false,
+                        isDraggingWireEndpoint: true,
+                        isTerminalExtending: false,
+                        isRheostatDragging: false
+                    }
+                })
+            }
         });
         const snapshot = FakeInteractionManager.prototype.getInteractionModeSnapshot.call(context);
 
-        expect(snapshot.mode).toBe('conflict');
-        expect(snapshot.hasConflict).toBe(true);
-        expect(snapshot.activeModes).toEqual(['wire', 'endpoint-edit']);
+        expect(snapshot.mode).toBe('endpoint-edit');
+        expect(snapshot.hasConflict).toBe(false);
+        expect(snapshot.activeModes).toEqual(['endpoint-edit']);
+        expect(snapshot.pendingTool).toBe('Wire');
+        expect(snapshot.wireSignals).toEqual({
+            pendingWireTool: true,
+            wireModeSelected: true,
+            wireModeSticky: true,
+            activeWiringSession: false
+        });
     });
 
     it('captures phone/classroom/embed runtime matrix in wire mode snapshot', () => {

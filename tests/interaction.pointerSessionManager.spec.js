@@ -895,4 +895,75 @@ describe('PointerSessionManager', () => {
         expect(context.viewOffset.y).toBeCloseTo(-20, 6);
         expect(context.updateViewTransform).toHaveBeenCalledTimes(1);
     });
+
+    it('claims canvas surface priority before routing touch pointer input', () => {
+        const claimPhoneSurface = vi.fn();
+        const context = {
+            app: {
+                responsiveLayout: {
+                    claimPhoneSurface
+                }
+            },
+            activePointers: new Map(),
+            svg: {
+                setPointerCapture: vi.fn()
+            },
+            shouldStartPinchGesture: vi.fn(() => false),
+            startPinchGesture: vi.fn(),
+            blockSinglePointerInteraction: false,
+            primaryPointerId: null,
+            lastPrimaryPointerType: 'mouse',
+            onMouseDown: vi.fn()
+        };
+        const event = {
+            pointerId: 61,
+            pointerType: 'touch',
+            clientX: 18,
+            clientY: 24,
+            preventDefault: vi.fn()
+        };
+
+        PointerSessionManager.onPointerDown.call(context, event);
+
+        expect(claimPhoneSurface).toHaveBeenCalledWith('canvas');
+        expect(context.onMouseDown).toHaveBeenCalledWith(event);
+    });
+
+    it('suspends pointer tracking while preserving suspended wiring session metadata', () => {
+        const suspendedWiringSession = {
+            wireStart: { x: 10, y: 20 }
+        };
+        const releasePointerCaptureSafe = vi.fn();
+        const cancel = vi.fn();
+        const context = {
+            activePointers: new Map([
+                [71, { clientX: 1, clientY: 2, pointerType: 'touch' }],
+                [72, { clientX: 3, clientY: 4, pointerType: 'pen' }]
+            ]),
+            primaryPointerId: 71,
+            pinchGesture: { pointerAId: 71, pointerBId: 72 },
+            blockSinglePointerInteraction: true,
+            lastPrimaryPointerType: 'touch',
+            pointerDownInfo: { moved: true },
+            wireModeGesture: { kind: 'terminal-extend' },
+            touchActionController: { cancel },
+            releasePointerCaptureSafe,
+            suspendedWiringSession
+        };
+
+        PointerSessionManager.suspendPointerSession.call(context, {
+            preserveSuspendedWiringSession: true
+        });
+
+        expect(cancel).toHaveBeenCalledTimes(1);
+        expect(releasePointerCaptureSafe).toHaveBeenCalledTimes(2);
+        expect(context.activePointers.size).toBe(0);
+        expect(context.primaryPointerId).toBe(null);
+        expect(context.pinchGesture).toBe(null);
+        expect(context.blockSinglePointerInteraction).toBe(false);
+        expect(context.pointerDownInfo).toBe(null);
+        expect(context.wireModeGesture).toBe(null);
+        expect(context.lastPrimaryPointerType).toBe('mouse');
+        expect(context.suspendedWiringSession).toBe(suspendedWiringSession);
+    });
 });

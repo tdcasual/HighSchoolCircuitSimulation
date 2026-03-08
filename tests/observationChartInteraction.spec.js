@@ -52,4 +52,29 @@ describe('ObservationChartInteraction', () => {
             frozen: true
         });
     });
+
+    it('clears transient touch readout on release unless the cursor was explicitly frozen', () => {
+        const interaction = new ObservationChartInteraction({ holdMs: 350 });
+
+        interaction.onPointerDown({ x: 40, y: 18, pointerType: 'touch', time: 0 });
+        interaction.onPointerMove({ x: 52, y: 24, pointerType: 'touch', time: 120 });
+        expect(interaction.getReadout()).toEqual({ x: 52, y: 24 });
+
+        interaction.onPointerUp();
+
+        expect(interaction.isFrozen()).toBe(false);
+        expect(interaction.getReadout()).toBe(null);
+    });
+
+    it('keeps frozen readout anchored across follow-up pointer moves', () => {
+        const interaction = new ObservationChartInteraction({ holdMs: 300 });
+
+        interaction.onPointerDown({ x: 80, y: 30, pointerType: 'touch', time: 0 });
+        interaction.onPointerMove({ x: 88, y: 36, pointerType: 'touch', time: 360 });
+        expect(interaction.isFrozen()).toBe(true);
+
+        interaction.onPointerMove({ x: 120, y: 90, pointerType: 'touch', time: 420 });
+
+        expect(interaction.getReadout()).toEqual({ x: 88, y: 36 });
+    });
 });

@@ -3,6 +3,10 @@ import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { runScriptInTempWorkspace } from './helpers/scriptGuardTestUtils.js';
 
+function extractDocPathsFromBackticks(content) {
+    return Array.from(content.matchAll(/`(docs\/[^`]+\.md)`/g), (match) => match[1]);
+}
+
 describe('release docs integrity', () => {
     it('uses release-evidence-index manifest instead of hard-coded date literals', () => {
         const script = readFileSync(
@@ -66,6 +70,28 @@ describe('release docs integrity', () => {
         expect(guide).toContain('Revision: `interaction-guide-r2-2026-04-06`');
         expect(closure).toContain('docs/process/component-interaction-usage-guide.md');
         expect(closure).toContain('interaction-guide-r2-2026-04-06');
+    });
+
+    it('keeps project top30 audit doc references resolvable', () => {
+        const top30Path = resolve(process.cwd(), 'docs/audits/project/top30.md');
+        const top30 = readFileSync(top30Path, 'utf8');
+        const refs = extractDocPathsFromBackticks(top30);
+
+        expect(refs.length).toBeGreaterThan(0);
+        for (const relPath of refs) {
+            expect(existsSync(resolve(process.cwd(), relPath)), `missing ${relPath}`).toBe(true);
+        }
+    });
+
+    it('keeps top30 closure review anchor docs resolvable', () => {
+        const closureReviewPath = resolve(process.cwd(), 'docs/audits/project/2026-03-07-top30-closure-review.md');
+        const closureReview = readFileSync(closureReviewPath, 'utf8');
+        const refs = extractDocPathsFromBackticks(closureReview);
+
+        expect(refs.length).toBeGreaterThan(0);
+        for (const relPath of refs) {
+            expect(existsSync(resolve(process.cwd(), relPath)), `missing ${relPath}`).toBe(true);
+        }
     });
 
     it('executes docs-integrity script on current release references', () => {

@@ -13,6 +13,8 @@ import { initializeInteractionModeStore } from '../app/interaction/InteractionOr
 export class InteractionManager {
     constructor(app) {
         initializeInteractionState(this, app);
+        this.runtimeVersion = app?.runtimeVersion ?? 2;
+        this.interactionModeStore = app?.interactionModeStore || this.interactionModeStore || null;
         this.interactionModeSnapshot = initializeInteractionModeStore(this);
         this.hideContextMenuHandler = () => {
             this.hideContextMenu();

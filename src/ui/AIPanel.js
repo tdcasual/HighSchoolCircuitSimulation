@@ -559,7 +559,11 @@ export class AIPanel {
      * 通过 AppRuntime 统一保存电路缓存
      */
     saveCircuitToLocalStorage(circuitJSON) {
-        const appPayload = safeInvoke(this.app, 'buildSaveData');
+        const runtimeSnapshot = safeInvoke(this.app, 'getRuntimeReadSnapshot');
+        const snapshotPayload = runtimeSnapshot && typeof runtimeSnapshot === 'object'
+            ? runtimeSnapshot.saveData
+            : null;
+        const appPayload = snapshotPayload ?? safeInvoke(this.app, 'buildSaveData');
         const payload = appPayload ?? circuitJSON;
         const saved = safeInvoke(this.app, 'saveCircuitToStorage', [payload], false);
         if (saved) {

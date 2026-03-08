@@ -61,12 +61,36 @@ function assertNoLegacyAliases(value, path = 'root') {
     }
 }
 
+function isV3Version(version) {
+    return version === 3 || version === '3' || version === '3.0';
+}
+
 function validateVersion(meta) {
     const version = meta.version;
-    const isV3 = version === 3 || version === '3' || version === '3.0';
-    if (!isV3) {
+    if (!isV3Version(version)) {
         throw new Error(`meta.version must be 3, received "${String(version)}"`);
     }
+}
+
+export function prepareCircuitPayloadV3(payload, options = {}) {
+    if (!options?.allowLegacyMigration || !isPlainObject(payload?.meta) || isV3Version(payload.meta.version)) {
+        return { payload, migration: null };
+    }
+
+    return {
+        payload: {
+            ...payload,
+            meta: {
+                ...payload.meta,
+                version: 3
+            }
+        },
+        migration: {
+            fromVersion: String(payload.meta.version),
+            strategy: 'legacy-meta-upgrade',
+            warnings: ['meta.version migrated from legacy payload']
+        }
+    };
 }
 
 function validateTerminalRef(ref, label) {
@@ -86,6 +110,45 @@ function validatePoint(point, label) {
     assertKnownKeys(point, POINT_KEYS, label);
     assertFiniteNumber(point.x, `${label}.x`);
     assertFiniteNumber(point.y, `${label}.y`);
+}
+
+function validateRuntimeCriticalComponentProperties(component, label) {
+    const properties = isPlainObject(component?.properties) ? component.properties : {};
+    const readValue = (key) => (Object.prototype.hasOwnProperty.call(properties, key) ? properties[key] : component?.[key]);
+    const ensureFinite = (key) => {
+        const value = readValue(key);
+        if (value === undefined) return null;
+        const numeric = Number(value);
+        if (!Number.isFinite(numeric)) {
+            throw new Error(`${label}.properties.${key} must be a finite number`);
+        }
+        return numeric;
+    };
+
+    if (component.type === 'PowerSource' || component.type === 'ACVoltageSource') {
+        const internalResistance = ensureFinite('internalResistance');
+        if (internalResistance !== null && internalResistance < 0) {
+            throw new Error(`${label}.properties.internalResistance must be >= 0`);
+        }
+    }
+
+    if (component.type === 'Ammeter') {
+        const resistance = ensureFinite('resistance');
+        if (resistance !== null && resistance < 0) {
+            throw new Error(`${label}.properties.resistance must be >= 0`);
+        }
+    }
+
+    if (component.type === 'Motor') {
+        const resistance = ensureFinite('resistance');
+        const inertia = ensureFinite('inertia');
+        if (resistance !== null && resistance <= 0) {
+            throw new Error(`${label}.properties.resistance must be > 0`);
+        }
+        if (inertia !== null && inertia <= 0) {
+            throw new Error(`${label}.properties.inertia must be > 0`);
+        }
+    }
 }
 
 function validateComponent(component, index) {
@@ -119,6 +182,7 @@ function validateComponent(component, index) {
     ) {
         throw new Error(`${label}.terminalExtensions must be an object or null`);
     }
+    validateRuntimeCriticalComponentProperties(component, label);
 }
 
 function validateWire(wire, index) {
@@ -174,7 +238,9 @@ function validateProbe(probe, index) {
     }
 }
 
-export function validateCircuitV3(payload) {
+export function validateCircuitV3(payload, options = {}) {
+    const prepared = prepareCircuitPayloadV3(payload, options);
+    payload = prepared.payload;
     assertPlainObject(payload, 'payload');
     assertNoLegacyAliases(payload);
     assertKnownKeys(payload, TOP_LEVEL_KEYS, 'payload');

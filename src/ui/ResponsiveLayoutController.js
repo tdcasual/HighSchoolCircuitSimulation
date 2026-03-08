@@ -18,6 +18,9 @@ const DRAWER_SWIPE_AXIS_DOMINANCE = 1.2;
 const DRAWER_SWIPE_CLOSE_THRESHOLD_PX = 40;
 
 const MODE_CLASS_PREFIX = 'layout-mode-';
+const PHONE_SURFACE_CANVAS = 'canvas';
+const PHONE_SURFACE_DRAWER = 'drawer';
+const PHONE_SURFACE_TOP_ACTION_MENU = 'top-action-menu';
 
 const safeInvokeMethod = (target, methodName, ...args) => safeInvoke(target, methodName, args);
 
@@ -209,6 +212,11 @@ export class ResponsiveLayoutController {
             : null;
         if (interactiveTarget) return;
         const targetId = event.currentTarget?.id === 'toolbox' ? 'toolbox' : 'side-panel';
+        this.claimPhoneSurface(PHONE_SURFACE_DRAWER, {
+            source: 'responsiveLayout.onDrawerPointerDown',
+            target: targetId
+        });
+        this.cancelDrawerSwipe();
         this.drawerSwipe = {
             pointerId: event.pointerId,
             startX: event.clientX,
@@ -301,23 +309,8 @@ export class ResponsiveLayoutController {
         }
     }
 
-    onDrawerPointerUp(event) {
-        if (!this.drawerSwipe) return;
-        const pointerId = this.drawerSwipe.pointerId;
-        const currentTarget = event?.currentTarget;
-        const drawerEl = this.drawerSwipe.drawerEl;
-        const prevTransition = this.drawerSwipe.prevTransition;
-        this.drawerSwipe = null;
-        if (drawerEl?.style) {
-            drawerEl.style.transition = prevTransition;
-            safeInvokeMethod(drawerEl.style, 'removeProperty', '--drawer-drag-x');
-            safeInvokeMethod(drawerEl.style, 'removeProperty', '--drawer-drag-y');
-        }
-        if (typeof currentTarget?.releasePointerCapture === 'function') {
-            try {
-                currentTarget.releasePointerCapture(pointerId);
-            } catch (_) {}
-        }
+    onDrawerPointerUp() {
+        this.cancelDrawerSwipe();
     }
 
     resolveLayoutMode(width = typeof window !== 'undefined' ? window.innerWidth : TABLET_MAX_WIDTH + 1) {
@@ -366,8 +359,65 @@ export class ResponsiveLayoutController {
         safeAddClass(this.body, `${MODE_CLASS_PREFIX}${mode}`);
     }
 
+    cancelDrawerSwipe() {
+        if (!this.drawerSwipe) return false;
+        const pointerId = this.drawerSwipe.pointerId;
+        const drawerEl = this.drawerSwipe.drawerEl;
+        const prevTransition = this.drawerSwipe.prevTransition;
+        this.drawerSwipe = null;
+        if (drawerEl?.style) {
+            drawerEl.style.transition = prevTransition;
+            safeInvokeMethod(drawerEl.style, 'removeProperty', '--drawer-drag-x');
+            safeInvokeMethod(drawerEl.style, 'removeProperty', '--drawer-drag-y');
+        }
+        if (typeof drawerEl?.releasePointerCapture === 'function') {
+            try {
+                drawerEl.releasePointerCapture(pointerId);
+            } catch (_) {}
+        }
+        return true;
+    }
+
+    claimPhoneSurface(surface, options = {}) {
+        const normalizedSurface = surface === PHONE_SURFACE_TOP_ACTION_MENU
+            ? PHONE_SURFACE_TOP_ACTION_MENU
+            : surface === PHONE_SURFACE_DRAWER
+                ? PHONE_SURFACE_DRAWER
+                : PHONE_SURFACE_CANVAS;
+        if (normalizedSurface === PHONE_SURFACE_TOP_ACTION_MENU) {
+            this.cancelDrawerSwipe();
+            this.closeDrawers({
+                preserveTopActionMenu: true,
+                source: options.source || 'responsiveLayout.claimPhoneSurface'
+            });
+            return true;
+        }
+        if (normalizedSurface === PHONE_SURFACE_DRAWER) {
+            this.app?.topActionMenu?.setOpen?.(false, {
+                source: options.source || 'responsiveLayout.claimPhoneSurface',
+                surface: normalizedSurface,
+                target: options.target || null
+            });
+            return true;
+        }
+        this.cancelDrawerSwipe();
+        this.closeDrawers({
+            preserveTopActionMenu: true,
+            source: options.source || 'responsiveLayout.claimPhoneSurface'
+        });
+        this.app?.topActionMenu?.setOpen?.(false, {
+            source: options.source || 'responsiveLayout.claimPhoneSurface',
+            surface: normalizedSurface
+        });
+        return true;
+    }
+
     toggleDrawer(target) {
         if (!this.isOverlayMode()) return;
+        this.claimPhoneSurface(PHONE_SURFACE_DRAWER, {
+            source: 'responsiveLayout.toggleDrawer',
+            target
+        });
 
         if (target === 'toolbox') {
             this.toolboxOpen = !this.toolboxOpen;
@@ -382,21 +432,32 @@ export class ResponsiveLayoutController {
 
     openDrawer(target) {
         if (!this.isOverlayMode()) return false;
+        this.claimPhoneSurface(PHONE_SURFACE_DRAWER, {
+            source: 'responsiveLayout.openDrawer',
+            target
+        });
         this.toolboxOpen = target === 'toolbox';
         this.sidePanelOpen = target === 'side-panel';
         this.syncLayoutUI();
         return true;
     }
 
-    closeDrawers() {
+    closeDrawers(options = {}) {
         if (!this.isOverlayMode()) return;
         this.toolboxOpen = false;
         this.sidePanelOpen = false;
         this.syncLayoutUI();
+        if (!options.preserveTopActionMenu) {
+            this.app?.topActionMenu?.setOpen?.(false, {
+                source: options.source || 'responsiveLayout.closeDrawers'
+            });
+        }
     }
 
     focusCanvas() {
-        this.closeDrawers();
+        this.claimPhoneSurface(PHONE_SURFACE_CANVAS, {
+            source: 'responsiveLayout.focusCanvas'
+        });
         return true;
     }
 

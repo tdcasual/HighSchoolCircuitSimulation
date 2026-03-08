@@ -32,6 +32,31 @@ describe('ObservationExportService', () => {
         expect(lines).toContain('Y: 0 · I');
     });
 
+    it('prefers runtime snapshot metadata when snapshot provider is available', () => {
+        const panel = {
+            sampleIntervalMs: 20,
+            getRuntimeReadSnapshot: vi.fn(() => ({
+                topologyVersion: 4,
+                simulationVersion: 9,
+                components: new Map([
+                    ['R1', { id: 'R1', label: 'R1', type: 'Resistor' }]
+                ])
+            })),
+            plots: [],
+            circuit: {
+                components: new Map()
+            }
+        };
+
+        const lines = buildObservationExportMetadata(panel, {
+            exportedAt: new Date('2026-03-03T00:00:00.000Z')
+        });
+
+        expect(lines).toContain('拓扑版本: 4');
+        expect(lines).toContain('仿真步: 9');
+        expect(lines).toContain('元器件: R1 (Resistor)');
+    });
+
     it('returns false when download anchor cannot click', () => {
         const canvas = {
             toDataURL: () => 'data:image/png;base64,abc'

@@ -151,6 +151,12 @@ export class TouchActionController {
         this.session = null;
     }
 
+    suspend() {
+        this.cancel();
+    }
+
+    resume() {}
+
     triggerLongPress() {
         if (!this.session || this.session.triggered) return;
         const { target, targetNode, lastX, lastY } = this.session;
@@ -160,6 +166,11 @@ export class TouchActionController {
         if (typeof this.interaction.endPrimaryInteractionForGesture === 'function') {
             this.interaction.endPrimaryInteractionForGesture();
         }
+        this.cancel();
+        this.interaction?.suspendPointerSession?.({
+            source: 'touchAction.longPress',
+            preserveSuspendedWiringSession: true
+        });
 
         const syntheticEvent = {
             clientX: lastX,

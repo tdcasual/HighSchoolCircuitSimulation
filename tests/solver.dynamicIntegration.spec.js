@@ -163,7 +163,7 @@ describe('Dynamic integration methods (capacitor/inductor)', () => {
         circuit.isRunning = false;
     });
 
-    it('applies adaptive timestep update after each successful solve pass', () => {
+    it('counts adaptive timestep update once per successful AC outer step', () => {
         const circuit = createTestCircuit();
         circuit.dt = 0.02;
         circuit.enableAdaptiveTimeStep = true;
@@ -187,6 +187,6 @@ describe('Dynamic integration methods (capacitor/inductor)', () => {
         circuit.isRunning = false;
 
         expect(circuit.lastResults?.valid).toBe(true);
-        expect(adaptiveSpy).toHaveBeenCalledTimes(expectedSubsteps);
+        expect(adaptiveSpy).toHaveBeenCalledTimes(1);
     });
 });

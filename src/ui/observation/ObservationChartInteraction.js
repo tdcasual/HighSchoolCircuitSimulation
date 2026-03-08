@@ -43,9 +43,13 @@ export class ObservationChartInteraction {
             y: toFiniteNumber(event.y, 0)
         };
         const time = toFiniteNumber(event.time, 0);
-        this.readout = point;
 
-        if (!this.pointerDown || this.frozen) return;
+        if (this.frozen) {
+            return;
+        }
+
+        this.readout = point;
+        if (!this.pointerDown) return;
         const elapsed = time - this.pointerDown.time;
         const supportsHoldFreeze = this.pointerDown.pointerType !== 'mouse';
         if (supportsHoldFreeze && elapsed >= this.holdMs) {
@@ -54,9 +58,20 @@ export class ObservationChartInteraction {
         }
     }
 
-    onPointerUp() {
+    onPointerUp(event = {}) {
+        const pointerType = this.pointerDown?.pointerType || String(event.pointerType || '').trim().toLowerCase() || 'mouse';
+        if (!this.frozen && pointerType !== 'mouse') {
+            this.readout = null;
+        }
         if (!this.frozen) {
             this.pointerDown = null;
+        }
+    }
+
+    onPointerCancel() {
+        this.pointerDown = null;
+        if (!this.frozen) {
+            this.readout = null;
         }
     }
 

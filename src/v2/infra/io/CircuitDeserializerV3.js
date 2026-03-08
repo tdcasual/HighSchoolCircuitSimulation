@@ -1,4 +1,4 @@
-import { validateCircuitV3 } from './CircuitSchemaV3.js';
+import { prepareCircuitPayloadV3, validateCircuitV3 } from './CircuitSchemaV3.js';
 import { requireComponentDefinition } from '../components/ComponentDefinitionRegistry.js';
 
 function clonePlainValue(value) {
@@ -74,20 +74,28 @@ function normalizeProbe(probe) {
 }
 
 export class CircuitDeserializerV3 {
-    static deserialize(payload) {
-        validateCircuitV3(payload);
+    static deserialize(payload, options = {}) {
+        const prepared = prepareCircuitPayloadV3(payload, options);
+        const normalizedPayload = prepared.payload;
+        validateCircuitV3(normalizedPayload);
 
-        return {
+        const result = {
             meta: {
                 version: 3,
-                name: typeof payload.meta.name === 'string' ? payload.meta.name : '',
-                timestamp: Number.isFinite(Number(payload.meta.timestamp))
-                    ? Number(payload.meta.timestamp)
+                name: typeof normalizedPayload.meta.name === 'string' ? normalizedPayload.meta.name : '',
+                timestamp: Number.isFinite(Number(normalizedPayload.meta.timestamp))
+                    ? Number(normalizedPayload.meta.timestamp)
                     : Date.now()
             },
-            components: payload.components.map((component) => normalizeComponent(component)),
-            wires: payload.wires.map((wire) => normalizeWire(wire)),
-            probes: (payload.probes || []).map((probe) => normalizeProbe(probe))
+            components: normalizedPayload.components.map((component) => normalizeComponent(component)),
+            wires: normalizedPayload.wires.map((wire) => normalizeWire(wire)),
+            probes: (normalizedPayload.probes || []).map((probe) => normalizeProbe(probe))
         };
+
+        if (prepared.migration) {
+            result.migration = prepared.migration;
+        }
+
+        return result;
     }
 }

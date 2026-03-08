@@ -40,6 +40,33 @@ describe('runtime diagnostics pipeline', () => {
         expect(results.runtimeDiagnostics).toBe(collected);
     });
 
+    it('uses circuit runtime snapshot freshness when provided', () => {
+        const existing = {
+            code: 'SHORT_CIRCUIT',
+            summary: 'x',
+            hints: ['h1'],
+            topologyVersion: 5,
+            simulationVersion: 8
+        };
+        const collectRuntimeDiagnostics = vi.fn();
+        const circuit = {
+            collectRuntimeDiagnostics,
+            simTime: 1.5,
+            topologyVersion: 1,
+            simulationStepId: 2,
+            getRuntimeReadSnapshot: vi.fn(() => ({
+                topologyVersion: 5,
+                simulationVersion: 8
+            }))
+        };
+        const results = { valid: false, runtimeDiagnostics: existing };
+
+        const diagnostics = resolveRuntimeDiagnosticsForUpdate({ results, circuit });
+
+        expect(diagnostics).toBe(existing);
+        expect(collectRuntimeDiagnostics).not.toHaveBeenCalled();
+    });
+
     it('falls back to ad-hoc diagnostics when circuit collector is unavailable', () => {
         const circuit = {
             simTime: 0.2,

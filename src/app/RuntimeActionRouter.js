@@ -81,6 +81,7 @@ export class RuntimeActionRouter {
             throw new Error('无效的电路 JSON：缺少 components/wires');
         }
 
+        this.app?.beginCircuitStorageOwnership?.(options.storageSource || 'runtime-load');
         this.stopSimulationImpl();
         this.app?.circuit?.fromJSON?.(data);
         safeInvokeMethod(this.app?.exerciseBoard, 'fromJSON', data.meta?.exerciseBoard);
@@ -127,7 +128,8 @@ export class RuntimeActionRouter {
             try {
                 const data = JSON.parse(event.target.result);
                 this.loadCircuitData(data, {
-                    statusText: `已导入电路: ${data.meta?.name || '未命名'}`
+                    statusText: `已导入电路: ${data.meta?.name || '未命名'}`,
+                    storageSource: 'manual-import'
                 });
             } catch (err) {
                 this.app?.logger?.error?.('Import error:', err);

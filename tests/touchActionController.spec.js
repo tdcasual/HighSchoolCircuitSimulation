@@ -87,9 +87,9 @@ describe('TouchActionController', () => {
         expect(interaction.endPrimaryInteractionForGesture).toHaveBeenCalledTimes(1);
         expect(interaction.selectComponent).toHaveBeenCalledWith('R_comp');
         expect(interaction.showContextMenu).toHaveBeenCalledTimes(1);
-
         const consumed = controller.onPointerUp({ pointerId: 7 });
-        expect(consumed).toBe(true);
+        expect(consumed).toBe(false);
+        expect(controller.session).toBe(null);
     });
 
     it('cancels long press when pointer moves too far', () => {
@@ -160,5 +160,34 @@ describe('TouchActionController', () => {
 
         expect(interaction.showContextMenu).not.toHaveBeenCalled();
         expect(controller.onPointerUp({ pointerId: 12 })).toBe(false);
+    });
+
+    it('clears long-press tracking immediately after opening context menu', () => {
+        vi.useFakeTimers();
+        const interaction = {
+            blockSinglePointerInteraction: false,
+            pendingTool: null,
+            wiringActive: false,
+            resolveProbeMarkerTarget: vi.fn(() => null),
+            endPrimaryInteractionForGesture: vi.fn(),
+            suspendPointerSession: vi.fn(),
+            selectComponent: vi.fn(),
+            showContextMenu: vi.fn()
+        };
+        const controller = new TouchActionController(interaction, { longPressDelayMs: 420 });
+        const event = {
+            pointerType: 'touch',
+            pointerId: 27,
+            clientX: 120,
+            clientY: 260,
+            target: makeTargetWithComponent('R_hold')
+        };
+
+        controller.onPointerDown(event);
+        vi.advanceTimersByTime(420);
+
+        expect(interaction.suspendPointerSession).toHaveBeenCalled();
+        expect(controller.session).toBe(null);
+        expect(controller.onPointerUp({ pointerId: 27 })).toBe(false);
     });
 });

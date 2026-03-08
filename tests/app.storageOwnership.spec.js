@@ -12,6 +12,13 @@ describe('runtime storage ownership contract', () => {
             retention: 'persistent',
             storageArea: 'local'
         });
+        expect(RuntimeStorageEntries.circuitAutosaveMeta).toMatchObject({
+            key: 'saved_circuit_meta',
+            owner: 'app-runtime',
+            scope: 'project',
+            retention: 'persistent',
+            storageArea: 'local'
+        });
         expect(RuntimeStorageEntries.aiPublicConfig).toMatchObject({
             key: 'ai_config',
             owner: 'openai-client',
@@ -31,12 +38,18 @@ describe('runtime storage ownership contract', () => {
 
     it('routes high-risk storage consumers through canonical entries instead of raw key literals', () => {
         const appRuntimeSource = readFileSync(resolve(process.cwd(), 'src/app/AppRuntimeV2.js'), 'utf8');
+        const actionRouterSource = readFileSync(resolve(process.cwd(), 'src/app/RuntimeActionRouter.js'), 'utf8');
         const aiPanelSource = readFileSync(resolve(process.cwd(), 'src/ui/AIPanel.js'), 'utf8');
         const openAiSource = readFileSync(resolve(process.cwd(), 'src/ai/OpenAIClientV2.js'), 'utf8');
 
         expect(appRuntimeSource).toContain('RuntimeStorageEntries.circuitAutosave');
+        expect(appRuntimeSource).toContain('RuntimeStorageEntries.circuitAutosaveMeta');
+        expect(appRuntimeSource).toContain('expectedSequence');
         expect(appRuntimeSource).not.toContain("localStorage.setItem('saved_circuit'");
         expect(appRuntimeSource).not.toContain("localStorage.getItem('saved_circuit'");
+
+        expect(actionRouterSource).toContain('beginCircuitStorageOwnership');
+        expect(actionRouterSource).toContain("storageSource || 'runtime-load'");
 
         expect(aiPanelSource).not.toContain("localStorage.setItem('saved_circuit'");
         expect(aiPanelSource).not.toContain("localStorage.getItem('saved_circuit'");

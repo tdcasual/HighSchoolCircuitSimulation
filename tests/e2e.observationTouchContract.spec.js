@@ -20,4 +20,13 @@ describe('observation touch e2e contract', () => {
         expect(source).not.toContain('app.observationPanel?.plots');
         expect(source).not.toContain('app.observationPanel.plots');
     });
+
+    it('binds pointercancel to chart interaction so touch interruptions do not leave stale readout state', () => {
+        const sourcePath = resolve(process.cwd(), 'src/ui/observation/ObservationInteractionController.js');
+        const source = readFileSync(sourcePath, 'utf8');
+
+        expect(source).toContain('pointercancel');
+        expect(source).toContain('onPointerCancel');
+        expect(source).toContain('onPointerUp(point)');
+    });
 });

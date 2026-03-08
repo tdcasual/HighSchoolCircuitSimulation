@@ -194,6 +194,29 @@ describe('CircuitSchema v3 strict validator', () => {
         expect(() => validateCircuitV3(badRefPayload)).toThrow(/componentId.*not found|componentId.*不存在/u);
     });
 
+    it('allows legacy meta.version only through explicit migration mode and records migration diagnostics', () => {
+        const legacyPayload = {
+            ...validV3Payload,
+            meta: {
+                ...validV3Payload.meta,
+                version: '1.0'
+            }
+        };
+
+        expect(() => CircuitDeserializerV3.deserialize(legacyPayload)).toThrow(/meta\.version/u);
+
+        const migrated = CircuitDeserializerV3.deserialize(legacyPayload, {
+            allowLegacyMigration: true
+        });
+
+        expect(migrated.meta.version).toBe(3);
+        expect(migrated.migration).toEqual({
+            fromVersion: '1.0',
+            strategy: 'legacy-meta-upgrade',
+            warnings: ['meta.version migrated from legacy payload']
+        });
+    });
+
     it('rejects wire terminal refs with out-of-range terminalIndex', () => {
         const badTerminalIndexPayload = {
             ...validV3Payload,
