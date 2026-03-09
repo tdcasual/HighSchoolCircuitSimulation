@@ -1,6 +1,6 @@
 /**
- * @deprecated Legacy v1 netlist DTO builder. New v2 code should use
- * `src/v2/simulation/NetlistBuilderV2.js` and avoid carrying source references.
+ * Legacy v1 netlist DTO builder used by the current runtime path.
+ * v2 code should prefer `src/v2/simulation/NetlistBuilderV2.js`.
  */
 export class NetlistBuilder {
     static OMIT_PARAM_KEYS = new Set(['id', 'type', 'nodes']);

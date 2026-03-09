@@ -4,9 +4,8 @@
  */
 
 import { MNASolver } from '../simulation/MNASolver.js';
-import { Matrix } from '../simulation/Matrix.js';
 import { getTerminalWorldPosition } from '../../utils/TerminalGeometry.js';
-import { normalizeCanvasPoint, pointKey, toCanvasInt } from '../../utils/CanvasCoords.js';
+import { normalizeCanvasPoint, toCanvasInt } from '../../utils/CanvasCoords.js';
 import { NodeBuilder } from '../topology/NodeBuilder.js';
 import { WireCompactor } from '../topology/WireCompactor.js';
 import { getTopologyStateSnapshot, setTopologyReplacementState } from '../topology/TopologyState.js';
@@ -20,13 +19,16 @@ import { CircuitPersistenceAdapter } from './CircuitPersistenceAdapter.js';
 import { CircuitDiagnosticsAdapter } from './CircuitDiagnosticsAdapter.js';
 import { CircuitTopologyService } from '../services/CircuitTopologyService.js';
 import { CircuitSimulationLoopService } from '../services/CircuitSimulationLoopService.js';
+import { CircuitObservationProbeService } from '../services/CircuitObservationProbeService.js';
+import { CircuitTopologyValidationService } from '../services/CircuitTopologyValidationService.js';
+import { CircuitFlowAnalysisService } from '../services/CircuitFlowAnalysisService.js';
+import { CircuitResultProjectionService } from '../services/CircuitResultProjectionService.js';
+import { getCircuitComponentProperties } from './CircuitComponentProperties.js';
 import {
     getWireCurrentInfo as getWireCurrentInfoViaService,
     isWireInShortCircuit as isWireInShortCircuitViaService,
     refreshShortCircuitDiagnostics as refreshShortCircuitDiagnosticsViaService
 } from './CircuitShortCircuitDiagnosticsService.js';
-
-const IDEAL_SOURCE_RESISTANCE_EPS = 1e-9;
 
 export class Circuit {
     constructor(options = {}) {
@@ -69,6 +71,10 @@ export class Circuit {
         this.connectivityCache = new ConnectivityCache();
         this.topologyService = new CircuitTopologyService();
         this.simulationLoopService = new CircuitSimulationLoopService();
+        this.observationProbeService = options.observationProbeService || new CircuitObservationProbeService();
+        this.topologyValidationService = options.topologyValidationService || new CircuitTopologyValidationService();
+        this.flowAnalysisService = options.flowAnalysisService || new CircuitFlowAnalysisService();
+        this.resultProjectionService = options.resultProjectionService || new CircuitResultProjectionService();
         this.componentTerminalTopologyKeys = new Map(); // componentId -> topology key used for terminal geometry cache
         this.terminalWorldPosCache = new Map(); // componentId -> Map(terminalIndex -> {x,y})
         this.simulationState = new SimulationState();
@@ -287,69 +293,35 @@ export class Circuit {
     }
 
     ensureUniqueObservationProbeId(baseId = `probe_${Date.now()}`) {
-        if (!this.observationProbes.has(baseId)) return baseId;
-        let i = 1;
-        while (this.observationProbes.has(`${baseId}_${i}`)) i += 1;
-        return `${baseId}_${i}`;
+        return this.observationProbeService.ensureUniqueObservationProbeId(this, baseId);
     }
 
     normalizeObservationProbe(probe) {
-        if (!probe || typeof probe !== 'object') return null;
-        const type = probe.type;
-        if (type !== 'NodeVoltageProbe' && type !== 'WireCurrentProbe') return null;
-        if (probe.id === undefined || probe.id === null || String(probe.id).trim() === '') return null;
-        if (probe.wireId === undefined || probe.wireId === null || String(probe.wireId).trim() === '') return null;
-        return {
-            id: String(probe.id),
-            type,
-            wireId: String(probe.wireId),
-            label: typeof probe.label === 'string' ? probe.label : null
-        };
+        return this.observationProbeService.normalizeObservationProbe(probe);
     }
 
     addObservationProbe(probe) {
-        const normalized = this.normalizeObservationProbe(probe);
-        if (!normalized) return null;
-        this.observationProbes.set(normalized.id, normalized);
-        return normalized;
+        return this.observationProbeService.addObservationProbe(this, probe);
     }
 
     removeObservationProbe(id) {
-        if (id === undefined || id === null || String(id).trim() === '') return false;
-        return this.observationProbes.delete(String(id));
+        return this.observationProbeService.removeObservationProbe(this, id);
     }
 
     removeObservationProbesByWireId(wireId) {
-        if (wireId === undefined || wireId === null || String(wireId).trim() === '') return;
-        const target = String(wireId);
-        for (const [id, probe] of this.observationProbes.entries()) {
-            if (probe?.wireId === target) {
-                this.observationProbes.delete(id);
-            }
-        }
+        return this.observationProbeService.removeObservationProbesByWireId(this, wireId);
     }
 
     remapObservationProbeWireIds(replacementByRemovedId = {}) {
-        if (!replacementByRemovedId || typeof replacementByRemovedId !== 'object') return;
-        for (const probe of this.observationProbes.values()) {
-            if (!probe?.wireId) continue;
-            let current = probe.wireId;
-            const seen = new Set();
-            while (replacementByRemovedId[current] && !seen.has(current)) {
-                seen.add(current);
-                current = replacementByRemovedId[current];
-            }
-            probe.wireId = current;
-        }
+        return this.observationProbeService.remapObservationProbeWireIds(this, replacementByRemovedId);
     }
 
     getObservationProbe(id) {
-        if (id === undefined || id === null || String(id).trim() === '') return undefined;
-        return this.observationProbes.get(String(id));
+        return this.observationProbeService.getObservationProbe(this, id);
     }
 
     getAllObservationProbes() {
-        return Array.from(this.observationProbes.values());
+        return this.observationProbeService.getAllObservationProbes(this);
     }
 
     getRuntimeReadSnapshot() {
@@ -691,255 +663,31 @@ export class Circuit {
     }
 
     getSourceInstantVoltageAtTime(comp, simTime = this.simTime) {
-        if (!comp) return 0;
-        if (comp.type === 'ACVoltageSource') {
-            const rms = Number.isFinite(comp.rmsVoltage) ? comp.rmsVoltage : 0;
-            const frequency = Number.isFinite(comp.frequency) ? comp.frequency : 0;
-            const phaseDeg = Number.isFinite(comp.phase) ? comp.phase : 0;
-            const offset = Number.isFinite(comp.offset) ? comp.offset : 0;
-            const omega = 2 * Math.PI * frequency;
-            const phaseRad = phaseDeg * Math.PI / 180;
-            return offset + (rms * Math.sqrt(2)) * Math.sin(omega * simTime + phaseRad);
-        }
-        return Number.isFinite(comp.voltage) ? comp.voltage : 0;
+        return this.topologyValidationService.getSourceInstantVoltageAtTime(this, comp, simTime);
     }
 
     isIdealVoltageSource(comp) {
-        if (!comp || (comp.type !== 'PowerSource' && comp.type !== 'ACVoltageSource')) return false;
-        const internalResistance = Number(comp.internalResistance);
-        return !Number.isFinite(internalResistance) || internalResistance < IDEAL_SOURCE_RESISTANCE_EPS;
+        return this.topologyValidationService.isIdealVoltageSource(comp);
     }
 
     componentProvidesResistiveDamping(comp) {
-        if (!comp) return false;
-        switch (comp.type) {
-            case 'Resistor':
-            case 'Bulb':
-            case 'Thermistor':
-            case 'Photoresistor':
-            case 'Diode':
-            case 'LED':
-            case 'Motor':
-                return true;
-            case 'Rheostat':
-                return comp.connectionMode !== 'none' && comp.connectionMode !== 'slider-only';
-            case 'Switch':
-                return !!comp.closed;
-            case 'SPDTSwitch':
-                return true;
-            case 'Fuse':
-                return !comp.blown;
-            case 'Ammeter': {
-                const resistance = Number(comp.resistance);
-                return Number.isFinite(resistance) && resistance > 0 && resistance < 1e11;
-            }
-            case 'Voltmeter': {
-                const resistance = Number(comp.resistance);
-                return Number.isFinite(resistance) && resistance > 0 && resistance < 1e11;
-            }
-            case 'PowerSource':
-            case 'ACVoltageSource': {
-                const internalResistance = Number(comp.internalResistance);
-                return Number.isFinite(internalResistance)
-                    && internalResistance >= IDEAL_SOURCE_RESISTANCE_EPS
-                    && internalResistance < 1e11;
-            }
-            case 'Relay': {
-                const onResistance = Number(comp.contactOnResistance);
-                const offResistance = Number(comp.contactOffResistance);
-                const resistance = comp.energized ? onResistance : offResistance;
-                return Number.isFinite(resistance) && resistance > 0 && resistance < 1e11;
-            }
-            default:
-                return false;
-        }
+        return this.topologyValidationService.componentProvidesResistiveDamping(comp);
     }
 
     detectConflictingIdealSources(simTime = this.simTime) {
-        const pairToSource = new Map();
-        const voltageTolerance = 1e-6;
-        const isValidNode = (nodeIdx) => Number.isInteger(nodeIdx) && nodeIdx >= 0;
-
-        for (const comp of this.components.values()) {
-            if (!this.isIdealVoltageSource(comp)) continue;
-            const nPos = comp.nodes?.[0];
-            const nNeg = comp.nodes?.[1];
-            if (!isValidNode(nPos) || !isValidNode(nNeg) || nPos === nNeg) continue;
-
-            const a = Math.min(nPos, nNeg);
-            const b = Math.max(nPos, nNeg);
-            const sourceVoltage = this.getSourceInstantVoltageAtTime(comp, simTime);
-            const canonicalVoltage = nPos === a ? sourceVoltage : -sourceVoltage;
-            const pairKey = `${a}|${b}`;
-            const existing = pairToSource.get(pairKey);
-            if (!existing) {
-                pairToSource.set(pairKey, {
-                    id: comp.id,
-                    voltage: canonicalVoltage,
-                    nodes: [a, b]
-                });
-                continue;
-            }
-
-            if (Math.abs(existing.voltage - canonicalVoltage) > voltageTolerance) {
-                return {
-                    code: 'TOPO_CONFLICTING_IDEAL_SOURCES',
-                    message: `检测到并联理想电压源冲突：${existing.id} 与 ${comp.id} 对同一节点对施加了不同电压。`,
-                    details: {
-                        sourceIds: [existing.id, comp.id],
-                        nodePair: existing.nodes,
-                        voltages: [existing.voltage, canonicalVoltage]
-                    }
-                };
-            }
-        }
-
-        return null;
+        return this.topologyValidationService.detectConflictingIdealSources(this, simTime);
     }
 
     detectCapacitorLoopWithoutResistance() {
-        const pairInfo = new Map();
-        const isValidNode = (nodeIdx) => Number.isInteger(nodeIdx) && nodeIdx >= 0;
-        const isCapacitor = (comp) => comp?.type === 'Capacitor' || comp?.type === 'ParallelPlateCapacitor';
-
-        for (const comp of this.components.values()) {
-            if (!comp || !Array.isArray(comp.nodes) || comp.nodes.length < 2) continue;
-            const n1 = comp.nodes[0];
-            const n2 = comp.nodes[1];
-            if (!isValidNode(n1) || !isValidNode(n2) || n1 === n2) continue;
-            const a = Math.min(n1, n2);
-            const b = Math.max(n1, n2);
-            const pairKey = `${a}|${b}`;
-
-            let info = pairInfo.get(pairKey);
-            if (!info) {
-                info = {
-                    nodePair: [a, b],
-                    capacitorIds: [],
-                    hasDamping: false
-                };
-                pairInfo.set(pairKey, info);
-            }
-
-            if (isCapacitor(comp)) {
-                info.capacitorIds.push(comp.id);
-            } else if (this.componentProvidesResistiveDamping(comp)) {
-                info.hasDamping = true;
-            }
-        }
-
-        for (const info of pairInfo.values()) {
-            if (info.capacitorIds.length >= 2 && !info.hasDamping) {
-                return {
-                    code: 'TOPO_CAPACITOR_LOOP_NO_RESISTANCE',
-                    message: `检测到纯电容并联回路（${info.capacitorIds.join(', ')}），缺少阻尼电阻，仿真可能不稳定。`,
-                    details: {
-                        capacitorIds: info.capacitorIds,
-                        nodePair: info.nodePair
-                    }
-                };
-            }
-        }
-
-        return null;
+        return this.topologyValidationService.detectCapacitorLoopWithoutResistance(this);
     }
 
     detectFloatingSubcircuitWarnings() {
-        const isValidNode = (nodeIdx) => Number.isInteger(nodeIdx) && nodeIdx >= 0;
-        const nodeToComponents = new Map();
-        const componentNodeMap = new Map();
-
-        for (const comp of this.components.values()) {
-            if (!comp || !comp.id || comp.type === 'Ground') continue;
-            const validNodes = Array.isArray(comp.nodes)
-                ? comp.nodes.filter(isValidNode)
-                : [];
-            if (validNodes.length === 0) continue;
-            componentNodeMap.set(comp.id, {
-                comp,
-                nodes: new Set(validNodes)
-            });
-            for (const node of validNodes) {
-                if (!nodeToComponents.has(node)) nodeToComponents.set(node, new Set());
-                nodeToComponents.get(node).add(comp.id);
-            }
-        }
-
-        const visited = new Set();
-        const groups = [];
-        for (const compId of componentNodeMap.keys()) {
-            if (visited.has(compId)) continue;
-            const queue = [compId];
-            visited.add(compId);
-            const componentIds = [];
-            const nodes = new Set();
-
-            while (queue.length > 0) {
-                const currentId = queue.shift();
-                componentIds.push(currentId);
-                const info = componentNodeMap.get(currentId);
-                if (!info) continue;
-                for (const node of info.nodes) {
-                    nodes.add(node);
-                    const neighbors = nodeToComponents.get(node);
-                    if (!neighbors) continue;
-                    for (const neighborId of neighbors) {
-                        if (visited.has(neighborId)) continue;
-                        visited.add(neighborId);
-                        queue.push(neighborId);
-                    }
-                }
-            }
-
-            groups.push({ componentIds, nodes });
-        }
-
-        if (groups.length <= 1) return [];
-
-        const floatingGroups = groups.filter((group) =>
-            group.componentIds.length >= 2 && !group.nodes.has(0)
-        );
-        if (floatingGroups.length === 0) return [];
-
-        return [{
-            code: 'TOPO_FLOATING_SUBCIRCUIT',
-            message: `检测到 ${floatingGroups.length} 个悬浮子电路（未连接参考地节点），仿真可继续但读数可能依赖参考选择。`,
-            details: {
-                groups: floatingGroups.map((group) => ({
-                    componentIds: group.componentIds
-                }))
-            }
-        }];
+        return this.topologyValidationService.detectFloatingSubcircuitWarnings(this);
     }
 
     validateSimulationTopology(simTime = this.simTime) {
-        this.ensureTopologyReadyForValidation();
-
-        const warnings = [];
-        const idealSourceError = this.detectConflictingIdealSources(simTime);
-        if (idealSourceError) {
-            return {
-                ok: false,
-                error: idealSourceError,
-                warnings
-            };
-        }
-
-        const capacitorLoopError = this.detectCapacitorLoopWithoutResistance();
-        if (capacitorLoopError) {
-            return {
-                ok: false,
-                error: capacitorLoopError,
-                warnings
-            };
-        }
-
-        warnings.push(...this.detectFloatingSubcircuitWarnings());
-        return {
-            ok: true,
-            error: null,
-            warnings
-        };
+        return this.topologyValidationService.validateSimulationTopology(this, simTime);
     }
 
     /**
@@ -1115,177 +863,7 @@ export class Circuit {
         this.attachRuntimeDiagnostics(this.lastResults, this.simTime);
 
         if (this.lastResults.valid) {
-            // 更新各元器件的显示值
-            for (const [id, comp] of this.components) {
-                const current = this.lastResults.currents.get(id) || 0;
-                const v1 = this.lastResults.voltages[comp.nodes[0]] || 0;
-                const v2 = this.lastResults.voltages[comp.nodes[1]] || 0;
-                
-                // 检查元器件是否真正连接到电路（两个端子都有导线连接）
-                const isConnected = this.isComponentConnected(id);
-                
-                // 如果元器件未连接，所有值都应该为0
-                if (!isConnected) {
-                    comp.currentValue = 0;
-                    comp.voltageValue = 0;
-                    comp.powerValue = 0;
-                    comp._isShorted = false;
-                    if (comp.type === 'Diode' || comp.type === 'LED') {
-                        comp.conducting = false;
-                    }
-                    if (comp.type === 'Relay') {
-                        comp.energized = false;
-                    }
-                    if (comp.type === 'Bulb' || comp.type === 'LED') {
-                        comp.brightness = 0;
-                    }
-                    continue;
-                }
-
-                if (comp.type === 'Ground') {
-                    comp.currentValue = 0;
-                    comp.voltageValue = 0;
-                    comp.powerValue = 0;
-                    continue;
-                }
-                
-                // 检查元器件是否被短路（两端节点相同）
-                const isFiniteResistanceSource = (comp.type === 'PowerSource' || comp.type === 'ACVoltageSource')
-                    && Number.isFinite(Number(comp.internalResistance))
-                    && Number(comp.internalResistance) >= IDEAL_SOURCE_RESISTANCE_EPS;
-                if (comp._isShorted && !isFiniteResistanceSource) {
-                    comp.currentValue = 0;
-                    comp.voltageValue = 0;
-                    comp.powerValue = 0;
-                    if (comp.type === 'Bulb' || comp.type === 'LED') {
-                        comp.brightness = 0;
-                    }
-                    continue;
-                }
-                
-                comp.currentValue = current;
-                
-                // 特殊处理：理想电压表必须强制电流为0
-                if (this.isIdealVoltmeter(comp)) {
-                    comp.currentValue = 0;
-                }
-                
-                // 对于电源，显示的电压应该是端子电压
-                if (comp.type === 'PowerSource' || comp.type === 'ACVoltageSource') {
-                    // 端子电压直接从节点电压差获取（诺顿模型下这就是正确的端子电压）
-                    const terminalVoltage = Math.abs(v1 - v2);
-                    comp.voltageValue = terminalVoltage;
-                    // 电源输出功率 = 端子电压 * 电流
-                    comp.powerValue = Math.abs(terminalVoltage * current);
-                } else if (comp.type === 'Rheostat') {
-                    // 滑动变阻器根据连接模式计算电压
-                    // 安全获取电压值，未连接的端子电压视为0
-                    const getVoltage = (nodeIdx) => {
-                        if (nodeIdx === undefined || nodeIdx < 0) return 0;
-                        return this.lastResults.voltages[nodeIdx] || 0;
-                    };
-                    
-                    const v_left = getVoltage(comp.nodes[0]);
-                    const v_right = getVoltage(comp.nodes[1]);
-                    const v_slider = getVoltage(comp.nodes[2]);
-                    // 保存分段电压供 UI 显示
-                    comp.voltageSegLeft = 0;
-                    comp.voltageSegRight = 0;
-                    
-                    let voltage = 0;
-                    switch (comp.connectionMode) {
-                        case 'left-slider':
-                            voltage = Math.abs(v_left - v_slider);
-                            comp.voltageSegLeft = voltage;
-                            comp.voltageSegRight = undefined;
-                            break;
-                        case 'right-slider':
-                            voltage = Math.abs(v_slider - v_right);
-                            comp.voltageSegLeft = undefined;
-                            comp.voltageSegRight = voltage;
-                            break;
-                        case 'left-right':
-                            voltage = Math.abs(v_left - v_right);
-                            comp.voltageSegLeft = voltage;
-                            comp.voltageSegRight = undefined;
-                            break;
-                        case 'all':
-                            // 三端都连接时，显示左右两端的总电压
-                            voltage = Math.abs(v_left - v_right);
-                            comp.voltageSegLeft = Math.abs(v_left - v_slider);
-                            comp.voltageSegRight = Math.abs(v_slider - v_right);
-                            break;
-                        default:
-                            voltage = 0;
-                            comp.voltageSegLeft = undefined;
-                            comp.voltageSegRight = undefined;
-                    }
-                    comp.voltageValue = voltage;
-                    comp.powerValue = Math.abs(current * voltage);
-                } else if (comp.type === 'SPDTSwitch') {
-                    const routeToB = comp.position === 'b';
-                    const targetIdx = routeToB ? 2 : 1;
-                    const vCommon = this.lastResults.voltages[comp.nodes[0]] || 0;
-                    const vTarget = this.lastResults.voltages[comp.nodes[targetIdx]] || 0;
-                    const voltage = Math.abs(vCommon - vTarget);
-                    comp.voltageValue = voltage;
-                    comp.powerValue = Math.abs(current * voltage);
-                } else if (comp.type === 'Relay') {
-                    const getVoltage = (nodeIdx) => {
-                        if (nodeIdx === undefined || nodeIdx < 0) return 0;
-                        return this.lastResults.voltages[nodeIdx] || 0;
-                    };
-                    const vCoilA = getVoltage(comp.nodes[0]);
-                    const vCoilB = getVoltage(comp.nodes[1]);
-                    const vContactA = getVoltage(comp.nodes[2]);
-                    const vContactB = getVoltage(comp.nodes[3]);
-                    const coilVoltage = Math.abs(vCoilA - vCoilB);
-                    const coilCurrent = current;
-                    const contactR = comp.energized
-                        ? Math.max(1e-9, Number(comp.contactOnResistance) || 1e-3)
-                        : Math.max(1, Number(comp.contactOffResistance) || 1e12);
-                    const contactCurrent = (vContactA - vContactB) / contactR;
-                    comp.contactCurrent = contactCurrent;
-                    comp.voltageValue = coilVoltage;
-                    comp.powerValue = Math.abs(coilVoltage * coilCurrent) + Math.abs((vContactA - vContactB) * contactCurrent);
-                } else {
-                    comp.voltageValue = Math.abs(v1 - v2);
-                    comp.powerValue = Math.abs(current * (v1 - v2));
-                }
-                
-                // 灯泡亮度
-                if (comp.type === 'Bulb') {
-                    comp.brightness = Math.min(1, comp.powerValue / comp.ratedPower);
-                }
-                if (comp.type === 'LED') {
-                    const ratedCurrent = Math.max(1e-6, Number(comp.ratedCurrent) || 0.02);
-                    const currentAbs = Math.abs(current);
-                    comp.brightness = comp.conducting ? Math.min(1, currentAbs / ratedCurrent) : 0;
-                }
-            }
-
-            // 更新保险丝 I²t 累计并判定是否熔断
-            let fuseStateChanged = false;
-            for (const [id, comp] of this.components) {
-                if (comp.type !== 'Fuse') continue;
-                if (comp.blown) continue;
-                if (!this.isComponentConnected(id)) continue;
-
-                const currentAbs = Math.abs(this.lastResults.currents.get(id) || 0);
-                if (!Number.isFinite(currentAbs)) continue;
-
-                const ratedCurrent = Math.max(1e-6, Number(comp.ratedCurrent) || 3);
-                const defaultThreshold = ratedCurrent * ratedCurrent * 0.2;
-                const threshold = Math.max(1e-9, Number(comp.i2tThreshold) || defaultThreshold);
-                comp.i2tAccum = Math.max(0, Number(comp.i2tAccum) || 0) + currentAbs * currentAbs * elapsedStepDt;
-                if (comp.i2tAccum >= threshold) {
-                    comp.blown = true;
-                    fuseStateChanged = true;
-                }
-            }
-            if (fuseStateChanged) {
-                this.markSolverCircuitDirty();
-            }
+            this.resultProjectionService.applyStepResults(this, this.lastResults, elapsedStepDt);
         }
 
         // 触发更新事件
@@ -1328,379 +906,43 @@ export class Circuit {
      * @returns {number}
      */
     getTerminalCurrentFlow(comp, terminalIndex, results) {
-        if (!comp || !results || terminalIndex == null) return 0;
-        if (!comp.nodes || terminalIndex >= comp.nodes.length) return 0;
-        const nodeIndex = comp.nodes[terminalIndex];
-        if (nodeIndex === undefined || nodeIndex < 0) return 0;
-
-        const compCurrent = results.currents.get(comp.id) || 0;
-        const eps = 1e-9;
-
-        // 三端器件单独处理
-        if (comp.type === 'Rheostat') {
-            const flows = this.getRheostatTerminalFlows(comp, results.voltages);
-            return flows[terminalIndex] || 0;
-        }
-        if (comp.type === 'SPDTSwitch') {
-            const flows = this.getSpdtTerminalFlows(comp, results.voltages);
-            return flows[terminalIndex] || 0;
-        }
-        if (comp.type === 'Relay') {
-            const flows = this.getRelayTerminalFlows(comp, results.voltages);
-            return flows[terminalIndex] || 0;
-        }
-        
-        // 理想电压表：内阻无穷大，不应该有电流
-        if (this.isIdealVoltmeter(comp)) {
-            return 0; // 理想电压表的端子不输出电流
-        }
-
-        // 判定为"主动"器件的列表（正电流表示端子0向外输出）
-        const isActiveSource = (
-            comp.type === 'PowerSource' ||
-            comp.type === 'ACVoltageSource' ||
-            comp.type === 'Motor' ||
-            (comp.type === 'Ammeter' && (!comp.resistance || comp.resistance <= 0))
-        );
-
-        if (Math.abs(compCurrent) < eps) {
-            return 0;
-        }
-
-        if (isActiveSource) {
-            return terminalIndex === 0 ? compCurrent : -compCurrent;
-        }
-
-        // 其余双端被视为被动器件
-        return terminalIndex === 0 ? -compCurrent : compCurrent;
+        return this.flowAnalysisService.getTerminalCurrentFlow(this, comp, terminalIndex, results);
     }
 
-    /**
-     * 计算滑动变阻器各端子的等效电流流向
-     * @param {Object} comp
-     * @param {number[]} voltages
-     * @returns {number[]}
-     */
     getRheostatTerminalFlows(comp, voltages) {
-        const flows = [0, 0, 0];
-        const getVoltage = (nodeIdx) => {
-            if (nodeIdx === undefined || nodeIdx < 0) return 0;
-            return voltages[nodeIdx] || 0;
-        };
-
-        const vLeft = getVoltage(comp.nodes[0]);
-        const vRight = getVoltage(comp.nodes[1]);
-        const vSlider = getVoltage(comp.nodes[2]);
-
-        const position = comp.position == null ? 0.5 : Math.min(Math.max(comp.position, 0), 1);
-        const range = Math.max(0, (comp.maxResistance ?? 100) - (comp.minResistance ?? 0));
-        const baseMin = comp.minResistance ?? 0;
-        const leftToSlider = Math.max(1e-9, baseMin + range * position);
-        const sliderToRight = Math.max(1e-9, (comp.maxResistance ?? 100) - range * position);
-
-        const mode = comp.connectionMode || 'none';
-
-        switch (mode) {
-            case 'left-slider': {
-                const I = (vLeft - vSlider) / leftToSlider;
-                flows[0] = -I;
-                flows[2] = I;
-                break;
-            }
-            case 'right-slider': {
-                const I = (vSlider - vRight) / sliderToRight;
-                flows[2] = -I;
-                flows[1] = I;
-                break;
-            }
-            case 'left-right': {
-                const R = Math.max(1e-9, comp.maxResistance ?? leftToSlider + sliderToRight);
-                const I = (vLeft - vRight) / R;
-                flows[0] = -I;
-                flows[1] = I;
-                break;
-            }
-            case 'all': {
-                const I_ls = (vLeft - vSlider) / leftToSlider;
-                const I_sr = (vSlider - vRight) / sliderToRight;
-                flows[0] = -I_ls;
-                flows[1] = I_sr;
-                flows[2] = I_ls - I_sr;
-                break;
-            }
-            default:
-                // 未接入电路或只有滑块等情况，都视为无电流
-                break;
-        }
-
-        return flows;
+        return this.flowAnalysisService.getRheostatTerminalFlows(comp, voltages);
     }
 
-    /**
-     * 计算单刀双掷开关各端子的等效电流流向
-     * 端子: 0=公共端, 1=上掷(a), 2=下掷(b)
-     * @param {Object} comp
-     * @param {number[]} voltages
-     * @returns {number[]}
-     */
     getSpdtTerminalFlows(comp, voltages) {
-        const flows = [0, 0, 0];
-        const routeToB = comp.position === 'b';
-        const targetIdx = routeToB ? 2 : 1;
-        const commonNode = comp.nodes?.[0];
-        const targetNode = comp.nodes?.[targetIdx];
-        if (commonNode == null || commonNode < 0 || targetNode == null || targetNode < 0) {
-            return flows;
-        }
-
-        const vCommon = voltages[commonNode] || 0;
-        const vTarget = voltages[targetNode] || 0;
-        const R = Math.max(1e-9, Number(comp.onResistance) || 1e-9);
-        const I = (vCommon - vTarget) / R;
-        flows[0] = -I;
-        flows[targetIdx] = I;
-        return flows;
+        return this.flowAnalysisService.getSpdtTerminalFlows(comp, voltages);
     }
 
-    /**
-     * 计算继电器各端子的等效电流流向
-     * 端子: 0/1=线圈, 2/3=触点
-     * @param {Object} comp
-     * @param {number[]} voltages
-     * @returns {number[]}
-     */
     getRelayTerminalFlows(comp, voltages) {
-        const flows = [0, 0, 0, 0];
-        const getVoltage = (nodeIdx) => {
-            if (nodeIdx === undefined || nodeIdx < 0) return 0;
-            return voltages[nodeIdx] || 0;
-        };
-
-        const n0 = comp.nodes?.[0];
-        const n1 = comp.nodes?.[1];
-        const n2 = comp.nodes?.[2];
-        const n3 = comp.nodes?.[3];
-
-        if (n0 != null && n0 >= 0 && n1 != null && n1 >= 0) {
-            const coilR = Math.max(1e-9, Number(comp.coilResistance) || 200);
-            const iCoil = (getVoltage(n0) - getVoltage(n1)) / coilR;
-            flows[0] = -iCoil;
-            flows[1] = iCoil;
-        }
-
-        if (n2 != null && n2 >= 0 && n3 != null && n3 >= 0) {
-            const contactR = comp.energized
-                ? Math.max(1e-9, Number(comp.contactOnResistance) || 1e-3)
-                : Math.max(1, Number(comp.contactOffResistance) || 1e12);
-            const iContact = (getVoltage(n2) - getVoltage(n3)) / contactR;
-            flows[2] = -iContact;
-            flows[3] = iContact;
-        }
-
-        return flows;
+        return this.flowAnalysisService.getRelayTerminalFlows(comp, voltages);
     }
 
     ensureWireFlowCache(results) {
-        if (this._wireFlowCache.version === results && this._wireFlowCache.map) {
-            return;
-        }
-        this._wireFlowCache = {
-            version: results,
-            map: this.computeWireFlowCache(results)
-        };
+        return this.flowAnalysisService.ensureWireFlowCache(this, results);
     }
 
     computeWireFlowCache(results) {
-        const wiresByNode = new Map(); // nodeIndex -> wire[]
-        const cache = new Map();
-
-        for (const wire of this.wires.values()) {
-            const nodeId = wire?.nodeIndex;
-            if (nodeId === undefined || nodeId === null || nodeId < 0) continue;
-            if (!wiresByNode.has(nodeId)) wiresByNode.set(nodeId, []);
-            wiresByNode.get(nodeId).push(wire);
-        }
-
-        for (const [, nodeWires] of wiresByNode) {
-            const nodeMap = this.computeNodeWireFlow(nodeWires, results);
-            for (const [wireId, info] of nodeMap) {
-                cache.set(wireId, info);
-            }
-        }
-
-        return cache;
+        return this.flowAnalysisService.computeWireFlowCache(this, results);
     }
 
     computeNodeWireFlow(nodeWires, results) {
-        const physical = this.computeNodeWireFlowPhysical(nodeWires, results);
-        if (physical) return physical;
-        const nodeResult = new Map();
-        for (const wire of nodeWires || []) {
-            nodeResult.set(wire.id, { flowDirection: 0, currentMagnitude: 0 });
-        }
-        return nodeResult;
+        return this.flowAnalysisService.computeNodeWireFlow(this, nodeWires, results);
     }
 
-    /**
-     * Compute wire currents inside a single electrical node by solving a resistive
-     * network on the wire graph (unit conductance per wire).
-     *
-     * This produces a KCL-consistent, physically-plausible distribution and avoids
-     * "phantom current" on bridge wires that connect equipotential points.
-     *
-     * @param {Object[]} nodeWires
-     * @param {Object} results
-     * @returns {Map<string, {flowDirection:number, currentMagnitude:number}>|null}
-     */
     computeNodeWireFlowPhysical(nodeWires, results) {
-        if (!nodeWires || nodeWires.length === 0) return new Map();
-        const nodeId = nodeWires[0]?.nodeIndex;
-        if (nodeId === undefined || nodeId === null || nodeId < 0) return null;
-
-        // Build vertices from wire endpoint coordinates within this electrical node.
-        const keys = [];
-        const indexOfKey = new Map(); // coordKey -> idx
-        const ensureVertex = (coordKey) => {
-            if (!coordKey) return null;
-            if (indexOfKey.has(coordKey)) return indexOfKey.get(coordKey);
-            const idx = keys.length;
-            indexOfKey.set(coordKey, idx);
-            keys.push(coordKey);
-            return idx;
-        };
-
-        const edges = [];
-        const degrees = [];
-        for (const wire of nodeWires) {
-            const aKey = pointKey(wire?.a);
-            const bKey = pointKey(wire?.b);
-            const u = ensureVertex(aKey);
-            const v = ensureVertex(bKey);
-            if (u === null || v === null) continue;
-            edges.push({ wireId: wire.id, startIdx: u, endIdx: v, conductance: 1 });
-        }
-
-        const n = keys.length;
-        if (n <= 1 || edges.length === 0) {
-            const nodeResult = new Map();
-            for (const wire of nodeWires) {
-                nodeResult.set(wire.id, { flowDirection: 0, currentMagnitude: 0 });
-            }
-            return nodeResult;
-        }
-
-        // Degree heuristic for picking a stable anchor (reference vertex).
-        for (let i = 0; i < n; i++) degrees[i] = 0;
-        for (const edge of edges) {
-            const u = edge.startIdx;
-            const v = edge.endIdx;
-            if (u === v) continue;
-            degrees[u] += 1;
-            degrees[v] += 1;
-        }
-        let anchor = 0;
-        for (let i = 1; i < n; i++) {
-            if ((degrees[i] || 0) > (degrees[anchor] || 0)) anchor = i;
-        }
-
-        // Injection per vertex: sum of component terminal flows at this coordinate.
-        const injections = new Array(n).fill(0);
-        const tiny = 1e-12;
-        for (const comp of this.components.values()) {
-            if (!Array.isArray(comp.nodes)) continue;
-            for (let ti = 0; ti < comp.nodes.length; ti++) {
-                if (comp.nodes[ti] !== nodeId) continue;
-                const pos = getTerminalWorldPosition(comp, ti);
-                const vKey = pointKey(pos);
-                if (!vKey || !indexOfKey.has(vKey)) continue;
-                const idx = indexOfKey.get(vKey);
-                const rawFlow = this.getTerminalCurrentFlow(comp, ti, results);
-                const flow = Math.abs(rawFlow) < tiny ? 0 : rawFlow;
-                injections[idx] += flow;
-            }
-        }
-
-        const size = n - 1;
-        const A = Array.from({ length: size }, () => Array(size).fill(0));
-        const b = Array(size).fill(0);
-        const toReduced = (idx) => (idx < anchor ? idx : idx - 1);
-
-        for (let i = 0; i < n; i++) {
-            if (i === anchor) continue;
-            b[toReduced(i)] = injections[i] || 0;
-        }
-
-        for (const edge of edges) {
-            const u = edge.startIdx;
-            const v = edge.endIdx;
-            const g = edge.conductance;
-            if (u === v) continue;
-
-            if (u !== anchor) {
-                const ui = toReduced(u);
-                A[ui][ui] += g;
-            }
-            if (v !== anchor) {
-                const vi = toReduced(v);
-                A[vi][vi] += g;
-            }
-            if (u !== anchor && v !== anchor) {
-                const ui = toReduced(u);
-                const vi = toReduced(v);
-                A[ui][vi] -= g;
-                A[vi][ui] -= g;
-            }
-        }
-
-        const x = Matrix.solve(A, b);
-        if (!x) return null;
-
-        const potentials = new Array(n).fill(0);
-        for (let i = 0; i < n; i++) {
-            if (i === anchor) continue;
-            potentials[i] = x[toReduced(i)] || 0;
-        }
-
-        const eps = 1e-9;
-        const nodeResult = new Map();
-        for (const wire of nodeWires) {
-            nodeResult.set(wire.id, { flowDirection: 0, currentMagnitude: 0 });
-        }
-        for (const edge of edges) {
-            const u = edge.startIdx;
-            const v = edge.endIdx;
-            const g = edge.conductance;
-            const current = g * ((potentials[u] || 0) - (potentials[v] || 0));
-            let mag = Math.abs(current);
-            let dir = 0;
-            if (mag >= eps) {
-                dir = current > 0 ? 1 : -1;
-            } else {
-                mag = 0;
-            }
-            nodeResult.set(edge.wireId, { flowDirection: dir, currentMagnitude: mag });
-        }
-
-        return nodeResult;
+        return this.flowAnalysisService.computeNodeWireFlowPhysical(this, nodeWires, results);
     }
 
-    computeNodeWireFlowHeuristic(_nodeWires, _results) {
-        return null;
+    computeNodeWireFlowHeuristic(nodeWires, results) {
+        return this.flowAnalysisService.computeNodeWireFlowHeuristic(this, nodeWires, results);
     }
 
-    // Model C: wires are ideal conductors and junctions are represented by endpoints.
-    // Wire current display is derived from node-internal flow solving (computeWireFlowCache),
-    // so we no longer need control-point/junction heuristics here.
-
-    /**
-     * 检查元器件是否为理想电压表
-     * @param {Object} comp - 元器件对象
-     * @returns {boolean} 是否为理想电压表
-     */
     isIdealVoltmeter(comp) {
-        if (!comp || comp.type !== 'Voltmeter') return false;
-        const r = comp.resistance;
-        return r === null || r === undefined || r === Infinity || r >= 1e10;
+        return this.flowAnalysisService.isIdealVoltmeter(comp);
     }
 
     refreshShortCircuitDiagnostics(results = null) {
@@ -1789,139 +1031,7 @@ export class Circuit {
      * @returns {Object} 属性对象
      */
     getComponentProperties(comp) {
-        switch (comp.type) {
-            case 'Ground':
-                return {
-                    isReference: true
-                };
-            case 'PowerSource':
-                return {
-                    voltage: comp.voltage,
-                    internalResistance: comp.internalResistance
-                };
-            case 'ACVoltageSource':
-                return {
-                    rmsVoltage: comp.rmsVoltage,
-                    frequency: comp.frequency,
-                    phase: comp.phase,
-                    offset: comp.offset,
-                    internalResistance: comp.internalResistance
-                };
-            case 'Resistor':
-                return { resistance: comp.resistance };
-            case 'Thermistor':
-                return {
-                    resistanceAt25: comp.resistanceAt25,
-                    beta: comp.beta,
-                    temperatureC: comp.temperatureC
-                };
-            case 'Photoresistor':
-                return {
-                    resistanceDark: comp.resistanceDark,
-                    resistanceLight: comp.resistanceLight,
-                    lightLevel: comp.lightLevel
-                };
-            case 'Diode':
-                return {
-                    forwardVoltage: comp.forwardVoltage,
-                    onResistance: comp.onResistance,
-                    offResistance: comp.offResistance
-                };
-            case 'LED':
-                return {
-                    forwardVoltage: comp.forwardVoltage,
-                    onResistance: comp.onResistance,
-                    offResistance: comp.offResistance,
-                    ratedCurrent: comp.ratedCurrent,
-                    color: comp.color
-                };
-            case 'Rheostat':
-                return {
-                    minResistance: comp.minResistance,
-                    maxResistance: comp.maxResistance,
-                    position: comp.position
-                };
-            case 'Bulb':
-                return {
-                    resistance: comp.resistance,
-                    ratedPower: comp.ratedPower
-                };
-            case 'Capacitor':
-                return {
-                    capacitance: comp.capacitance,
-                    integrationMethod: comp.integrationMethod || 'auto'
-                };
-            case 'Inductor':
-                return {
-                    inductance: comp.inductance,
-                    initialCurrent: comp.initialCurrent,
-                    integrationMethod: comp.integrationMethod || 'auto'
-                };
-            case 'ParallelPlateCapacitor':
-                return {
-                    plateArea: comp.plateArea,
-                    plateDistance: comp.plateDistance,
-                    dielectricConstant: comp.dielectricConstant,
-                    plateOffsetYPx: comp.plateOffsetYPx,
-                    explorationMode: comp.explorationMode,
-                    capacitance: comp.capacitance,
-                    integrationMethod: comp.integrationMethod || 'auto'
-                };
-            case 'Motor':
-                return {
-                    resistance: comp.resistance,
-                    torqueConstant: comp.torqueConstant,
-                    emfConstant: comp.emfConstant,
-                    inertia: comp.inertia,
-                    loadTorque: comp.loadTorque
-                };
-            case 'Switch':
-                return { closed: comp.closed };
-            case 'SPDTSwitch':
-                return {
-                    position: comp.position === 'b' ? 'b' : 'a',
-                    onResistance: comp.onResistance,
-                    offResistance: comp.offResistance
-                };
-            case 'Relay':
-                return {
-                    coilResistance: comp.coilResistance,
-                    pullInCurrent: comp.pullInCurrent,
-                    dropOutCurrent: comp.dropOutCurrent,
-                    contactOnResistance: comp.contactOnResistance,
-                    contactOffResistance: comp.contactOffResistance,
-                    energized: !!comp.energized
-                };
-            case 'Fuse':
-                return {
-                    ratedCurrent: comp.ratedCurrent,
-                    i2tThreshold: comp.i2tThreshold,
-                    i2tAccum: comp.i2tAccum,
-                    coldResistance: comp.coldResistance,
-                    blownResistance: comp.blownResistance,
-                    blown: !!comp.blown
-                };
-            case 'Ammeter':
-                return {
-                    resistance: comp.resistance,
-                    range: comp.range,
-                    selfReading: !!comp.selfReading
-                };
-            case 'Voltmeter':
-                return {
-                    resistance: comp.resistance,
-                    range: comp.range,
-                    selfReading: !!comp.selfReading
-                };
-            case 'BlackBox':
-                return {
-                    boxWidth: comp.boxWidth,
-                    boxHeight: comp.boxHeight,
-                    viewMode: comp.viewMode === 'opaque' ? 'opaque' : 'transparent'
-                };
-            default:
-                return {};
-        }
+        return getCircuitComponentProperties(comp);
     }
 
     /**
