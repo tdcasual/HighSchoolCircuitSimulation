@@ -220,3 +220,129 @@ describe('ChartWindowController.render', () => {
         expect(meaning).toContain('电流');
     });
 });
+
+describe('ChartWindowController delegation seams', () => {
+    it('delegates pointer lifecycle methods to injected pointer controller', () => {
+        const pointerController = {
+            onHeaderPointerDown: vi.fn(),
+            onHeaderDoubleClick: vi.fn(),
+            onResizeHandlePointerDown: vi.fn(),
+            onPointerMove: vi.fn(),
+            onPointerUp: vi.fn(),
+            attachGlobalPointerListeners: vi.fn(),
+            cancelPointerSessions: vi.fn(),
+            detachDragListeners: vi.fn()
+        };
+        const bindingController = {
+            applyLegendState: vi.fn(),
+            onAxisSourceChange: vi.fn(),
+            onAxisQuantityChange: vi.fn(),
+            refreshSourceOptions: vi.fn(),
+            rebuildSeriesControls: vi.fn(),
+            resolveBindingMeaning: vi.fn(() => 'binding'),
+            resolveAxisMeaningLabels: vi.fn(() => ({ xLabel: 'x', yLabel: 'y' }))
+        };
+        const canvasView = {
+            clearData: vi.fn(),
+            markDirty: vi.fn(),
+            resizeCanvasToDisplaySize: vi.fn(),
+            render: vi.fn()
+        };
+        const controller = new ChartWindowController({ clampRect: (frame) => frame }, {
+            id: 'chart_1',
+            frame: { x: 0, y: 0, width: 320, height: 240 },
+            series: [],
+            axis: {}
+        }, {
+            pointerController,
+            bindingController,
+            canvasView
+        });
+        const event = { pointerId: 1 };
+
+        controller.onHeaderPointerDown(event);
+        controller.onHeaderDoubleClick(event);
+        controller.onResizeHandlePointerDown(event, 'se');
+        controller.onPointerMove(event);
+        controller.onPointerUp(event);
+        controller.attachGlobalPointerListeners();
+        controller.cancelPointerSessions();
+        controller.detachDragListeners();
+
+        expect(pointerController.onHeaderPointerDown).toHaveBeenCalledWith(event);
+        expect(pointerController.onHeaderDoubleClick).toHaveBeenCalledWith(event);
+        expect(pointerController.onResizeHandlePointerDown).toHaveBeenCalledWith(event, 'se');
+        expect(pointerController.onPointerMove).toHaveBeenCalledWith(event);
+        expect(pointerController.onPointerUp).toHaveBeenCalledWith(event);
+        expect(pointerController.attachGlobalPointerListeners).toHaveBeenCalledTimes(1);
+        expect(pointerController.cancelPointerSessions).toHaveBeenCalledTimes(1);
+        expect(pointerController.detachDragListeners).toHaveBeenCalledTimes(1);
+    });
+
+    it('delegates binding methods to injected binding controller', () => {
+        const bindingController = {
+            applyLegendState: vi.fn(),
+            onAxisSourceChange: vi.fn(),
+            onAxisQuantityChange: vi.fn(),
+            refreshSourceOptions: vi.fn(),
+            rebuildSeriesControls: vi.fn(),
+            resolveBindingMeaning: vi.fn(() => 'binding'),
+            resolveAxisMeaningLabels: vi.fn(() => ({ xLabel: 'time', yLabel: 'current' }))
+        };
+        const controller = new ChartWindowController({ clampRect: (frame) => frame }, {
+            id: 'chart_1',
+            frame: { x: 0, y: 0, width: 320, height: 240 },
+            series: [],
+            axis: {}
+        }, {
+            pointerController: {},
+            bindingController,
+            canvasView: {}
+        });
+
+        controller.applyLegendState();
+        controller.onAxisSourceChange();
+        controller.onAxisQuantityChange();
+        controller.refreshSourceOptions();
+        controller.rebuildSeriesControls();
+        expect(controller.resolveBindingMeaning({ sourceId: TIME_SOURCE_ID, quantityId: 't' })).toBe('binding');
+        expect(controller.resolveAxisMeaningLabels()).toEqual({ xLabel: 'time', yLabel: 'current' });
+
+        expect(bindingController.applyLegendState).toHaveBeenCalledTimes(1);
+        expect(bindingController.onAxisSourceChange).toHaveBeenCalledTimes(1);
+        expect(bindingController.onAxisQuantityChange).toHaveBeenCalledTimes(1);
+        expect(bindingController.refreshSourceOptions).toHaveBeenCalledTimes(1);
+        expect(bindingController.rebuildSeriesControls).toHaveBeenCalledTimes(1);
+        expect(bindingController.resolveBindingMeaning).toHaveBeenCalledTimes(1);
+        expect(bindingController.resolveAxisMeaningLabels).toHaveBeenCalledTimes(1);
+    });
+
+    it('delegates canvas methods to injected canvas view', () => {
+        const canvasView = {
+            clearData: vi.fn(),
+            markDirty: vi.fn(),
+            resizeCanvasToDisplaySize: vi.fn(),
+            render: vi.fn()
+        };
+        const controller = new ChartWindowController({ clampRect: (frame) => frame }, {
+            id: 'chart_1',
+            frame: { x: 0, y: 0, width: 320, height: 240 },
+            series: [],
+            axis: {}
+        }, {
+            pointerController: {},
+            bindingController: {},
+            canvasView
+        });
+
+        controller.clearData();
+        controller.markDirty();
+        controller.resizeCanvasToDisplaySize();
+        controller.render();
+
+        expect(canvasView.clearData).toHaveBeenCalledTimes(1);
+        expect(canvasView.markDirty).toHaveBeenCalledTimes(1);
+        expect(canvasView.resizeCanvasToDisplaySize).toHaveBeenCalledTimes(1);
+        expect(canvasView.render).toHaveBeenCalledTimes(1);
+    });
+});

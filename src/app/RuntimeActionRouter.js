@@ -1,7 +1,7 @@
-import { resetIdCounter, updateIdCounterFromExisting } from '../components/Component.js';
+import { resetEntityIdCounter, updateEntityIdCounterFromExisting } from '../utils/id/EntityIdCounter.js';
 import { buildRuntimeDiagnostics } from '../core/simulation/RuntimeDiagnostics.js';
-import { RuntimeStorageEntries } from './RuntimeStorageRegistry.js';
-import { safeRemoveStorageItem } from './AppStorage.js';
+import { RuntimeStorageEntries } from '../utils/storage/StorageRegistry.js';
+import { safeRemoveStorageItem } from '../utils/storage/SafeStorage.js';
 import { safeInvokeMethod } from './AppSerialization.js';
 
 export class RuntimeActionRouter {
@@ -9,8 +9,8 @@ export class RuntimeActionRouter {
         this.app = app;
         this.uiBridge = options.uiBridge || null;
         this.safeRemoveStorageItemImpl = options.safeRemoveStorageItemImpl || safeRemoveStorageItem;
-        this.updateIdCounterFromExistingImpl = options.updateIdCounterFromExistingImpl || updateIdCounterFromExisting;
-        this.resetIdCounterImpl = options.resetIdCounterImpl || resetIdCounter;
+        this.updateIdCounterFromExistingImpl = options.updateIdCounterFromExistingImpl || updateEntityIdCounterFromExisting;
+        this.resetIdCounterImpl = options.resetIdCounterImpl || resetEntityIdCounter;
         this.stopSimulationImpl = options.stopSimulationImpl || (() => this.stopSimulation());
     }
 

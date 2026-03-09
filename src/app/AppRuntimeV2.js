@@ -7,23 +7,34 @@ import { Circuit } from '../core/runtime/Circuit.js';
 import { Renderer } from '../ui/Renderer.js';
 import { InteractionManager } from '../ui/Interaction.js';
 import { loadAIPanelClass } from '../ui/ai/loadAIPanel.js';
-import { ChartWorkspaceController } from '../ui/charts/ChartWorkspaceController.js';
-import { ExerciseBoard } from '../ui/ExerciseBoard.js';
 import { ResponsiveLayoutController } from '../ui/ResponsiveLayoutController.js';
-import { ClassroomModeController } from '../ui/ClassroomModeController.js';
-import { ToolboxCategoryController } from '../ui/ToolboxCategoryController.js';
-import { TopActionMenuController } from '../ui/TopActionMenuController.js';
 import { MobileRestoreBroker } from '../ui/mobile/MobileRestoreBroker.js';
 import { MobileRestoreEntryController } from '../ui/mobile/MobileRestoreEntryController.js';
-import { FirstRunGuideController } from '../ui/FirstRunGuideController.js';
-import { EmbedRuntimeBridge, parseEmbedRuntimeOptionsFromSearch } from '../embed/EmbedRuntimeBridge.js';
+import { parseEmbedRuntimeOptionsFromSearch } from '../embed/EmbedRuntimeOptions.js';
+import {
+    createDeferredChartWorkspaceFacade,
+    createDeferredClassroomModeFacade,
+    createDeferredExerciseBoardFacade,
+    createDeferredFirstRunGuideFacade,
+    createDeferredToolboxCategoryFacade,
+    createDeferredTopActionMenuFacade,
+    loadEmbedRuntimeBridgeClass,
+    scheduleDeferredUiHydration as scheduleDeferredUiHydrationInternal
+} from './DeferredRuntimeFeatures.js';
 import { RuntimeActionRouter } from '../app/RuntimeActionRouter.js';
 import { RuntimeUiBridge } from '../app/RuntimeUiBridge.js';
 import { createRuntimeLogger } from '../utils/Logger.js';
-import { RuntimeStorageEntries } from '../app/RuntimeStorageRegistry.js';
+import { RuntimeStorageEntries } from '../utils/storage/StorageRegistry.js';
 import { buildAppSaveData } from '../app/AppSerialization.js';
-import { safeGetStorageItem, safeSetStorageItem } from '../app/AppStorage.js';
+import { safeGetStorageItem, safeSetStorageItem } from '../utils/storage/SafeStorage.js';
 import { InteractionModeStore } from './interaction/InteractionModeStore.js';
+import {
+    bindLazyAIPanelTriggers as bindLazyAIPanelTriggersDelegate,
+    debugRuntimeCircuit,
+    detachLazyAIPanelTriggers as detachLazyAIPanelTriggersDelegate,
+    ensureAIPanelLoaded as ensureAIPanelLoadedDelegate,
+    openAIPanel as openAIPanelDelegate
+} from './AppRuntimeV2Delegates.js';
 
 export class AppRuntimeV2 {
     constructor() {
@@ -52,9 +63,9 @@ export class AppRuntimeV2 {
         // 初始化交互管理器
         this.interaction = new InteractionManager(this);
 
-        // 初始化图表工作区（画布悬浮窗）
-        this.chartWorkspace = new ChartWorkspaceController(this);
-        
+        // 初始化延迟水合的重型 UI 子系统
+        this.chartWorkspace = createDeferredChartWorkspaceFacade(this);
+
         // AI 助手改为延迟加载：首屏不初始化重型面板。
         this.aiPanel = null;
         this.aiPanelLoadingPromise = null;
@@ -63,29 +74,30 @@ export class AppRuntimeV2 {
         this.boundLazyAIOpen = null;
         this.bindLazyAIPanelTriggers();
 
-        // 初始化习题板
-        this.exerciseBoard = new ExerciseBoard(this);
+        // 初始化习题板（延迟水合）
+        this.exerciseBoard = createDeferredExerciseBoardFacade(this);
 
         // 初始化响应式布局控制
         this.responsiveLayout = new ResponsiveLayoutController(this);
 
-        // 初始化手机端顶部更多菜单
-        this.topActionMenu = new TopActionMenuController(this);
+        // 初始化手机端顶部更多菜单（延迟水合）
+        this.topActionMenu = createDeferredTopActionMenuFacade(this);
 
         // 初始化手机端统一恢复入口
         this.mobileRestoreBroker = new MobileRestoreBroker();
         this.mobileRestoreEntry = new MobileRestoreEntryController(this, this.mobileRestoreBroker);
 
-        // 初始化工具箱分类折叠控制
-        this.toolboxCategoryController = new ToolboxCategoryController(this);
+        // 初始化工具箱分类折叠控制（延迟水合）
+        this.toolboxCategoryController = createDeferredToolboxCategoryFacade(this);
 
-        // 初始化课堂模式控制（大屏演示可读性增强）
-        this.classroomMode = new ClassroomModeController(this);
+        // 初始化课堂模式控制（延迟水合）
+        this.classroomMode = createDeferredClassroomModeFacade(this);
 
-        // 初始化首开引导（嵌入模式默认关闭）
-        this.firstRunGuide = new FirstRunGuideController(this, {
+        // 初始化首开引导（延迟水合）
+        this.firstRunGuide = createDeferredFirstRunGuideFacade(this, {
             enabled: !this.runtimeOptions.enabled
         });
+        this.scheduleDeferredUiHydration();
 
         this.runtimeUiBridge = new RuntimeUiBridge(this);
         this.actionRouter = new RuntimeActionRouter(this, {
@@ -105,7 +117,7 @@ export class AppRuntimeV2 {
         // 嵌入模式桥接（类似 deployggb.js 的 iframe API）
         this.embedBridge = null;
         if (this.runtimeOptions.enabled) {
-            this.embedBridge = new EmbedRuntimeBridge(this, this.runtimeOptions);
+            void this.initializeEmbedRuntimeBridge();
         }
         
         // 初始化完成
@@ -119,82 +131,8 @@ export class AppRuntimeV2 {
     /**
      * 调试电路状态
      */
-    debugCircuit() {
-        const logger = this.logger.child('debugCircuit');
-        // 启用 solver 调试模式
-        this.circuit.solver.debugMode = true;
-        
-        logger.info('=== Circuit Debug Info ===');
-        logger.info('Components:', this.circuit.components.size);
-        logger.info('Wires:', this.circuit.wires.size);
-        logger.info('Nodes:', this.circuit.nodes.length);
-        
-        logger.info('\n--- Components ---');
-        for (const [id, comp] of this.circuit.components) {
-            logger.info(`${id} (${comp.type}): nodes=[${comp.nodes}], V=${comp.voltageValue?.toFixed(3)}, I=${comp.currentValue?.toFixed(3)}, R=${comp.resistance || comp.maxResistance || 'N/A'}`);
-        }
-        
-        logger.info('\n--- Wires ---');
-        for (const [id, wire] of this.circuit.wires) {
-            const fmtEnd = (which) => {
-                const ref = which === 'a' ? wire.aRef : wire.bRef;
-                if (ref && ref.componentId !== undefined && ref.componentId !== null) {
-                    return `${ref.componentId}:${ref.terminalIndex}`;
-                }
-                const pt = which === 'a' ? wire.a : wire.b;
-                if (pt && Number.isFinite(Number(pt.x)) && Number.isFinite(Number(pt.y))) {
-                    return `(${Math.round(Number(pt.x))},${Math.round(Number(pt.y))})`;
-                }
-                return '?';
-            };
-            logger.info(`${id}: ${fmtEnd('a')} -> ${fmtEnd('b')}`);
-        }
-        
-        logger.info('\n--- Node Connections ---');
-        // 分析每个节点连接了哪些端子
-        const nodeConnections = {};
-        for (const [id, comp] of this.circuit.components) {
-            comp.nodes.forEach((node, termIdx) => {
-                if (!nodeConnections[node]) nodeConnections[node] = [];
-                nodeConnections[node].push(`${id}:${termIdx}`);
-            });
-        }
-        for (const [node, terminals] of Object.entries(nodeConnections)) {
-            logger.info(`Node ${node}: ${terminals.join(', ')}`);
-        }
-        
-        // 强制运行一次求解
-        logger.info('\n--- Running Solve ---');
-        this.circuit.rebuildNodes();
-        
-        logger.info('\n--- After rebuildNodes ---');
-        logger.info('Total nodes:', this.circuit.nodes.length);
-        for (const [id, comp] of this.circuit.components) {
-            logger.info(`  ${id}: nodes = [${comp.nodes}]`);
-        }
-        
-        this.circuit.solver.setCircuit(
-            Array.from(this.circuit.components.values()),
-            this.circuit.nodes
-        );
-        
-        logger.info('VoltageSourceCount:', this.circuit.solver.voltageSourceCount);
-        
-        const results = this.circuit.solver.solve(this.circuit.dt);
-        
-        logger.info('\n--- Solve Results ---');
-        logger.info('Valid:', results.valid);
-        logger.info('Voltages:', results.voltages);
-        if (results.currents instanceof Map) {
-            logger.info('Currents:', Object.fromEntries(results.currents));
-        } else {
-            logger.info('Currents:', results.currents);
-        }
-        
-        // 禁用调试模式
-        this.circuit.solver.debugMode = false;
-        
-        return { circuit: this.circuit, results };
+debugCircuit() {
+        return debugRuntimeCircuit(this);
     }
 
     /**
@@ -436,57 +374,31 @@ export class AppRuntimeV2 {
         }
     }
 
-    bindLazyAIPanelTriggers() {
-        if (typeof document === 'undefined') return;
-        const triggerIds = ['ai-fab-btn', 'ai-toggle-btn'];
-        this.boundLazyAIOpen = (event) => {
-            if (this.aiPanel) return;
-            event?.preventDefault?.();
-            event?.stopPropagation?.();
-            void this.openAIPanel();
-        };
-
-        this.aiLazyTriggerElements = [];
-        for (const id of triggerIds) {
-            const element = document.getElementById(id);
-            if (!element || typeof element.addEventListener !== 'function') continue;
-            element.addEventListener('click', this.boundLazyAIOpen);
-            this.aiLazyTriggerElements.push(element);
-        }
+    scheduleDeferredUiHydration() {
+        return scheduleDeferredUiHydrationInternal(this);
     }
 
-    detachLazyAIPanelTriggers() {
-        if (!Array.isArray(this.aiLazyTriggerElements) || !this.boundLazyAIOpen) return;
-        for (const element of this.aiLazyTriggerElements) {
-            if (!element || typeof element.removeEventListener !== 'function') continue;
-            element.removeEventListener('click', this.boundLazyAIOpen);
-        }
-        this.aiLazyTriggerElements = [];
-    }
-
-    async ensureAIPanelLoaded() {
-        if (this.aiPanel) return this.aiPanel;
-        if (this.aiPanelLoadingPromise) return this.aiPanelLoadingPromise;
-
-        this.aiPanelLoadingPromise = (async () => {
-            const AIPanelClass = await this.aiPanelClassLoader();
-            this.aiPanel = new AIPanelClass(this);
-            this.detachLazyAIPanelTriggers();
-            return this.aiPanel;
-        })();
-
+    async initializeEmbedRuntimeBridge() {
         try {
-            return await this.aiPanelLoadingPromise;
-        } finally {
-            this.aiPanelLoadingPromise = null;
+            const EmbedRuntimeBridge = await loadEmbedRuntimeBridgeClass();
+            this.embedBridge = new EmbedRuntimeBridge(this, this.runtimeOptions);
+            return this.embedBridge;
+        } catch (error) {
+            this.logger?.error?.('Failed to initialize embed runtime bridge:', error);
+            return null;
         }
     }
-
-    async openAIPanel() {
-        const panel = await this.ensureAIPanelLoaded();
-        panel?.setPanelCollapsed?.(false);
-        panel?.markPanelActive?.();
-        return panel;
+bindLazyAIPanelTriggers() {
+        return bindLazyAIPanelTriggersDelegate(this);
+    }
+detachLazyAIPanelTriggers() {
+        return detachLazyAIPanelTriggersDelegate(this);
+    }
+async ensureAIPanelLoaded() {
+        return ensureAIPanelLoadedDelegate(this);
+    }
+async openAIPanel() {
+        return openAIPanelDelegate(this);
     }
 
     markMobilePrimaryTask(taskId = 'build') {

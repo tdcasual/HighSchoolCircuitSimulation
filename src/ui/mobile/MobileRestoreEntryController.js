@@ -1,6 +1,5 @@
 import {
     safeAddEventListener,
-    safeInvoke,
     safeSetAttribute
 } from '../../utils/RuntimeSafety.js';
 

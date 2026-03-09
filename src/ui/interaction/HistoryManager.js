@@ -1,4 +1,4 @@
-import { updateIdCounterFromExisting } from '../../components/Component.js';
+import { updateEntityIdCounterFromExisting } from '../../utils/id/EntityIdCounter.js';
 import { safeInvoke } from '../../utils/RuntimeSafety.js';
 
 const safeInvokeMethod = (target, methodName, ...args) => safeInvoke(target, methodName, args);
@@ -139,7 +139,7 @@ export class HistoryManager {
             ]
                 .map((id) => normalizeIdentifier(id))
                 .filter((id) => typeof id === 'string');
-            updateIdCounterFromExisting(allIds);
+            updateEntityIdCounterFromExisting(allIds);
 
             safeInvokeMethod(this.interaction?.renderer, 'render');
             safeInvokeMethod(app?.chartWorkspace, 'refreshComponentOptions');

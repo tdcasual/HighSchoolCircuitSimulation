@@ -3,10 +3,12 @@
  */
 
 import { computeOverlapFractionFromOffsetPx, computeParallelPlateCapacitance } from '../../utils/Physics.js';
+import {
+    generateEntityId,
+    resetEntityIdCounter,
+    updateEntityIdCounterFromExisting
+} from '../../utils/id/EntityIdCounter.js';
 import { ComponentDefaults, getComponentTerminalCount } from '../catalog/ComponentCatalog.js';
-
-// 元器件ID计数器
-let componentIdCounter = 0;
 
 /**
  * 生成唯一ID
@@ -14,14 +16,14 @@ let componentIdCounter = 0;
  * @returns {string} 唯一ID
  */
 export function generateId(type) {
-    return `${type}_${++componentIdCounter}`;
+    return generateEntityId(type);
 }
 
 /**
  * 重置ID计数器
  */
 export function resetIdCounter() {
-    componentIdCounter = 0;
+    resetEntityIdCounter();
 }
 
 /**
@@ -29,17 +31,7 @@ export function resetIdCounter() {
  * @param {string[]} existingIds - 现有的ID列表
  */
 export function updateIdCounterFromExisting(existingIds) {
-    let maxNum = 0;
-    for (const id of existingIds) {
-        const match = id.match(/_(\d+)$/);
-        if (match) {
-            const num = parseInt(match[1], 10);
-            if (num > maxNum) {
-                maxNum = num;
-            }
-        }
-    }
-    componentIdCounter = maxNum;
+    updateEntityIdCounterFromExisting(existingIds);
 }
 
 /**

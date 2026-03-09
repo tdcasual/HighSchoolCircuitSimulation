@@ -11,8 +11,6 @@ import {
     updateTextIfChanged
 } from './display/ComponentDisplayState.js';
 import {
-    getComponentHitBox,
-    getTerminalLocalOffset,
     TOUCH_TARGET_RADIUS_PX,
     TOUCH_TARGET_SIZE_PX
 } from './geometry/ComponentGeometry.js';
@@ -34,6 +32,7 @@ import {
     updateValueDisplay as updateValueDisplayRenderer
 } from './render/ComponentValueDisplayRenderer.js';
 import { renderComponentByRegistry } from './render/RendererRegistry.js';
+import { CONTROL_COMPONENT_RENDERERS } from './render/ControlComponentRenderers.js';
 import {
     updateParallelPlateCapacitorVisualRuntime,
     updateValueDisplayRuntime
@@ -44,10 +43,7 @@ import {
     getComponentTerminalCount
 } from './catalog/ComponentCatalog.js';
 import {
-    createComponent,
-    generateId,
-    resetIdCounter,
-    updateIdCounterFromExisting
+    createComponent
 } from './factory/ComponentFactory.js';
 
 function safeHasClass(node, className) {
@@ -69,7 +65,7 @@ function safeToggleClass(node, className, force) {
 }
 
 export { ComponentDefaults, ComponentNames, getComponentTerminalCount };
-export { createComponent, generateId, resetIdCounter, updateIdCounterFromExisting };
+export { createComponent };
 
 const VALUE_DISPLAY_STACK_ORDER = ['power', 'voltage', 'current'];
 const DEFAULT_VALUE_DISPLAY_ANCHOR = Object.freeze({ x: 0, y: -14 });
@@ -373,113 +369,7 @@ export const SVGRenderer = {
         this.addText(g, 0, 25, labelText, 9, 'label');
     },
 
-    /**
-     * 渲染继电器（4端：线圈2端 + 触点2端）
-     */
-    renderRelay(g, comp) {
-        // 线圈（上方）
-        this.addLine(g, -30, -12, -18, -12);
-        this.addLine(g, 18, -12, 30, -12);
-        const loops = 4;
-        const radius = 4;
-        const startX = -14;
-        for (let i = 0; i < loops; i++) {
-            const cx = startX + i * (radius * 2) + radius;
-            const arc = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-            arc.setAttribute('d', `M ${cx - radius} -12 A ${radius} ${radius} 0 0 1 ${cx + radius} -12`);
-            arc.setAttribute('fill', 'none');
-            arc.setAttribute('stroke', '#333');
-            arc.setAttribute('stroke-width', '2');
-            g.appendChild(arc);
-        }
-
-        // 触点（下方，常开）
-        this.addLine(g, -30, 12, -10, 12);
-        this.addLine(g, 10, 12, 30, 12);
-        const contact = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-        contact.setAttribute('x1', '-10');
-        contact.setAttribute('y1', '12');
-        contact.setAttribute('x2', comp.energized ? '10' : '6');
-        contact.setAttribute('y2', comp.energized ? '12' : '4');
-        contact.setAttribute('stroke', '#333');
-        contact.setAttribute('stroke-width', '2');
-        g.appendChild(contact);
-
-        // 机械连杆示意
-        this.addLine(g, 0, -4, 0, 4, 1.2);
-
-        // 端子：0/1=线圈，2/3=触点
-        this.addTerminal(g, -30, -12, 0, comp);
-        this.addTerminal(g, 30, -12, 1, comp);
-        this.addTerminal(g, -30, 12, 2, comp);
-        this.addTerminal(g, 30, 12, 3, comp);
-
-        const labelText = comp.label || `Relay ${comp.energized ? '吸合' : '释放'}`;
-        this.addText(g, 0, 30, labelText, 9, 'label');
-    },
-
-    /**
-     * 渲染滑动变阻器
-     */
-    renderRheostat(g, comp) {
-        // 连接线
-        this.addLine(g, -35, 0, -25, 0);
-        this.addLine(g, 25, 0, 35, 0);
-        
-        // 电阻体
-        const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-        rect.setAttribute('x', -25);
-        rect.setAttribute('y', -8);
-        rect.setAttribute('width', 50);
-        rect.setAttribute('height', 16);
-        rect.setAttribute('class', 'body');
-        g.appendChild(rect);
-        
-        // 滑块位置采用统一几何模型，保证渲染与拓扑计算一致。
-        const sliderLocal = getTerminalLocalOffset('Rheostat', 2, 0, comp);
-        const sliderX = sliderLocal.x;
-        const posRaw = comp.position !== undefined ? comp.position : 0.5;
-        const pos = Math.min(Math.max(posRaw, 0), 1);
-        
-        // 滑动杆（横跨电阻体上方）
-        this.addLine(g, -25, -12, 25, -12, 1.5);
-        
-        // 滑块连接线（从滑块位置向上到端子）
-        this.addLine(g, sliderX, -12, sliderX, -25, 2);
-        
-        // 滑块三角形（可拖动调节）- 指向下方接触电阻体
-        const triangle = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
-        triangle.setAttribute('points', `${sliderX - 6},-16 ${sliderX + 6},-16 ${sliderX},-9`);
-        triangle.setAttribute('class', 'rheostat-slider');
-        triangle.setAttribute('fill', '#2196F3');
-        triangle.style.pointerEvents = 'auto';
-        triangle.style.cursor = 'ew-resize';
-        g.appendChild(triangle);
-        
-        // 端子 0: 左端（支持延长）
-        const term0 = this.addTerminal(g, -35, 0, 0, comp);
-        term0.style.pointerEvents = 'all';
-        
-        // 端子 1: 右端（支持延长）
-        const term1 = this.addTerminal(g, 35, 0, 1, comp);
-        term1.style.pointerEvents = 'all';
-        
-        // 端子 2: 滑动触点（上方，支持延长）
-        const term2 = this.addTerminal(g, sliderX, -28, 2, comp);
-        term2.style.pointerEvents = 'all';
-        term2.setAttribute('fill', '#FF5722'); // 不同颜色以区分
-        
-        // 标签 - 显示接入电路的实际电阻，优先显示自定义标签
-        if (comp.label) {
-            this.addText(g, 0, 28, comp.label, 10, 'label');
-        } else {
-            const displayR = comp.activeResistance !== undefined ? comp.activeResistance :
-                (comp.minResistance + (comp.maxResistance - comp.minResistance) * pos);
-            const directionMark = comp.resistanceDirection === 'slider-right-increase' ? '→↑' :
-                                  comp.resistanceDirection === 'slider-right-decrease' ? '→↓' : '';
-            this.addText(g, 0, 28, `${displayR.toFixed(1)}Ω ${directionMark}`, 10, 'label');
-        }
-    },
+    ...CONTROL_COMPONENT_RENDERERS,
 
     /**
      * 渲染灯泡
@@ -696,189 +586,6 @@ export const SVGRenderer = {
     },
 
     /**
-     * 渲染开关
-     */
-    renderSwitch(g, comp) {
-        // 连接线
-        this.addLine(g, -30, 0, -12, 0);
-        this.addLine(g, 12, 0, 30, 0);
-        
-        // 开关触点
-        const leftDot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        leftDot.setAttribute('cx', -10);
-        leftDot.setAttribute('cy', 0);
-        leftDot.setAttribute('r', 3);
-        leftDot.setAttribute('fill', '#333');
-        g.appendChild(leftDot);
-        
-        const rightDot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        rightDot.setAttribute('cx', 10);
-        rightDot.setAttribute('cy', 0);
-        rightDot.setAttribute('r', 3);
-        rightDot.setAttribute('fill', '#333');
-        g.appendChild(rightDot);
-        
-        // 透明的触摸区域（便于点击切换）
-        const switchHitBox = getComponentHitBox({ type: 'Switch', ...comp });
-        const touchArea = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-        touchArea.setAttribute('x', switchHitBox.x);
-        touchArea.setAttribute('y', switchHitBox.y);
-        touchArea.setAttribute('width', switchHitBox.width);
-        touchArea.setAttribute('height', switchHitBox.height);
-        touchArea.setAttribute('fill', 'transparent');
-        touchArea.setAttribute('class', 'switch-touch');
-        touchArea.style.cursor = 'pointer';
-        g.appendChild(touchArea);
-        
-        // 开关刀（可动部分）
-        const blade = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-        blade.setAttribute('x1', -10);
-        blade.setAttribute('y1', 0);
-        blade.setAttribute('class', 'switch-blade');
-        if (comp.closed) {
-            // 闭合状态
-            blade.setAttribute('x2', 10);
-            blade.setAttribute('y2', 0);
-        } else {
-            // 断开状态
-            blade.setAttribute('x2', 5);
-            blade.setAttribute('y2', -12);
-        }
-        blade.setAttribute('stroke', '#333');
-        blade.setAttribute('stroke-width', 2.5);
-        blade.setAttribute('stroke-linecap', 'round');
-        blade.style.cursor = 'pointer';
-        g.appendChild(blade);
-        
-        // 端子
-        this.addTerminal(g, -30, 0, 0, comp);
-        this.addTerminal(g, 30, 0, 1, comp);
-        
-        // 状态标签 - 优先显示自定义标签
-        const labelText = comp.label || (comp.closed ? '闭合' : '断开');
-        this.addText(g, 0, 22, labelText, 9, 'label');
-    },
-
-    /**
-     * 渲染单刀双掷开关（SPDT）
-     * 端子: 0=公共端, 1=上掷(a), 2=下掷(b)
-     */
-    renderSPDTSwitch(g, comp) {
-        const route = comp.position === 'b' ? 'b' : 'a';
-
-        // 三个端子的引线
-        this.addLine(g, -30, 0, -12, 0);
-        this.addLine(g, 12, -10, 30, -10);
-        this.addLine(g, 12, 10, 30, 10);
-
-        // 触点
-        const commonDot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        commonDot.setAttribute('cx', -10);
-        commonDot.setAttribute('cy', 0);
-        commonDot.setAttribute('r', 3);
-        commonDot.setAttribute('fill', '#333');
-        g.appendChild(commonDot);
-
-        const topDot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        topDot.setAttribute('cx', 10);
-        topDot.setAttribute('cy', -10);
-        topDot.setAttribute('r', 3);
-        topDot.setAttribute('fill', '#333');
-        g.appendChild(topDot);
-
-        const bottomDot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        bottomDot.setAttribute('cx', 10);
-        bottomDot.setAttribute('cy', 10);
-        bottomDot.setAttribute('r', 3);
-        bottomDot.setAttribute('fill', '#333');
-        g.appendChild(bottomDot);
-
-        // 透明触摸区域（沿用 switch-touch，便于复用交互逻辑）
-        const switchHitBox = getComponentHitBox({ type: 'Switch', ...comp });
-        const touchArea = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-        touchArea.setAttribute('x', switchHitBox.x);
-        touchArea.setAttribute('y', switchHitBox.y);
-        touchArea.setAttribute('width', switchHitBox.width);
-        touchArea.setAttribute('height', switchHitBox.height);
-        touchArea.setAttribute('fill', 'transparent');
-        touchArea.setAttribute('class', 'switch-touch');
-        touchArea.style.cursor = 'pointer';
-        g.appendChild(touchArea);
-
-        // 拨片（沿用 switch-blade 样式与点击识别）
-        const blade = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-        blade.setAttribute('x1', -10);
-        blade.setAttribute('y1', 0);
-        blade.setAttribute('x2', 10);
-        blade.setAttribute('y2', route === 'a' ? -10 : 10);
-        blade.setAttribute('stroke', '#333');
-        blade.setAttribute('stroke-width', 2.5);
-        blade.setAttribute('stroke-linecap', 'round');
-        blade.setAttribute('class', 'switch-blade');
-        blade.style.cursor = 'pointer';
-        g.appendChild(blade);
-
-        // 端子（支持延长）
-        this.addTerminal(g, -30, 0, 0, comp);
-        this.addTerminal(g, 30, -10, 1, comp);
-        this.addTerminal(g, 30, 10, 2, comp);
-
-        const labelText = comp.label || (route === 'a' ? '上掷' : '下掷');
-        this.addText(g, 0, 26, labelText, 9, 'label');
-    },
-
-    /**
-     * 渲染保险丝
-     */
-    renderFuse(g, comp) {
-        const blown = !!comp.blown;
-
-        // 引线
-        this.addLine(g, -30, 0, -12, 0);
-        this.addLine(g, 12, 0, 30, 0);
-
-        const body = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-        body.setAttribute('x', -12);
-        body.setAttribute('y', -7);
-        body.setAttribute('width', 24);
-        body.setAttribute('height', 14);
-        body.setAttribute('rx', 6);
-        body.setAttribute('ry', 6);
-        body.setAttribute('fill', blown ? '#ffebee' : '#fffde7');
-        body.setAttribute('stroke', blown ? '#d32f2f' : '#8d6e63');
-        body.setAttribute('stroke-width', 2);
-        g.appendChild(body);
-
-        const filament = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-        filament.setAttribute('x1', -7);
-        filament.setAttribute('y1', 0);
-        filament.setAttribute('x2', 7);
-        filament.setAttribute('y2', 0);
-        filament.setAttribute('stroke', blown ? '#d32f2f' : '#6d4c41');
-        filament.setAttribute('stroke-width', 2);
-        filament.setAttribute('stroke-linecap', 'round');
-        g.appendChild(filament);
-
-        if (blown) {
-            const crack = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-            crack.setAttribute('x1', -1);
-            crack.setAttribute('y1', -4);
-            crack.setAttribute('x2', 1);
-            crack.setAttribute('y2', 4);
-            crack.setAttribute('stroke', '#d32f2f');
-            crack.setAttribute('stroke-width', 2.2);
-            crack.setAttribute('stroke-linecap', 'round');
-            g.appendChild(crack);
-        }
-
-        this.addTerminal(g, -30, 0, 0, comp);
-        this.addTerminal(g, 30, 0, 1, comp);
-
-        const labelText = comp.label || (blown ? '已熔断' : `${comp.ratedCurrent}A`);
-        this.addText(g, 0, 24, labelText, 9, 'label');
-    },
-
-    /**
      * 渲染电流表
      */
     renderAmmeter(g, comp) {
@@ -946,37 +653,6 @@ export const SVGRenderer = {
         // 量程标签 - 优先显示自定义标签
         const labelText = comp.label || `${comp.range}V`;
         this.addText(g, 0, 30, labelText, 9, 'label');
-    },
-
-    /**
-     * 渲染黑箱（组合容器）
-     */
-    renderBlackBox(g, comp) {
-        const w = Math.max(80, comp.boxWidth || 180);
-        const h = Math.max(60, comp.boxHeight || 110);
-        const mode = comp.viewMode === 'opaque' ? 'opaque' : 'transparent';
-
-        const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-        rect.setAttribute('x', String(-w / 2));
-        rect.setAttribute('y', String(-h / 2));
-        rect.setAttribute('width', String(w));
-        rect.setAttribute('height', String(h));
-        rect.setAttribute('rx', '14');
-        rect.setAttribute('ry', '14');
-        rect.setAttribute('class', `blackbox-body ${mode}`);
-        g.appendChild(rect);
-
-        // 标题
-        const labelText = comp.label || 'BlackBox';
-        this.addText(g, 0, 6, labelText, 13, 'blackbox-title');
-
-        // 端口提示
-        this.addText(g, -w / 2 + 14, -h / 2 + 18, '端口1', 10, 'blackbox-port');
-        this.addText(g, w / 2 - 14, -h / 2 + 18, '端口2', 10, 'blackbox-port');
-
-        // 端子：放在盒子边缘中心（内部连线可从盒子内接到边缘；外部连线从外侧接入）
-        this.addTerminal(g, -w / 2, 0, 0, comp);
-        this.addTerminal(g, w / 2, 0, 1, comp);
     },
 
     /**
