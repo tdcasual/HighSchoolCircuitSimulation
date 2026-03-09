@@ -1,7 +1,17 @@
-import { safeGetStorageItem, safeRemoveStorageItem, safeSetStorageItem } from '../app/AppStorage.js';
-import { RuntimeStorageEntries } from '../app/RuntimeStorageRegistry.js';
-
-const DEFAULT_REQUEST_TIMEOUT_MS = 180000;
+import {
+    buildResponsesRequestBody,
+    DEFAULT_REQUEST_TIMEOUT_MS,
+    extractResponseText as extractResponseTextValue,
+    extractTextFromContent as extractTextFromContentValue,
+    normalizeApiEndpoint as normalizeApiEndpointValue,
+    normalizeEndpoint as normalizeEndpointValue,
+    normalizePositiveNumber as normalizePositiveNumberValue,
+    normalizeProxyEndpoint as normalizeProxyEndpointValue,
+    normalizeRequestMode as normalizeRequestModeValue,
+    resolveModelsEndpoint as resolveModelsEndpointValue
+} from './OpenAIClientProtocol.js';
+import { safeGetStorageItem, safeRemoveStorageItem, safeSetStorageItem } from '../utils/storage/SafeStorage.js';
+import { RuntimeStorageEntries } from '../utils/storage/StorageRegistry.js';
 
 export class OpenAIClientV2 {
     constructor(options = {}) {
@@ -25,60 +35,23 @@ export class OpenAIClientV2 {
     }
 
     normalizePositiveNumber(value, fallbackValue) {
-        const parsed = Number(value);
-        if (!Number.isFinite(parsed) || parsed <= 0) return fallbackValue;
-        return parsed;
+        return normalizePositiveNumberValue(value, fallbackValue);
     }
 
     normalizeRequestMode(mode) {
-        return String(mode || '').trim().toLowerCase() === 'proxy' ? 'proxy' : 'direct';
+        return normalizeRequestModeValue(mode);
     }
 
     normalizeEndpoint(endpoint) {
-        const raw = String(endpoint || '').trim();
-        if (!raw) return 'https://api.openai.com';
-        try {
-            return new URL(raw).toString().replace(/\/+$/u, '');
-        } catch (_) {
-            // continue
-        }
-
-        const normalized = raw.startsWith('/') ? `https://api.openai.com${raw}` : `https://${raw}`;
-        try {
-            return new URL(normalized).toString().replace(/\/+$/u, '');
-        } catch (_) {
-            return 'https://api.openai.com';
-        }
+        return normalizeEndpointValue(endpoint);
     }
 
     normalizeApiEndpoint(rawEndpoint) {
-        const endpoint = this.normalizeEndpoint(rawEndpoint);
-        if (endpoint.endsWith('/v1/responses')) return endpoint;
-        if (/\/v1\/[^/]+$/u.test(endpoint)) {
-            return endpoint.replace(/\/v1\/[^/]+$/u, '/v1/responses');
-        }
-        if (endpoint.endsWith('/v1')) return `${endpoint}/responses`;
-        if (/\/v1(\/|$)/u.test(endpoint)) {
-            return endpoint.replace(/\/v1(\/.*)?$/u, '/v1/responses');
-        }
-        return `${endpoint}/v1/responses`;
+        return normalizeApiEndpointValue(rawEndpoint);
     }
 
     normalizeProxyEndpoint(endpoint) {
-        const raw = String(endpoint || '').trim();
-        if (!raw) return '';
-        try {
-            return new URL(raw).toString().replace(/\/+$/u, '');
-        } catch (_) {
-            // continue
-        }
-
-        const normalized = raw.startsWith('/') ? `https://api.openai.com${raw}` : `https://${raw}`;
-        try {
-            return new URL(normalized).toString().replace(/\/+$/u, '');
-        } catch (_) {
-            return '';
-        }
+        return normalizeProxyEndpointValue(endpoint);
     }
 
     loadConfig(options = {}) {
@@ -229,17 +202,7 @@ export class OpenAIClientV2 {
         if (this.isProxyMode()) {
             return this.getProxyEndpointOrThrow();
         }
-        const apiEndpoint = this.normalizeEndpoint(this.config?.apiEndpoint);
-        if (/\/v1\/[^/]+$/u.test(apiEndpoint)) {
-            return apiEndpoint.replace(/\/v1\/[^/]+$/u, '/v1/models');
-        }
-        if (apiEndpoint.endsWith('/v1')) {
-            return `${apiEndpoint}/models`;
-        }
-        if (/\/v1\//u.test(apiEndpoint)) {
-            return `${apiEndpoint.split('/v1/')[0]}/v1/models`;
-        }
-        return apiEndpoint.endsWith('/') ? `${apiEndpoint}v1/models` : `${apiEndpoint}/v1/models`;
+        return resolveModelsEndpointValue(this.config?.apiEndpoint);
     }
 
     buildRequestHeaders(includeJson = false) {
@@ -254,49 +217,20 @@ export class OpenAIClientV2 {
     }
 
     buildRequestBody(messages = [], model = this.config.textModel, maxTokens = null) {
-        return {
-            model: String(model || this.config.textModel),
-            input: Array.isArray(messages) ? messages : [],
-            max_output_tokens: this.normalizePositiveNumber(
-                maxTokens,
-                this.normalizePositiveNumber(this.config.maxOutputTokens, 2000)
-            ),
-            stream: false
-        };
+        return buildResponsesRequestBody(
+            messages,
+            model || this.config.textModel,
+            maxTokens,
+            this.config.maxOutputTokens
+        );
     }
 
     extractTextFromContent(content) {
-        if (!content) return '';
-        if (typeof content === 'string') return content;
-        if (!Array.isArray(content)) return '';
-        const parts = content.map((item) => {
-            if (!item) return '';
-            if (typeof item === 'string') return item;
-            if (typeof item.text === 'string') return item.text;
-            return '';
-        }).filter(Boolean);
-        return parts.join('\n').trim();
+        return extractTextFromContentValue(content);
     }
 
     extractResponseText(payload = {}) {
-        if (typeof payload.output_text === 'string' && payload.output_text.trim()) {
-            return payload.output_text.trim();
-        }
-        if (typeof payload.response?.output_text === 'string' && payload.response.output_text.trim()) {
-            return payload.response.output_text.trim();
-        }
-
-        const outputs = payload.output || payload.outputs || payload.response?.output || payload.response?.outputs;
-        if (Array.isArray(outputs)) {
-            for (const item of outputs) {
-                const text = this.extractTextFromContent(item?.content || item?.message?.content);
-                if (text) return text;
-            }
-        }
-
-        const fallbackText = this.extractTextFromContent(payload?.choices?.[0]?.message?.content);
-        if (fallbackText) return fallbackText;
-        return '';
+        return extractResponseTextValue(payload);
     }
 
     getTimeoutMs() {
