@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { RuntimeStorageEntries, RuntimeStorageKeys } from '../src/app/RuntimeStorageRegistry.js';
+import { RuntimeStorageEntries, RuntimeStorageKeys } from '../src/utils/storage/StorageRegistry.js';
 
 describe('runtime storage ownership contract', () => {
     it('defines canonical storage metadata for circuit autosave and AI config entries', () => {

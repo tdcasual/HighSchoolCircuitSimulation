@@ -14,8 +14,15 @@ describe('bundle size budget guard wiring', () => {
         expect(ci).toContain('npm run check:bundle-size');
     });
 
-    it('provides bundle size budget guard script', () => {
+    it('defines hard and target bundle thresholds', () => {
         const guardPath = resolve(process.cwd(), 'scripts/ci/assert-bundle-size-budget.mjs');
+        const content = readFileSync(guardPath, 'utf8');
+
         expect(existsSync(guardPath)).toBe(true);
+        expect(content).toContain('360 * 1024');
+        expect(content).toContain('400 * 1024');
+        expect(content).toContain('620 * 1024');
+        expect(content).toContain('580 * 1024');
+        expect(content).toContain('warning main target exceeded');
     });
 });

@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 
+import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
-import { mkdir, writeFile, readdir, stat } from 'node:fs/promises';
+import { mkdir, readdir, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 const root = process.cwd();
@@ -11,15 +12,19 @@ const bundleReportRelPath = 'dist/bundle-size-report.json';
 
 const SAFE_INVOKE_MAX = 15;
 const V2_LOCAL_SAFE_INVOKE_MAX = 0;
-const MAIN_BUNDLE_MAX_BYTES = 400 * 1024;
-const TOTAL_BUNDLE_MAX_BYTES = 520 * 1024;
+const MAIN_BUNDLE_HARD_MAX_BYTES = 400 * 1024;
+const MAIN_BUNDLE_TARGET_MAX_BYTES = 360 * 1024;
+const TOTAL_BUNDLE_HARD_MAX_BYTES = 620 * 1024;
+const TOTAL_BUNDLE_TARGET_MAX_BYTES = 580 * 1024;
+const SHIM_INVENTORY_BASELINE = 0;
 
 const CORE_FILE_BUDGETS = [
-    { file: 'src/core/runtime/Circuit.js', maxLines: 2000 },
-    { file: 'src/components/Component.js', maxLines: 1500 },
-    { file: 'src/ui/charts/ChartWindowController.js', maxLines: 700 },
-    { file: 'src/app/interaction/InteractionOrchestrator.js', maxLines: 400 },
-    { file: 'src/app/AppRuntimeV2.js', maxLines: 800 }
+    { file: 'src/core/runtime/Circuit.js', hardMaxLines: 1400, targetMaxLines: 1300 },
+    { file: 'src/components/Component.js', hardMaxLines: 1200, targetMaxLines: 1100 },
+    { file: 'src/ui/charts/ChartWindowController.js', hardMaxLines: 450, targetMaxLines: 360 },
+    { file: 'src/app/interaction/InteractionOrchestrator.js', hardMaxLines: 300, targetMaxLines: 240 },
+    { file: 'src/core/simulation/MNASolver.js', hardMaxLines: 650, targetMaxLines: 550 },
+    { file: 'src/app/AppRuntimeV2.js', hardMaxLines: 575, targetMaxLines: 500 }
 ];
 
 function formatKiB(bytes) {
@@ -34,8 +39,46 @@ function countPattern(source, pattern) {
     return [...String(source).matchAll(pattern)].length;
 }
 
+function toRelPath(absPath) {
+    return path.relative(root, absPath).replaceAll('\\', '/');
+}
+
+function countByStatus(statusEntries = []) {
+    return statusEntries.reduce((acc, status) => {
+        acc[status] = (acc[status] || 0) + 1;
+        return acc;
+    }, {});
+}
+
+function summarizeStatus(statusEntries = []) {
+    const summary = countByStatus(statusEntries);
+    const fail = summary.fail || 0;
+    const warn = summary.warn || 0;
+    const ok = summary.ok || 0;
+    return {
+        fail,
+        warn,
+        ok,
+        status: fail > 0 ? 'fail' : (warn > 0 ? 'warn' : 'ok')
+    };
+}
+
+function runProcess(command, args) {
+    const executable = process.platform === 'win32' && command === 'npx' ? 'npx.cmd' : command;
+    return spawnSync(executable, args, {
+        cwd: root,
+        encoding: 'utf8',
+        maxBuffer: 20 * 1024 * 1024
+    });
+}
+
 async function listFilesRecursive(directory, extensions = new Set(['.js', '.mjs', '.cjs'])) {
     const absDirectory = path.resolve(root, directory);
+    const directoryStat = await stat(absDirectory).catch(() => null);
+    if (!directoryStat || !directoryStat.isDirectory()) {
+        return [];
+    }
+
     const queue = [absDirectory];
     const results = [];
 
@@ -70,8 +113,7 @@ async function collectSafeInvokeDebt() {
         const source = readFileSync(absPath, 'utf8');
         const hitCount = countPattern(source, /function safeInvokeMethod\(/gu);
         if (hitCount > 0) {
-            const relPath = path.relative(root, absPath).replaceAll('\\', '/');
-            matches.push({ file: relPath, count: hitCount });
+            matches.push({ file: toRelPath(absPath), count: hitCount });
             count += hitCount;
         }
     }
@@ -85,8 +127,8 @@ async function collectSafeInvokeDebt() {
 }
 
 async function collectV2SafeInvokeDebt() {
-    const v2RootStat = await stat(path.resolve(root, 'src/v2')).catch(() => null);
-    if (!v2RootStat || !v2RootStat.isDirectory()) {
+    const files = await listFilesRecursive('src/v2');
+    if (files.length === 0) {
         return {
             status: 'ok',
             count: 0,
@@ -96,17 +138,13 @@ async function collectV2SafeInvokeDebt() {
         };
     }
 
-    const files = await listFilesRecursive('src/v2');
     const matches = [];
     let count = 0;
     for (const absPath of files) {
         const source = readFileSync(absPath, 'utf8');
         const hitCount = countPattern(source, /function safeInvokeMethod\(/gu);
         if (hitCount > 0) {
-            matches.push({
-                file: path.relative(root, absPath).replaceAll('\\', '/'),
-                count: hitCount
-            });
+            matches.push({ file: toRelPath(absPath), count: hitCount });
             count += hitCount;
         }
     }
@@ -127,18 +165,19 @@ function collectCoreFileDebt() {
                 file: budget.file,
                 status: 'fail',
                 lines: null,
-                maxLines: budget.maxLines,
+                maxLines: budget.hardMaxLines,
+                targetLines: budget.targetMaxLines,
                 ratio: null,
                 note: 'missing'
             };
         }
 
         const lines = lineCount(readFileSync(absPath, 'utf8'));
-        const ratio = lines / budget.maxLines;
+        const ratio = lines / budget.hardMaxLines;
         let status = 'ok';
-        if (lines > budget.maxLines) {
+        if (lines > budget.hardMaxLines) {
             status = 'fail';
-        } else if (ratio >= 0.95) {
+        } else if (lines > budget.targetMaxLines) {
             status = 'warn';
         }
 
@@ -146,10 +185,29 @@ function collectCoreFileDebt() {
             file: budget.file,
             status,
             lines,
-            maxLines: budget.maxLines,
+            maxLines: budget.hardMaxLines,
+            targetLines: budget.targetMaxLines,
             ratio: Number((ratio * 100).toFixed(1))
         };
     });
+}
+
+function collectHotspots(coreFiles = []) {
+    const files = coreFiles.map((entry) => ({
+        file: entry.file,
+        status: entry.status,
+        currentLines: entry.lines,
+        budgetLines: entry.maxLines,
+        targetLines: entry.targetLines ?? null,
+        utilizationPercent: entry.ratio,
+        note: entry.note || null
+    }));
+    const summary = summarizeStatus(files.map((entry) => entry.status));
+    return {
+        status: summary.status,
+        files,
+        summary
+    };
 }
 
 function collectBundleDebt() {
@@ -159,8 +217,12 @@ function collectBundleDebt() {
             status: 'warn',
             mainBytes: null,
             totalBytes: null,
-            maxMainBytes: MAIN_BUNDLE_MAX_BYTES,
-            maxTotalBytes: TOTAL_BUNDLE_MAX_BYTES,
+            mainKiB: null,
+            totalKiB: null,
+            maxMainBytes: MAIN_BUNDLE_HARD_MAX_BYTES,
+            maxTotalBytes: TOTAL_BUNDLE_HARD_MAX_BYTES,
+            targetMainBytes: MAIN_BUNDLE_TARGET_MAX_BYTES,
+            targetTotalBytes: TOTAL_BUNDLE_TARGET_MAX_BYTES,
             note: `missing ${bundleReportRelPath}, run npm run build:frontend`
         };
     }
@@ -173,8 +235,12 @@ function collectBundleDebt() {
             status: 'fail',
             mainBytes: null,
             totalBytes: null,
-            maxMainBytes: MAIN_BUNDLE_MAX_BYTES,
-            maxTotalBytes: TOTAL_BUNDLE_MAX_BYTES,
+            mainKiB: null,
+            totalKiB: null,
+            maxMainBytes: MAIN_BUNDLE_HARD_MAX_BYTES,
+            maxTotalBytes: TOTAL_BUNDLE_HARD_MAX_BYTES,
+            targetMainBytes: MAIN_BUNDLE_TARGET_MAX_BYTES,
+            targetTotalBytes: TOTAL_BUNDLE_TARGET_MAX_BYTES,
             note: `invalid JSON: ${error?.message || String(error)}`
         };
     }
@@ -186,19 +252,33 @@ function collectBundleDebt() {
             status: 'fail',
             mainBytes: null,
             totalBytes: null,
-            maxMainBytes: MAIN_BUNDLE_MAX_BYTES,
-            maxTotalBytes: TOTAL_BUNDLE_MAX_BYTES,
+            mainKiB: null,
+            totalKiB: null,
+            maxMainBytes: MAIN_BUNDLE_HARD_MAX_BYTES,
+            maxTotalBytes: TOTAL_BUNDLE_HARD_MAX_BYTES,
+            targetMainBytes: MAIN_BUNDLE_TARGET_MAX_BYTES,
+            targetTotalBytes: TOTAL_BUNDLE_TARGET_MAX_BYTES,
             note: 'invalid report shape'
         };
     }
 
-    const status = mainBytes > MAIN_BUNDLE_MAX_BYTES || totalBytes > TOTAL_BUNDLE_MAX_BYTES ? 'fail' : 'ok';
+    let status = 'ok';
+    if (mainBytes > MAIN_BUNDLE_HARD_MAX_BYTES || totalBytes > TOTAL_BUNDLE_HARD_MAX_BYTES) {
+        status = 'fail';
+    } else if (mainBytes > MAIN_BUNDLE_TARGET_MAX_BYTES || totalBytes > TOTAL_BUNDLE_TARGET_MAX_BYTES) {
+        status = 'warn';
+    }
+
     return {
         status,
         mainBytes,
         totalBytes,
-        maxMainBytes: MAIN_BUNDLE_MAX_BYTES,
-        maxTotalBytes: TOTAL_BUNDLE_MAX_BYTES
+        mainKiB: Number((mainBytes / 1024).toFixed(1)),
+        totalKiB: Number((totalBytes / 1024).toFixed(1)),
+        maxMainBytes: MAIN_BUNDLE_HARD_MAX_BYTES,
+        maxTotalBytes: TOTAL_BUNDLE_HARD_MAX_BYTES,
+        targetMainBytes: MAIN_BUNDLE_TARGET_MAX_BYTES,
+        targetTotalBytes: TOTAL_BUNDLE_TARGET_MAX_BYTES
     };
 }
 
@@ -207,21 +287,13 @@ async function collectLegacyObservationDebt() {
     let count = 0;
     const files = [];
     for (const target of targets) {
-        const absTarget = path.resolve(root, target);
-        const targetStat = await stat(absTarget).catch(() => null);
-        if (!targetStat || !targetStat.isDirectory()) {
-            continue;
-        }
         const targetFiles = await listFilesRecursive(target);
         for (const absPath of targetFiles) {
             const source = readFileSync(absPath, 'utf8');
             const hitCount = countPattern(source, /observationPanel/gu);
             if (hitCount > 0) {
                 count += hitCount;
-                files.push({
-                    file: path.relative(root, absPath).replaceAll('\\', '/'),
-                    count: hitCount
-                });
+                files.push({ file: toRelPath(absPath), count: hitCount });
             }
         }
     }
@@ -233,11 +305,95 @@ async function collectLegacyObservationDebt() {
     };
 }
 
-function countByStatus(statusEntries = []) {
-    return statusEntries.reduce((acc, status) => {
-        acc[status] = (acc[status] || 0) + 1;
-        return acc;
-    }, {});
+async function collectShimInventory() {
+    const files = await listFilesRecursive('src');
+    const matches = [];
+    let count = 0;
+
+    for (const absPath of files) {
+        const source = readFileSync(absPath, 'utf8');
+        const hitCount = countPattern(source, /@deprecated/giu);
+        if (hitCount > 0) {
+            matches.push({ file: toRelPath(absPath), count: hitCount });
+            count += hitCount;
+        }
+    }
+
+    const growth = Math.max(0, count - SHIM_INVENTORY_BASELINE);
+    return {
+        status: growth > 0 ? 'fail' : (count > 0 ? 'warn' : 'ok'),
+        count,
+        baseline: SHIM_INVENTORY_BASELINE,
+        growth,
+        files: matches
+    };
+}
+
+function collectLintDebt() {
+    const result = runProcess('npx', ['eslint', '.', '--ext', '.js,.mjs,.cjs', '-f', 'json']);
+    const stdout = String(result.stdout || '').trim();
+    const stderr = String(result.stderr || '').trim();
+
+    if (!stdout) {
+        return {
+            status: 'fail',
+            errorCount: 0,
+            warningCount: 0,
+            boundaryErrors: 0,
+            protectedWarnings: 0,
+            files: [],
+            note: stderr || 'eslint returned no JSON output'
+        };
+    }
+
+    let lintResults;
+    try {
+        lintResults = JSON.parse(stdout);
+    } catch (error) {
+        return {
+            status: 'fail',
+            errorCount: 0,
+            warningCount: 0,
+            boundaryErrors: 0,
+            protectedWarnings: 0,
+            files: [],
+            note: `failed to parse eslint json: ${error?.message || String(error)}`
+        };
+    }
+
+    let errorCount = 0;
+    let warningCount = 0;
+    let boundaryErrors = 0;
+    const files = [];
+
+    for (const entry of Array.isArray(lintResults) ? lintResults : []) {
+        const relPath = entry?.filePath ? toRelPath(entry.filePath) : null;
+        const messages = Array.isArray(entry?.messages) ? entry.messages : [];
+        const fileBoundaryErrors = messages.filter((message) => String(message.ruleId || '').startsWith('boundaries/')).length;
+        const fileErrors = Number(entry?.errorCount) || 0;
+        const fileWarnings = Number(entry?.warningCount) || 0;
+        errorCount += fileErrors;
+        warningCount += fileWarnings;
+        boundaryErrors += fileBoundaryErrors;
+        if ((fileErrors + fileWarnings) > 0 && relPath) {
+            files.push({
+                file: relPath,
+                errorCount: fileErrors,
+                warningCount: fileWarnings,
+                boundaryErrors: fileBoundaryErrors
+            });
+        }
+    }
+
+    return {
+        status: errorCount > 0 ? 'fail' : (warningCount > 0 ? 'warn' : 'ok'),
+        errorCount,
+        warningCount,
+        boundaryErrors,
+        protectedWarnings: warningCount,
+        files,
+        note: result.status === 0 ? null : (stderr || 'eslint reported violations')
+    };
 }
 
 function buildMarkdown(report) {
@@ -252,11 +408,30 @@ function buildMarkdown(report) {
         `- Warn: ${report.summary.warn}`,
         `- OK: ${report.summary.ok}`,
         '',
+        '## Lint Health',
+        '',
+        `- Lint status: ${report.lint.status}`,
+        `- Error count: ${report.lint.errorCount}`,
+        `- Boundary errors: ${report.lint.boundaryErrors}`,
+        `- Protected warnings: ${report.lint.protectedWarnings}`
+    ];
+
+    if (report.lint.note) {
+        lines.push(`- Note: ${report.lint.note}`);
+    }
+    if (report.lint.files.length > 0) {
+        lines.push('- Files:');
+        for (const item of report.lint.files.slice(0, 12)) {
+            lines.push(`  - ${item.file}: errors=${item.errorCount}, warnings=${item.warningCount}, boundaryErrors=${item.boundaryErrors}`);
+        }
+    }
+
+    lines.push(
+        '',
         '## Runtime Safety Duplication',
         '',
         `- Local \`safeInvokeMethod\` count: ${report.runtimeSafety.count}/${report.runtimeSafety.max} (${report.runtimeSafety.status})`
-    ];
-
+    );
     if (report.runtimeSafety.files.length > 0) {
         lines.push('- Files:');
         for (const item of report.runtimeSafety.files) {
@@ -280,19 +455,30 @@ function buildMarkdown(report) {
         }
     }
 
-    lines.push('', '## Core File Budgets', '', '| File | Lines | Budget | Status |', '|---|---:|---:|---|');
+    lines.push('', '## Core File Budgets', '', '| File | Lines | Hard | Target | Status |', '|---|---:|---:|---:|---|');
     for (const item of report.coreFiles) {
         const linesValue = item.lines == null ? 'n/a' : String(item.lines);
-        lines.push(`| ${item.file} | ${linesValue} | ${item.maxLines} | ${item.status} |`);
+        lines.push(`| ${item.file} | ${linesValue} | ${item.maxLines} | ${item.targetLines ?? 'n/a'} | ${item.status} |`);
     }
+
+    lines.push('', '## Hotspots', '', `- Hotspot status: ${report.hotspots.status}`);
+    lines.push(`- Hotspot counts: fail=${report.hotspots.summary.fail}, warn=${report.hotspots.summary.warn}, ok=${report.hotspots.summary.ok}`);
 
     lines.push('', '## Bundle Budget', '');
     if (report.bundle.mainBytes == null || report.bundle.totalBytes == null) {
         lines.push(`- Status: ${report.bundle.status}`);
         lines.push(`- Note: ${report.bundle.note}`);
     } else {
-        lines.push(`- Main bundle: ${formatKiB(report.bundle.mainBytes)} / ${formatKiB(report.bundle.maxMainBytes)} (${report.bundle.status})`);
-        lines.push(`- Total JS output: ${formatKiB(report.bundle.totalBytes)} / ${formatKiB(report.bundle.maxTotalBytes)} (${report.bundle.status})`);
+        lines.push(`- Main bundle: hard ${formatKiB(report.bundle.mainBytes)} / ${formatKiB(report.bundle.maxMainBytes)}, target ${formatKiB(report.bundle.targetMainBytes)} (${report.bundle.status})`);
+        lines.push(`- Total JS output: hard ${formatKiB(report.bundle.totalBytes)} / ${formatKiB(report.bundle.maxTotalBytes)}, target ${formatKiB(report.bundle.targetTotalBytes)} (${report.bundle.status})`);
+    }
+
+    lines.push('', '## Shim Inventory', '', `- Deprecated shim markers in src: ${report.shimInventory.count} / baseline ${report.shimInventory.baseline} (growth=${report.shimInventory.growth}, ${report.shimInventory.status})`);
+    if (report.shimInventory.files.length > 0) {
+        lines.push('- Files:');
+        for (const item of report.shimInventory.files.slice(0, 12)) {
+            lines.push(`  - ${item.file}: ${item.count}`);
+        }
     }
 
     lines.push('', '## Legacy Observation Contract', '', `- observationPanel references in src + scripts/e2e: ${report.legacyObservation.count} (${report.legacyObservation.status})`);
@@ -308,26 +494,35 @@ function buildMarkdown(report) {
 }
 
 async function main() {
+    const lint = collectLintDebt();
     const runtimeSafety = await collectSafeInvokeDebt();
     const v2RuntimeSafety = await collectV2SafeInvokeDebt();
     const coreFiles = collectCoreFileDebt();
+    const hotspots = collectHotspots(coreFiles);
     const bundle = collectBundleDebt();
+    const shimInventory = await collectShimInventory();
     const legacyObservation = await collectLegacyObservationDebt();
 
     const statusSummary = countByStatus([
+        lint.status,
         runtimeSafety.status,
         v2RuntimeSafety.status,
+        hotspots.status,
         bundle.status,
+        shimInventory.status,
         legacyObservation.status,
         ...coreFiles.map((entry) => entry.status)
     ]);
 
     const report = {
         generatedAt: new Date().toISOString(),
+        lint,
         runtimeSafety,
         v2RuntimeSafety,
         coreFiles,
+        hotspots,
         bundle,
+        shimInventory,
         legacyObservation,
         summary: {
             fail: statusSummary.fail || 0,

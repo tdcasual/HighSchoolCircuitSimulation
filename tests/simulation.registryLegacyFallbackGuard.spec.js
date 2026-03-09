@@ -24,7 +24,8 @@ describe('registry legacy fallback guard wiring', () => {
         const scriptPath = resolve(process.cwd(), 'scripts/ci/assert-registry-legacy-fallback-guard.mjs');
         const content = readFileSync(scriptPath, 'utf8');
 
-        expect(content).toContain('buildSystemMatrixCacheKey(nodeCount)');
+        expect(content).toContain('buildSystemMatrixCacheKey(options = {})');
+        expect(content).toContain('src/core/simulation/SolverMatrixCacheKeyBuilder.js');
         expect(content).toContain('must not invoke stamping APIs');
         expect(content).toContain('must not mutate component state while building cache key');
     });
@@ -45,7 +46,8 @@ describe('registry legacy fallback guard wiring', () => {
             scriptRelPath: 'scripts/ci/assert-registry-legacy-fallback-guard.mjs',
             sourceFiles: [
                 'src/core/simulation/MNASolver.js',
-                'src/core/simulation/ResultPostprocessor.js'
+                'src/core/simulation/ResultPostprocessor.js',
+                'src/core/simulation/SolverMatrixCacheKeyBuilder.js'
             ],
             mutateByFile: {
                 'src/core/simulation/MNASolver.js': (source) => source.replace(
@@ -70,7 +72,8 @@ describe('registry legacy fallback guard wiring', () => {
             scriptRelPath: 'scripts/ci/assert-registry-legacy-fallback-guard.mjs',
             sourceFiles: [
                 'src/core/simulation/MNASolver.js',
-                'src/core/simulation/ResultPostprocessor.js'
+                'src/core/simulation/ResultPostprocessor.js',
+                'src/core/simulation/SolverMatrixCacheKeyBuilder.js'
             ],
             mutateByFile: {
                 'src/core/simulation/MNASolver.js': (source) => source.replace('registry.get(comp.type)', 'registry.get(comp.kind)')
@@ -86,12 +89,13 @@ describe('registry legacy fallback guard wiring', () => {
             scriptRelPath: 'scripts/ci/assert-registry-legacy-fallback-guard.mjs',
             sourceFiles: [
                 'src/core/simulation/MNASolver.js',
-                'src/core/simulation/ResultPostprocessor.js'
+                'src/core/simulation/ResultPostprocessor.js',
+                'src/core/simulation/SolverMatrixCacheKeyBuilder.js'
             ],
             mutateByFile: {
-                'src/core/simulation/MNASolver.js': (source) => source.replace(
+                'src/core/simulation/SolverMatrixCacheKeyBuilder.js': (source) => source.replace(
                     "return keyParts.join('|');",
-                    "this.gmin = 1e-12;\n        return keyParts.join('|');"
+                    "this.gmin = 1e-12;\n    return keyParts.join('|');"
                 )
             }
         });

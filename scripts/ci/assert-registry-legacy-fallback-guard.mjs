@@ -20,7 +20,7 @@ function readText(relPath) {
 
 function extractMethodBody(source, signature, fileLabel) {
     const escapedSignature = signature.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const headerRegex = new RegExp(`(?:^|\\n)\\s*${escapedSignature}\\s*\\{`);
+    const headerRegex = new RegExp(`(?:^|\\n)[^\\n]*${escapedSignature}\\s*\\{`);
     const headerMatch = headerRegex.exec(source);
     if (!headerMatch) {
         fail(`cannot find method signature "${signature}" in ${fileLabel}`);
@@ -115,9 +115,11 @@ function assertMethodBodyMatches(body, signature, fileLabel, checks = []) {
 
 const solverPath = 'src/core/simulation/MNASolver.js';
 const resultPath = 'src/core/simulation/ResultPostprocessor.js';
+const cacheKeyBuilderPath = 'src/core/simulation/SolverMatrixCacheKeyBuilder.js';
 
 const solverSource = readText(solverPath);
 const resultSource = readText(resultPath);
+const cacheKeyBuilderSource = readText(cacheKeyBuilderPath);
 
 const solverStampBody = assertNoLegacyTypeSwitch(
     solverSource,
@@ -130,9 +132,9 @@ const resultCurrentBody = assertNoLegacyTypeSwitch(
     resultPath
 );
 const cacheKeyBody = extractMethodBody(
-    solverSource,
-    'buildSystemMatrixCacheKey(nodeCount)',
-    solverPath
+    cacheKeyBuilderSource,
+    'buildSystemMatrixCacheKey(options = {})',
+    cacheKeyBuilderPath
 );
 
 const structuralTypeWhitelist = new Set([
@@ -210,8 +212,8 @@ assertMethodBodyMatches(
 
 assertMethodBodyDoesNotMatch(
     cacheKeyBody,
-    'buildSystemMatrixCacheKey(nodeCount)',
-    solverPath,
+    'buildSystemMatrixCacheKey(options = {})',
+    cacheKeyBuilderPath,
     [
         {
             regex: /\bthis\.stamp[A-Za-z0-9_]*\s*\(/,
@@ -233,7 +235,7 @@ assertMethodBodyDoesNotMatch(
 );
 
 if (!/return\s+keyParts\.join\(['"]\|['"]\)\s*;/.test(cacheKeyBody)) {
-    fail(`${solverPath} -> buildSystemMatrixCacheKey(nodeCount) must return a keyParts join result`);
+    fail(`${cacheKeyBuilderPath} -> buildSystemMatrixCacheKey(options = {}) must return a keyParts join result`);
 }
 
 console.log('[registry-guard] ok');

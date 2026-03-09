@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { safeRemoveStorageItem } from '../src/app/AppStorage.js';
-import { RuntimeStorageEntries } from '../src/app/RuntimeStorageRegistry.js';
+import { safeRemoveStorageItem } from '../src/utils/storage/SafeStorage.js';
+import { RuntimeStorageEntries } from '../src/utils/storage/StorageRegistry.js';
 import { AppRuntimeV2 } from '../src/app/AppRuntimeV2.js';
 import { Circuit } from '../src/core/runtime/Circuit.js';
 import { CircuitPersistenceAdapter } from '../src/core/runtime/CircuitPersistenceAdapter.js';

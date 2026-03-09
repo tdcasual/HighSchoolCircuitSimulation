@@ -29,8 +29,32 @@ describe('debt dashboard generator', () => {
         expect(report.generatedAt).toBeTypeOf('string');
         expect(report.runtimeSafety.count).toBeTypeOf('number');
         expect(Array.isArray(report.coreFiles)).toBe(true);
+        expect(report.coreFiles.some((entry) => entry.file === 'src/core/simulation/MNASolver.js')).toBe(true);
         expect(report.bundle.status).toMatch(/^(ok|warn|fail)$/u);
+        expect(report.bundle.mainKiB === null || typeof report.bundle.mainKiB === 'number').toBe(true);
+        expect(report.bundle.targetMainBytes).toBeTypeOf('number');
+        expect(report.bundle.targetTotalBytes).toBeTypeOf('number');
         expect(report.legacyObservation.count).toBeTypeOf('number');
+        expect(report.lint).toMatchObject({
+            status: expect.stringMatching(/^(ok|warn|fail)$/u),
+            errorCount: expect.any(Number),
+            boundaryErrors: expect.any(Number),
+            protectedWarnings: expect.any(Number)
+        });
+        expect(report.hotspots).toMatchObject({
+            status: expect.stringMatching(/^(ok|warn|fail)$/u),
+            files: expect.any(Array),
+            summary: expect.objectContaining({
+                fail: expect.any(Number),
+                warn: expect.any(Number),
+                ok: expect.any(Number)
+            })
+        });
+        expect(report.shimInventory).toMatchObject({
+            count: expect.any(Number),
+            baseline: expect.any(Number),
+            growth: expect.any(Number)
+        });
         expect(report.summary).toMatchObject({
             fail: expect.any(Number),
             warn: expect.any(Number),
@@ -39,7 +63,11 @@ describe('debt dashboard generator', () => {
 
         const markdown = readFileSync(mdPath, 'utf8');
         expect(markdown).toContain('# Tech Debt Dashboard');
+        expect(markdown).toContain('## Lint Health');
         expect(markdown).toContain('## Runtime Safety Duplication');
         expect(markdown).toContain('## Core File Budgets');
-    });
+        expect(markdown).toContain('## Shim Inventory');
+        expect(markdown).toContain('target');
+        expect(markdown).toContain('baseline');
+    }, 15000);
 });

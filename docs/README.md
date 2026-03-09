@@ -46,5 +46,6 @@
 ## 快速入口
 
 - 改进闭环流程：[`docs/process/improvement-workflow.md`](./process/improvement-workflow.md)
+- 可维护性治理协议：[`docs/process/maintainability-governance.md`](./process/maintainability-governance.md)
 - 手机端回归清单：[`docs/process/mobile-ux-regression-checklist.md`](./process/mobile-ux-regression-checklist.md)
 - 改进记录模板：[`docs/templates/improvement-log-template.md`](./templates/improvement-log-template.md)

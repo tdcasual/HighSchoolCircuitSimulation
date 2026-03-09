@@ -25,6 +25,7 @@
   - 收官报告：[`docs/reports/2026-03-03-v2-breaking-refactor-final-report.md`](docs/reports/2026-03-03-v2-breaking-refactor-final-report.md)
   - 执行日志：[`docs/plans/2026-03-03-v2-breaking-refactor-execution-log.md`](docs/plans/2026-03-03-v2-breaking-refactor-execution-log.md)
   - 债务看板说明：[`docs/reports/debt-dashboard-readme.md`](docs/reports/debt-dashboard-readme.md)
+  - 可维护性治理协议：[`docs/process/maintainability-governance.md`](docs/process/maintainability-governance.md)
 
 ## 🧭 观察运行时契约（2026-03-03）
 

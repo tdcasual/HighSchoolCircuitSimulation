@@ -6,7 +6,7 @@
     "build:frontend": "node scripts/build-frontend.mjs",
     "package:embed": "npm run build:frontend && node scripts/embed-packager.mjs",
     "build:edgeone": "npm run package:embed && node scripts/build-edgeone.mjs",
-    "check": "npm run check:observation-contract && npm run check:interaction-mode-contract && npm run check:registry-guard && npm run check:renderer-no-legacy && npm run check:engine-no-adapters && npm run check:ci-workflow && npm run check:v2:boundaries && npm run check:v2:runtime-exclusive && npm run check:v2:coverage && npm run check:v2:runtime-safety && npm run check:core-size && npm run lint && npm run format:check && npm test",
+    "check": "npm run check:observation-contract && npm run check:interaction-mode-contract && npm run check:registry-guard && npm run check:renderer-no-legacy && npm run check:engine-no-adapters && npm run check:ci-workflow && npm run check:v2:boundaries && npm run check:v2:runtime-exclusive && npm run check:v2:coverage && npm run check:v2:runtime-safety && npm run check:maintainability && npm run check:core-size && npm run lint && npm run format:check && npm test",
     "check:full": "npm run check && npm run check:e2e && npm run baseline:p0 && npm run baseline:circuitjs && npm run baseline:ai",
     "lint": "eslint . --ext .js,.mjs,.cjs",
     "lint:fix": "npm run lint -- --fix",
@@ -43,7 +43,8 @@
     "test:e2e:observation": "node scripts/e2e/observation-touch-regression.mjs",
     "test:e2e:compat": "node scripts/e2e/browser-compat-smoke.mjs",
     "test:e2e:ai-mobile": "node scripts/e2e/ai-mobile-layout-regression.mjs",
-    "check:e2e": "npm run test:e2e:wire && npm run test:e2e:responsive && npm run test:e2e:observation && npm run test:e2e:ai-mobile"
+    "check:e2e": "npm run test:e2e:wire && npm run test:e2e:responsive && npm run test:e2e:observation && npm run test:e2e:ai-mobile",
+    "check:maintainability": "node scripts/ci/assert-maintainability-budget.mjs"
   },
   "devDependencies": {
     "esbuild": "^0.25.11",
