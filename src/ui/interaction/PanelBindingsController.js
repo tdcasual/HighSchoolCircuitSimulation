@@ -1,3 +1,11 @@
+import { getClassroomScenarioById } from '../../core/scenarios/ClassroomScenarioPack.js';
+
+const EMPTY_STATE_PRESETS = Object.freeze({
+    'series-circuit': 'classroom-series',
+    'parallel-circuit': 'classroom-parallel',
+    'meter-demo': 'classroom-probe-measurement'
+});
+
 export function bindButtonEvents() {
     const CLEAR_HOLD_DURATION_MS = 350;
     const CLEAR_HOLD_MOVE_TOLERANCE_SQ = 64;
@@ -21,6 +29,33 @@ export function bindButtonEvents() {
     };
 
     const isTouchPointer = (pointerType) => pointerType === 'touch' || pointerType === 'pen';
+    const emptyStateButtons = typeof document?.querySelectorAll === 'function'
+        ? document.querySelectorAll('[data-empty-action]')
+        : [];
+
+    Array.from(emptyStateButtons).forEach((button) => {
+        safeInvokeMethod(button, 'addEventListener', 'click', (event) => {
+            event?.preventDefault?.();
+            const actionId = event?.currentTarget?.dataset?.emptyAction || button?.dataset?.emptyAction || '';
+            const scenarioId = EMPTY_STATE_PRESETS[actionId];
+            const scenario = getClassroomScenarioById(scenarioId);
+
+            if (!scenario) {
+                this.updateStatus?.('教学示例暂不可用');
+                return;
+            }
+            if (typeof this.app?.loadCircuitData !== 'function') {
+                this.updateStatus?.('当前模式不支持加载示例');
+                return;
+            }
+
+            this.app?.markMobilePrimaryTask?.('build');
+            this.app.loadCircuitData(scenario.circuit, {
+                statusText: `已加载示例：${scenario.name}`,
+                storageSource: 'empty-state-preset'
+            });
+        });
+    });
 
     // 运行按钮
     const handleRun = () => {

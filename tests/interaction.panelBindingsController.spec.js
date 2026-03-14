@@ -30,6 +30,49 @@ afterEach(() => {
 });
 
 describe('PanelBindingsController.bindButtonEvents', () => {
+    it('loads classroom presets from workbench empty-state actions', () => {
+        const seriesButton = makeClickableElement();
+        seriesButton.dataset = { emptyAction: 'series-circuit' };
+
+        vi.stubGlobal('document', {
+            getElementById: vi.fn(() => null),
+            querySelectorAll: vi.fn((selector) => {
+                if (selector === '[data-empty-action]') {
+                    return [seriesButton];
+                }
+                return [];
+            })
+        });
+
+        const context = {
+            app: {
+                loadCircuitData: vi.fn(),
+                markMobilePrimaryTask: vi.fn()
+            },
+            updateStatus: vi.fn(),
+            hideDialog: vi.fn(),
+            applyDialogChanges: vi.fn()
+        };
+
+        PanelBindingsController.bindButtonEvents.call(context);
+        seriesButton.trigger('click', {
+            currentTarget: seriesButton,
+            preventDefault: vi.fn()
+        });
+
+        expect(context.app.markMobilePrimaryTask).toHaveBeenCalledWith('build');
+        expect(context.app.loadCircuitData).toHaveBeenCalledWith(expect.objectContaining({
+            meta: expect.objectContaining({
+                name: '串联基础回路'
+            }),
+            components: expect.any(Array),
+            wires: expect.any(Array)
+        }), expect.objectContaining({
+            statusText: '已加载示例：串联基础回路',
+            storageSource: 'empty-state-preset'
+        }));
+    });
+
     it('binds global add-chart actions for desktop and mobile menu buttons', () => {
         const desktopAddChartButton = makeClickableElement();
         const mobileAddChartButton = makeClickableElement();

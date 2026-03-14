@@ -296,6 +296,16 @@
                 <button id="btn-mobile-stop" class="mobile-toggle-btn mobile-stop-btn" type="button" disabled>停止</button>
             </div>
             <button id="btn-mobile-sim-toggle" class="mobile-sim-toggle" type="button" aria-pressed="false">运行</button>
+            <section id="workbench-empty-state" aria-label="实验开始引导">
+                <p class="workbench-kicker">课堂实验台</p>
+                <h1 class="workbench-empty-title">从左侧拖入元件，开始搭建你的第一个电路</h1>
+                <p class="workbench-empty-body">也可以先载入一个教学示例，快速进入串联、并联和仪表测量练习。</p>
+                <div class="workbench-empty-actions">
+                    <button class="workbench-empty-action" type="button" data-empty-action="series-circuit">串联示例</button>
+                    <button class="workbench-empty-action" type="button" data-empty-action="parallel-circuit">并联示例</button>
+                    <button class="workbench-empty-action" type="button" data-empty-action="meter-demo">仪表示例</button>
+                </div>
+            </section>
             <svg id="circuit-canvas" xmlns="http://www.w3.org/2000/svg">
                 <defs>
                     <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">

@@ -46,4 +46,67 @@ describe('RuntimeUiBridge', () => {
             statusText: expect.stringContaining(diagnostics.hints[0])
         }));
     });
+
+    it('toggles guided empty state visibility from circuit component presence', () => {
+        const emptyState = {
+            hidden: true,
+            dataset: {},
+            setAttribute: vi.fn()
+        };
+        const canvasContainer = {
+            classList: {
+                toggle: vi.fn()
+            }
+        };
+        const app = {
+            circuit: {
+                components: new Map()
+            }
+        };
+        const bridge = new RuntimeUiBridge(app, {
+            setStatusTextImpl: vi.fn(),
+            setSimulationControlsRunningImpl: vi.fn()
+        });
+
+        vi.stubGlobal('document', {
+            getElementById: vi.fn((id) => ({
+                'workbench-empty-state': emptyState,
+                'canvas-container': canvasContainer
+            }[id] || null))
+        });
+
+        expect(bridge.syncWorkbenchEmptyState()).toBe(true);
+        expect(emptyState.hidden).toBe(false);
+        expect(emptyState.dataset.state).toBe('empty');
+        expect(emptyState.setAttribute).toHaveBeenCalledWith('aria-hidden', 'false');
+        expect(canvasContainer.classList.toggle).toHaveBeenCalledWith('canvas-empty', true);
+
+        app.circuit.components = new Map([['R1', { id: 'R1' }]]);
+        expect(bridge.syncWorkbenchEmptyState()).toBe(false);
+        expect(emptyState.hidden).toBe(true);
+        expect(emptyState.dataset.state).toBe('ready');
+        expect(emptyState.setAttribute).toHaveBeenCalledWith('aria-hidden', 'true');
+        expect(canvasContainer.classList.toggle).toHaveBeenCalledWith('canvas-empty', false);
+    });
+
+    it('syncs empty state when circuit load or clear feedback is shown', () => {
+        const bridge = new RuntimeUiBridge({
+            circuit: {
+                components: new Map()
+            }
+        }, {
+            setStatusTextImpl: vi.fn(),
+            setSimulationControlsRunningImpl: vi.fn()
+        });
+        const syncSpy = vi.spyOn(bridge, 'syncWorkbenchEmptyState').mockReturnValue(true);
+
+        bridge.showCircuitCleared();
+        bridge.showCircuitLoaded({
+            data: {
+                components: [{ id: 'R1' }]
+            }
+        });
+
+        expect(syncSpy).toHaveBeenCalledTimes(2);
+    });
 });
