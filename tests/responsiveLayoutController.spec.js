@@ -167,6 +167,17 @@ describe('ResponsiveLayoutController', () => {
         expect(sidePanel.classList.contains('layout-open')).toBe(false);
     });
 
+    it('toggles phone drawer body state while overlay drawers are open', () => {
+        const { body } = setupLayoutFixture(640);
+        const controller = new ResponsiveLayoutController({});
+
+        controller.openDrawer('toolbox');
+        expect(body.classList.contains('phone-drawer-open')).toBe(true);
+
+        controller.closeDrawers();
+        expect(body.classList.contains('phone-drawer-open')).toBe(false);
+    });
+
     it('switches to phone mode when viewport is narrow', () => {
         const { body, win, toolboxToggleBtn } = setupLayoutFixture(760);
         new ResponsiveLayoutController({});

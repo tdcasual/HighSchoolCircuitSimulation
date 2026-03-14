@@ -475,10 +475,13 @@ export class ResponsiveLayoutController {
 
     syncLayoutUI() {
         const overlay = this.isOverlayMode();
+        const phoneDrawerOpen = this.mode === MODE_PHONE && (this.toolboxOpen || this.sidePanelOpen);
 
         safeToggleClass(this.toolbox, 'layout-open', overlay && this.toolboxOpen);
 
         safeToggleClass(this.sidePanel, 'layout-open', overlay && this.sidePanelOpen);
+
+        safeToggleClass(this.body, 'phone-drawer-open', phoneDrawerOpen);
 
         this.setToggleButtonState(this.toolboxToggleBtn, overlay && this.toolboxOpen, !overlay);
         this.setToggleButtonState(this.sidePanelToggleBtn, overlay && this.sidePanelOpen, !overlay);

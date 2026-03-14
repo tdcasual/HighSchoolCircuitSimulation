@@ -2723,13 +2723,13 @@ body.layout-mode-phone .status-mode-btn {
 }
 
 body.layout-mode-phone #top-action-bar {
-    padding: 7px 8px;
-    gap: 6px;
+    padding: 6px 8px;
+    gap: 5px;
     grid-template-columns: 1fr auto;
 }
 
 body.layout-mode-phone .top-action-btn {
-    min-height: 40px;
+    min-height: 44px;
     padding: 6px 10px;
     border-radius: 8px;
     font-size: 12px;
@@ -2749,7 +2749,7 @@ body.layout-mode-phone .top-action-btn-more {
     align-items: center;
     justify-content: center;
     min-width: 52px;
-    min-height: 42px;
+    min-height: 44px;
     padding: 8px 12px;
 }
 
@@ -2768,12 +2768,22 @@ body.layout-mode-phone #mobile-restore-entry {
     align-items: center;
     justify-content: center;
     min-width: 72px;
-    min-height: 40px;
+    min-height: 44px;
     max-width: 132px;
     padding: 8px 12px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+body.layout-mode-phone.mobile-top-action-menu-open #top-action-bar,
+body.layout-mode-phone.phone-drawer-open #top-action-bar {
+    gap: 4px;
+}
+
+body.layout-mode-phone.mobile-top-action-menu-open #mobile-restore-entry,
+body.layout-mode-phone.phone-drawer-open #mobile-restore-entry {
+    display: none !important;
 }
 
 body.layout-mode-phone #zoom-level {
@@ -2861,9 +2871,15 @@ body.layout-mode-phone.ai-keyboard-open #canvas-mobile-controls {
     transform: translateY(8px);
 }
 
+body.layout-mode-phone.phone-drawer-open #canvas-mobile-controls {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(8px);
+}
+
 body.layout-mode-phone .mobile-toggle-btn {
     flex: 0 1 auto;
-    min-height: 42px;
+    min-height: 44px;
     padding: 8px 6px;
     border-radius: 10px;
     font-size: 12px;
@@ -2901,9 +2917,14 @@ body.layout-mode-phone.ai-panel-open #canvas-mobile-controls {
     gap: 4px;
 }
 
-body.layout-mode-phone.mobile-controls-condensed .mobile-toggle-btn,
+body.layout-mode-phone.mobile-controls-condensed .mobile-toggle-btn {
+    min-height: 44px;
+    padding: 6px 6px;
+    font-size: 11px;
+}
+
 body.layout-mode-phone.ai-panel-open .mobile-toggle-btn {
-    min-height: 34px;
+    min-height: 44px;
     padding: 6px 6px;
     font-size: 11px;
 }
@@ -2955,8 +2976,18 @@ body.layout-mode-phone.ai-keyboard-open .mobile-sim-toggle {
     transform: translateY(6px);
 }
 
+body.layout-mode-phone.phone-drawer-open .mobile-sim-toggle {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(6px);
+}
+
 body.layout-mode-phone.ai-input-active .quick-action-bar,
 body.layout-mode-phone.ai-keyboard-open .quick-action-bar {
+    display: none !important;
+}
+
+body.layout-mode-phone.phone-drawer-open .quick-action-bar {
     display: none !important;
 }
 
@@ -3033,6 +3064,16 @@ body.layout-mode-phone #side-panel {
 body.layout-mode-phone #toolbox.layout-open,
 body.layout-mode-phone #side-panel.layout-open {
     transform: translateY(var(--drawer-drag-y, 0px));
+}
+
+body.layout-mode-phone #toolbox .toolbox-header,
+body.layout-mode-phone .side-panel-header {
+    gap: 8px;
+    padding-bottom: 10px;
+}
+
+body.layout-mode-phone .side-panel-tabs {
+    gap: 6px;
 }
 
 body.layout-mode-phone #observation-root .observation-sticky-controls {

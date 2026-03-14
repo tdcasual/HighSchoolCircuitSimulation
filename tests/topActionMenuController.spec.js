@@ -50,17 +50,16 @@ function createElementMock() {
 function setupFixture() {
     const button = createElementMock();
     const menu = createElementMock();
+    const bodyClassList = createClassList();
+    bodyClassList.toggle('layout-mode-phone', true);
     const elements = {
         'btn-top-action-more': button,
         'top-action-more-menu': menu
     };
     const listeners = new Map();
-    let phoneMode = true;
     const documentMock = {
         body: {
-            classList: {
-                contains: vi.fn((name) => name === 'layout-mode-phone' && phoneMode)
-            }
+            classList: bodyClassList
         },
         getElementById: vi.fn((id) => elements[id] || null),
         addEventListener: vi.fn((eventName, handler) => {
@@ -71,7 +70,7 @@ function setupFixture() {
             if (handler) handler(event);
         },
         setPhoneMode(next) {
-            phoneMode = !!next;
+            bodyClassList.toggle('layout-mode-phone', !!next);
         }
     };
 
@@ -224,5 +223,16 @@ describe('TopActionMenuController', () => {
 
         expect(claimPhoneSurface).toHaveBeenCalledWith('top-action-menu');
         expect(controller.isOpen).toBe(true);
+    });
+
+    it('toggles a body state hook while the phone top action menu is open', () => {
+        const { button, documentMock } = setupFixture();
+        const controller = new TopActionMenuController({});
+
+        button.trigger('click', { preventDefault: vi.fn(), stopPropagation: vi.fn() });
+        expect(documentMock.body.classList.contains('mobile-top-action-menu-open')).toBe(true);
+
+        controller.setOpen(false);
+        expect(documentMock.body.classList.contains('mobile-top-action-menu-open')).toBe(false);
     });
 });

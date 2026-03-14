@@ -23,24 +23,39 @@ function extractPxValue(block, property) {
 }
 
 describe('mobile css touch targets', () => {
-    it('keeps phone restore anchor touch height >= 40px', () => {
+    it('keeps phone restore anchor touch height >= 44px', () => {
         const css = readStyleSheet();
         const block = extractRuleBlock(css, 'body.layout-mode-phone #mobile-restore-entry');
         const minHeightPx = extractPxValue(block, 'min-height');
 
         expect(block.length).toBeGreaterThan(0);
         expect(Number.isFinite(minHeightPx)).toBe(true);
-        expect(minHeightPx).toBeGreaterThanOrEqual(40);
+        expect(minHeightPx).toBeGreaterThanOrEqual(44);
     });
 
-    it('keeps phone top more button touch height >= 40px', () => {
+    it('keeps phone top more button touch height >= 44px', () => {
         const css = readStyleSheet();
         const block = extractRuleBlock(css, 'body.layout-mode-phone .top-action-btn-more');
         const minHeightPx = extractPxValue(block, 'min-height');
 
         expect(block.length).toBeGreaterThan(0);
         expect(Number.isFinite(minHeightPx)).toBe(true);
-        expect(minHeightPx).toBeGreaterThanOrEqual(40);
+        expect(minHeightPx).toBeGreaterThanOrEqual(44);
+    });
+
+    it('keeps phone mobile toggle buttons touch height >= 44px even while condensed', () => {
+        const css = readStyleSheet();
+        const defaultBlock = extractRuleBlock(css, 'body.layout-mode-phone .mobile-toggle-btn');
+        const condensedBlock = extractRuleBlock(css, 'body.layout-mode-phone.mobile-controls-condensed .mobile-toggle-btn');
+        const defaultMinHeightPx = extractPxValue(defaultBlock, 'min-height');
+        const condensedMinHeightPx = extractPxValue(condensedBlock, 'min-height');
+
+        expect(defaultBlock.length).toBeGreaterThan(0);
+        expect(condensedBlock.length).toBeGreaterThan(0);
+        expect(Number.isFinite(defaultMinHeightPx)).toBe(true);
+        expect(Number.isFinite(condensedMinHeightPx)).toBe(true);
+        expect(defaultMinHeightPx).toBeGreaterThanOrEqual(44);
+        expect(condensedMinHeightPx).toBeGreaterThanOrEqual(44);
     });
 
     it('keeps phone AI send button touch target >= 44px', () => {
@@ -82,6 +97,12 @@ describe('mobile css touch targets', () => {
         expect(css.includes('body.layout-mode-phone.ai-keyboard-open #canvas-mobile-controls')).toBe(true);
         expect(css.includes('pointer-events: none')).toBe(true);
         expect(css.includes('opacity: 0')).toBe(true);
+    });
+
+    it('suppresses bottom phone controls while a phone drawer is open', () => {
+        const css = readStyleSheet();
+        expect(css.includes('body.layout-mode-phone.phone-drawer-open #canvas-mobile-controls')).toBe(true);
+        expect(css.includes('body.layout-mode-phone.phone-drawer-open .mobile-sim-toggle')).toBe(true);
     });
 
     it('keeps phone AI chat typography readable (input >=16px, message >=15px)', () => {
