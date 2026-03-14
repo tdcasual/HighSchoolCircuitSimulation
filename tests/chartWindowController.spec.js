@@ -172,7 +172,7 @@ describe('ChartWindowController.render', () => {
         controller._needsRedraw = true;
 
         controller.render();
-        expect(controller.elements.latest.textContent).toContain('最新(系列 1)');
+        expect(controller.elements.latest.textContent).toContain('读数(系列 1)');
 
         controller.state = {
             ...controller.state,
@@ -181,7 +181,7 @@ describe('ChartWindowController.render', () => {
         controller.markDirty();
         controller.render();
 
-        expect(controller.elements.latest.textContent).toBe('最新: —');
+        expect(controller.elements.latest.textContent).toBe('读数: —');
     });
 
     it('resolves binding meaning for numeric zero source ids', () => {

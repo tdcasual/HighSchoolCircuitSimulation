@@ -20,9 +20,11 @@ export class ChartWindowBindingController {
         const controller = this.controller;
         const collapsed = !!controller.state.ui?.legendCollapsed;
         safeInvokeMethod(controller.elements.root?.classList, 'toggle', 'chart-window-legend-collapsed', collapsed);
+        safeSetAttribute(controller.elements.legend, 'aria-label', '图表通道列表');
         if (controller.elements.legendToggleBtn) {
-            controller.elements.legendToggleBtn.textContent = collapsed ? '展开图例' : '收起图例';
+            controller.elements.legendToggleBtn.textContent = collapsed ? '展开通道' : '收起通道';
             safeSetAttribute(controller.elements.legendToggleBtn, 'aria-expanded', collapsed ? 'false' : 'true');
+            safeSetAttribute(controller.elements.legendToggleBtn, 'aria-label', collapsed ? '展开通道列表' : '收起通道列表');
         }
 
         const axisCollapsed = !!controller.state.ui?.axisCollapsed;
@@ -30,6 +32,7 @@ export class ChartWindowBindingController {
         if (controller.elements.axisToggleBtn) {
             controller.elements.axisToggleBtn.textContent = axisCollapsed ? '展开X设置' : '收起X设置';
             safeSetAttribute(controller.elements.axisToggleBtn, 'aria-expanded', axisCollapsed ? 'false' : 'true');
+            safeSetAttribute(controller.elements.axisToggleBtn, 'aria-label', axisCollapsed ? '展开X轴设置' : '收起X轴设置');
         }
     }
 

@@ -13,7 +13,7 @@ export class ChartWindowCanvasView {
             buffer?.clear?.();
         }
         controller._autoRangeWindow = { x: null, y: null };
-        controller._latestText = '最新: —';
+        controller._latestText = '读数: —';
         if (controller.elements.latest) {
             controller.elements.latest.textContent = controller._latestText;
         }
@@ -75,7 +75,7 @@ export class ChartWindowCanvasView {
             ctx.fillStyle = '#64748b';
             ctx.font = `${12 * dpr}px sans-serif`;
             ctx.fillText('暂无数据，运行模拟后开始采样', 20 * dpr, 24 * dpr);
-            controller._latestText = '最新: —';
+            controller._latestText = '读数: —';
             if (controller.elements.latest) {
                 controller.elements.latest.textContent = controller._latestText;
             }
@@ -181,8 +181,8 @@ export class ChartWindowCanvasView {
         });
 
         controller._latestText = latestPoint
-            ? `最新(${latestPoint.seriesName}): x=${formatNumberCompact(latestPoint.x)}, y=${formatNumberCompact(latestPoint.y)}`
-            : '最新: —';
+            ? `读数(${latestPoint.seriesName}): x=${formatNumberCompact(latestPoint.x)}, y=${formatNumberCompact(latestPoint.y)}`
+            : '读数: —';
         if (controller.elements.latest) {
             controller.elements.latest.textContent = controller._latestText;
         }
