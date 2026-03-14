@@ -64,7 +64,18 @@ export function setSimulationControlsRunning(isRunning, options = {}) {
 }
 
 export function setStatusText(text, options = {}) {
+    const message = String(text ?? '');
     const statusNode = getNodeById('status-text', options);
-    if (!statusNode) return;
-    statusNode.textContent = text;
+    const statusRibbonNode = getNodeById('status-ribbon-text', options);
+    const sessionHintNode = getNodeById('experiment-session-hint', options);
+
+    if (statusNode) {
+        statusNode.textContent = message;
+    }
+    if (statusRibbonNode) {
+        statusRibbonNode.textContent = message;
+    }
+    if (sessionHintNode) {
+        sessionHintNode.textContent = message;
+    }
 }

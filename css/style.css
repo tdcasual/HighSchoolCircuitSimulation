@@ -105,7 +105,8 @@ body.embed-readonly #circuit-canvas {
     left: 0;
     right: 0;
     height: var(--top-action-bar-height);
-    display: flex;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center;
     gap: 10px;
     padding: 8px 14px;
@@ -119,6 +120,59 @@ body.embed-readonly #circuit-canvas {
     z-index: 260;
     overflow-x: auto;
     white-space: nowrap;
+}
+
+.top-action-zone {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+}
+
+#top-action-primary,
+#top-action-secondary {
+    flex-wrap: wrap;
+}
+
+#top-action-session {
+    display: grid;
+    justify-items: center;
+    gap: 2px;
+    padding-inline: 12px;
+    text-align: center;
+}
+
+#experiment-title {
+    margin: 0;
+    color: var(--text-strong);
+    font-size: 14px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+}
+
+#experiment-session-hint {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 12px;
+    line-height: 1.3;
+}
+
+#status-ribbon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 24px;
+    padding: 0 10px;
+    border: 1px solid color-mix(in oklch, var(--stroke-soft) 88%, var(--accent-instrument) 12%);
+    border-radius: 999px;
+    background: color-mix(in oklch, var(--surface-elevated) 90%, var(--accent-instrument) 10%);
+}
+
+#status-ribbon-text {
+    color: var(--text-strong);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
 }
 
 .top-action-btn {
@@ -158,7 +212,6 @@ body.embed-readonly #circuit-canvas {
 }
 
 .top-action-btn-more {
-    margin-left: auto;
     display: none;
     border-color: rgba(15, 23, 42, 0.24);
     background: #f5f7fb;
@@ -2472,6 +2525,7 @@ body.layout-mode-phone .status-mode-btn {
 body.layout-mode-phone #top-action-bar {
     padding: 7px 8px;
     gap: 6px;
+    grid-template-columns: 1fr auto;
 }
 
 body.layout-mode-phone .top-action-btn {
@@ -2497,6 +2551,15 @@ body.layout-mode-phone .top-action-btn-more {
     min-width: 52px;
     min-height: 42px;
     padding: 8px 12px;
+}
+
+body.layout-mode-phone #top-action-session {
+    display: none;
+}
+
+body.layout-mode-phone #top-action-primary,
+body.layout-mode-phone #top-action-secondary {
+    gap: 6px;
 }
 
 

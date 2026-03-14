@@ -18,14 +18,25 @@
     <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js" id="MathJax-script" async></script>
 </head>
 <body>
-    <div id="top-action-bar" role="toolbar" aria-label="全局操作">
-        <button id="btn-clear" class="top-action-btn top-action-btn-danger">清空电路</button>
-        <button id="btn-export" class="top-action-btn">导出JSON</button>
-        <button id="btn-import" class="top-action-btn">导入JSON</button>
-        <button id="btn-add-chart" class="top-action-btn">添加图表</button>
-        <button id="btn-exercise-board" class="top-action-btn">习题板</button>
-        <button id="btn-top-action-more" class="top-action-btn top-action-btn-more" type="button" aria-haspopup="true" aria-expanded="false">更多</button>
-        <button id="mobile-restore-entry" class="top-action-btn mobile-restore-entry" type="button" hidden aria-live="polite"></button>
+    <div id="top-action-bar" role="toolbar" aria-label="实验操作">
+        <div id="top-action-primary" class="top-action-zone">
+            <button id="btn-clear" class="top-action-btn top-action-btn-danger">清空电路</button>
+            <button id="btn-export" class="top-action-btn">导出JSON</button>
+            <button id="btn-import" class="top-action-btn">导入JSON</button>
+        </div>
+        <div id="top-action-session" class="top-action-zone" aria-live="polite">
+            <p id="experiment-title">课堂实验台</p>
+            <p id="experiment-session-hint">从元件托盘拖入器材开始搭建电路</p>
+            <div id="status-ribbon">
+                <span id="status-ribbon-text">就绪</span>
+            </div>
+        </div>
+        <div id="top-action-secondary" class="top-action-zone">
+            <button id="btn-add-chart" class="top-action-btn">添加图表</button>
+            <button id="btn-exercise-board" class="top-action-btn">习题板</button>
+            <button id="btn-top-action-more" class="top-action-btn top-action-btn-more" type="button" aria-haspopup="true" aria-expanded="false">更多</button>
+            <button id="mobile-restore-entry" class="top-action-btn mobile-restore-entry" type="button" hidden aria-live="polite"></button>
+        </div>
         <input type="file" id="file-import" accept=".json" style="display:none"/>
     </div>
     <div id="top-action-more-menu" class="top-action-more-menu" hidden>
