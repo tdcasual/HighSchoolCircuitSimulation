@@ -502,6 +502,8 @@ export class ExerciseBoard {
 
         if (this.panel) {
             safeToggleClass(this.panel, 'split', mode === 'split');
+            safeToggleClass(this.panel, 'assistant-surface-preview', mode !== 'edit');
+            safeToggleClass(this.panel, 'assistant-surface-visible', this.state.visible);
         }
 
         this.applyTypographyToUI();
@@ -532,6 +534,7 @@ export class ExerciseBoard {
     setSettingsOpen(open) {
         if (!this.settingsPanel) return;
         safeToggleClass(this.settingsPanel, 'hidden', !open);
+        safeToggleClass(this.panel, 'assistant-surface-settings-open', !!open);
         if (open) {
             safeAddEventListener(document, 'pointerdown', this.boundDocumentPointerDown);
         } else {

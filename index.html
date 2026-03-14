@@ -444,16 +444,16 @@
     </div>
 
 	    <!-- 习题板 -->
-	    <div id="exercise-board-panel" class="hidden">
-	        <div id="exercise-board-header">
+	    <div id="exercise-board-panel" class="hidden assistant-surface assistant-surface-note">
+	        <div id="exercise-board-header" class="assistant-surface-header">
 	            <h3>习题板</h3>
-	            <div id="exercise-board-actions">
+	            <div id="exercise-board-actions" class="assistant-surface-actions">
 	                <button id="exercise-board-settings-btn" title="显示与排版">Aa</button>
 	                <button id="exercise-board-mode-btn" title="编辑/预览">预览</button>
 	                <button id="exercise-board-hide-btn" title="隐藏">×</button>
 	            </div>
 	        </div>
-	        <div id="exercise-board-settings" class="hidden" role="dialog" aria-label="习题板显示设置">
+	        <div id="exercise-board-settings" class="hidden assistant-surface-popover" role="dialog" aria-label="习题板显示设置">
 	            <div class="ex-setting-row">
 	                <label for="exercise-board-font-size">字号</label>
 	                <input id="exercise-board-font-size" type="range" min="12" max="22" step="1" value="14">
@@ -479,7 +479,7 @@
 	                <button id="exercise-board-settings-reset-btn" type="button" class="ex-setting-reset">重置</button>
 	            </div>
 	        </div>
-	        <div id="exercise-board-toolbar" aria-label="习题板编辑工具栏">
+	        <div id="exercise-board-toolbar" class="assistant-surface-toolbar" aria-label="习题板编辑工具栏">
 	            <button type="button" class="ex-tool-btn" data-ex-action="bold" title="加粗 (Ctrl+B)"><strong>B</strong></button>
 	            <button type="button" class="ex-tool-btn" data-ex-action="italic" title="斜体 (Ctrl+I)"><em>I</em></button>
 	            <button type="button" class="ex-tool-btn" data-ex-action="inline-code" title="行内代码 (Ctrl+`)"><code>&lt;/&gt;</code></button>
@@ -490,7 +490,7 @@
 	            <button type="button" class="ex-tool-btn" data-ex-action="math-block" title="公式块 $$...$$">$$</button>
 	            <button type="button" class="ex-tool-btn" data-ex-action="link" title="链接 (Ctrl+K)">🔗</button>
 	        </div>
-	        <div id="exercise-board-content">
+	        <div id="exercise-board-content" class="assistant-surface-content">
 	            <textarea id="exercise-board-editor" spellcheck="false"
 	                placeholder="在这里写习题/讲解（支持 Markdown + LaTeX：$...$ / $$...$$）"></textarea>
 	            <div id="exercise-board-preview" class="hidden"><div id="exercise-board-preview-inner"></div></div>
@@ -499,16 +499,16 @@
 	    </div>
 
     <!-- AI助手面板 -->
-    <div id="ai-assistant-panel" class="collapsed">
-        <button id="ai-fab-btn" title="展开 AI 助手" aria-label="展开 AI 助手" aria-hidden="false">🤖</button>
-        <div id="ai-panel-header">
-            <h3>AI 助手</h3>
-            <div id="ai-panel-actions">
+    <div id="ai-assistant-panel" class="collapsed assistant-surface assistant-surface-ai">
+        <button id="ai-fab-btn" title="展开实验助手" aria-label="展开实验助手" aria-hidden="false">🤖</button>
+        <div id="ai-panel-header" class="assistant-surface-header">
+            <h3>实验助手</h3>
+            <div id="ai-panel-actions" class="assistant-surface-actions">
                 <button id="ai-settings-btn" title="设置">设置</button>
                 <button id="ai-toggle-btn" title="展开面板" aria-expanded="false">展开</button>
             </div>
         </div>
-        <div id="ai-panel-content">
+        <div id="ai-panel-content" class="assistant-surface-content">
             <!-- 物理解释 Tab -->
             <div id="tab-explain" class="ai-tab-content active">
                 <div id="chat-messages"></div>

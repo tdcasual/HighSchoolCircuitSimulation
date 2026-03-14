@@ -9,10 +9,10 @@ afterEach(() => {
 describe('AIPanel.initializeUI', () => {
     it('does not throw when optional settings button is absent', () => {
         const container = { appendChild: vi.fn() };
-        const panel = { addEventListener: vi.fn() };
+        const panel = { addEventListener: vi.fn(), setAttribute: vi.fn() };
         const panelHeader = { addEventListener: vi.fn() };
         const toggleBtn = { addEventListener: vi.fn() };
-        const fabBtn = { addEventListener: vi.fn() };
+        const fabBtn = { addEventListener: vi.fn(), setAttribute: vi.fn() };
 
         vi.stubGlobal('document', {
             getElementById: vi.fn((id) => ({
@@ -53,6 +53,9 @@ describe('AIPanel.initializeUI', () => {
         expect(ctx.initializeSettingsDialog).toHaveBeenCalledTimes(1);
         expect(ctx.initializePanelLayoutControls).toHaveBeenCalledTimes(1);
         expect(ctx.bindMathJaxLoadListener).toHaveBeenCalledTimes(1);
+        expect(panel.setAttribute).toHaveBeenCalledWith('aria-label', '实验助手');
+        expect(fabBtn.setAttribute).toHaveBeenCalledWith('title', '展开实验助手');
+        expect(fabBtn.setAttribute).toHaveBeenCalledWith('aria-label', '展开实验助手');
     });
 
     it('header dblclick handler tolerates targets without closest', () => {

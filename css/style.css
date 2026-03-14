@@ -3469,6 +3469,110 @@ body.classroom-mode-enhanced .component .value-display {
 }
 
 /* ==========================================
+   实验助手 / 习题板共享表面
+   ========================================== */
+.assistant-surface {
+    background: color-mix(in oklch, var(--surface-elevated) 96%, white 4%);
+    border: 1px solid var(--stroke-soft);
+    box-shadow: var(--shadow-elevated);
+    border-radius: 18px;
+    overflow: hidden;
+    backdrop-filter: blur(6px);
+}
+
+.assistant-surface-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    border-bottom: 1px solid color-mix(in oklch, var(--stroke-soft) 82%, var(--accent-instrument) 18%);
+    background: linear-gradient(
+        180deg,
+        color-mix(in oklch, var(--surface-elevated) 92%, white 8%) 0%,
+        color-mix(in oklch, var(--surface-base) 88%, var(--accent-instrument) 12%) 100%
+    );
+    user-select: none;
+}
+
+.assistant-surface-note .assistant-surface-header {
+    border-bottom-color: color-mix(in oklch, var(--stroke-soft) 78%, var(--accent-observe) 22%);
+    background: linear-gradient(
+        180deg,
+        color-mix(in oklch, var(--surface-elevated) 92%, white 8%) 0%,
+        color-mix(in oklch, var(--surface-base) 86%, var(--accent-observe) 14%) 100%
+    );
+}
+
+.assistant-surface-header h3 {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-strong);
+    letter-spacing: 0.02em;
+}
+
+.assistant-surface-actions {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.assistant-surface-actions button {
+    min-height: 34px;
+    padding: 6px 12px;
+    border: 1px solid color-mix(in oklch, var(--stroke-soft) 72%, var(--accent-instrument) 28%);
+    border-radius: 10px;
+    background: color-mix(in oklch, var(--surface-elevated) 90%, var(--accent-instrument) 10%);
+    color: var(--text-strong);
+    font-size: 13px;
+    font-weight: 700;
+    transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
+}
+
+.assistant-surface-note .assistant-surface-actions button {
+    border-color: color-mix(in oklch, var(--stroke-soft) 72%, var(--accent-observe) 28%);
+    background: color-mix(in oklch, var(--surface-elevated) 88%, var(--accent-observe) 12%);
+}
+
+.assistant-surface-actions button:hover {
+    background: color-mix(in oklch, var(--surface-elevated) 82%, var(--accent-instrument) 18%);
+    border-color: color-mix(in oklch, var(--stroke-strong) 72%, var(--accent-instrument) 28%);
+    box-shadow: 0 8px 18px rgba(28, 40, 64, 0.12);
+    transform: translateY(-1px);
+}
+
+.assistant-surface-note .assistant-surface-actions button:hover {
+    background: color-mix(in oklch, var(--surface-elevated) 82%, var(--accent-observe) 18%);
+    border-color: color-mix(in oklch, var(--stroke-strong) 72%, var(--accent-observe) 28%);
+}
+
+.assistant-surface-content {
+    background: color-mix(in oklch, var(--surface-elevated) 94%, var(--surface-base) 6%);
+}
+
+.assistant-surface-toolbar {
+    border-bottom: 1px solid color-mix(in oklch, var(--stroke-soft) 82%, var(--accent-observe) 18%);
+    background: color-mix(in oklch, var(--surface-elevated) 92%, var(--surface-inset) 8%);
+}
+
+.assistant-surface-popover {
+    background: color-mix(in oklch, var(--surface-elevated) 96%, white 4%);
+    border: 1px solid color-mix(in oklch, var(--stroke-soft) 80%, var(--accent-observe) 20%);
+    border-radius: 14px;
+    box-shadow: 0 18px 34px rgba(28, 40, 64, 0.18);
+}
+
+.assistant-surface-note.assistant-surface-preview .assistant-surface-content,
+.assistant-surface-note.assistant-surface-preview #exercise-board-preview {
+    background: color-mix(in oklch, var(--surface-elevated) 90%, var(--accent-observe) 10%);
+}
+
+.assistant-surface-settings-open .assistant-surface-header {
+    box-shadow: inset 0 -1px 0 color-mix(in oklch, var(--stroke-soft) 72%, var(--accent-observe) 28%);
+}
+
+/* ==========================================
    习题板 - Markdown + LaTeX
    ========================================== */
 #exercise-board-panel {
@@ -3485,11 +3589,11 @@ body.classroom-mode-enhanced .component .value-display {
     --ex-font-size: 14px;
     --ex-line-height: 1.7;
     --ex-prose-max-width: 720px;
-    background: var(--panel-bg);
-    border: 1px solid var(--border-color);
-    box-shadow: var(--shadow);
+    background: color-mix(in oklch, var(--surface-elevated) 96%, white 4%);
+    border: 1px solid var(--stroke-soft);
+    box-shadow: var(--shadow-elevated);
     z-index: 110;
-    border-radius: 10px;
+    border-radius: 18px;
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -3501,43 +3605,19 @@ body.classroom-mode-enhanced .component .value-display {
 
 #exercise-board-panel.resizing,
 #exercise-board-panel.dragging {
-    box-shadow: 0 6px 18px rgba(0,0,0,0.25);
+    box-shadow: 0 14px 32px rgba(28, 40, 64, 0.26);
 }
 
 #exercise-board-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 10px 14px;
-    background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
-    border-bottom: 1px solid #f0f0f0;
-    user-select: none;
     cursor: move;
 }
 
 #exercise-board-header h3 {
-    font-size: 14px;
-    font-weight: 600;
-    margin: 0;
-    color: var(--text-color);
-    letter-spacing: -0.3px;
-}
-
-#exercise-board-actions {
-    display: flex;
-    gap: 6px;
-    align-items: center;
+    color: var(--text-strong);
 }
 
 #exercise-board-actions button {
-    background: #f7f9ff;
-    border: 1px solid var(--border-color);
-    color: var(--text-color);
-    padding: 6px 12px;
-    border-radius: 8px;
     cursor: pointer;
-    font-size: 13px;
-    transition: all 0.2s;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -3551,9 +3631,7 @@ body.classroom-mode-enhanced .component .value-display {
 }
 
 #exercise-board-actions button:hover {
-    background: #e8f2ff;
-    color: var(--primary-dark);
-    border-color: var(--primary-color);
+    color: var(--text-strong);
 }
 
 #exercise-board-settings {
@@ -3562,10 +3640,6 @@ body.classroom-mode-enhanced .component .value-display {
     right: 12px;
     width: 300px;
     max-width: calc(100% - 24px);
-    background: var(--panel-bg);
-    border: 1px solid var(--border-color);
-    border-radius: 12px;
-    box-shadow: 0 10px 26px rgba(0, 0, 0, 0.18);
     padding: 10px 12px;
     z-index: 120;
 }
@@ -3575,7 +3649,7 @@ body.classroom-mode-enhanced .component .value-display {
 }
 
 .ex-setting-row + .ex-setting-row {
-    border-top: 1px solid rgba(221, 221, 221, 0.55);
+    border-top: 1px solid color-mix(in oklch, var(--stroke-soft) 84%, white 16%);
 }
 
 .ex-setting-row {
@@ -3588,7 +3662,7 @@ body.classroom-mode-enhanced .component .value-display {
 
 .ex-setting-row label {
     font-size: 12px;
-    color: var(--text-light);
+    color: var(--text-muted);
 }
 
 .ex-setting-row input[type="range"] {
@@ -3598,16 +3672,16 @@ body.classroom-mode-enhanced .component .value-display {
 .ex-setting-row select {
     width: 100%;
     padding: 6px 8px;
-    border: 1px solid var(--border-color);
+    border: 1px solid var(--stroke-soft);
     border-radius: 8px;
-    background: #fbfdff;
+    background: color-mix(in oklch, var(--surface-elevated) 94%, white 6%);
     font-size: 13px;
-    color: var(--text-color);
+    color: var(--text-strong);
 }
 
 .ex-setting-value {
     font-size: 12px;
-    color: var(--text-color);
+    color: var(--text-strong);
     opacity: 0.9;
     min-width: 46px;
     text-align: right;
@@ -3622,13 +3696,13 @@ body.classroom-mode-enhanced .component .value-display {
     align-items: center;
     gap: 8px;
     font-size: 13px;
-    color: var(--text-color);
+    color: var(--text-strong);
 }
 
 .ex-setting-reset {
-    background: #fff7f7;
-    border: 1px solid rgba(244, 67, 54, 0.35);
-    color: #c62828;
+    background: color-mix(in oklch, var(--surface-elevated) 88%, var(--accent-danger) 12%);
+    border: 1px solid color-mix(in oklch, var(--stroke-soft) 72%, var(--accent-danger) 28%);
+    color: color-mix(in oklch, var(--text-strong) 72%, var(--accent-danger) 28%);
     padding: 6px 10px;
     border-radius: 8px;
     cursor: pointer;
@@ -3636,8 +3710,8 @@ body.classroom-mode-enhanced .component .value-display {
 }
 
 .ex-setting-reset:hover {
-    background: #ffecec;
-    border-color: rgba(244, 67, 54, 0.6);
+    background: color-mix(in oklch, var(--surface-elevated) 80%, var(--accent-danger) 20%);
+    border-color: color-mix(in oklch, var(--stroke-strong) 68%, var(--accent-danger) 32%);
 }
 
 #exercise-board-toolbar {
@@ -3645,8 +3719,6 @@ body.classroom-mode-enhanced .component .value-display {
     flex-wrap: wrap;
     gap: 6px;
     padding: 8px 10px;
-    border-bottom: 1px solid #f0f0f0;
-    background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
 }
 
 #exercise-board-toolbar.hidden {
@@ -3654,9 +3726,9 @@ body.classroom-mode-enhanced .component .value-display {
 }
 
 .ex-tool-btn {
-    background: #f7f9ff;
-    border: 1px solid var(--border-color);
-    color: var(--text-color);
+    background: color-mix(in oklch, var(--surface-elevated) 92%, var(--accent-observe) 8%);
+    border: 1px solid color-mix(in oklch, var(--stroke-soft) 78%, var(--accent-observe) 22%);
+    color: var(--text-strong);
     padding: 6px 8px;
     border-radius: 8px;
     cursor: pointer;
@@ -3677,9 +3749,9 @@ body.classroom-mode-enhanced .component .value-display {
 }
 
 .ex-tool-btn:hover {
-    background: #e8f2ff;
-    color: var(--primary-dark);
-    border-color: var(--primary-color);
+    background: color-mix(in oklch, var(--surface-elevated) 82%, var(--accent-observe) 18%);
+    border-color: color-mix(in oklch, var(--stroke-strong) 72%, var(--accent-observe) 28%);
+    color: var(--text-strong);
 }
 
 #exercise-board-panel.split #exercise-board-content {
@@ -3693,7 +3765,7 @@ body.classroom-mode-enhanced .component .value-display {
 }
 
 #exercise-board-panel.split #exercise-board-editor {
-    border-right: 1px solid rgba(221, 221, 221, 0.7);
+    border-right: 1px solid color-mix(in oklch, var(--stroke-soft) 76%, var(--accent-observe) 24%);
 }
 
 #exercise-board-content {
@@ -3702,6 +3774,7 @@ body.classroom-mode-enhanced .component .value-display {
     display: flex;
     flex-direction: column;
     min-height: 160px;
+    background: color-mix(in oklch, var(--surface-elevated) 94%, var(--surface-base) 6%);
 }
 
 #exercise-board-editor {
@@ -3712,8 +3785,8 @@ body.classroom-mode-enhanced .component .value-display {
     padding: 12px 14px;
     font-size: var(--ex-font-size);
     line-height: var(--ex-line-height);
-    color: var(--text-color);
-    background: #fbfdff;
+    color: var(--text-strong);
+    background: color-mix(in oklch, var(--surface-elevated) 94%, var(--accent-observe) 6%);
     resize: none;
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', 'Noto Sans SC', sans-serif;
 }
@@ -3736,7 +3809,8 @@ body.classroom-mode-enhanced .component .value-display {
     padding: 14px 16px;
     font-size: var(--ex-font-size);
     line-height: var(--ex-line-height);
-    color: var(--text-color);
+    color: var(--text-strong);
+    background: color-mix(in oklch, var(--surface-elevated) 96%, white 4%);
     overflow-wrap: anywhere;
     word-break: break-word;
 }
@@ -3844,14 +3918,14 @@ body.classroom-mode-enhanced .component .value-display {
     content: '';
     width: 14px;
     height: 14px;
-    border-right: 2px solid var(--border-color);
-    border-bottom: 2px solid var(--border-color);
+    border-right: 2px solid var(--stroke-strong);
+    border-bottom: 2px solid var(--stroke-strong);
     border-radius: 2px;
     opacity: 0.8;
 }
 
 /* ==========================================
-   AI助手面板 - ChatGPT 简约风格
+   实验助手面板
    ========================================== */
 #ai-assistant-panel {
     position: fixed;
@@ -3863,12 +3937,12 @@ body.classroom-mode-enhanced .component .value-display {
     min-height: 260px;
     max-width: calc(100vw - 32px);
     max-height: calc(100vh - 32px);
-    background: var(--panel-bg);
-    border: 1px solid var(--border-color);
-    box-shadow: var(--shadow);
+    background: color-mix(in oklch, var(--surface-elevated) 96%, white 4%);
+    border: 1px solid var(--stroke-soft);
+    box-shadow: var(--shadow-elevated);
     transition: box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1), width 0.18s ease, height 0.18s ease, border-radius 0.18s ease, opacity 0.35s ease;
     z-index: 100;
-    border-radius: 10px;
+    border-radius: 18px;
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -3893,7 +3967,7 @@ body.classroom-mode-enhanced .component .value-display {
 
 #ai-assistant-panel.resizing,
 #ai-assistant-panel.dragging {
-    box-shadow: 0 6px 18px rgba(0,0,0,0.25);
+    box-shadow: 0 14px 32px rgba(28, 40, 64, 0.26);
     opacity: 1;
 }
 
@@ -3911,55 +3985,29 @@ body.classroom-mode-enhanced .component .value-display {
 }
 
 #ai-panel-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 10px 14px;
-    background: var(--panel-bg);
-    border-bottom: 1px solid #f0f0f0;
     cursor: pointer;
-    border-radius: 10px 10px 0 0;
+    border-radius: 18px 18px 0 0;
     transition: background 0.2s;
-    user-select: none;
     cursor: move;
 }
 
 #ai-panel-header:hover {
-    background: #f8faff;
+    background: color-mix(in oklch, var(--surface-elevated) 80%, var(--accent-instrument) 20%);
 }
 
 #ai-panel-header h3 {
-    font-size: 14px;
-    font-weight: 600;
-    margin: 0;
-    color: var(--text-color);
-    letter-spacing: -0.3px;
-}
-
-#ai-panel-actions {
-    display: flex;
-    gap: 6px;
-    align-items: center;
+    color: var(--text-strong);
 }
 
 #ai-panel-actions button {
-    background: #f7f9ff;
-    border: 1px solid var(--border-color);
-    color: var(--text-color);
-    padding: 6px 12px;
-    border-radius: 8px;
     cursor: pointer;
-    font-size: 13px;
-    transition: all 0.2s;
     display: flex;
     align-items: center;
     justify-content: center;
 }
 
 #ai-panel-actions button:hover {
-    background: #e8f2ff;
-    color: var(--primary-dark);
-    border-color: var(--primary-color);
+    color: var(--text-strong);
 }
 
 #ai-panel-content {
@@ -3967,7 +4015,7 @@ body.classroom-mode-enhanced .component .value-display {
     overflow: hidden;
     display: flex;
     flex-direction: column;
-    background: var(--panel-bg);
+    background: color-mix(in oklch, var(--surface-elevated) 94%, var(--surface-base) 6%);
     min-height: 210px;
 }
 
@@ -4001,8 +4049,8 @@ body.classroom-mode-enhanced .component .value-display {
     content: '';
     width: 14px;
     height: 14px;
-    border-right: 2px solid var(--border-color);
-    border-bottom: 2px solid var(--border-color);
+    border-right: 2px solid var(--stroke-strong);
+    border-bottom: 2px solid var(--stroke-strong);
     border-radius: 2px;
     opacity: 0.8;
 }
@@ -4058,18 +4106,22 @@ body.layout-mode-phone #ai-resize-handle {
     display: none;
     width: 52px;
     height: 52px;
-    border: 1px solid rgba(76, 113, 168, 0.35);
+    border: 1px solid color-mix(in oklch, var(--stroke-soft) 70%, var(--accent-instrument) 30%);
     border-radius: 999px;
     background:
         radial-gradient(circle at 30% 30%, rgba(255,255,255,0.78) 0%, rgba(255,255,255,0) 45%),
-        radial-gradient(circle at 68% 78%, rgba(255,181,213,0.45) 0%, rgba(255,181,213,0) 48%),
-        linear-gradient(165deg, #8fd3ff 0%, #a08bff 48%, #7fd3c2 100%);
+        radial-gradient(circle at 68% 78%, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 48%),
+        linear-gradient(
+            165deg,
+            color-mix(in oklch, var(--accent-instrument) 72%, white 28%) 0%,
+            color-mix(in oklch, var(--accent-instrument) 62%, var(--accent-run) 38%) 100%
+        );
     color: #fff;
     font-weight: 600;
     font-size: 24px;
     line-height: 1;
     cursor: pointer;
-    box-shadow: 0 10px 20px rgba(64, 98, 168, 0.32);
+    box-shadow: 0 12px 24px rgba(28, 40, 64, 0.24);
     align-items: center;
     justify-content: center;
     transition: transform 0.18s ease, filter 0.18s ease, box-shadow 0.22s ease;
@@ -4078,7 +4130,7 @@ body.layout-mode-phone #ai-resize-handle {
 #ai-fab-btn:hover {
     filter: brightness(1.07) saturate(1.05);
     transform: translateY(-1px) scale(1.02);
-    box-shadow: 0 14px 24px rgba(64, 98, 168, 0.4);
+    box-shadow: 0 16px 28px rgba(28, 40, 64, 0.28);
 }
 
 #ai-assistant-panel.collapsed #ai-fab-btn {

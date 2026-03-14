@@ -193,7 +193,8 @@ describe('AIPanel layout collapse behavior', () => {
         AIPanel.prototype.syncPanelCollapsedUI.call(ctx);
 
         expect(fabBtn.setAttribute).toHaveBeenCalledWith('aria-hidden', 'false');
-        expect(fabBtn.setAttribute).toHaveBeenCalledWith('title', '展开 AI 助手');
+        expect(fabBtn.setAttribute).toHaveBeenCalledWith('title', '展开实验助手');
+        expect(fabBtn.setAttribute).toHaveBeenCalledWith('aria-label', '展开实验助手');
     });
 
     it('allows dragging from floating icon when collapsed', () => {

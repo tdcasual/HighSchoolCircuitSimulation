@@ -21,6 +21,7 @@ export class AIPanel {
     constructor(app) {
         this.app = app;
         this.circuit = app.circuit;
+        this.panelDisplayName = '实验助手';
         this.aiLogger = new AILogService();
         this.aiClient = new OpenAIClientV2();
         this.aiClient.setLogger(this.aiLogger);
@@ -79,6 +80,12 @@ export class AIPanel {
         this.resizeHandle = document.getElementById('ai-resize-handle');
         this.toggleBtn = document.getElementById('ai-toggle-btn');
         this.fabBtn = document.getElementById('ai-fab-btn');
+        const panelDisplayName = this.panelDisplayName || '实验助手';
+        const expandLabel = `展开${panelDisplayName}`;
+
+        safeSetAttribute(this.panel, 'aria-label', panelDisplayName);
+        safeSetAttribute(this.fabBtn, 'title', expandLabel);
+        safeSetAttribute(this.fabBtn, 'aria-label', expandLabel);
 
         // 折叠/展开
         if (this.toggleBtn && this.panel) {
