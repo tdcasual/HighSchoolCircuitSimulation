@@ -19,6 +19,24 @@ function buildRuntimeDiagnosticsStatusMessage(runtimeDiagnostics = {}) {
     return summary || primaryHint;
 }
 
+function getCircuitComponentCount(circuit) {
+    if (circuit?.components instanceof Map) {
+        return circuit.components.size;
+    }
+    if (Array.isArray(circuit?.components)) {
+        return circuit.components.length;
+    }
+    return 0;
+}
+
+function safeToggleClass(node, className, force) {
+    const toggle = node?.classList?.toggle;
+    if (typeof toggle !== 'function') return;
+    try {
+        toggle.call(node.classList, className, force);
+    } catch (_) {}
+}
+
 export class RuntimeUiBridge {
     constructor(app, options = {}) {
         this.app = app;
@@ -32,6 +50,30 @@ export class RuntimeUiBridge {
             return;
         }
         this.setStatusTextImpl(text);
+    }
+
+    syncWorkbenchEmptyState(options = {}) {
+        if (typeof document === 'undefined') {
+            return getCircuitComponentCount(this.app?.circuit) === 0;
+        }
+
+        const componentCount = Number.isFinite(options.componentCount)
+            ? Math.max(0, Math.floor(options.componentCount))
+            : getCircuitComponentCount(this.app?.circuit);
+        const isEmpty = componentCount === 0;
+        const emptyState = document.getElementById('workbench-empty-state');
+        const canvasContainer = document.getElementById('canvas-container');
+
+        if (emptyState) {
+            emptyState.hidden = !isEmpty;
+            if (emptyState.dataset) {
+                emptyState.dataset.state = isEmpty ? 'empty' : 'ready';
+            }
+            emptyState.setAttribute?.('aria-hidden', isEmpty ? 'false' : 'true');
+        }
+
+        safeToggleClass(canvasContainer, 'canvas-empty', isEmpty);
+        return isEmpty;
     }
 
     onCircuitUpdate(results) {
@@ -90,12 +132,14 @@ export class RuntimeUiBridge {
     }
 
     showCircuitCleared() {
+        this.syncWorkbenchEmptyState({ componentCount: 0 });
         this.updateStatus('电路已清空');
     }
 
     showCircuitLoaded({ data, statusText = '', silent = false } = {}) {
         if (silent) return;
         const componentCount = Array.isArray(data?.components) ? data.components.length : 0;
+        this.syncWorkbenchEmptyState({ componentCount });
         this.updateStatus(statusText || `已加载电路 (${componentCount} 个元器件)`);
     }
 

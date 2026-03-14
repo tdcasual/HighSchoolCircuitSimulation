@@ -98,7 +98,10 @@ function getLocalFeedbackPresenter(context) {
 
 export function isObservationTabActive() {
     const observationPage = document.getElementById('panel-observation');
-    return safeHasClass(observationPage, 'active');
+    if (safeHasClass(observationPage, 'active')) return true;
+    const observationTab = document.querySelector?.('.panel-tab-btn[data-panel="observation"]');
+    if (safeHasClass(observationTab, 'active')) return true;
+    return observationTab?.getAttribute?.('aria-selected') === 'true';
 }
 
 export function getActiveInteractionMode() {

@@ -1,3 +1,11 @@
+import { getClassroomScenarioById } from '../../core/scenarios/ClassroomScenarioPack.js';
+
+const EMPTY_STATE_PRESETS = Object.freeze({
+    'series-circuit': 'classroom-series',
+    'parallel-circuit': 'classroom-parallel',
+    'meter-demo': 'classroom-probe-measurement'
+});
+
 export function bindButtonEvents() {
     const CLEAR_HOLD_DURATION_MS = 350;
     const CLEAR_HOLD_MOVE_TOLERANCE_SQ = 64;
@@ -21,6 +29,33 @@ export function bindButtonEvents() {
     };
 
     const isTouchPointer = (pointerType) => pointerType === 'touch' || pointerType === 'pen';
+    const emptyStateButtons = typeof document?.querySelectorAll === 'function'
+        ? document.querySelectorAll('[data-empty-action]')
+        : [];
+
+    Array.from(emptyStateButtons).forEach((button) => {
+        safeInvokeMethod(button, 'addEventListener', 'click', (event) => {
+            event?.preventDefault?.();
+            const actionId = event?.currentTarget?.dataset?.emptyAction || button?.dataset?.emptyAction || '';
+            const scenarioId = EMPTY_STATE_PRESETS[actionId];
+            const scenario = getClassroomScenarioById(scenarioId);
+
+            if (!scenario) {
+                this.updateStatus?.('教学示例暂不可用');
+                return;
+            }
+            if (typeof this.app?.loadCircuitData !== 'function') {
+                this.updateStatus?.('当前模式不支持加载示例');
+                return;
+            }
+
+            this.app?.markMobilePrimaryTask?.('build');
+            this.app.loadCircuitData(scenario.circuit, {
+                statusText: `已加载示例：${scenario.name}`,
+                storageSource: 'empty-state-preset'
+            });
+        });
+    });
 
     // 运行按钮
     const handleRun = () => {
@@ -210,9 +245,13 @@ export function bindButtonEvents() {
     };
     bindClick('btn-add-chart', handleAddChart);
     bindClick('btn-mobile-add-chart', handleAddChart);
+    bindClick('btn-observation-add-chart', handleAddChart);
 
     // 习题板（复用原按钮绑定，避免重复切换）
     bindClick('btn-mobile-exercise-board', () => {
+        safeInvokeMethod(document.getElementById('btn-exercise-board'), 'click');
+    });
+    bindClick('btn-observation-exercise-board', () => {
         safeInvokeMethod(document.getElementById('btn-exercise-board'), 'click');
     });
 
@@ -266,6 +305,9 @@ export function bindSidePanelEvents() {
     const pages = Array.from(document.querySelectorAll('.panel-page'));
 
     const activate = (panelName) => {
+        const normalizedPanelName = typeof panelName === 'string' && panelName
+            ? panelName
+            : 'properties';
         if (tabButtons.length === 0 || pages.length === 0) {
             const propertiesPage = document.getElementById('panel-properties');
             safeInvokeMethod(propertiesPage?.classList, 'add', 'active');
@@ -273,15 +315,27 @@ export function bindSidePanelEvents() {
         }
 
         tabButtons.forEach((btn) => {
-            const isActive = btn.dataset.panel === panelName;
+            const isActive = btn.dataset.panel === normalizedPanelName;
             safeInvokeMethod(btn?.classList, 'toggle', 'active', isActive);
             safeInvokeMethod(btn, 'setAttribute', 'aria-selected', isActive ? 'true' : 'false');
+            safeInvokeMethod(btn, 'setAttribute', 'tabindex', isActive ? '0' : '-1');
         });
 
         pages.forEach((page) => {
-            const isActive = page.dataset.panel === panelName;
+            const isActive = page.dataset.panel === normalizedPanelName;
             safeInvokeMethod(page?.classList, 'toggle', 'active', isActive);
+            safeInvokeMethod(page, 'setAttribute', 'aria-hidden', isActive ? 'false' : 'true');
         });
+
+        this.activeSidePanelTab = normalizedPanelName;
+        if (normalizedPanelName === 'observation') {
+            this.app?.markMobilePrimaryTask?.('observe');
+            this.app?.chartWorkspace?.refreshComponentOptions?.();
+            this.app?.chartWorkspace?.refreshDialGauges?.();
+            this.app?.chartWorkspace?.requestRender?.({ onlyIfActive: false });
+        } else {
+            this.app?.markMobilePrimaryTask?.('build');
+        }
     };
 
     tabButtons.forEach((btn) => {
@@ -293,4 +347,6 @@ export function bindSidePanelEvents() {
 
     // 暴露给其他逻辑使用（选择元件时自动跳回属性页）
     this.activateSidePanelTab = activate;
+    const initialPanel = tabButtons.find((btn) => btn?.classList?.contains?.('active'))?.dataset?.panel || 'properties';
+    activate(initialPanel);
 }

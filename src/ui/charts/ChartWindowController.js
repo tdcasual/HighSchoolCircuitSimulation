@@ -14,7 +14,7 @@ export class ChartWindowController {
         this.seriesElements = new Map();
         this._needsRedraw = true;
         this._autoRangeWindow = { x: null, y: null };
-        this._latestText = '最新: —';
+        this._latestText = '读数: —';
         this._dragSession = null;
         this._resizeSession = null;
         this._restoreFrame = null;
@@ -51,7 +51,7 @@ export class ChartWindowController {
             }
         });
 
-        const header = createElement('div', { className: 'chart-window-header' });
+        const header = createElement('div', { className: 'chart-window-header chart-window-record-header' });
         const titleInput = createElement('input', {
             className: 'chart-window-title',
             attrs: {
@@ -62,7 +62,7 @@ export class ChartWindowController {
         });
         const addSeriesBtn = createElement('button', {
             className: 'chart-window-btn chart-window-btn-primary',
-            textContent: '+ 系列',
+            textContent: '+ 通道',
             attrs: { type: 'button' }
         });
         const axisToggleBtn = createElement('button', {
@@ -72,7 +72,7 @@ export class ChartWindowController {
         });
         const legendToggleBtn = createElement('button', {
             className: 'chart-window-btn',
-            textContent: this.state.ui?.legendCollapsed ? '展开图例' : '收起图例',
+            textContent: this.state.ui?.legendCollapsed ? '展开通道' : '收起通道',
             attrs: { type: 'button' }
         });
         const closeBtn = createElement('button', {
@@ -98,12 +98,23 @@ export class ChartWindowController {
         canvasWrap.appendChild(canvas);
 
         const latest = createElement('div', {
-            className: 'chart-window-latest',
+            className: 'chart-window-latest chart-window-readout',
             textContent: this._latestText
         });
+        latest.setAttribute('aria-live', 'polite');
 
-        const legend = createElement('section', { className: 'chart-window-legend' });
+        const legend = createElement('section', {
+            className: 'chart-window-legend chart-window-channel-list',
+            attrs: {
+                'aria-label': '图表通道列表'
+            }
+        });
+        const legendHeading = createElement('div', {
+            className: 'chart-window-channel-heading',
+            textContent: '通道配置'
+        });
         const legendBody = createElement('div', { className: 'chart-window-legend-body' });
+        legend.appendChild(legendHeading);
         legend.appendChild(legendBody);
 
         const resizers = createElement('div', { className: 'chart-window-resizers' });
@@ -117,9 +128,9 @@ export class ChartWindowController {
         });
 
         root.appendChild(header);
+        root.appendChild(latest);
         root.appendChild(axisControls);
         root.appendChild(canvasWrap);
-        root.appendChild(latest);
         root.appendChild(legend);
         root.appendChild(resizers);
 

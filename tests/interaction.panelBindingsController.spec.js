@@ -30,6 +30,49 @@ afterEach(() => {
 });
 
 describe('PanelBindingsController.bindButtonEvents', () => {
+    it('loads classroom presets from workbench empty-state actions', () => {
+        const seriesButton = makeClickableElement();
+        seriesButton.dataset = { emptyAction: 'series-circuit' };
+
+        vi.stubGlobal('document', {
+            getElementById: vi.fn(() => null),
+            querySelectorAll: vi.fn((selector) => {
+                if (selector === '[data-empty-action]') {
+                    return [seriesButton];
+                }
+                return [];
+            })
+        });
+
+        const context = {
+            app: {
+                loadCircuitData: vi.fn(),
+                markMobilePrimaryTask: vi.fn()
+            },
+            updateStatus: vi.fn(),
+            hideDialog: vi.fn(),
+            applyDialogChanges: vi.fn()
+        };
+
+        PanelBindingsController.bindButtonEvents.call(context);
+        seriesButton.trigger('click', {
+            currentTarget: seriesButton,
+            preventDefault: vi.fn()
+        });
+
+        expect(context.app.markMobilePrimaryTask).toHaveBeenCalledWith('build');
+        expect(context.app.loadCircuitData).toHaveBeenCalledWith(expect.objectContaining({
+            meta: expect.objectContaining({
+                name: '串联基础回路'
+            }),
+            components: expect.any(Array),
+            wires: expect.any(Array)
+        }), expect.objectContaining({
+            statusText: '已加载示例：串联基础回路',
+            storageSource: 'empty-state-preset'
+        }));
+    });
+
     it('binds global add-chart actions for desktop and mobile menu buttons', () => {
         const desktopAddChartButton = makeClickableElement();
         const mobileAddChartButton = makeClickableElement();
@@ -548,7 +591,7 @@ describe('PanelBindingsController.bindButtonEvents', () => {
 describe('PanelBindingsController.bindSidePanelEvents', () => {
     it('binds tab click and toggles active states', () => {
         const btnProperty = {
-            dataset: { panel: 'property' },
+            dataset: { panel: 'properties' },
             classList: { toggle: vi.fn() },
             setAttribute: vi.fn(),
             addEventListener: vi.fn()
@@ -559,28 +602,53 @@ describe('PanelBindingsController.bindSidePanelEvents', () => {
             setAttribute: vi.fn(),
             addEventListener: vi.fn()
         };
-        const pageProperty = {
-            dataset: { panel: 'property' },
-            id: 'panel-property',
+        const btnGuide = {
+            dataset: { panel: 'guide' },
             classList: { toggle: vi.fn() },
-            setAttribute: vi.fn()
+            setAttribute: vi.fn(),
+            addEventListener: vi.fn()
+        };
+        const pageProperty = {
+            dataset: { panel: 'properties' },
+            id: 'panel-properties',
+            classList: { toggle: vi.fn() },
+            setAttribute: vi.fn(),
+            removeAttribute: vi.fn()
         };
         const pageObservation = {
             dataset: { panel: 'observation' },
             id: 'panel-observation',
             classList: { toggle: vi.fn() },
-            setAttribute: vi.fn()
+            setAttribute: vi.fn(),
+            removeAttribute: vi.fn()
+        };
+        const pageGuide = {
+            dataset: { panel: 'guide' },
+            id: 'panel-guide',
+            classList: { toggle: vi.fn() },
+            setAttribute: vi.fn(),
+            removeAttribute: vi.fn()
         };
 
         vi.stubGlobal('document', {
             querySelectorAll: vi.fn((selector) => {
-                if (selector === '.panel-tab-btn') return [btnProperty, btnObservation];
-                if (selector === '.panel-page') return [pageProperty, pageObservation];
+                if (selector === '.panel-tab-btn') return [btnProperty, btnObservation, btnGuide];
+                if (selector === '.panel-page') return [pageProperty, pageObservation, pageGuide];
                 return [];
-            })
+            }),
+            getElementById: vi.fn(() => null)
         });
 
-        const context = {};
+        const context = {
+            app: {
+                markMobilePrimaryTask: vi.fn(),
+                chartWorkspace: {
+                    refreshComponentOptions: vi.fn(),
+                    refreshDialGauges: vi.fn(),
+                    requestRender: vi.fn()
+                }
+            }
+        };
         PanelBindingsController.bindSidePanelEvents.call(context);
 
         const observationClickHandler = btnObservation.addEventListener.mock.calls[0][1];
@@ -588,13 +656,21 @@ describe('PanelBindingsController.bindSidePanelEvents', () => {
 
         expect(btnObservation.classList.toggle).toHaveBeenCalledWith('active', true);
         expect(btnProperty.classList.toggle).toHaveBeenCalledWith('active', false);
+        expect(btnGuide.classList.toggle).toHaveBeenCalledWith('active', false);
         expect(pageObservation.classList.toggle).toHaveBeenCalledWith('active', true);
+        expect(pageGuide.classList.toggle).toHaveBeenCalledWith('active', false);
+        expect(pageObservation.setAttribute).toHaveBeenCalledWith('aria-hidden', 'false');
+        expect(pageProperty.setAttribute).toHaveBeenCalledWith('aria-hidden', 'true');
+        expect(context.app.markMobilePrimaryTask).toHaveBeenCalledWith('observe');
+        expect(context.app.chartWorkspace.refreshComponentOptions).toHaveBeenCalledTimes(1);
+        expect(context.app.chartWorkspace.refreshDialGauges).toHaveBeenCalledTimes(1);
+        expect(context.app.chartWorkspace.requestRender).toHaveBeenCalledWith({ onlyIfActive: false });
         expect(typeof context.activateSidePanelTab).toBe('function');
     });
 
     it('does not throw when tab/page methods are non-callable', () => {
         const btnProperty = {
-            dataset: { panel: 'property' },
+            dataset: { panel: 'properties' },
             classList: { toggle: {} },
             setAttribute: {},
             addEventListener: {}
@@ -605,30 +681,47 @@ describe('PanelBindingsController.bindSidePanelEvents', () => {
             setAttribute: {},
             addEventListener: {}
         };
-        const pageProperty = {
-            dataset: { panel: 'property' },
-            id: 'panel-property',
+        const btnGuide = {
+            dataset: { panel: 'guide' },
             classList: { toggle: {} },
-            setAttribute: {}
+            setAttribute: {},
+            addEventListener: {}
+        };
+        const pageProperty = {
+            dataset: { panel: 'properties' },
+            id: 'panel-properties',
+            classList: { toggle: {} },
+            setAttribute: {},
+            removeAttribute: {}
         };
         const pageObservation = {
             dataset: { panel: 'observation' },
             id: 'panel-observation',
             classList: { toggle: {} },
-            setAttribute: {}
+            setAttribute: {},
+            removeAttribute: {}
+        };
+        const pageGuide = {
+            dataset: { panel: 'guide' },
+            id: 'panel-guide',
+            classList: { toggle: {} },
+            setAttribute: {},
+            removeAttribute: {}
         };
 
         vi.stubGlobal('document', {
             querySelectorAll: vi.fn((selector) => {
-                if (selector === '.panel-tab-btn') return [btnProperty, btnObservation];
-                if (selector === '.panel-page') return [pageProperty, pageObservation];
+                if (selector === '.panel-tab-btn') return [btnProperty, btnObservation, btnGuide];
+                if (selector === '.panel-page') return [pageProperty, pageObservation, pageGuide];
                 return [];
-            })
+            }),
+            getElementById: vi.fn(() => null)
         });
 
-        const context = {};
+        const context = { app: { chartWorkspace: {} } };
         expect(() => PanelBindingsController.bindSidePanelEvents.call(context)).not.toThrow();
         expect(typeof context.activateSidePanelTab).toBe('function');
         expect(() => context.activateSidePanelTab('observation')).not.toThrow();
+        expect(() => context.activateSidePanelTab('guide')).not.toThrow();
     });
 });

@@ -17,14 +17,17 @@ export class ObservationInteractionController {
 
     bindTabRefresh() {
         const panel = this.panel;
-        const tabBtn = document.querySelector('.panel-tab-btn[data-panel="observation"]');
-        if (!tabBtn) return;
-        safeAddEventListener(tabBtn, 'click', () => {
+        const tabButtons = typeof document === 'undefined'
+            ? []
+            : Array.from(document.querySelectorAll?.('.panel-tab-btn[data-panel="observation"]') || []);
+        if (tabButtons.length === 0) return;
+        tabButtons.forEach((tabBtn) => safeAddEventListener(tabBtn, 'click', () => {
+            panel?.app?.markMobilePrimaryTask?.('observe');
             panel?.refreshComponentOptions?.();
             panel?.refreshDialGauges?.();
             panel?.updatePresetButtonHints?.();
             panel?.requestRender?.({ onlyIfActive: false });
-        });
+        }));
     }
 
     bindPlotCanvasInteraction(plot) {

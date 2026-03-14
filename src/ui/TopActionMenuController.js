@@ -88,6 +88,9 @@ export class TopActionMenuController {
         this.menu.hidden = !open;
         safeClassListToggle(this.menu, 'open', open);
         safeSetAttribute(this.button, 'aria-expanded', open ? 'true' : 'false');
+        if (typeof document !== 'undefined') {
+            safeClassListToggle(document.body, 'mobile-top-action-menu-open', this.isPhoneMode() && open);
+        }
     }
 
     toggle() {

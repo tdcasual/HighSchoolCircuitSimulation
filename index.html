@@ -18,14 +18,25 @@
     <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js" id="MathJax-script" async></script>
 </head>
 <body>
-    <div id="top-action-bar" role="toolbar" aria-label="全局操作">
-        <button id="btn-clear" class="top-action-btn top-action-btn-danger">清空电路</button>
-        <button id="btn-export" class="top-action-btn">导出JSON</button>
-        <button id="btn-import" class="top-action-btn">导入JSON</button>
-        <button id="btn-add-chart" class="top-action-btn">添加图表</button>
-        <button id="btn-exercise-board" class="top-action-btn">习题板</button>
-        <button id="btn-top-action-more" class="top-action-btn top-action-btn-more" type="button" aria-haspopup="true" aria-expanded="false">更多</button>
-        <button id="mobile-restore-entry" class="top-action-btn mobile-restore-entry" type="button" hidden aria-live="polite"></button>
+    <div id="top-action-bar" role="toolbar" aria-label="实验操作">
+        <div id="top-action-primary" class="top-action-zone">
+            <button id="btn-clear" class="top-action-btn top-action-btn-danger">清空电路</button>
+            <button id="btn-export" class="top-action-btn">导出JSON</button>
+            <button id="btn-import" class="top-action-btn">导入JSON</button>
+        </div>
+        <div id="top-action-session" class="top-action-zone" aria-live="polite">
+            <p id="experiment-title">课堂实验台</p>
+            <p id="experiment-session-hint">从元件托盘拖入器材开始搭建电路</p>
+            <div id="status-ribbon">
+                <span id="status-ribbon-text">就绪</span>
+            </div>
+        </div>
+        <div id="top-action-secondary" class="top-action-zone">
+            <button id="btn-add-chart" class="top-action-btn">添加图表</button>
+            <button id="btn-exercise-board" class="top-action-btn">习题板</button>
+            <button id="btn-top-action-more" class="top-action-btn top-action-btn-more" type="button" aria-haspopup="true" aria-expanded="false">更多</button>
+            <button id="mobile-restore-entry" class="top-action-btn mobile-restore-entry" type="button" hidden aria-live="polite"></button>
+        </div>
         <input type="file" id="file-import" accept=".json" style="display:none"/>
     </div>
     <div id="top-action-more-menu" class="top-action-more-menu" hidden>
@@ -44,6 +55,37 @@
             <div class="toolbox-header">
                 <h2>元器件</h2>
                 <button id="btn-close-toolbox" class="toolbox-close-btn" type="button" aria-label="关闭元件库">关闭</button>
+            </div>
+            <p class="toolbox-lead">先从课堂常用器材开始：点击后可在画布放置，或直接拖拽到实验台中。</p>
+            <div class="tool-category tool-category-featured" data-category="classroom-common" data-collapsible="false">
+                <div class="tool-category-header">
+                    <h3>课堂常用</h3>
+                    <span class="toolbox-section-tag">快速开始</span>
+                </div>
+                <div class="tool-item tool-item-quick" data-type="PowerSource" draggable="true">
+                    <span class="tool-item-shortcut">6V</span>
+                    <span>电源</span>
+                </div>
+                <div class="tool-item tool-item-quick" data-type="Resistor" draggable="true">
+                    <span class="tool-item-shortcut">R</span>
+                    <span>定值电阻</span>
+                </div>
+                <div class="tool-item tool-item-quick" data-type="Bulb" draggable="true">
+                    <span class="tool-item-shortcut">灯</span>
+                    <span>灯泡</span>
+                </div>
+                <div class="tool-item tool-item-quick" data-type="Switch" draggable="true">
+                    <span class="tool-item-shortcut">S</span>
+                    <span>开关</span>
+                </div>
+                <div class="tool-item tool-item-quick" data-type="Voltmeter" draggable="true">
+                    <span class="tool-item-shortcut">V</span>
+                    <span>电压表</span>
+                </div>
+                <div class="tool-item tool-item-quick" data-type="Wire" draggable="true">
+                    <span class="tool-item-shortcut">线</span>
+                    <span>导线</span>
+                </div>
             </div>
             <div class="tool-category" data-category="power">
                 <h3>电源</h3>
@@ -285,6 +327,16 @@
                 <button id="btn-mobile-stop" class="mobile-toggle-btn mobile-stop-btn" type="button" disabled>停止</button>
             </div>
             <button id="btn-mobile-sim-toggle" class="mobile-sim-toggle" type="button" aria-pressed="false">运行</button>
+            <section id="workbench-empty-state" aria-label="实验开始引导">
+                <p class="workbench-kicker">课堂实验台</p>
+                <h1 class="workbench-empty-title">从左侧拖入元件，开始搭建你的第一个电路</h1>
+                <p class="workbench-empty-body">也可以先载入一个教学示例，快速进入串联、并联和仪表测量练习。</p>
+                <div class="workbench-empty-actions">
+                    <button class="workbench-empty-action" type="button" data-empty-action="series-circuit">串联示例</button>
+                    <button class="workbench-empty-action" type="button" data-empty-action="parallel-circuit">并联示例</button>
+                    <button class="workbench-empty-action" type="button" data-empty-action="meter-demo">仪表示例</button>
+                </div>
+            </section>
             <svg id="circuit-canvas" xmlns="http://www.w3.org/2000/svg">
                 <defs>
                     <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
@@ -323,12 +375,46 @@
                     <h2>面板</h2>
                     <button id="btn-close-side-panel" class="panel-close-btn" type="button" aria-label="关闭面板">关闭</button>
                 </div>
+                <div class="side-panel-tabs" role="tablist" aria-label="实验面板">
+                    <button class="panel-tab-btn active" type="button" data-panel="properties" aria-selected="true">属性</button>
+                    <button class="panel-tab-btn" type="button" data-panel="observation" aria-selected="false">观察</button>
+                    <button class="panel-tab-btn" type="button" data-panel="guide" aria-selected="false">说明</button>
+                </div>
             </div>
 
             <div class="side-panel-body">
-                <section id="panel-properties" class="panel-page active" data-panel="properties" role="tabpanel">
+                <section id="panel-properties" class="panel-page active" data-panel="properties" role="tabpanel" aria-hidden="false">
                     <div id="property-content">
                         <p class="hint">选择一个元器件查看和编辑属性</p>
+                    </div>
+                </section>
+                <section id="panel-observation" class="panel-page" data-panel="observation" role="tabpanel" aria-hidden="true">
+                    <div id="observation-root">
+                        <div class="observation-header">
+                            <div>
+                                <h3>观察工作台</h3>
+                                <p class="hint">把图表、仪表和探针组合起来，查看电压、电流与动态过程。</p>
+                            </div>
+                        </div>
+                        <div class="observation-sticky-controls">
+                            <div class="observation-actions">
+                                <button id="btn-observation-add-chart" class="control-btn" type="button">添加图表</button>
+                                <button id="btn-observation-exercise-board" class="control-btn" type="button">打开习题板</button>
+                            </div>
+                        </div>
+                        <p class="hint">图表会浮在实验台上方；切回属性页时，当前选中元件的信息仍会保留。</p>
+                        <p id="observation-runtime-status" class="observation-runtime-status" aria-live="polite"></p>
+                    </div>
+                </section>
+                <section id="panel-guide" class="panel-page" data-panel="guide" role="tabpanel" aria-hidden="true">
+                    <div class="panel-guide-content">
+                        <h3>实验说明</h3>
+                        <ol class="panel-guide-steps">
+                            <li>先放入电源和负载，再用导线闭合回路。</li>
+                            <li>切到“属性”页检查阻值、电压和开关状态。</li>
+                            <li>切到“观察”页添加图表或使用电表查看读数变化。</li>
+                        </ol>
+                        <p class="hint">如果想快速开始，左侧“课堂常用”里已经准备好了电源、电阻、灯泡、导线和电压表。</p>
                     </div>
                 </section>
             </div>
@@ -358,16 +444,16 @@
     </div>
 
 	    <!-- 习题板 -->
-	    <div id="exercise-board-panel" class="hidden">
-	        <div id="exercise-board-header">
+	    <div id="exercise-board-panel" class="hidden assistant-surface assistant-surface-note">
+	        <div id="exercise-board-header" class="assistant-surface-header">
 	            <h3>习题板</h3>
-	            <div id="exercise-board-actions">
+	            <div id="exercise-board-actions" class="assistant-surface-actions">
 	                <button id="exercise-board-settings-btn" title="显示与排版">Aa</button>
 	                <button id="exercise-board-mode-btn" title="编辑/预览">预览</button>
 	                <button id="exercise-board-hide-btn" title="隐藏">×</button>
 	            </div>
 	        </div>
-	        <div id="exercise-board-settings" class="hidden" role="dialog" aria-label="习题板显示设置">
+	        <div id="exercise-board-settings" class="hidden assistant-surface-popover" role="dialog" aria-label="习题板显示设置">
 	            <div class="ex-setting-row">
 	                <label for="exercise-board-font-size">字号</label>
 	                <input id="exercise-board-font-size" type="range" min="12" max="22" step="1" value="14">
@@ -393,7 +479,7 @@
 	                <button id="exercise-board-settings-reset-btn" type="button" class="ex-setting-reset">重置</button>
 	            </div>
 	        </div>
-	        <div id="exercise-board-toolbar" aria-label="习题板编辑工具栏">
+	        <div id="exercise-board-toolbar" class="assistant-surface-toolbar" aria-label="习题板编辑工具栏">
 	            <button type="button" class="ex-tool-btn" data-ex-action="bold" title="加粗 (Ctrl+B)"><strong>B</strong></button>
 	            <button type="button" class="ex-tool-btn" data-ex-action="italic" title="斜体 (Ctrl+I)"><em>I</em></button>
 	            <button type="button" class="ex-tool-btn" data-ex-action="inline-code" title="行内代码 (Ctrl+`)"><code>&lt;/&gt;</code></button>
@@ -404,7 +490,7 @@
 	            <button type="button" class="ex-tool-btn" data-ex-action="math-block" title="公式块 $$...$$">$$</button>
 	            <button type="button" class="ex-tool-btn" data-ex-action="link" title="链接 (Ctrl+K)">🔗</button>
 	        </div>
-	        <div id="exercise-board-content">
+	        <div id="exercise-board-content" class="assistant-surface-content">
 	            <textarea id="exercise-board-editor" spellcheck="false"
 	                placeholder="在这里写习题/讲解（支持 Markdown + LaTeX：$...$ / $$...$$）"></textarea>
 	            <div id="exercise-board-preview" class="hidden"><div id="exercise-board-preview-inner"></div></div>
@@ -413,16 +499,16 @@
 	    </div>
 
     <!-- AI助手面板 -->
-    <div id="ai-assistant-panel" class="collapsed">
-        <button id="ai-fab-btn" title="展开 AI 助手" aria-label="展开 AI 助手" aria-hidden="false">🤖</button>
-        <div id="ai-panel-header">
-            <h3>AI 助手</h3>
-            <div id="ai-panel-actions">
+    <div id="ai-assistant-panel" class="collapsed assistant-surface assistant-surface-ai">
+        <button id="ai-fab-btn" title="展开实验助手" aria-label="展开实验助手" aria-hidden="false">🤖</button>
+        <div id="ai-panel-header" class="assistant-surface-header">
+            <h3>实验助手</h3>
+            <div id="ai-panel-actions" class="assistant-surface-actions">
                 <button id="ai-settings-btn" title="设置">设置</button>
                 <button id="ai-toggle-btn" title="展开面板" aria-expanded="false">展开</button>
             </div>
         </div>
-        <div id="ai-panel-content">
+        <div id="ai-panel-content" class="assistant-surface-content">
             <!-- 物理解释 Tab -->
             <div id="tab-explain" class="ai-tab-content active">
                 <div id="chat-messages"></div>

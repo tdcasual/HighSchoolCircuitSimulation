@@ -76,11 +76,19 @@ describe('SimulationUiState', () => {
 
     it('updates status text only when status node exists', () => {
         const statusNode = { textContent: '' };
-        const withStatusDoc = createDocumentStub({ 'status-text': statusNode });
+        const statusRibbonNode = { textContent: '' };
+        const sessionHintNode = { textContent: '' };
+        const withStatusDoc = createDocumentStub({
+            'status-text': statusNode,
+            'status-ribbon-text': statusRibbonNode,
+            'experiment-session-hint': sessionHintNode
+        });
         const noStatusDoc = createDocumentStub();
 
         setStatusText('模拟运行中', { document: withStatusDoc });
         expect(statusNode.textContent).toBe('模拟运行中');
+        expect(statusRibbonNode.textContent).toBe('模拟运行中');
+        expect(sessionHintNode.textContent).toBe('模拟运行中');
 
         expect(() => setStatusText('ignored', { document: noStatusDoc })).not.toThrow();
     });

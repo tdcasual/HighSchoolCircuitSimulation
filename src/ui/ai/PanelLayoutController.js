@@ -516,6 +516,7 @@ function rememberExpandedPanelSizeImpl() {
 function syncPanelCollapsedUIImpl() {
     const collapsed = this.isPanelCollapsed();
     const phoneLayout = isPhoneLayout(this);
+    const panelLabel = this.panelDisplayName || '实验助手';
     const bodyClassList = getBodyClassList();
     safeInvokeMethod(bodyClassList, 'toggle', 'ai-panel-open', phoneLayout && !collapsed);
     if (phoneLayout && !collapsed) {
@@ -537,7 +538,8 @@ function syncPanelCollapsedUIImpl() {
     }
     if (this.fabBtn) {
         safeInvokeMethod(this.fabBtn, 'setAttribute', 'aria-hidden', String(!collapsed));
-        safeInvokeMethod(this.fabBtn, 'setAttribute', 'title', collapsed ? '展开 AI 助手' : 'AI 助手');
+        safeInvokeMethod(this.fabBtn, 'setAttribute', 'title', collapsed ? `展开${panelLabel}` : panelLabel);
+        safeInvokeMethod(this.fabBtn, 'setAttribute', 'aria-label', collapsed ? `展开${panelLabel}` : panelLabel);
     }
 }
 

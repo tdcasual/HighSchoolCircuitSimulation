@@ -103,6 +103,7 @@ export class AppRuntimeV2 {
         this.actionRouter = new RuntimeActionRouter(this, {
             uiBridge: this.runtimeUiBridge
         });
+        this.bindWorkbenchEmptyStateToCircuit();
         
         // 尝试从 localStorage 恢复电路
         if (this.runtimeOptions.restoreFromStorage) {
@@ -122,6 +123,7 @@ export class AppRuntimeV2 {
         
         // 初始化完成
         this.updateStatus('电路模拟器已就绪');
+        this.syncWorkbenchEmptyState();
         this.logger.info('Circuit Simulator initialized');
         
         // 暴露调试接口到全局
@@ -141,6 +143,30 @@ debugCircuit() {
     onCircuitUpdate(results) {
         const runtimeUiBridge = this.runtimeUiBridge || new RuntimeUiBridge(this);
         return runtimeUiBridge.onCircuitUpdate(results);
+    }
+
+    bindWorkbenchEmptyStateToCircuit() {
+        if (this.workbenchEmptyStateSyncBound || !this.circuit) return false;
+        const bindSync = (methodName) => {
+            const original = this.circuit?.[methodName];
+            if (typeof original !== 'function') return;
+            this.circuit[methodName] = (...args) => {
+                const result = original.apply(this.circuit, args);
+                AppRuntimeV2.prototype.syncWorkbenchEmptyState.call(this);
+                return result;
+            };
+        };
+
+        bindSync('addComponent');
+        bindSync('removeComponent');
+        bindSync('clear');
+        bindSync('fromJSON');
+        this.workbenchEmptyStateSyncBound = true;
+        return true;
+    }
+
+    syncWorkbenchEmptyState() {
+        return this.runtimeUiBridge?.syncWorkbenchEmptyState?.() ?? false;
     }
 
     getRuntimeCapabilityFlags() {
@@ -450,4 +476,3 @@ async openAIPanel() {
         return this.classroomMode.setPreferredLevel(level, options);
     }
 }
-
