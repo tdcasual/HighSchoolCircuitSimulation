@@ -308,6 +308,13 @@ body.embed-readonly #circuit-canvas {
     gap: 10px;
 }
 
+.toolbox-lead {
+    margin: 10px 0 16px;
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text-muted);
+}
+
 .toolbox-close-btn {
     display: none;
     border: 1px solid rgba(15, 23, 42, 0.2);
@@ -335,6 +342,14 @@ body.layout-mode-phone .toolbox-close-btn {
     margin-bottom: 20px;
 }
 
+.tool-category-featured {
+    padding: 12px;
+    border: 1px solid rgba(37, 99, 235, 0.16);
+    border-radius: 16px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(247, 251, 255, 0.94) 100%);
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+}
+
 .tool-category h3 {
     font-size: 13px;
     color: var(--text-light);
@@ -349,6 +364,19 @@ body.layout-mode-phone .toolbox-close-btn {
     justify-content: space-between;
     gap: 8px;
     margin-bottom: 10px;
+}
+
+.toolbox-section-tag {
+    display: inline-flex;
+    align-items: center;
+    min-height: 26px;
+    padding: 0 10px;
+    border-radius: 999px;
+    background: rgba(37, 99, 235, 0.1);
+    color: var(--primary-dark);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
 }
 
 .tool-category-toggle {
@@ -420,6 +448,26 @@ body.layout-mode-phone .toolbox-close-btn {
 .tool-item span {
     font-size: 12px;
     white-space: nowrap;
+}
+
+.tool-item-quick {
+    justify-content: flex-start;
+    background: rgba(255, 255, 255, 0.92);
+}
+
+.tool-item-shortcut {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 34px;
+    height: 28px;
+    padding: 0 8px;
+    border-radius: 999px;
+    background: rgba(37, 99, 235, 0.1);
+    color: var(--primary-dark);
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
 }
 
 .action-btn {
@@ -1262,6 +1310,21 @@ body.layout-mode-phone .panel-close-btn {
 
 .panel-page.active {
     display: block;
+}
+
+.panel-guide-content {
+    display: grid;
+    gap: 10px;
+}
+
+.panel-guide-steps {
+    margin: 0;
+    padding-left: 20px;
+    display: grid;
+    gap: 8px;
+    color: var(--text-strong);
+    font-size: 13px;
+    line-height: 1.6;
 }
 
 #property-content {

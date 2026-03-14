@@ -56,6 +56,37 @@
                 <h2>元器件</h2>
                 <button id="btn-close-toolbox" class="toolbox-close-btn" type="button" aria-label="关闭元件库">关闭</button>
             </div>
+            <p class="toolbox-lead">先从课堂常用器材开始：点击后可在画布放置，或直接拖拽到实验台中。</p>
+            <div class="tool-category tool-category-featured" data-category="classroom-common" data-collapsible="false">
+                <div class="tool-category-header">
+                    <h3>课堂常用</h3>
+                    <span class="toolbox-section-tag">快速开始</span>
+                </div>
+                <div class="tool-item tool-item-quick" data-type="PowerSource" draggable="true">
+                    <span class="tool-item-shortcut">6V</span>
+                    <span>电源</span>
+                </div>
+                <div class="tool-item tool-item-quick" data-type="Resistor" draggable="true">
+                    <span class="tool-item-shortcut">R</span>
+                    <span>定值电阻</span>
+                </div>
+                <div class="tool-item tool-item-quick" data-type="Bulb" draggable="true">
+                    <span class="tool-item-shortcut">灯</span>
+                    <span>灯泡</span>
+                </div>
+                <div class="tool-item tool-item-quick" data-type="Switch" draggable="true">
+                    <span class="tool-item-shortcut">S</span>
+                    <span>开关</span>
+                </div>
+                <div class="tool-item tool-item-quick" data-type="Voltmeter" draggable="true">
+                    <span class="tool-item-shortcut">V</span>
+                    <span>电压表</span>
+                </div>
+                <div class="tool-item tool-item-quick" data-type="Wire" draggable="true">
+                    <span class="tool-item-shortcut">线</span>
+                    <span>导线</span>
+                </div>
+            </div>
             <div class="tool-category" data-category="power">
                 <h3>电源</h3>
                 <div class="tool-item" data-type="Ground" draggable="true">
@@ -344,12 +375,46 @@
                     <h2>面板</h2>
                     <button id="btn-close-side-panel" class="panel-close-btn" type="button" aria-label="关闭面板">关闭</button>
                 </div>
+                <div class="side-panel-tabs" role="tablist" aria-label="实验面板">
+                    <button class="panel-tab-btn active" type="button" data-panel="properties" aria-selected="true">属性</button>
+                    <button class="panel-tab-btn" type="button" data-panel="observation" aria-selected="false">观察</button>
+                    <button class="panel-tab-btn" type="button" data-panel="guide" aria-selected="false">说明</button>
+                </div>
             </div>
 
             <div class="side-panel-body">
-                <section id="panel-properties" class="panel-page active" data-panel="properties" role="tabpanel">
+                <section id="panel-properties" class="panel-page active" data-panel="properties" role="tabpanel" aria-hidden="false">
                     <div id="property-content">
                         <p class="hint">选择一个元器件查看和编辑属性</p>
+                    </div>
+                </section>
+                <section id="panel-observation" class="panel-page" data-panel="observation" role="tabpanel" aria-hidden="true">
+                    <div id="observation-root">
+                        <div class="observation-header">
+                            <div>
+                                <h3>观察工作台</h3>
+                                <p class="hint">把图表、仪表和探针组合起来，查看电压、电流与动态过程。</p>
+                            </div>
+                        </div>
+                        <div class="observation-sticky-controls">
+                            <div class="observation-actions">
+                                <button id="btn-observation-add-chart" class="control-btn" type="button">添加图表</button>
+                                <button id="btn-observation-exercise-board" class="control-btn" type="button">打开习题板</button>
+                            </div>
+                        </div>
+                        <p class="hint">图表会浮在实验台上方；切回属性页时，当前选中元件的信息仍会保留。</p>
+                        <p id="observation-runtime-status" class="observation-runtime-status" aria-live="polite"></p>
+                    </div>
+                </section>
+                <section id="panel-guide" class="panel-page" data-panel="guide" role="tabpanel" aria-hidden="true">
+                    <div class="panel-guide-content">
+                        <h3>实验说明</h3>
+                        <ol class="panel-guide-steps">
+                            <li>先放入电源和负载，再用导线闭合回路。</li>
+                            <li>切到“属性”页检查阻值、电压和开关状态。</li>
+                            <li>切到“观察”页添加图表或使用电表查看读数变化。</li>
+                        </ol>
+                        <p class="hint">如果想快速开始，左侧“课堂常用”里已经准备好了电源、电阻、灯泡、导线和电压表。</p>
                     </div>
                 </section>
             </div>

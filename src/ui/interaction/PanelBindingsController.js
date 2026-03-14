@@ -245,9 +245,13 @@ export function bindButtonEvents() {
     };
     bindClick('btn-add-chart', handleAddChart);
     bindClick('btn-mobile-add-chart', handleAddChart);
+    bindClick('btn-observation-add-chart', handleAddChart);
 
     // 习题板（复用原按钮绑定，避免重复切换）
     bindClick('btn-mobile-exercise-board', () => {
+        safeInvokeMethod(document.getElementById('btn-exercise-board'), 'click');
+    });
+    bindClick('btn-observation-exercise-board', () => {
         safeInvokeMethod(document.getElementById('btn-exercise-board'), 'click');
     });
 
@@ -301,6 +305,9 @@ export function bindSidePanelEvents() {
     const pages = Array.from(document.querySelectorAll('.panel-page'));
 
     const activate = (panelName) => {
+        const normalizedPanelName = typeof panelName === 'string' && panelName
+            ? panelName
+            : 'properties';
         if (tabButtons.length === 0 || pages.length === 0) {
             const propertiesPage = document.getElementById('panel-properties');
             safeInvokeMethod(propertiesPage?.classList, 'add', 'active');
@@ -308,15 +315,27 @@ export function bindSidePanelEvents() {
         }
 
         tabButtons.forEach((btn) => {
-            const isActive = btn.dataset.panel === panelName;
+            const isActive = btn.dataset.panel === normalizedPanelName;
             safeInvokeMethod(btn?.classList, 'toggle', 'active', isActive);
             safeInvokeMethod(btn, 'setAttribute', 'aria-selected', isActive ? 'true' : 'false');
+            safeInvokeMethod(btn, 'setAttribute', 'tabindex', isActive ? '0' : '-1');
         });
 
         pages.forEach((page) => {
-            const isActive = page.dataset.panel === panelName;
+            const isActive = page.dataset.panel === normalizedPanelName;
             safeInvokeMethod(page?.classList, 'toggle', 'active', isActive);
+            safeInvokeMethod(page, 'setAttribute', 'aria-hidden', isActive ? 'false' : 'true');
         });
+
+        this.activeSidePanelTab = normalizedPanelName;
+        if (normalizedPanelName === 'observation') {
+            this.app?.markMobilePrimaryTask?.('observe');
+            this.app?.chartWorkspace?.refreshComponentOptions?.();
+            this.app?.chartWorkspace?.refreshDialGauges?.();
+            this.app?.chartWorkspace?.requestRender?.({ onlyIfActive: false });
+        } else {
+            this.app?.markMobilePrimaryTask?.('build');
+        }
     };
 
     tabButtons.forEach((btn) => {
@@ -328,4 +347,6 @@ export function bindSidePanelEvents() {
 
     // 暴露给其他逻辑使用（选择元件时自动跳回属性页）
     this.activateSidePanelTab = activate;
+    const initialPanel = tabButtons.find((btn) => btn?.classList?.contains?.('active'))?.dataset?.panel || 'properties';
+    activate(initialPanel);
 }
