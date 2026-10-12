@@ -316,4 +316,82 @@ describe('RuntimeUiBridge', () => {
 
         expect(syncSpy).toHaveBeenCalledTimes(2);
     });
+
+    it('attaches a valid v2 ViewMap on the classroom update path and clears it on V1 fallback', () => {
+        const viewMap = new Map([
+            ['R1', { currentValue: 0, voltageValue: 2.4, powerValue: 0 }]
+        ]);
+        const renderer = {
+            setViewMap: vi.fn(),
+            updateValues: vi.fn(),
+            updateWireAnimations: vi.fn()
+        };
+        const app = {
+            circuit: { solverBackend: { mode: 'v2', consecutiveFallbackSteps: 0 } },
+            renderer,
+            chartWorkspace: {
+                onCircuitUpdate: vi.fn(),
+                setRuntimeStatus: vi.fn()
+            },
+            interaction: { selectedComponent: null }
+        };
+        const bridge = new RuntimeUiBridge(app, {
+            setStatusTextImpl: vi.fn(),
+            setSimulationControlsRunningImpl: vi.fn()
+        });
+
+        bridge.onCircuitUpdate({
+            valid: true,
+            backendUsed: 'v2',
+            viewMap,
+            currents: new Map([['R1', 0]])
+        });
+        expect(renderer.setViewMap).toHaveBeenCalledTimes(1);
+        expect(renderer.setViewMap).toHaveBeenCalledWith(viewMap);
+
+        renderer.setViewMap.mockClear();
+        bridge.onCircuitUpdate({
+            valid: true,
+            backendUsed: 'v1',
+            viewMap,
+            currents: new Map([['R1', 0.3]])
+        });
+        expect(renderer.setViewMap).toHaveBeenCalledWith(null);
+
+        renderer.setViewMap.mockClear();
+        bridge.onCircuitUpdate({
+            valid: true,
+            backendUsed: 'v2',
+            viewMap: { R1: { currentValue: 0 } },
+            currents: new Map([['R1', 0]])
+        });
+        expect(renderer.setViewMap).toHaveBeenCalledWith(null);
+    });
+
+    it('clears Renderer ViewMap on stop, clear, and load including silent restore', () => {
+        const renderer = {
+            setViewMap: vi.fn(),
+            updateValues: vi.fn(),
+            updateWireAnimations: vi.fn()
+        };
+        const bridge = new RuntimeUiBridge({
+            circuit: { components: new Map() },
+            renderer
+        }, {
+            setStatusTextImpl: vi.fn(),
+            setSimulationControlsRunningImpl: vi.fn()
+        });
+
+        bridge.showSimulationStopped();
+        bridge.showCircuitCleared();
+        bridge.showCircuitLoaded({
+            data: { components: [{ id: 'R1' }] },
+            silent: true
+        });
+
+        expect(renderer.setViewMap).toHaveBeenCalledTimes(3);
+        expect(renderer.setViewMap).toHaveBeenNthCalledWith(1, null);
+        expect(renderer.setViewMap).toHaveBeenNthCalledWith(2, null);
+        expect(renderer.setViewMap).toHaveBeenNthCalledWith(3, null);
+    });
 });

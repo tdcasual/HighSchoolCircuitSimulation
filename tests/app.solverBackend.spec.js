@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { wrapSolverBackend } from '../src/app/simulation/ComponentViewAdapter.js';
+import { RuntimeUiBridge } from '../src/app/RuntimeUiBridge.js';
 import { debugRuntimeCircuit } from '../src/app/AppRuntimeV2Delegates.js';
 import { SimulationRefreshSkill } from '../src/ai/skills/SimulationRefreshSkill.js';
 import { createInjectedSolverBackend, DEFAULT_SOLVER_BACKEND_MODE } from '../src/v2/app/createInjectedSolverBackend.js';
@@ -247,6 +248,40 @@ describe('CircuitSimulationLoopService solverBackend dispatch', () => {
         expect(resistor.nodes).toBe(liveNodes);
         expect(circuit.nodes).toBe(circuitNodes);
         expect(backend.restoreStandby).toHaveBeenCalledWith(circuit);
+    });
+
+    it('hands the live v2 ViewMap to Renderer.setViewMap through RuntimeUiBridge', () => {
+        const circuit = buildSeriesFixture();
+        circuit.solverBackend = wrapSolverBackend(createInjectedSolverBackend());
+        circuit.prepareSimulation();
+        circuit.step();
+        circuit.haltSimulation();
+
+        expect(circuit.lastResults.backendUsed).toBe('v2');
+        expect(circuit.lastResults.valid).toBe(true);
+        expect(circuit.lastResults.viewMap).toBeInstanceOf(Map);
+        expect(circuit.lastResults.viewMap.has('R1')).toBe(true);
+
+        const renderer = {
+            setViewMap: vi.fn(),
+            updateValues: vi.fn(),
+            updateWireAnimations: vi.fn()
+        };
+        const bridge = new RuntimeUiBridge({
+            circuit,
+            renderer,
+            chartWorkspace: {
+                onCircuitUpdate: vi.fn(),
+                setRuntimeStatus: vi.fn()
+            },
+            interaction: { selectedComponent: null }
+        }, {
+            setStatusTextImpl: vi.fn(),
+            setSimulationControlsRunningImpl: vi.fn()
+        });
+        bridge.onCircuitUpdate(circuit.lastResults);
+        expect(renderer.setViewMap).toHaveBeenCalledTimes(1);
+        expect(renderer.setViewMap).toHaveBeenCalledWith(circuit.lastResults.viewMap);
     });
 
     it('keeps the v1 arm on solver.solve when mode is v1 or backend is missing', () => {

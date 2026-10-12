@@ -2,12 +2,14 @@
  * Copies ViewMap display fields onto live Circuit components.
  * Does not copy nodes / wire.nodeIndex / circuit.nodes.
  *
- * Sunset (do not delete this adapter before Renderer reads ViewMap):
- * 1. Renderer.setViewMap wired; buildValueDisplaySnapshot prefers ViewMap.
+ * Sunset (do not delete this adapter before remaining readers leave live fields):
+ * 1. Renderer.setViewMap wired via RuntimeUiBridge.onCircuitUpdate on valid v2;
+ *    cleared on V1/fallback/stop/clear/load. buildValueDisplaySnapshot prefers ViewMap.
  * 2. MeasurementReadoutController / PropertyPanelController / ObservationSources /
- *    ObservationExportService read ViewMap or circuit.lastViewMap.
+ *    ObservationExportService still read live component fields (not circuit.lastViewMap).
  * 3. Adapter call-count debug path at 0 for two release cycles can delete.
- * 4. Never delete the adapter before Renderer reads ViewMap (meters go to zero).
+ * 4. Never delete the adapter before Renderer reads ViewMap (meters go to zero)
+ *    and those other readers leave live fields.
  */
 export function applyViewMapToComponents(circuit, viewMap) {
     if (!circuit?.components || !viewMap || typeof viewMap[Symbol.iterator] !== 'function') {

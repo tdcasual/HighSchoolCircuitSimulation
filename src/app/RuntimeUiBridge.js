@@ -50,6 +50,12 @@ function safeToggleClass(node, className, force) {
     } catch (_) {}
 }
 
+function attachSolverViewMap(renderer, results) {
+    if (!renderer || typeof renderer.setViewMap !== 'function') return;
+    const useViewMap = !!(results?.valid && results?.backendUsed === 'v2' && results.viewMap instanceof Map);
+    renderer.setViewMap(useViewMap ? results.viewMap : null);
+}
+
 export class RuntimeUiBridge {
     constructor(app, options = {}) {
         this.app = app;
@@ -96,6 +102,7 @@ export class RuntimeUiBridge {
             circuit: this.app?.circuit
         });
 
+        attachSolverViewMap(this.app?.renderer, results);
         this.app?.renderer?.updateValues?.();
         this.app?.renderer?.updateWireAnimations?.(this.app?.circuit?.isRunning, results);
         this.app?.chartWorkspace?.onCircuitUpdate?.(results);
@@ -155,17 +162,20 @@ export class RuntimeUiBridge {
 
     showSimulationStopped() {
         this.setSimulationControlsRunningImpl(false);
+        attachSolverViewMap(this.app?.renderer, null);
         this.app?.renderer?.updateWireAnimations?.(false);
         this.app?.chartWorkspace?.setRuntimeStatus?.('');
         this.updateStatus('模拟已停止');
     }
 
     showCircuitCleared() {
+        attachSolverViewMap(this.app?.renderer, null);
         this.syncWorkbenchEmptyState({ componentCount: 0 });
         this.updateStatus('电路已清空');
     }
 
     showCircuitLoaded({ data, statusText = '', silent = false } = {}) {
+        attachSolverViewMap(this.app?.renderer, null);
         if (silent) return;
         const componentCount = Array.isArray(data?.components) ? data.components.length : 0;
         this.syncWorkbenchEmptyState({ componentCount });
