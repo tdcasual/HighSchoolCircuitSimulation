@@ -1,15 +1,5 @@
 import { NetlistBuilderV2 } from '../../simulation/NetlistBuilderV2.js';
 import { NodeBuilderV2 } from '../../simulation/NodeBuilderV2.js';
-import { getComponentManifestV2 } from '../../domain/components/ComponentManifest.js';
-
-function terminalCountOf(type) {
-    try {
-        const count = Number(getComponentManifestV2(type).terminalCount);
-        return Number.isInteger(count) && count > 0 ? count : 2;
-    } catch {
-        return 2;
-    }
-}
 
 function asList(source) {
     if (!source) return [];
@@ -28,31 +18,12 @@ function readSnapshotCollections(snapshot) {
     };
 }
 
-function copyPoint(point) {
-    if (!point || typeof point !== 'object') return point;
-    return { x: point.x, y: point.y };
-}
-
 function workingComponentMap(components) {
     const map = new Map();
     for (const component of components) {
         if (!component || component.id === undefined || component.id === null) continue;
         if (typeof component.id === 'string' && !component.id.trim()) continue;
         map.set(component.id, { ...component });
-    }
-    return map;
-}
-
-function workingWireMap(wires) {
-    const map = new Map();
-    for (const wire of wires) {
-        if (!wire || wire.id === undefined || wire.id === null) continue;
-        if (typeof wire.id === 'string' && !wire.id.trim()) continue;
-        map.set(wire.id, {
-            ...wire,
-            a: copyPoint(wire.a),
-            b: copyPoint(wire.b)
-        });
     }
     return map;
 }
@@ -84,13 +55,11 @@ export class TopologyCoordinatorV2 {
     buildNetlist(snapshot, options = {}) {
         const { components, wires } = readSnapshotCollections(snapshot);
         const componentMap = workingComponentMap(components);
-        const wireMap = workingWireMap(wires);
 
         const topology = this.nodeBuilder.build({
             components: componentMap,
-            wires: wireMap,
-            getTerminalWorldPosition: options.getTerminalWorldPosition,
-            getTerminalCount: terminalCountOf
+            wires,
+            getTerminalWorldPosition: options.getTerminalWorldPosition
         });
 
         for (const [id, component] of componentMap) {

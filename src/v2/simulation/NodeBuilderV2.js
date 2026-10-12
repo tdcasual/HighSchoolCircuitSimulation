@@ -26,18 +26,15 @@ function toMap(collection) {
 }
 
 export class NodeBuilderV2 {
-    build({ components, wires, getTerminalWorldPosition, getTerminalCount } = {}) {
+    build({ components, wires, getTerminalWorldPosition } = {}) {
         const componentMap = toMap(components);
         const wireMap = toMap(wires);
-        const resolveTerminalCount = typeof getTerminalCount === 'function'
-            ? getTerminalCount
-            : defaultTerminalCount;
 
         const resolveTerminalPosition = (componentId, terminalIndex, comp) => {
             const raw = typeof getTerminalWorldPosition === 'function'
                 ? getTerminalWorldPosition(componentId, terminalIndex, comp)
                 : getTerminalWorldPositionFromGeometry(comp, terminalIndex);
-            // Snapshots may skip Circuit.addWire; non-integers make pointKey return null.
+            // pointKey rejects non-integers; snap first.
             return normalizeCanvasPoint(raw);
         };
 
@@ -84,7 +81,7 @@ export class NodeBuilderV2 {
         };
 
         for (const [id, comp] of componentMap) {
-            const terminalCount = resolveTerminalCount(comp.type);
+            const terminalCount = defaultTerminalCount(comp.type);
             for (let terminalIndex = 0; terminalIndex < terminalCount; terminalIndex++) {
                 registerTerminal(id, terminalIndex, comp);
             }
@@ -110,7 +107,7 @@ export class NodeBuilderV2 {
 
         const connectedTerminals = new Map();
         for (const [id, comp] of componentMap) {
-            const terminalCount = resolveTerminalCount(comp.type);
+            const terminalCount = defaultTerminalCount(comp.type);
             for (let ti = 0; ti < terminalCount; ti++) {
                 const tKey = `${id}:${ti}`;
                 const coordKey = terminalCoordKey.get(tKey);
@@ -202,9 +199,8 @@ export class NodeBuilderV2 {
             assignNodeIfNeeded(root);
         }
 
-        const componentNodes = new Map();
         for (const [id, comp] of componentMap) {
-            const terminalCount = resolveTerminalCount(comp.type);
+            const terminalCount = defaultTerminalCount(comp.type);
             const nodes = Array.from({ length: terminalCount }, () => -1);
             for (let ti = 0; ti < terminalCount; ti++) {
                 const tKey = `${id}:${ti}`;
@@ -216,31 +212,13 @@ export class NodeBuilderV2 {
                     nodes[ti] = mapped;
                 }
             }
-            componentNodes.set(id, nodes);
-            // Working copies only; caller must not pass live Circuit maps.
             comp.nodes = nodes;
-        }
-
-        const wireNodeIndex = new Map();
-        for (const wire of wireMap.values()) {
-            const aId = `W:${wire.id}:a`;
-            if (!parent.has(aId)) {
-                wire.nodeIndex = -1;
-                wireNodeIndex.set(wire.id, -1);
-                continue;
-            }
-            const root = find(aId);
-            const mapped = nodeMap.has(root) ? nodeMap.get(root) : -1;
-            wire.nodeIndex = mapped;
-            wireNodeIndex.set(wire.id, mapped);
         }
 
         const nodes = Array.from({ length: nodeIndex }, (_, i) => ({ id: i }));
         return {
             nodes,
-            terminalConnectionMap: connectedTerminals,
-            componentNodes,
-            wireNodeIndex
+            terminalConnectionMap: connectedTerminals
         };
     }
 }

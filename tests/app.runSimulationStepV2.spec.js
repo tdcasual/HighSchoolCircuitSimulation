@@ -22,16 +22,19 @@ describe('RunSimulationStepV2', () => {
         expect(snapshot.components.every((component) => component.nodes === undefined)).toBe(true);
         expect(snapshot.wires).toHaveLength(2);
 
+        let resolverCalls = 0;
         const result = runSimulationStepV2({
             circuitModel: snapshot,
             simulationState: new SimulationStateV2(),
             options: {
                 dt: 0.01,
-                getTerminalWorldPosition: (_componentId, terminalIndex, comp) => (
-                    getTerminalWorldPosition(comp, terminalIndex)
-                )
+                getTerminalWorldPosition: (_componentId, terminalIndex, comp) => {
+                    resolverCalls += 1;
+                    return getTerminalWorldPosition(comp, terminalIndex);
+                }
             }
         });
+        expect(resolverCalls).toBeGreaterThan(0);
 
         expect(result.solveResult.valid).toBe(true);
         expect(result.projection.components).toHaveLength(2);

@@ -76,6 +76,10 @@ export class ResultPostprocessorV2 {
             }
 
             if (component.type === 'PowerSource' || component.type === 'ACVoltageSource') {
+                if (!Number.isInteger(n1) || n1 < 0 || !Number.isInteger(n2) || n2 < 0) {
+                    currents.set(id, 0);
+                    continue;
+                }
                 const internalResistance = Number(component.internalResistance);
                 const sourceVoltage = resolveSourceVoltage(component, simTime);
                 if (Number.isFinite(internalResistance) && internalResistance > 1e-9) {

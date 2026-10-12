@@ -19,4 +19,23 @@ describe('ResultPostprocessorV2', () => {
 
         expect(currents.get('0')).toBeCloseTo(1, 12);
     });
+
+    it('reports zero current for a resistor with a dangling terminal', () => {
+        const currents = ResultPostprocessorV2.computeCurrents(
+            [
+                {
+                    id: 'R1',
+                    type: 'Resistor',
+                    nodes: [1, -1],
+                    resistance: 100
+                }
+            ],
+            [0, 12],
+            new Map(),
+            { dt: 0.01, simTime: 0 }
+        );
+
+        expect(currents.get('R1')).toBe(0);
+    });
 });
+

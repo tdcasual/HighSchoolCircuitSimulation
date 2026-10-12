@@ -70,7 +70,29 @@ describe('NetlistBuilderV2', () => {
         expect(netlist.components[0].id).toBe('0');
     });
 
-    it('keeps unconnected -1 node slots and omits runtime fields from params', () => {
+    it('keeps unconnected -1 node slots and omits every runtime param key', () => {
+        const runtimeOmitKeys = [
+            'currentValue',
+            'voltageValue',
+            'powerValue',
+            'brightness',
+            'conducting',
+            'speed',
+            'backEmf',
+            'vsIndex',
+            '_isShorted',
+            '_nortonModel',
+            'prevVoltage',
+            'prevCharge',
+            'prevCurrent',
+            'junctionVoltage',
+            'junctionCurrent',
+            'i2tAccum',
+            'energized'
+        ];
+        const runtimeFields = Object.fromEntries(
+            runtimeOmitKeys.map((key, index) => [key, index + 1])
+        );
         const builder = new NetlistBuilderV2();
         const netlist = builder.build({
             components: [{
@@ -78,17 +100,18 @@ describe('NetlistBuilderV2', () => {
                 type: 'Resistor',
                 nodes: [3, -1],
                 resistance: 100,
-                currentValue: 0.3,
-                vsIndex: 2,
-                nodesShadow: 1
+                nodesShadow: 1,
+                ...runtimeFields
             }],
             nodes: [0, 1, 2, 3]
         });
 
         expect(netlist.components[0].nodes).toEqual([3, -1]);
-        expect(netlist.components[0].params).toEqual({
-            resistance: 100,
-            nodesShadow: 1
-        });
+        expect(netlist.components[0].params.resistance).toBe(100);
+        expect(netlist.components[0].params.nodesShadow).toBe(1);
+        for (const key of runtimeOmitKeys) {
+            expect(netlist.components[0].params).not.toHaveProperty(key);
+        }
     });
 });
+

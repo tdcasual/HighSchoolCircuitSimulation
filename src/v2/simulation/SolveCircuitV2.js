@@ -48,7 +48,7 @@ function clamp(value, min, max) {
 
 function normalizeNodeIndex(value) {
     const parsed = Number(value);
-    // Keep dangling slots as -1; filtering [n,-1] → [n] stamps G to ground.
+    // Keep unconnected slots as -1; dropping a slot would stamp G to ground.
     if (!Number.isInteger(parsed) || parsed < 0) return -1;
     return parsed;
 }
@@ -90,11 +90,15 @@ function nodeToMatrixIndex(node) {
     return node - 1;
 }
 
+function hasDisconnectedTerminal(n1, n2) {
+    return !Number.isInteger(n1) || n1 < 0 || !Number.isInteger(n2) || n2 < 0;
+}
+
 function stampResistor(matrix, n1, n2, resistance) {
     const r = Number(resistance);
     if (!Number.isFinite(r) || r <= 0) return;
     // -1 is unconnected, not earth (node 0). A singleton G stamp would leak current.
-    if (!Number.isInteger(n1) || n1 < 0 || !Number.isInteger(n2) || n2 < 0) return;
+    if (hasDisconnectedTerminal(n1, n2)) return;
     const g = 1 / r;
 
     const i1 = nodeToMatrixIndex(n1);
@@ -110,6 +114,7 @@ function stampResistor(matrix, n1, n2, resistance) {
 function stampCurrentSource(vector, fromNode, toNode, current) {
     const i = Number(current);
     if (!Number.isFinite(i) || Math.abs(i) < 1e-18) return;
+    if (hasDisconnectedTerminal(fromNode, toNode)) return;
 
     const from = nodeToMatrixIndex(fromNode);
     const to = nodeToMatrixIndex(toNode);

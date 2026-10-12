@@ -140,7 +140,7 @@ describe('ResultProjector v2', () => {
         model = addComponent(model, {
             id: 'R1',
             type: 'Resistor',
-            nodes: [1, 0],
+            nodes: [9, 8],
             resistance: 8
         });
 

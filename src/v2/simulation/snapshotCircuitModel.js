@@ -54,7 +54,6 @@ function snapshotComponent(component) {
     if (!component || typeof component !== 'object') return null;
     const cloned = cloneSnapshotValue(component);
     if (!cloned || cloned.id === undefined || cloned.id === null) return null;
-    delete cloned.nodes;
     return cloned;
 }
 
