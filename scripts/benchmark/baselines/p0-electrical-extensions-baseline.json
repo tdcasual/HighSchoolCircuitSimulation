@@ -1,0 +1,283 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-10-12T06:43:29.766Z",
+  "runtime": {
+    "node": "v24.21.0",
+    "platform": "linux",
+    "absTolerance": 0.000001,
+    "relTolerance": 0.001
+  },
+  "scenarioCount": 6,
+  "scenarios": [
+    {
+      "id": "motor_stall",
+      "description": "6V ideal source + 5Ω motor armature stall",
+      "valid": true,
+      "dt": 0.01,
+      "steps": 1,
+      "simTime": 0.01,
+      "components": 2,
+      "wires": 2,
+      "nodes": 2,
+      "nodeVoltages": [
+        0,
+        6
+      ],
+      "componentCurrents": {
+        "M1": 1.2,
+        "V1": 1.200000000006
+      },
+      "componentVoltages": {
+        "M1": 6,
+        "V1": 6
+      },
+      "componentNodeVoltages": {
+        "M1": [
+          6,
+          0
+        ],
+        "V1": [
+          6,
+          0
+        ]
+      },
+      "wireCurrents": {
+        "W1": -1.2,
+        "W2": 1.200000000006
+      },
+      "runner": "dc-solve"
+    },
+    {
+      "id": "ac_resistor_rms",
+      "description": "50Hz 10Vrms AC + 10Ω resistor RMS via production ticks",
+      "valid": true,
+      "dt": 0.01,
+      "steps": 4,
+      "simTime": 0.04,
+      "components": 2,
+      "wires": 2,
+      "nodes": 2,
+      "nodeVoltages": [
+        0,
+        -2.212317420825
+      ],
+      "componentCurrents": {
+        "R1": -0.221231742082,
+        "VAC": -0.221231742085
+      },
+      "componentVoltages": {
+        "R1": -2.212317420825,
+        "VAC": -2.212317420825
+      },
+      "componentNodeVoltages": {
+        "R1": [
+          -2.212317420825,
+          0
+        ],
+        "VAC": [
+          -2.212317420825,
+          0
+        ]
+      },
+      "wireCurrents": {
+        "W1": -0.221231742082,
+        "W2": -0.221231742085
+      },
+      "runner": "production-tick",
+      "substepCount": 20,
+      "sampleCount": 80,
+      "componentRmsCurrents": {
+        "R1": 1,
+        "VAC": 1.00000000001
+      },
+      "componentRmsVoltages": {
+        "R1": 10,
+        "VAC": 10
+      }
+    },
+    {
+      "id": "diode_forward",
+      "description": "Forward-biased diode with 5V / 100Ω",
+      "valid": true,
+      "dt": 0.01,
+      "steps": 1,
+      "simTime": 0.01,
+      "components": 3,
+      "wires": 3,
+      "nodes": 3,
+      "nodeVoltages": [
+        0,
+        5,
+        4.086397971765
+      ],
+      "componentCurrents": {
+        "D1": 0.040863979719,
+        "R1": 0.040863979718,
+        "V1": 0.040863979727
+      },
+      "componentVoltages": {
+        "D1": 0.913602028235,
+        "R1": 4.086397971765,
+        "V1": 5
+      },
+      "componentNodeVoltages": {
+        "D1": [
+          5,
+          4.086397971765
+        ],
+        "R1": [
+          4.086397971765,
+          0
+        ],
+        "V1": [
+          5,
+          0
+        ]
+      },
+      "wireCurrents": {
+        "W1": 0.040863979719,
+        "W2": 0.040863979718,
+        "W3": 0.040863979727
+      },
+      "runner": "dc-solve"
+    },
+    {
+      "id": "diode_reverse",
+      "description": "Reverse-biased diode leakage with 5V / 100Ω",
+      "valid": true,
+      "dt": 0.01,
+      "steps": 1,
+      "simTime": 0.01,
+      "components": 3,
+      "wires": 3,
+      "nodes": 3,
+      "nodeVoltages": [
+        0,
+        5,
+        3.1005e-8
+      ],
+      "componentCurrents": {
+        "D1": -2.95e-10,
+        "R1": 3.1e-10,
+        "V1": 3.15e-10
+      },
+      "componentVoltages": {
+        "D1": -4.999999968995,
+        "R1": 3.1005e-8,
+        "V1": 5
+      },
+      "componentNodeVoltages": {
+        "D1": [
+          3.1005e-8,
+          5
+        ],
+        "R1": [
+          3.1005e-8,
+          0
+        ],
+        "V1": [
+          5,
+          0
+        ]
+      },
+      "wireCurrents": {
+        "W1": 0,
+        "W2": 0,
+        "W3": 0
+      },
+      "runner": "dc-solve"
+    },
+    {
+      "id": "switch_closed_6v10",
+      "description": "Closed switch 6V / 10Ω series",
+      "valid": true,
+      "dt": 0.01,
+      "steps": 1,
+      "simTime": 0.01,
+      "components": 3,
+      "wires": 3,
+      "nodes": 3,
+      "nodeVoltages": [
+        0,
+        6,
+        6e-10
+      ],
+      "componentCurrents": {
+        "R1": 0.59999999994,
+        "S1": 0.59999999994,
+        "V1": 0.599999999946
+      },
+      "componentVoltages": {
+        "R1": 5.9999999994,
+        "S1": 6e-10,
+        "V1": 6
+      },
+      "componentNodeVoltages": {
+        "R1": [
+          6,
+          6e-10
+        ],
+        "S1": [
+          6e-10,
+          0
+        ],
+        "V1": [
+          6,
+          0
+        ]
+      },
+      "wireCurrents": {
+        "W1": 0.59999999994,
+        "W2": 0.59999999994,
+        "W3": 0.599999999946
+      },
+      "runner": "dc-solve"
+    },
+    {
+      "id": "switch_open_6v10",
+      "description": "Open switch 6V / 10Ω series",
+      "valid": true,
+      "dt": 0.01,
+      "steps": 1,
+      "simTime": 0.01,
+      "components": 3,
+      "wires": 3,
+      "nodes": 3,
+      "nodeVoltages": [
+        0,
+        6,
+        5.99999999988
+      ],
+      "componentCurrents": {
+        "R1": 1.2e-11,
+        "S1": 0,
+        "V1": 1.8e-11
+      },
+      "componentVoltages": {
+        "R1": 1.2e-10,
+        "S1": 5.99999999988,
+        "V1": 6
+      },
+      "componentNodeVoltages": {
+        "R1": [
+          6,
+          5.99999999988
+        ],
+        "S1": [
+          5.99999999988,
+          0
+        ],
+        "V1": [
+          6,
+          0
+        ]
+      },
+      "wireCurrents": {
+        "W1": 0,
+        "W2": 0,
+        "W3": 0
+      },
+      "runner": "dc-solve"
+    }
+  ]
+}

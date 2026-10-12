@@ -230,7 +230,7 @@ assertStepRun(
     qualitySteps,
     'quality',
     'Run quality checks and regressions',
-    'npm run lint && npm run format:check && npm run check:v2:runtime-safety && npm run check:core-size && npm test && npm run baseline:p0 && npm run baseline:circuitjs && npm run baseline:ai'
+    'npm run lint && npm run format:check && npm run check:v2:runtime-safety && npm run check:core-size && npm test && npm run baseline:p0 && npm run baseline:circuitjs && npm run baseline:ai && npm run baseline:p0:ext'
 );
 
 assertStepOrder(qualitySteps, 'quality', [
