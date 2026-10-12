@@ -44,7 +44,7 @@ export function resolveSourceInstantVoltage(comp, simTime = 0) {
     return Number.isFinite(comp.voltage) ? comp.voltage : 0;
 }
 
-export function hasValidVsIndex(comp) {
+function hasValidVsIndex(comp) {
     return Number.isInteger(comp?.vsIndex) && comp.vsIndex >= 0;
 }
 

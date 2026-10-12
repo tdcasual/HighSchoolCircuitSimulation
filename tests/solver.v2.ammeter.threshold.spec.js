@@ -48,7 +48,7 @@ describe('SolveCircuitV2 ammeter r<=0 threshold', () => {
         const production = solveCircuit(circuitIdeal);
         const ideal = solveV2FromCircuit(circuitIdeal).result;
         expect(ideal.valid).toBe(true);
-        expect(Math.abs(ideal.currents.get('A1'))).toBeCloseTo(0.12, 6);
+        expect(ideal.currents.get('A1')).toBeCloseTo(-0.12, 6);
         expect(ideal.currents.get('A1')).toBeCloseTo(production.currents.get('A1'), 6);
 
         const circuitResistive = createTestCircuit();
@@ -57,13 +57,13 @@ describe('SolveCircuitV2 ammeter r<=0 threshold', () => {
             internalResistance: 0
         });
         addComponent(circuitResistive, 'Ammeter', 'A1', { resistance: 1 });
-        addComponent(circuitResistive, 'Resistor', 'R1', { resistance: 99 });
+        addComponent(circuitResistive, 'Resistor', 'R1', { resistance: 100 });
         connectWire(circuitResistive, 'W1', src, 0, 'A1', 0);
         connectWire(circuitResistive, 'W2', 'A1', 1, 'R1', 0);
         connectWire(circuitResistive, 'W3', 'R1', 1, src, 1);
         const resistive = solveV2FromCircuit(circuitResistive).result;
         expect(resistive.valid).toBe(true);
-        expect(resistive.currents.get('A1')).toBeCloseTo(0.12, 6);
+        expect(resistive.currents.get('A1')).toBeCloseTo(12 / 101, 6);
 
         const tiny = normalizeComponent({
             id: 'A1',

@@ -96,13 +96,16 @@ function formatCalls(calls) {
         || '<none>';
 }
 
-function recordStamp(registry, type, overrides = {}) {
+function recordStamp(registry, type, extra = {}) {
     const handler = registry.get(type);
     if (!handler || typeof handler.stamp !== 'function') {
         throw new Error(`missing stamp handler for ${type}`);
     }
     const context = createRecordingStampContext();
-    handler.stamp(stubComponent(type, overrides), context, nodesFor(type));
+    if (extra.context && typeof extra.context === 'object') {
+        Object.assign(context, extra.context);
+    }
+    handler.stamp(stubComponent(type, extra.overrides || {}), context, nodesFor(type));
     return context.calls;
 }
 
@@ -117,7 +120,28 @@ const EXTRA_CASES = Object.freeze([
     { type: 'Motor', overrides: { vsIndex: undefined, resistance: 5 } },
     { type: 'SPDTSwitch', overrides: { position: 'b', vsIndex: 0 } },
     { type: 'PowerSource', overrides: { internalResistance: 1e-9, _nortonModel: true, voltage: 6 } },
-    { type: 'PowerSource', overrides: { internalResistance: 0, _nortonModel: false, voltage: 6, vsIndex: 0 } }
+    { type: 'PowerSource', overrides: { internalResistance: 0, _nortonModel: false, voltage: 6, vsIndex: 0 } },
+    {
+        type: 'Capacitor',
+        overrides: {
+            capacitance: 0.001,
+            prevVoltage: 1,
+            prevCharge: 0.001,
+            prevCurrent: 0.1,
+            _dynamicHistoryReady: true
+        },
+        context: { resolveDynamicIntegrationMethod: () => 'trapezoidal' }
+    },
+    {
+        type: 'Inductor',
+        overrides: {
+            inductance: 0.1,
+            prevCurrent: 1,
+            prevVoltage: 0.5,
+            _dynamicHistoryReady: true
+        },
+        context: { resolveDynamicIntegrationMethod: () => 'trapezoidal' }
+    }
 ]);
 
 async function main() {
@@ -159,8 +183,8 @@ async function main() {
         let v1Calls;
         let v2Calls;
         try {
-            v1Calls = recordStamp(DefaultComponentRegistry, extra.type, extra.overrides);
-            v2Calls = recordStamp(DefaultStampRegistryV2, extra.type, extra.overrides);
+            v1Calls = recordStamp(DefaultComponentRegistry, extra.type, extra);
+            v2Calls = recordStamp(DefaultStampRegistryV2, extra.type, extra);
         } catch (error) {
             mismatches.push(`${label}: ${error?.message || String(error)}`);
             continue;

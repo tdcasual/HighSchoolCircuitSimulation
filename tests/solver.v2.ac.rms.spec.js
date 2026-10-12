@@ -33,6 +33,24 @@ describe('SolveCircuitV2 AC RMS', () => {
 
         const meanSquare = samples.reduce((sum, value) => sum + value * value, 0) / samples.length;
         const rms = Math.sqrt(meanSquare);
-        expect(rms).toBeCloseTo(1, 2);
+        expect(rms).toBeCloseTo(1, 4);
+    });
+
+    it('peaks at rms√2 when phase is 90° at t=0', () => {
+        const circuit = createTestCircuit();
+        const source = addComponent(circuit, 'ACVoltageSource', 'VAC', {
+            rmsVoltage: 10,
+            frequency: 50,
+            phase: 90,
+            offset: 0,
+            internalResistance: 0
+        });
+        addComponent(circuit, 'Resistor', 'R1', { resistance: 10 });
+        connectWire(circuit, 'W1', source, 0, 'R1', 0);
+        connectWire(circuit, 'W2', 'R1', 1, source, 1);
+
+        const { result } = solveV2FromCircuit(circuit, { dt: 0.001, simTime: 0 });
+        expect(result.valid).toBe(true);
+        expect(result.currents.get('R1')).toBeCloseTo(Math.SQRT2, 6);
     });
 });

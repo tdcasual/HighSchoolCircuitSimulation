@@ -13,7 +13,6 @@ describe('ResultPostprocessorV2', () => {
                 }
             ],
             [0, 10],
-            new Map(),
             { dt: 0.01, simTime: 0 }
         );
 
@@ -31,7 +30,6 @@ describe('ResultPostprocessorV2', () => {
                 }
             ],
             [0, 12],
-            new Map(),
             { dt: 0.01, simTime: 0 }
         );
 
@@ -50,7 +48,6 @@ describe('ResultPostprocessorV2', () => {
                 }
             ],
             [0, 1e-9],
-            new Map(),
             { dt: 0.01, simTime: 0, solveVector: [0, 0.6], nodeCount: 2 }
         );
 
@@ -84,7 +81,6 @@ describe('ResultPostprocessorV2', () => {
                 }
             ],
             [0, 6],
-            new Map(),
             { dt: 0.01, simTime: 0, solveVector, nodeCount: 2 }
         );
 

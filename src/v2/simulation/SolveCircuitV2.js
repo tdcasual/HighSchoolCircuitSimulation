@@ -116,7 +116,6 @@ function toMatrixIndex(nodeIdx) {
 
 export function assignVoltageSourceIndices(components) {
     let voltageSourceCount = 0;
-    let shortCircuitDetected = false;
     let hasConnectedSwitch = false;
 
     for (const comp of components) {
@@ -135,9 +134,6 @@ export function assignVoltageSourceIndices(components) {
             comp._isShorted = (n1 === n2 && n1 >= 0);
             if (comp.type === 'Relay' || comp.type === 'Rheostat') {
                 comp._isShorted = false;
-            }
-            if (comp._isShorted && isPowerSource) {
-                shortCircuitDetected = true;
             }
         } else {
             comp._isShorted = false;
@@ -261,7 +257,7 @@ export function assignVoltageSourceIndices(components) {
         }
     }
 
-    return { voltageSourceCount, shortCircuitDetected, hasConnectedSwitch };
+    return { voltageSourceCount, hasConnectedSwitch };
 }
 
 function isFiniteResistanceSource(comp) {
@@ -379,6 +375,7 @@ export function solveCircuitV2(netlistDTO, simulationState = new SimulationState
     let solvedCurrents = new Map();
     let solvedValid = false;
     let lastJunctionDelta = 0;
+    let converged = !hasStateful;
 
     for (let iter = 0; iter < maxIterations; iter += 1) {
         const { A, z, size } = assemble(components, nodeCount, voltageSourceCount, contextExtras);
@@ -425,7 +422,6 @@ export function solveCircuitV2(netlistDTO, simulationState = new SimulationState
         solvedCurrents = ResultPostprocessorV2.computeCurrents(
             components,
             solvedVoltages,
-            new Map(),
             {
                 dt,
                 simTime,
@@ -438,7 +434,10 @@ export function solveCircuitV2(netlistDTO, simulationState = new SimulationState
         );
         solvedValid = true;
 
-        if (!hasStateful) break;
+        if (!hasStateful) {
+            converged = true;
+            break;
+        }
 
         let relayChanged = false;
         if (hasJunction) {
@@ -467,7 +466,10 @@ export function solveCircuitV2(netlistDTO, simulationState = new SimulationState
         }
 
         const junctionConverged = !hasJunction || lastJunctionDelta <= junctionTolerance;
-        if (junctionConverged && !relayChanged) break;
+        if (junctionConverged && !relayChanged) {
+            converged = true;
+            break;
+        }
     }
 
     if (!solvedValid) {
@@ -492,8 +494,20 @@ export function solveCircuitV2(netlistDTO, simulationState = new SimulationState
         state: nextState
     });
 
+    const valid = !hasStateful || converged;
+    if (!valid) {
+        diagnostics.code = 'not_converged';
+        diagnostics.details = {
+            ...diagnostics.details,
+            nodeCount,
+            matrixSize,
+            maxIterations,
+            lastJunctionDelta
+        };
+    }
+
     return {
-        valid: true,
+        valid,
         voltages: solvedVoltages,
         currents: solvedCurrents,
         nextState,

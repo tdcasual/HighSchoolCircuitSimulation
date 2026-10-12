@@ -47,6 +47,10 @@ describe('SolveCircuitV2 closed switch series VS', () => {
         expect(result.valid).toBe(true);
         const i1 = result.currents.get('S1');
         const i2 = result.currents.get('S2');
+        expect(Number.isFinite(i1)).toBe(true);
+        expect(Number.isFinite(i2)).toBe(true);
+        expect(Math.abs(i1)).toBeLessThan(10);
+        expect(Math.abs(i2)).toBeLessThan(10);
         expect(i1 + i2).toBeCloseTo(0.6, 2);
     });
 

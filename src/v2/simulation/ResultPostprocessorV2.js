@@ -5,7 +5,7 @@ function isValidNode(nodeIdx) {
 }
 
 export class ResultPostprocessorV2 {
-    static computeCurrents(components = [], voltages = [], _voltageSourceCurrentsById = new Map(), context = {}) {
+    static computeCurrents(components = [], voltages = [], context = {}) {
         const currents = new Map();
         const state = context?.state;
         const dt = Number.isFinite(context?.dt) && context.dt > 0 ? context.dt : 0.001;
