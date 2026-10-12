@@ -42,6 +42,41 @@ describe('SimulationRefreshSkill', () => {
         expect(result.reason).toContain('求解器不可用');
     });
 
+    it('uses solveFrame for a non-v1 backend without setting isRunning', () => {
+        const solveFrame = vi.fn().mockReturnValue({
+            valid: true,
+            voltages: [0, 2.4],
+            currents: new Map([['R1', 0.3]]),
+            backendUsed: 'v2'
+        });
+        const solve = vi.fn();
+        const circuit = {
+            dt: 0.01,
+            simTime: 2,
+            isRunning: false,
+            solverBackend: {
+                mode: 'v2',
+                solveFrame
+            },
+            solver: {
+                solve,
+                updateDynamicComponents: vi.fn()
+            },
+            rebuildNodes: vi.fn(),
+            ensureSolverPrepared: vi.fn(),
+            lastResults: null
+        };
+
+        const result = SimulationRefreshSkill.run({ circuit });
+
+        expect(result.ok).toBe(true);
+        expect(solveFrame).toHaveBeenCalledTimes(1);
+        expect(solve).not.toHaveBeenCalled();
+        expect(circuit.solver.updateDynamicComponents).not.toHaveBeenCalled();
+        expect(circuit.isRunning).toBe(false);
+        expect(circuit.simTime).toBe(2);
+    });
+
     it('attaches runtime diagnostics for invalid solve results', () => {
         const circuit = {
             dt: 0.01,

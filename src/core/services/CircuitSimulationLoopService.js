@@ -11,6 +11,128 @@ function getAdaptiveSeverity(results = {}) {
     return iterations;
 }
 
+const SHADOW_REL_TOL = 1e-3;
+const SHADOW_ABS_TOL = 1e-6;
+const SHADOW_SAMPLE_EVERY_N = 5;
+const SHADOW_TIMEOUT_MS = 8;
+
+function numericMismatch(left, right) {
+    if (!Number.isFinite(left) || !Number.isFinite(right)) return true;
+    const absolute = Math.abs(left - right);
+    const scale = Math.max(Math.abs(left), Math.abs(right));
+    const relative = scale === 0 ? 0 : absolute / scale;
+    return relative > SHADOW_REL_TOL && absolute > SHADOW_ABS_TOL;
+}
+
+function readCurrent(currents, id) {
+    if (currents instanceof Map) {
+        if (!currents.has(id)) return { has: false, value: undefined };
+        return { has: true, value: currents.get(id) };
+    }
+    if (currents && typeof currents === 'object' && Object.prototype.hasOwnProperty.call(currents, id)) {
+        return { has: true, value: currents[id] };
+    }
+    return { has: false, value: undefined };
+}
+
+function countShadowMismatches(v1, v2, context) {
+    let count = 0;
+    const ids = new Set();
+    if (v1?.currents instanceof Map) {
+        for (const key of v1.currents.keys()) ids.add(key);
+    } else if (v1?.currents && typeof v1.currents === 'object') {
+        for (const key of Object.keys(v1.currents)) ids.add(key);
+    }
+    if (v2?.currents instanceof Map) {
+        for (const key of v2.currents.keys()) ids.add(key);
+    } else if (v2?.currents && typeof v2.currents === 'object') {
+        for (const key of Object.keys(v2.currents)) ids.add(key);
+    }
+    if (context?.components) {
+        for (const id of context.components.keys()) ids.add(id);
+    }
+    for (const id of ids) {
+        const left = readCurrent(v1?.currents, id);
+        const right = readCurrent(v2?.currents, id);
+        if (!left.has || !right.has) {
+            count += 1;
+            continue;
+        }
+        if (numericMismatch(left.value, right.value)) count += 1;
+    }
+    if (context?.components) {
+        for (const [, comp] of context.components) {
+            const nodes = Array.isArray(comp?.nodes) ? comp.nodes : [];
+            for (let index = 0; index < nodes.length; index += 1) {
+                const nodeIndex = nodes[index];
+                if (!Number.isInteger(nodeIndex) || nodeIndex < 0) continue;
+                const leftHas = Array.isArray(v1?.voltages) && nodeIndex < v1.voltages.length;
+                const rightHas = Array.isArray(v2?.voltages) && nodeIndex < v2.voltages.length;
+                if (!leftHas || !rightHas) {
+                    count += 1;
+                    continue;
+                }
+                if (numericMismatch(v1.voltages[nodeIndex], v2.voltages[nodeIndex])) count += 1;
+            }
+        }
+    }
+    return count;
+}
+
+function noteAdaptive(current, candidate) {
+    if (!candidate || getAdaptiveSeverity(current) >= getAdaptiveSeverity(candidate)) {
+        return current;
+    }
+    return candidate;
+}
+
+function nowMs() {
+    return typeof performance !== 'undefined' && typeof performance.now === 'function'
+        ? performance.now()
+        : 0;
+}
+
+function commitV1Substep(context, substepDt) {
+    const substepResults = context.solver.solve(substepDt, context.simTime);
+    if (!substepResults.valid) {
+        return { substepResults, elapsedDt: 0 };
+    }
+    context.simTime += substepDt;
+    context.solver.updateDynamicComponents(substepResults.voltages, substepResults.currents);
+    context.syncSimulationStateToComponents();
+    context.resultProjectionService?.updateFuseState?.(context, substepResults, substepDt);
+    return { substepResults, elapsedDt: substepDt };
+}
+
+function runShadowCompare(backend, context, v1, substepDt, startSimTime) {
+    if (backend.shadowReady === false) return;
+    const started = nowMs();
+    let v2 = null;
+    try {
+        v2 = backend.solveFrame({
+            circuit: context,
+            dt: substepDt,
+            simTime: startSimTime
+        });
+    } catch (_) {
+        backend.shadowErrorCount = (backend.shadowErrorCount || 0) + 1;
+        return;
+    }
+    const elapsed = nowMs() - started;
+    if (elapsed > SHADOW_TIMEOUT_MS) {
+        backend.shadowErrorCount = (backend.shadowErrorCount || 0) + 1;
+        return;
+    }
+    backend.shadowCompareCount = (backend.shadowCompareCount || 0) + 1;
+    const mismatches = countShadowMismatches(v1, v2, context);
+    if (mismatches > 0) {
+        backend.shadowMismatchCount = (backend.shadowMismatchCount || 0) + 1;
+        if (backend.shadowThrow) {
+            throw new Error('solver shadow mismatch');
+        }
+    }
+}
+
 export class CircuitSimulationLoopService {
     getSimulationSubstepCount(context, stepDt = context?.dt) {
         const dt = Number.isFinite(stepDt) && stepDt > 0
@@ -52,23 +174,90 @@ export class CircuitSimulationLoopService {
         let latestResults = null;
         let adaptiveDecisionResults = null;
         let elapsedDt = 0;
+        const backend = context.solverBackend;
+        const mode = backend?.mode;
+        const useV1 = !backend || mode === 'v1';
+        const shadowTick = !useV1 && mode === 'shadow'
+            ? (Number(backend.shadowWallClockTick) || 0)
+            : 0;
+        const sampleEveryN = Number(backend?.sampleEveryN) > 0
+            ? Number(backend.sampleEveryN)
+            : SHADOW_SAMPLE_EVERY_N;
 
         for (let index = 0; index < substepCount; index++) {
-            const substepResults = context.solver.solve(substepDt, context.simTime);
-            latestResults = substepResults;
-            if (!adaptiveDecisionResults || getAdaptiveSeverity(substepResults) >= getAdaptiveSeverity(adaptiveDecisionResults)) {
-                adaptiveDecisionResults = substepResults;
+            if (useV1) {
+                const substepResults = context.solver.solve(substepDt, context.simTime);
+                latestResults = substepResults;
+                if (!adaptiveDecisionResults || getAdaptiveSeverity(substepResults) >= getAdaptiveSeverity(adaptiveDecisionResults)) {
+                    adaptiveDecisionResults = substepResults;
+                }
+
+                if (!substepResults.valid) {
+                    break;
+                }
+
+                context.simTime += substepDt;
+                elapsedDt += substepDt;
+                context.solver.updateDynamicComponents(substepResults.voltages, substepResults.currents);
+                context.syncSimulationStateToComponents();
+                context.resultProjectionService?.updateFuseState?.(context, substepResults, substepDt);
+                continue;
             }
 
-            if (!substepResults.valid) {
+            const startSimTime = context.simTime;
+            if (mode === 'v2') {
+                let result;
+                try {
+                    result = backend.solveFrame({
+                        circuit: context,
+                        dt: substepDt,
+                        simTime: startSimTime
+                    });
+                } catch (_) {
+                    result = { valid: false, voltages: [], currents: new Map() };
+                }
+                if (result?.valid) {
+                    latestResults = result;
+                    latestResults.backendUsed = 'v2';
+                    adaptiveDecisionResults = noteAdaptive(result, adaptiveDecisionResults);
+                    context.simTime += substepDt;
+                    elapsedDt += substepDt;
+                    continue;
+                }
+                backend.restoreStandby?.(context);
+                context.solver.setCircuit(Array.from(context.components.values()), context.nodes);
+                const v1 = context.solver.solve(substepDt, startSimTime);
+                if (v1.valid) {
+                    context.simTime += substepDt;
+                    elapsedDt += substepDt;
+                    context.solver.updateDynamicComponents(v1.voltages, v1.currents);
+                    context.syncSimulationStateToComponents();
+                    context.resultProjectionService?.updateFuseState?.(context, v1, substepDt);
+                }
+                latestResults = v1;
+                latestResults.backendUsed = 'v1';
+                backend.fallbackCount = (backend.fallbackCount || 0) + 1;
+                adaptiveDecisionResults = noteAdaptive(v1, adaptiveDecisionResults);
+                if (!v1.valid) {
+                    break;
+                }
+                continue;
+            }
+
+            const committed = commitV1Substep(context, substepDt);
+            latestResults = committed.substepResults;
+            adaptiveDecisionResults = noteAdaptive(committed.substepResults, adaptiveDecisionResults);
+            elapsedDt += committed.elapsedDt;
+            if (mode === 'shadow' && shadowTick % sampleEveryN === 0 && index === 0) {
+                runShadowCompare(backend, context, committed.substepResults, substepDt, startSimTime);
+            }
+            if (!committed.substepResults.valid) {
                 break;
             }
+        }
 
-            context.simTime += substepDt;
-            elapsedDt += substepDt;
-            context.solver.updateDynamicComponents(substepResults.voltages, substepResults.currents);
-            context.syncSimulationStateToComponents();
-            context.resultProjectionService?.updateFuseState?.(context, substepResults, substepDt);
+        if (mode === 'shadow') {
+            backend.shadowWallClockTick = shadowTick + 1;
         }
 
         if (adaptiveDecisionResults) {

@@ -96,7 +96,10 @@ export class RuntimeActionRouter {
         restoreAppUi({
             exerciseBoard: this.app?.exerciseBoard,
             chartWorkspace: this.app?.chartWorkspace,
-            ui: parsed.ui
+            ui: parsed.ui,
+            solverBackend: this.app?.circuit?.solverBackend,
+            warn: (message) => this.app?.logger?.warn?.(message),
+            applyMode: !this.app?.runtimeOptions?.enabled && !this.app?.runtimeOptions?.solverBackendExplicit
         });
 
         const components = parsed.circuit.components;

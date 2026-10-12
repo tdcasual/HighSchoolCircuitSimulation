@@ -144,9 +144,19 @@ export function parseEmbedRuntimeOptionsFromSearch(search = '') {
     const capabilities = { unfreeze: capabilitiesRaw.includes('unfreeze') };
     const usable = originsAreUsable(targetOrigin, allowedParentOrigins);
     const embedRequested = enabled;
+    const embedEnabled = embedRequested && usable;
+    const solverRaw = String(params.get('solver') || '').trim().toLowerCase();
+    const solverExplicit = params.has('solver')
+        && (solverRaw === 'v1' || solverRaw === 'v2' || solverRaw === 'shadow');
+    let solverBackend;
+    if (solverExplicit) {
+        solverBackend = solverRaw;
+    } else if (embedEnabled) {
+        solverBackend = 'v1';
+    }
 
     return {
-        enabled: embedRequested && usable,
+        enabled: embedEnabled,
         mode,
         readOnly: mode === EMBED_MODE_READONLY || parseBooleanFlag(params.get('readonly'), false),
         classroomLevel: normalizeClassroomLevel(params.get('classroomLevel'), mode),
@@ -155,7 +165,10 @@ export function parseEmbedRuntimeOptionsFromSearch(search = '') {
         capabilities,
         autoSave: embedRequested ? parseBooleanFlag(params.get('autosave'), false) : true,
         restoreFromStorage: embedRequested ? parseBooleanFlag(params.get('restore'), false) : true,
-        features: normalizeFeatureFlags(mode, rawFeatureFlags)
+        features: normalizeFeatureFlags(mode, rawFeatureFlags),
+        solverBackend,
+        solverBackendExplicit: solverExplicit,
+        shadowThrow: parseBooleanFlag(params.get('shadowThrow'), false)
     };
 }
 

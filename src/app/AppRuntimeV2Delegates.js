@@ -49,14 +49,24 @@ export function debugRuntimeCircuit(app) {
         logger.info(`  ${id}: nodes = [${comp.nodes}]`);
     }
 
-    app.circuit.solver.setCircuit(
-        Array.from(app.circuit.components.values()),
-        app.circuit.nodes
-    );
-
-    logger.info('VoltageSourceCount:', app.circuit.solver.voltageSourceCount);
-
-    const results = app.circuit.solver.solve(app.circuit.dt);
+    const backend = app.circuit.solverBackend;
+    const useBackend = !!backend && backend.mode !== 'v1' && typeof backend.solveFrame === 'function';
+    let results;
+    if (useBackend) {
+        results = backend.solveFrame({
+            circuit: app.circuit,
+            dt: app.circuit.dt,
+            simTime: app.circuit.simTime
+        });
+        logger.info('VoltageSourceCount:', app.circuit.solver.voltageSourceCount);
+    } else {
+        app.circuit.solver.setCircuit(
+            Array.from(app.circuit.components.values()),
+            app.circuit.nodes
+        );
+        logger.info('VoltageSourceCount:', app.circuit.solver.voltageSourceCount);
+        results = app.circuit.solver.solve(app.circuit.dt);
+    }
 
     logger.info('\n--- Solve Results ---');
     logger.info('Valid:', results.valid);
@@ -66,9 +76,20 @@ export function debugRuntimeCircuit(app) {
     } else {
         logger.info('Currents:', results.currents);
     }
+    logger.info('solverBackend:', backend?.mode);
+    logger.info('backendUsed:', results?.backendUsed);
+    logger.info('shadowMismatchCount:', backend?.shadowMismatchCount);
 
     app.circuit.solver.debugMode = false;
-    return { circuit: app.circuit, results };
+    return {
+        circuit: app.circuit,
+        results,
+        solverBackend: backend?.mode,
+        backendUsed: results?.backendUsed,
+        shadowMismatchCount: backend?.shadowMismatchCount,
+        shadowErrorCount: backend?.shadowErrorCount,
+        shadowCompareCount: backend?.shadowCompareCount
+    };
 }
 
 export function bindLazyAIPanelTriggers(app) {

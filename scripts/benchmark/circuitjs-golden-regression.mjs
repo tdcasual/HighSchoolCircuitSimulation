@@ -3,6 +3,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { Circuit } from '../../src/core/runtime/Circuit.js';
 import { createComponent } from '../../src/components/Component.js';
+import { createInjectedSolverBackend } from '../../src/v2/app/createInjectedSolverBackend.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -289,18 +290,32 @@ function runScenario(def) {
     const { text, sourcePath } = resolveScenarioText(def.sourceFile);
     const { circuit, conversion } = buildCircuitFromCircuitJsText(text, def.id);
 
+    circuit.solverBackend = createInjectedSolverBackend();
     circuit.dt = def.dt;
-    circuit.simTime = def.initialSimTime;
-
-    let results = { valid: false, voltages: [], currents: new Map() };
-    for (let i = 0; i < def.steps; i++) {
-        circuit.ensureSolverPrepared();
-        results = circuit.solver.solve(circuit.dt, circuit.simTime);
-        circuit.lastResults = results;
-        if (!results.valid) break;
-        circuit.solver.updateDynamicComponents(results.voltages, results.currents);
-        circuit.simTime += circuit.dt;
+    // Frozen goldens are one wall-clock solve(dt) at t=0; keep that dt on the production loop.
+    circuit.maxAcSubstepsPerStep = 1;
+    circuit.prepareSimulation();
+    for (const comp of circuit.getAllComponents()) {
+        if (comp.type !== 'Inductor') continue;
+        // First unprepared solve used factory prevCurrent=0, not circuitjs i0.
+        comp.prevCurrent = 0;
+        const entry = circuit.simulationState?.get?.(comp.id);
+        if (entry) {
+            entry.prevCurrent = 0;
+            entry._dynamicHistoryReady = false;
+        }
+        comp._dynamicHistoryReady = false;
     }
+    if (Number.isFinite(def.initialSimTime) && def.initialSimTime !== 0) {
+        circuit.simTime = def.initialSimTime;
+    }
+
+    for (let i = 0; i < def.steps; i++) {
+        circuit.step();
+        if (!circuit.lastResults?.valid) break;
+    }
+    circuit.haltSimulation();
+    const results = circuit.lastResults || { valid: false, voltages: [], currents: new Map() };
 
     const components = circuit.getAllComponents().slice().sort((a, b) => String(a.id).localeCompare(String(b.id)));
     const wires = circuit.getAllWires().slice().sort((a, b) => String(a.id).localeCompare(String(b.id)));

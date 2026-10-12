@@ -4,6 +4,7 @@ import { Circuit } from '../../src/core/runtime/Circuit.js';
 import { createComponent } from '../../src/components/Component.js';
 import { getTerminalWorldPosition } from '../../src/utils/TerminalGeometry.js';
 import { validateCircuitJSON } from '../../src/utils/circuitSchema.js';
+import { createInjectedSolverBackend } from '../../src/v2/app/createInjectedSolverBackend.js';
 
 const OUTPUT_DIR = new URL('../../output/benchmarks/', import.meta.url).pathname;
 
@@ -29,8 +30,14 @@ function connectTerminals(circuit, wireId, aComp, aTerminalIndex, bComp, bTermin
     });
 }
 
-function buildSeriesLoopScenario(resistorCount) {
+function createBenchmarkCircuit() {
     const circuit = new Circuit();
+    circuit.solverBackend = createInjectedSolverBackend();
+    return circuit;
+}
+
+function buildSeriesLoopScenario(resistorCount) {
+    const circuit = createBenchmarkCircuit();
     const spacing = 120;
     const source = addComponent(circuit, 'PowerSource', 'V1', 0, 0, {
         voltage: 12,
@@ -56,7 +63,7 @@ function buildSeriesLoopScenario(resistorCount) {
 }
 
 function buildConflictingIdealSourceScenario() {
-    const circuit = new Circuit();
+    const circuit = createBenchmarkCircuit();
     const v1 = addComponent(circuit, 'PowerSource', 'V1', 0, 0, {
         voltage: 5,
         internalResistance: 0
@@ -119,17 +126,17 @@ function runScenarioBenchmarks({ name, resistorCount, importIterations, rebuildI
     validateCircuitJSON(json);
 
     const importMetric = benchmark(`${name}:import`, importIterations, () => {
-        const circuit = new Circuit();
+        const circuit = createBenchmarkCircuit();
         circuit.fromJSON(json);
     });
 
-    const rebuildCircuit = new Circuit();
+    const rebuildCircuit = createBenchmarkCircuit();
     rebuildCircuit.fromJSON(json);
     const rebuildMetric = benchmark(`${name}:rebuildNodes`, rebuildIterations, () => {
         rebuildCircuit.rebuildNodes();
     });
 
-    const solveCircuit = new Circuit();
+    const solveCircuit = createBenchmarkCircuit();
     solveCircuit.fromJSON(json);
     let invalidSolveCount = 0;
     const solveMetric = withMutedWarnings(() =>
@@ -140,9 +147,9 @@ function runScenarioBenchmarks({ name, resistorCount, importIterations, rebuildI
         })
     );
 
-    const stepCircuit = new Circuit();
+    const stepCircuit = createBenchmarkCircuit();
     stepCircuit.fromJSON(json);
-    stepCircuit.isRunning = true;
+    stepCircuit.prepareSimulation();
     let invalidStepCount = 0;
     const stepMetric = withMutedWarnings(() =>
         benchmark(`${name}:step`, stepIterations, (_index, isWarmup) => {
@@ -150,7 +157,7 @@ function runScenarioBenchmarks({ name, resistorCount, importIterations, rebuildI
             if (!isWarmup && !stepCircuit.lastResults?.valid) invalidStepCount += 1;
         })
     );
-    stepCircuit.isRunning = false;
+    stepCircuit.haltSimulation();
 
     return {
         name,

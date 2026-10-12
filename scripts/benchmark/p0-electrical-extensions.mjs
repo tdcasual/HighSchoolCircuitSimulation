@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { addComponent, connectWire, createTestCircuit } from '../../tests/helpers/circuitTestUtils.js';
+import { createInjectedSolverBackend } from '../../src/v2/app/createInjectedSolverBackend.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -167,6 +168,7 @@ function collectSnapshotFields(circuit, results, def) {
 
 function runProductionTickScenario(def) {
     const circuit = def.build();
+    circuit.solverBackend = createInjectedSolverBackend();
     circuit.dt = def.dt;
     const sumSqCurrent = {};
     const sumSqVoltage = {};
@@ -220,6 +222,7 @@ function runProductionTickScenario(def) {
 
 function runDcSolveScenario(def) {
     const circuit = def.build();
+    circuit.solverBackend = createInjectedSolverBackend();
     circuit.dt = def.dt;
     circuit.simTime = def.initialSimTime;
     circuit.rebuildNodes();

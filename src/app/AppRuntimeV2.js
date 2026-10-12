@@ -12,6 +12,7 @@ import { ResponsiveLayoutController } from '../ui/ResponsiveLayoutController.js'
 import { MobileRestoreBroker } from '../ui/mobile/MobileRestoreBroker.js';
 import { MobileRestoreEntryController } from '../ui/mobile/MobileRestoreEntryController.js';
 import { parseEmbedRuntimeOptionsFromSearch } from '../embed/EmbedRuntimeOptions.js';
+import { wrapSolverBackend } from './simulation/ComponentViewAdapter.js';
 import {
     createDeferredChartWorkspaceFacade,
     createDeferredClassroomModeFacade,
@@ -56,6 +57,9 @@ export class AppRuntimeV2 {
         
         // 初始化电路引擎
         this.circuit = options.circuit || new Circuit();
+        if (options.solverBackend) {
+            this.circuit.solverBackend = wrapSolverBackend(options.solverBackend, this);
+        }
         this.circuit.setLogger?.(this.logger.child('circuit'));
         this.simulationDriver = typeof options.simulationDriverFactory === 'function'
             ? options.simulationDriverFactory({ circuit: this.circuit })
@@ -320,7 +324,8 @@ debugCircuit() {
         return buildAppSaveData({
             circuit: this.circuit,
             exerciseBoard: this.exerciseBoard,
-            chartWorkspace: this.chartWorkspace
+            chartWorkspace: this.chartWorkspace,
+            solverBackend: this.circuit.solverBackend?.mode
         });
     }
 

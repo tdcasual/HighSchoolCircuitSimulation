@@ -757,6 +757,7 @@ export class Circuit {
         if (typeof this.solver.setSimulationState === 'function') {
             this.solver.setSimulationState(this.simulationState);
         }
+        this.solverBackend?.reset?.();
     }
 
     syncSimulationStateToComponents() {
@@ -860,7 +861,7 @@ export class Circuit {
 
         this.attachRuntimeDiagnostics(this.lastResults, this.simTime);
 
-        if (this.lastResults.valid) {
+        if (this.lastResults.valid && this.lastResults.backendUsed !== 'v2') {
             this.resultProjectionService?.updateComponentDisplayValues?.(this, this.lastResults);
         }
 

@@ -1,3 +1,4 @@
+import { createInjectedSolverBackend } from '../app/createInjectedSolverBackend.js';
 import { createAppCompositionRootV2 } from './AppCompositionRootV2.js';
 
 function hasChartWorkspaceContract(appInstance) {
@@ -29,7 +30,10 @@ export function bootstrapV2({ register = registerBootstrapV2, AppClass } = {}) {
         return false;
     }
 
-    const compositionRoot = createAppCompositionRootV2({ AppClass });
+    const compositionRoot = createAppCompositionRootV2({
+        AppClass,
+        appOptions: { solverBackend: createInjectedSolverBackend() }
+    });
     return !!register({
         createApp: () => compositionRoot.createApp()
     });

@@ -256,4 +256,56 @@ describe('AppSerialization envelope', () => {
         expect(restored.components.has('R1')).toBe(true);
         expect(restored.components.has('Vkeep')).toBe(false);
     });
+
+    it('writes ui.solverBackend from runtime and does not put it in circuit payload', () => {
+        const doc = buildAppDocument({
+            circuit: {
+                toJSON: () => bareCircuitPayload()
+            },
+            solverBackend: 'shadow'
+        });
+        expect(doc.formatVersion).toBe(APP_DOCUMENT_VERSION);
+        expect(doc.ui.solverBackend).toBe('shadow');
+        expect(doc.circuit.solverBackend).toBeUndefined();
+        expect(doc.circuit.meta.solverBackend).toBeUndefined();
+
+        const parsed = parseAppDocument(doc);
+        expect(parsed.ui.solverBackend).toBe('shadow');
+        expect(parsed.circuit.solverBackend).toBeUndefined();
+    });
+
+    it('lowers archived ui.solverBackend=v2 to v1 before default-on', () => {
+        const solverBackend = { mode: 'shadow' };
+        const warn = vi.fn();
+        restoreAppUi({
+            ui: { solverBackend: 'v2' },
+            solverBackend,
+            warn
+        });
+        expect(solverBackend.mode).toBe('v1');
+        expect(warn).toHaveBeenCalled();
+        expect(String(warn.mock.calls[0][0])).toMatch(/v1/);
+
+        const kept = { mode: 'v1' };
+        restoreAppUi({
+            ui: { solverBackend: 'shadow' },
+            solverBackend: kept
+        });
+        expect(kept.mode).toBe('shadow');
+
+        const unknown = { mode: 'shadow' };
+        restoreAppUi({
+            ui: { solverBackend: 'nope' },
+            solverBackend: unknown
+        });
+        expect(unknown.mode).toBe('v1');
+
+        const locked = { mode: 'v1' };
+        restoreAppUi({
+            ui: { solverBackend: 'shadow' },
+            solverBackend: locked,
+            applyMode: false
+        });
+        expect(locked.mode).toBe('v1');
+    });
 });

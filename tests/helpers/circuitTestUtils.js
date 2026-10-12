@@ -48,6 +48,14 @@ export function connectWire(circuit, id, startComponent, startTerminalIndex, end
 }
 
 export function solveCircuit(circuit, simTime = 0) {
+    const backend = circuit.solverBackend;
+    if (backend && backend.mode !== 'v1' && typeof backend.solveFrame === 'function') {
+        return backend.solveFrame({
+            circuit,
+            dt: circuit.dt,
+            simTime
+        });
+    }
     circuit.solver.setCircuit(
         Array.from(circuit.components.values()),
         circuit.nodes

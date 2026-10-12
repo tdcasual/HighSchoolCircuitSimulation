@@ -30,8 +30,12 @@ export const SimulationRefreshSkill = {
                 circuit.ensureSolverPrepared();
             }
 
+            const dt = Math.max(1e-6, safeNumber(circuit.dt, 0.01));
+            const simTime = safeNumber(circuit.simTime, 0);
+            const backend = circuit.solverBackend;
+            const useBackend = !!backend && backend.mode !== 'v1' && typeof backend.solveFrame === 'function';
             const solver = circuit.solver;
-            if (!solver || typeof solver.solve !== 'function') {
+            if (!useBackend && (!solver || typeof solver.solve !== 'function')) {
                 return {
                     ok: false,
                     refreshed: false,
@@ -40,9 +44,9 @@ export const SimulationRefreshSkill = {
                 };
             }
 
-            const dt = Math.max(1e-6, safeNumber(circuit.dt, 0.01));
-            const simTime = safeNumber(circuit.simTime, 0);
-            const results = solver.solve(dt, simTime);
+            const results = useBackend
+                ? backend.solveFrame({ circuit, dt, simTime })
+                : solver.solve(dt, simTime);
             circuit.lastResults = results;
 
             if (results && typeof results === 'object' && !results.runtimeDiagnostics) {
@@ -53,7 +57,7 @@ export const SimulationRefreshSkill = {
                 }
             }
 
-            if (results?.valid && typeof solver.updateDynamicComponents === 'function') {
+            if (!useBackend && results?.valid && typeof solver.updateDynamicComponents === 'function') {
                 solver.updateDynamicComponents(results.voltages, results.currents);
                 circuit.simTime = simTime + dt;
             }

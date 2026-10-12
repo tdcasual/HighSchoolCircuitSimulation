@@ -4,6 +4,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { Circuit } from '../../src/core/runtime/Circuit.js';
 import { createComponent } from '../../src/components/Component.js';
 import { getTerminalWorldPosition } from '../../src/utils/TerminalGeometry.js';
+import { createInjectedSolverBackend } from '../../src/v2/app/createInjectedSolverBackend.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -272,19 +273,19 @@ export const P0_SCENARIO_DEFINITIONS = [
 
 function runScenario(def) {
     const circuit = def.build();
+    circuit.solverBackend = createInjectedSolverBackend();
     circuit.dt = def.dt;
-    circuit.simTime = def.initialSimTime;
-    circuit.rebuildNodes();
-
-    let results = { valid: false, voltages: [], currents: new Map() };
-    for (let i = 0; i < def.steps; i++) {
-        circuit.ensureSolverPrepared();
-        results = circuit.solver.solve(circuit.dt, circuit.simTime);
-        circuit.lastResults = results;
-        if (!results.valid) break;
-        circuit.solver.updateDynamicComponents(results.voltages);
-        circuit.simTime += circuit.dt;
+    circuit.prepareSimulation();
+    if (Number.isFinite(def.initialSimTime) && def.initialSimTime !== 0) {
+        circuit.simTime = def.initialSimTime;
     }
+
+    for (let i = 0; i < def.steps; i++) {
+        circuit.step();
+        if (!circuit.lastResults?.valid) break;
+    }
+    circuit.haltSimulation();
+    const results = circuit.lastResults || { valid: false, voltages: [], currents: new Map() };
 
     const componentCurrents = {};
     const componentVoltages = {};

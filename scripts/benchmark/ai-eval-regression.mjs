@@ -7,6 +7,7 @@ import { CircuitAIAgent } from '../../src/ai/agent/CircuitAIAgent.js';
 import { ClaimExtractSkill } from '../../src/ai/skills/ClaimExtractSkill.js';
 import { NumericCheckSkill } from '../../src/ai/skills/NumericCheckSkill.js';
 import { OpenAIClientV2 } from '../../src/ai/OpenAIClientV2.js';
+import { createInjectedSolverBackend } from '../../src/v2/app/createInjectedSolverBackend.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -54,16 +55,27 @@ function loadScenarios() {
 export const AI_EVAL_SCENARIO_FILES = listScenarioFiles();
 
 function refreshCircuitReadings(circuit) {
-    circuit.rebuildNodes();
-    circuit.ensureSolverPrepared();
-    const dt = Math.max(1e-6, safeNumber(circuit.dt, 0.01));
-    const simTime = safeNumber(circuit.simTime, 0);
-    const results = circuit.solver.solve(dt, simTime);
-    circuit.lastResults = results;
-    if (results?.valid) {
-        circuit.solver.updateDynamicComponents(results.voltages, results.currents);
+    circuit.solverBackend = createInjectedSolverBackend();
+    const display = new Map();
+    for (const [id, comp] of circuit.components) {
+        display.set(id, {
+            currentValue: comp.currentValue,
+            voltageValue: comp.voltageValue,
+            powerValue: comp.powerValue
+        });
     }
-    return !!results?.valid;
+    circuit.prepareSimulation();
+    circuit.step();
+    circuit.haltSimulation();
+    // Frozen checks read scenario JSON paint; step() would overwrite it.
+    for (const [id, paint] of display) {
+        const comp = circuit.components.get(id);
+        if (!comp) continue;
+        comp.currentValue = paint.currentValue;
+        comp.voltageValue = paint.voltageValue;
+        comp.powerValue = paint.powerValue;
+    }
+    return !!circuit.lastResults?.valid;
 }
 
 function pickComponentsForQuestion(circuit, questionText) {
@@ -218,6 +230,7 @@ function evaluateTargets(targets = [], checks = []) {
 
 async function runScenarioEvaluation(scenario, mode = 'mock') {
     const circuit = new Circuit();
+    circuit.solverBackend = createInjectedSolverBackend();
     circuit.fromJSON(scenario.circuit || {});
     const valid = refreshCircuitReadings(circuit);
     const explainer = new CircuitExplainer(circuit);
