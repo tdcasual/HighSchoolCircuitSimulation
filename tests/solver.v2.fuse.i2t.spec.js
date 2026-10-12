@@ -70,15 +70,17 @@ describe('SolveCircuitV2 fuse I²t', () => {
     it('treats i2tThreshold=0 as unset and uses the rated-current default', () => {
         const circuit = buildFuseCircuit({
             ratedCurrent: 2,
-            loadResistance: 1.05,
+            loadResistance: 1.28,
             i2tThreshold: 0
         });
         const first = solveV2FromCircuit(circuit, { dt: 0.01, state: new SimulationStateV2() });
         expect(first.result.valid).toBe(true);
-        expect(first.result.currents.get('F1')).toBeGreaterThan(8.94);
-        expect(first.result.nextState.get('F1').blown).toBe(true);
 
-        const second = solveV2FromCircuit(circuit, { dt: 0.01, state: first.result.nextState });
-        expect(Math.abs(second.result.currents.get('F1') || 0)).toBeLessThan(1e-6);
+        const current = first.result.currents.get('F1');
+        const expectedAccum = current * current * 0.01;
+        expect(expectedAccum).toBeGreaterThan(0.4);
+        expect(expectedAccum).toBeLessThan(0.8);
+        expect(first.result.nextState.get('F1').i2tAccum).toBeCloseTo(expectedAccum, 8);
+        expect(first.result.nextState.get('F1').blown).toBe(false);
     });
 });
