@@ -30,7 +30,15 @@ describe('ResultProjector v2', () => {
             diagnostics: { code: '', warnings: [] }
         };
 
+        const netlist = {
+            components: [
+                { id: 'V1', type: 'PowerSource', nodes: [1, 0], params: {} },
+                { id: 'R1', type: 'Resistor', nodes: [1, 0], params: {} }
+            ]
+        };
+
         const viewModel = projectResultV2({
+            netlist,
             circuitModel: model,
             solveResult
         });
@@ -58,6 +66,9 @@ describe('ResultProjector v2', () => {
         });
 
         const viewModel = projectResultV2({
+            netlist: {
+                components: [{ id: 'R1', type: 'Resistor', nodes: [1, 0], params: {} }]
+            },
             circuitModel: model,
             solveResult: {
                 valid: true,
@@ -81,6 +92,9 @@ describe('ResultProjector v2', () => {
         });
 
         const viewModel = projectResultV2({
+            netlist: {
+                components: [{ id: 'R1', type: 'Resistor', nodes: [1, 0], params: {} }]
+            },
             circuitModel: model,
             solveResult: {
                 valid: true,
@@ -104,6 +118,9 @@ describe('ResultProjector v2', () => {
         });
 
         const viewModel = projectResultV2({
+            netlist: {
+                components: [{ id: '0', type: 'Resistor', nodes: [1, 0], params: {} }]
+            },
             circuitModel: model,
             solveResult: {
                 valid: true,
@@ -116,5 +133,41 @@ describe('ResultProjector v2', () => {
         expect(viewModel.components[0].id).toBe('0');
         expect(viewModel.components[0].status).toBe('ok');
         expect(viewModel.components[0].measurements.current).toBeCloseTo(0.3, 12);
+    });
+
+    it('reads terminal voltages from netlist nodes, not circuitModel.nodes', () => {
+        let model = CircuitModel.empty();
+        model = addComponent(model, {
+            id: 'R1',
+            type: 'Resistor',
+            nodes: [1, 0],
+            resistance: 8
+        });
+
+        const viewModel = projectResultV2({
+            netlist: {
+                components: [{ id: 'R1', type: 'Resistor', nodes: [1, 0], params: {} }]
+            },
+            circuitModel: model,
+            solveResult: {
+                valid: true,
+                voltages: [0, 2.4],
+                currents: new Map([['R1', 0.3]]),
+                diagnostics: { code: '', warnings: [] }
+            }
+        });
+
+        expect(viewModel.components[0].measurements.voltage).toBeCloseTo(2.4, 6);
+
+        const ignoredModelNodes = projectResultV2({
+            circuitModel: model,
+            solveResult: {
+                valid: true,
+                voltages: [0, 2.4],
+                currents: new Map([['R1', 0.3]]),
+                diagnostics: { code: '', warnings: [] }
+            }
+        });
+        expect(ignoredModelNodes.components[0].measurements.voltage).toBe(0);
     });
 });

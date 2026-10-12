@@ -69,4 +69,26 @@ describe('NetlistBuilderV2', () => {
 
         expect(netlist.components[0].id).toBe('0');
     });
+
+    it('keeps unconnected -1 node slots and omits runtime fields from params', () => {
+        const builder = new NetlistBuilderV2();
+        const netlist = builder.build({
+            components: [{
+                id: 'R1',
+                type: 'Resistor',
+                nodes: [3, -1],
+                resistance: 100,
+                currentValue: 0.3,
+                vsIndex: 2,
+                nodesShadow: 1
+            }],
+            nodes: [0, 1, 2, 3]
+        });
+
+        expect(netlist.components[0].nodes).toEqual([3, -1]);
+        expect(netlist.components[0].params).toEqual({
+            resistance: 100,
+            nodesShadow: 1
+        });
+    });
 });

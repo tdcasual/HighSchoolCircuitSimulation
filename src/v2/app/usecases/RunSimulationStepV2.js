@@ -10,15 +10,18 @@ export function runSimulationStepV2({
     topologyCoordinator = new TopologyCoordinatorV2(),
     simulationCoordinator = new SimulationCoordinatorV2()
 } = {}) {
-    const netlist = topologyCoordinator.buildNetlist(circuitModel);
+    const netlist = topologyCoordinator.buildNetlist(circuitModel, {
+        getTerminalWorldPosition: options.getTerminalWorldPosition
+    });
     const solveResult = simulationCoordinator.solveStep({
         netlist,
         simulationState,
         options
     });
     const projection = projectResultV2({
-        circuitModel,
-        solveResult
+        netlist,
+        solveResult,
+        circuitModel
     });
 
     return {

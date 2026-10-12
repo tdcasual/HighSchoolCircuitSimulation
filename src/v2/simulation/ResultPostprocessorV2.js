@@ -225,6 +225,10 @@ export class ResultPostprocessorV2 {
 
             const explicitResistance = resolveResistance(component.resistance, NaN);
             if (Number.isFinite(explicitResistance)) {
+                if (!Number.isInteger(n1) || n1 < 0 || !Number.isInteger(n2) || n2 < 0) {
+                    currents.set(id, 0);
+                    continue;
+                }
                 currents.set(id, deltaV / explicitResistance);
                 continue;
             }

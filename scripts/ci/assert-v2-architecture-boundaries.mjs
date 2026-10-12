@@ -18,6 +18,10 @@ const allowedDeps = Object.freeze({
 const allowedOutsideV2Imports = Object.freeze({
     'src/v2/infra/io/CircuitSchemaV3.js': Object.freeze([
         '../../../core/io/CircuitSchemaGateway.js'
+    ]),
+    'src/v2/simulation/NodeBuilderV2.js': Object.freeze([
+        '../../utils/CanvasCoords.js',
+        '../../utils/TerminalGeometry.js'
     ])
 });
 

@@ -1,5 +1,26 @@
 export class NetlistBuilderV2 {
-    static OMIT_PARAM_KEYS = new Set(['id', 'type', 'nodes']);
+    static OMIT_PARAM_KEYS = new Set([
+        'id',
+        'type',
+        'nodes',
+        'currentValue',
+        'voltageValue',
+        'powerValue',
+        'brightness',
+        'conducting',
+        'speed',
+        'backEmf',
+        'vsIndex',
+        '_isShorted',
+        '_nortonModel',
+        'prevVoltage',
+        'prevCharge',
+        'prevCurrent',
+        'junctionVoltage',
+        'junctionCurrent',
+        'i2tAccum',
+        'energized'
+    ]);
 
     toNodeEntry(node, index) {
         if (node && typeof node === 'object' && node.id != null) {
@@ -12,13 +33,17 @@ export class NetlistBuilderV2 {
     }
 
     normalizeTerminalNode(node) {
-        if (typeof node === 'string' || typeof node === 'number') {
+        if (typeof node === 'number') {
+            if (!Number.isInteger(node) || node < 0) return -1;
+            return node;
+        }
+        if (typeof node === 'string') {
             return node;
         }
         if (node && typeof node === 'object' && node.id != null) {
             return String(node.id);
         }
-        return null;
+        return -1;
     }
 
     toPlainValue(value) {
@@ -66,9 +91,7 @@ export class NetlistBuilderV2 {
             && (typeof safeComponent.id !== 'string' || safeComponent.id.trim());
         const id = hasId ? String(safeComponent.id) : `${type}_${index}`;
         const sourceNodes = Array.isArray(safeComponent.nodes) ? safeComponent.nodes : [];
-        const nodes = sourceNodes
-            .map((node) => this.normalizeTerminalNode(node))
-            .filter((node) => node !== null);
+        const nodes = sourceNodes.map((node) => this.normalizeTerminalNode(node));
 
         return {
             id,

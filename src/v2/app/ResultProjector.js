@@ -32,24 +32,51 @@ function resolveStatus(solveResult, hasCurrent) {
     return 'ok';
 }
 
-export function projectResultV2({ circuitModel, solveResult } = {}) {
-    const componentMap = circuitModel?.components instanceof Map ? circuitModel.components : new Map();
-    const voltages = Array.isArray(solveResult?.voltages) ? [...solveResult.voltages] : [];
-    const currents = resolveCurrentsMap(solveResult?.currents);
+function collectProjectionSources({ netlist, circuitModel }) {
+    const netlistComponents = Array.isArray(netlist?.components) ? netlist.components : [];
+    if (netlistComponents.length > 0) {
+        return netlistComponents.map((entry, index) => {
+            const safe = entry && typeof entry === 'object' ? entry : {};
+            const hasId = safe.id !== undefined && safe.id !== null
+                && (typeof safe.id !== 'string' || safe.id.trim());
+            return {
+                id: hasId ? String(safe.id) : `Unknown_${index}`,
+                type: String(safe.type || 'Unknown'),
+                nodes: Array.isArray(safe.nodes) ? safe.nodes : []
+            };
+        });
+    }
 
-    const components = [];
+    const componentMap = circuitModel?.components instanceof Map ? circuitModel.components : new Map();
+    const sources = [];
     for (const [id, component] of componentMap.entries()) {
         const safeComponent = component && typeof component === 'object' ? component : {};
-        const n1 = safeComponent.nodes?.[0];
-        const n2 = safeComponent.nodes?.[1];
+        sources.push({
+            id: String(id),
+            type: String(safeComponent.type || 'Unknown'),
+            nodes: []
+        });
+    }
+    return sources;
+}
+
+export function projectResultV2({ netlist, solveResult, circuitModel } = {}) {
+    const voltages = Array.isArray(solveResult?.voltages) ? [...solveResult.voltages] : [];
+    const currents = resolveCurrentsMap(solveResult?.currents);
+    const sources = collectProjectionSources({ netlist, circuitModel });
+
+    const components = [];
+    for (const source of sources) {
+        const n1 = source.nodes?.[0];
+        const n2 = source.nodes?.[1];
         const voltage = readNodeVoltage(voltages, n1) - readNodeVoltage(voltages, n2);
-        const hasCurrent = currents.has(id);
-        const current = hasCurrent ? toFiniteNumber(currents.get(id), 0) : 0;
+        const hasCurrent = currents.has(source.id);
+        const current = hasCurrent ? toFiniteNumber(currents.get(source.id), 0) : 0;
         const power = voltage * current;
 
         components.push({
-            id: String(id),
-            type: String(safeComponent.type || 'Unknown'),
+            id: source.id,
+            type: source.type,
             status: resolveStatus(solveResult, hasCurrent),
             measurements: {
                 voltage,

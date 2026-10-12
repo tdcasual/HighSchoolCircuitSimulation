@@ -48,11 +48,12 @@ function clamp(value, min, max) {
 
 function normalizeNodeIndex(value) {
     const parsed = Number(value);
-    if (!Number.isInteger(parsed) || parsed < 0) return null;
+    // Keep dangling slots as -1; filtering [n,-1] → [n] stamps G to ground.
+    if (!Number.isInteger(parsed) || parsed < 0) return -1;
     return parsed;
 }
 
-function normalizeComponent(component, index) {
+export function normalizeComponent(component, index) {
     const safeComponent = component && typeof component === 'object' ? component : {};
     const type = typeof safeComponent.type === 'string' ? safeComponent.type : 'Unknown';
     const hasId = safeComponent.id !== undefined
@@ -60,9 +61,7 @@ function normalizeComponent(component, index) {
         && (typeof safeComponent.id !== 'string' || safeComponent.id.trim());
     const id = hasId ? String(safeComponent.id) : `${type}_${index}`;
     const sourceNodes = Array.isArray(safeComponent.nodes) ? safeComponent.nodes : [];
-    const nodes = sourceNodes
-        .map((node) => normalizeNodeIndex(node))
-        .filter((node) => node !== null);
+    const nodes = sourceNodes.map((node) => normalizeNodeIndex(node));
 
     const params = clonePlainValue(safeComponent.params || {});
     if (params && typeof params === 'object') {
@@ -94,6 +93,8 @@ function nodeToMatrixIndex(node) {
 function stampResistor(matrix, n1, n2, resistance) {
     const r = Number(resistance);
     if (!Number.isFinite(r) || r <= 0) return;
+    // -1 is unconnected, not earth (node 0). A singleton G stamp would leak current.
+    if (!Number.isInteger(n1) || n1 < 0 || !Number.isInteger(n2) || n2 < 0) return;
     const g = 1 / r;
 
     const i1 = nodeToMatrixIndex(n1);

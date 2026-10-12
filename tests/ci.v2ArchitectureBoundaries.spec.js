@@ -28,4 +28,15 @@ describe('v2 architecture boundaries guard', () => {
         const output = execFileSync('node', [scriptPath], { encoding: 'utf8' });
         expect(output).toContain('[v2-architecture] ok');
     });
+
+    it('allowlists NodeBuilderV2 utils specs with two-dot relative paths only', () => {
+        const scriptPath = resolve(process.cwd(), 'scripts/ci/assert-v2-architecture-boundaries.mjs');
+        const source = readFileSync(scriptPath, 'utf8');
+
+        expect(source).toContain("'src/v2/simulation/NodeBuilderV2.js'");
+        expect(source).toContain("'../../utils/CanvasCoords.js'");
+        expect(source).toContain("'../../utils/TerminalGeometry.js'");
+        expect(source).not.toContain("'../../../utils/");
+        expect(source).not.toContain('src/core/topology/NodeBuilder.js');
+    });
 });
