@@ -108,55 +108,6 @@ export const P0_EXT_SCENARIO_DEFINITIONS = [
     })
 ];
 
-function createRmsAccumulator(circuit) {
-    const sumSqCurrent = {};
-    const sumSqVoltage = {};
-    let sampleCount = 0;
-
-    return {
-        capture(voltages, currents) {
-            sampleCount += 1;
-            for (const comp of circuit.getAllComponents()) {
-                const current = currents instanceof Map ? (currents.get(comp.id) || 0) : 0;
-                sumSqCurrent[comp.id] = (sumSqCurrent[comp.id] || 0) + current * current;
-
-                const n1 = Array.isArray(comp.nodes) ? comp.nodes[0] : -1;
-                const n2 = Array.isArray(comp.nodes) ? comp.nodes[1] : -1;
-                const v1 = Number.isInteger(n1) && n1 >= 0 ? (voltages?.[n1] || 0) : 0;
-                const v2 = Number.isInteger(n2) && n2 >= 0 ? (voltages?.[n2] || 0) : 0;
-                const voltage = v1 - v2;
-                sumSqVoltage[comp.id] = (sumSqVoltage[comp.id] || 0) + voltage * voltage;
-            }
-        },
-        finish() {
-            const n = sampleCount > 0 ? sampleCount : 1;
-            const componentRmsCurrents = {};
-            const componentRmsVoltages = {};
-            for (const id of Object.keys(sumSqCurrent).sort((a, b) => a.localeCompare(b))) {
-                componentRmsCurrents[id] = normalizeNumber(Math.sqrt(sumSqCurrent[id] / n));
-            }
-            for (const id of Object.keys(sumSqVoltage).sort((a, b) => a.localeCompare(b))) {
-                componentRmsVoltages[id] = normalizeNumber(Math.sqrt(sumSqVoltage[id] / n));
-            }
-            return { sampleCount, componentRmsCurrents, componentRmsVoltages };
-        }
-    };
-}
-
-function withSubstepCapture(circuit, onCapture, fn) {
-    const solver = circuit.solver;
-    const original = solver.updateDynamicComponents.bind(solver);
-    solver.updateDynamicComponents = (voltages, currents) => {
-        onCapture(voltages, currents);
-        return original(voltages, currents);
-    };
-    try {
-        return fn();
-    } finally {
-        solver.updateDynamicComponents = original;
-    }
-}
-
 function collectSnapshotFields(circuit, results, def) {
     const componentCurrents = {};
     const componentVoltages = {};
@@ -217,25 +168,53 @@ function collectSnapshotFields(circuit, results, def) {
 function runProductionTickScenario(def) {
     const circuit = def.build();
     circuit.dt = def.dt;
-    const rms = createRmsAccumulator(circuit);
+    const sumSqCurrent = {};
+    const sumSqVoltage = {};
+    let sampleCount = 0;
+    const solver = circuit.solver;
+    const originalUpdate = solver.updateDynamicComponents.bind(solver);
+    solver.updateDynamicComponents = (voltages, currents) => {
+        sampleCount += 1;
+        for (const comp of circuit.getAllComponents()) {
+            const current = currents instanceof Map ? (currents.get(comp.id) || 0) : 0;
+            sumSqCurrent[comp.id] = (sumSqCurrent[comp.id] || 0) + current * current;
+            const n1 = Array.isArray(comp.nodes) ? comp.nodes[0] : -1;
+            const n2 = Array.isArray(comp.nodes) ? comp.nodes[1] : -1;
+            const v1 = Number.isInteger(n1) && n1 >= 0 ? (voltages?.[n1] || 0) : 0;
+            const v2 = Number.isInteger(n2) && n2 >= 0 ? (voltages?.[n2] || 0) : 0;
+            const voltage = v1 - v2;
+            sumSqVoltage[comp.id] = (sumSqVoltage[comp.id] || 0) + voltage * voltage;
+        }
+        return originalUpdate(voltages, currents);
+    };
 
-    withSubstepCapture(circuit, (voltages, currents) => rms.capture(voltages, currents), () => {
+    try {
         circuit.prepareSimulation();
         for (let i = 0; i < def.steps; i++) {
             circuit.step();
             if (!circuit.lastResults?.valid) break;
         }
         circuit.haltSimulation();
-    });
+    } finally {
+        solver.updateDynamicComponents = originalUpdate;
+    }
 
     const results = circuit.lastResults || { valid: false, voltages: [], currents: new Map() };
     const snapshot = collectSnapshotFields(circuit, results, def);
-    const rmsSummary = rms.finish();
+    const n = sampleCount > 0 ? sampleCount : 1;
+    const componentRmsCurrents = {};
+    const componentRmsVoltages = {};
+    for (const id of Object.keys(sumSqCurrent).sort((a, b) => a.localeCompare(b))) {
+        componentRmsCurrents[id] = normalizeNumber(Math.sqrt(sumSqCurrent[id] / n));
+    }
+    for (const id of Object.keys(sumSqVoltage).sort((a, b) => a.localeCompare(b))) {
+        componentRmsVoltages[id] = normalizeNumber(Math.sqrt(sumSqVoltage[id] / n));
+    }
     snapshot.runner = RUNNER_PRODUCTION_TICK;
     snapshot.substepCount = circuit.getSimulationSubstepCount(def.dt);
-    snapshot.sampleCount = rmsSummary.sampleCount;
-    snapshot.componentRmsCurrents = rmsSummary.componentRmsCurrents;
-    snapshot.componentRmsVoltages = rmsSummary.componentRmsVoltages;
+    snapshot.sampleCount = sampleCount;
+    snapshot.componentRmsCurrents = componentRmsCurrents;
+    snapshot.componentRmsVoltages = componentRmsVoltages;
     return snapshot;
 }
 
@@ -428,33 +407,34 @@ function parseArgs(argv) {
 
 export function runBaselineCli(options = {}) {
     const update = !!options.update;
+    const baselineFile = options.baselineFile || BASELINE_FILE;
     const snapshot = buildSnapshot();
     saveJson(CURRENT_SNAPSHOT_FILE, snapshot);
 
     if (update) {
-        saveJson(BASELINE_FILE, snapshot);
+        saveJson(baselineFile, snapshot);
         const report = makeMarkdownReport(snapshot, null);
         mkdirSync(dirname(DIFF_REPORT_FILE), { recursive: true });
         writeFileSync(DIFF_REPORT_FILE, report, 'utf8');
-        console.log(`Updated baseline: ${BASELINE_FILE}`);
+        console.log(`Updated baseline: ${baselineFile}`);
         console.log(`Current snapshot: ${CURRENT_SNAPSHOT_FILE}`);
         console.log(`Report: ${DIFF_REPORT_FILE}`);
         return 0;
     }
 
-    if (!existsSync(BASELINE_FILE)) {
+    if (!existsSync(baselineFile)) {
         const report = makeMarkdownReport(snapshot, {
             passed: false,
-            errors: [`Baseline not found: ${BASELINE_FILE}`]
+            errors: [`Baseline not found: ${baselineFile}`]
         });
         mkdirSync(dirname(DIFF_REPORT_FILE), { recursive: true });
         writeFileSync(DIFF_REPORT_FILE, report, 'utf8');
-        console.error(`Baseline not found: ${BASELINE_FILE}`);
+        console.error(`Baseline not found: ${baselineFile}`);
         console.error('Run with --update once to create baseline.');
         return 2;
     }
 
-    const baseline = JSON.parse(readFileSync(BASELINE_FILE, 'utf8'));
+    const baseline = JSON.parse(readFileSync(baselineFile, 'utf8'));
     const comparison = compareSnapshots(snapshot, baseline);
     const report = makeMarkdownReport(snapshot, comparison);
     mkdirSync(dirname(DIFF_REPORT_FILE), { recursive: true });
