@@ -22,6 +22,59 @@ describe('Renderer value snapshot updates', () => {
         vi.restoreAllMocks();
     });
 
+    it('prefers ViewMap values and increments fallback only for missing ids', () => {
+        const component = {
+            id: 'R1',
+            type: 'Resistor',
+            currentValue: 0.5,
+            voltageValue: 4,
+            powerValue: 2,
+            display: {}
+        };
+        const renderer = createRendererContext(component, {});
+        renderer.viewMap = null;
+        renderer.viewMapFallbackCount = 0;
+
+        const fallbackSnapshot = Renderer.prototype.buildValueDisplaySnapshot.call(
+            renderer,
+            component,
+            true,
+            false,
+            false
+        );
+        expect(renderer.viewMapFallbackCount).toBe(1);
+        const fallbackParts = fallbackSnapshot.split('|');
+        expect(fallbackParts[4]).toBe(renderer.formatValueSnapshotNumber(0.5));
+        expect(fallbackParts[5]).toBe(renderer.formatValueSnapshotNumber(4));
+
+        renderer.setViewMap(new Map([
+            ['R1', {
+                currentValue: 0,
+                voltageValue: 2.4,
+                powerValue: 0,
+                status: 'ok'
+            }]
+        ]));
+        const viewSnapshot = Renderer.prototype.buildValueDisplaySnapshot.call(
+            renderer,
+            component,
+            true,
+            false,
+            false
+        );
+        expect(renderer.viewMapFallbackCount).toBe(1);
+        const viewParts = viewSnapshot.split('|');
+        expect(viewParts[4]).toBe(renderer.formatValueSnapshotNumber(0));
+        expect(viewParts[5]).toBe(renderer.formatValueSnapshotNumber(2.4));
+        expect(viewParts[6]).toBe(renderer.formatValueSnapshotNumber(0));
+        expect(viewParts[4]).not.toBe(renderer.formatValueSnapshotNumber(0.5));
+        expect(viewParts[5]).not.toBe(renderer.formatValueSnapshotNumber(4));
+
+        renderer.setViewMap(null);
+        Renderer.prototype.buildValueDisplaySnapshot.call(renderer, component, true, false, false);
+        expect(renderer.viewMapFallbackCount).toBe(2);
+    });
+
     it('skips value display writes when snapshot is unchanged', () => {
         const component = {
             id: 'R1',

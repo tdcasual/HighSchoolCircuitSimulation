@@ -70,6 +70,12 @@ export class Renderer {
         this.componentElements = new Map();
         this.wireElements = new Map();
         this.valueDisplaySnapshot = new Map();
+        this.viewMap = null;
+        this.viewMapFallbackCount = 0;
+    }
+
+    setViewMap(viewMap) {
+        this.viewMap = viewMap instanceof Map ? viewMap : null;
     }
 
     /**
@@ -304,16 +310,29 @@ export class Renderer {
     }
 
     buildValueDisplaySnapshot(comp, showCurrent, showVoltage, showPower) {
+        const viewId = comp?.id === undefined || comp?.id === null ? '' : String(comp.id);
+        const view = this.viewMap instanceof Map && viewId
+            ? this.viewMap.get(viewId)
+            : undefined;
+        const usingView = view != null && typeof view === 'object';
+        if (!usingView) {
+            this.viewMapFallbackCount = (Number(this.viewMapFallbackCount) || 0) + 1;
+        }
+        const currentValue = usingView ? view.currentValue : comp?.currentValue;
+        const voltageValue = usingView ? view.voltageValue : comp?.voltageValue;
+        const powerValue = usingView ? view.powerValue : comp?.powerValue;
+        const voltageSegLeft = usingView ? view.voltageSegLeft : comp?.voltageSegLeft;
+        const voltageSegRight = usingView ? view.voltageSegRight : comp?.voltageSegRight;
         return [
             comp?.type || 'Unknown',
             showCurrent ? '1' : '0',
             showVoltage ? '1' : '0',
             showPower ? '1' : '0',
-            this.formatValueSnapshotNumber(comp?.currentValue),
-            this.formatValueSnapshotNumber(comp?.voltageValue),
-            this.formatValueSnapshotNumber(comp?.powerValue),
-            this.formatValueSnapshotNumber(comp?.voltageSegLeft),
-            this.formatValueSnapshotNumber(comp?.voltageSegRight),
+            this.formatValueSnapshotNumber(currentValue),
+            this.formatValueSnapshotNumber(voltageValue),
+            this.formatValueSnapshotNumber(powerValue),
+            this.formatValueSnapshotNumber(voltageSegLeft),
+            this.formatValueSnapshotNumber(voltageSegRight),
             this.formatValueSnapshotNumber(comp?.ratedPower),
             this.formatValueSnapshotNumber(comp?.boxHeight)
         ].join('|');
