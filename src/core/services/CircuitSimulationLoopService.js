@@ -86,12 +86,6 @@ function noteAdaptive(current, candidate) {
     return candidate;
 }
 
-function nowMs() {
-    return typeof performance !== 'undefined' && typeof performance.now === 'function'
-        ? performance.now()
-        : 0;
-}
-
 function commitV1Substep(context, substepDt) {
     const substepResults = context.solver.solve(substepDt, context.simTime);
     if (!substepResults.valid) {
@@ -104,9 +98,8 @@ function commitV1Substep(context, substepDt) {
     return { substepResults, elapsedDt: substepDt };
 }
 
-function runShadowCompare(backend, context, v1, substepDt, startSimTime) {
-    if (backend.shadowReady === false) return;
-    const started = nowMs();
+function sampleShadowFrame(backend, context, substepDt, startSimTime) {
+    const started = globalThis.performance?.now?.();
     let v2 = null;
     try {
         v2 = backend.solveFrame({
@@ -116,13 +109,18 @@ function runShadowCompare(backend, context, v1, substepDt, startSimTime) {
         });
     } catch (_) {
         backend.shadowErrorCount = (backend.shadowErrorCount || 0) + 1;
-        return;
+        return null;
     }
-    const elapsed = nowMs() - started;
-    if (elapsed > SHADOW_TIMEOUT_MS) {
+    const ended = globalThis.performance?.now?.();
+    if (Number.isFinite(started) && Number.isFinite(ended) && (ended - started) > SHADOW_TIMEOUT_MS) {
         backend.shadowErrorCount = (backend.shadowErrorCount || 0) + 1;
-        return;
+        return null;
     }
+    return v2;
+}
+
+function recordShadowCompare(backend, context, v1, v2) {
+    if (!v2) return;
     backend.shadowCompareCount = (backend.shadowCompareCount || 0) + 1;
     const mismatches = countShadowMismatches(v1, v2, context);
     if (mismatches > 0) {
@@ -180,9 +178,6 @@ export class CircuitSimulationLoopService {
         const shadowTick = !useV1 && mode === 'shadow'
             ? (Number(backend.shadowWallClockTick) || 0)
             : 0;
-        const sampleEveryN = Number(backend?.sampleEveryN) > 0
-            ? Number(backend.sampleEveryN)
-            : SHADOW_SAMPLE_EVERY_N;
 
         for (let index = 0; index < substepCount; index++) {
             if (useV1) {
@@ -226,30 +221,31 @@ export class CircuitSimulationLoopService {
                 }
                 backend.restoreStandby?.(context);
                 context.solver.setCircuit(Array.from(context.components.values()), context.nodes);
-                const v1 = context.solver.solve(substepDt, startSimTime);
-                if (v1.valid) {
-                    context.simTime += substepDt;
-                    elapsedDt += substepDt;
-                    context.solver.updateDynamicComponents(v1.voltages, v1.currents);
-                    context.syncSimulationStateToComponents();
-                    context.resultProjectionService?.updateFuseState?.(context, v1, substepDt);
-                }
-                latestResults = v1;
+                const committed = commitV1Substep(context, substepDt);
+                latestResults = committed.substepResults;
                 latestResults.backendUsed = 'v1';
                 backend.fallbackCount = (backend.fallbackCount || 0) + 1;
-                adaptiveDecisionResults = noteAdaptive(v1, adaptiveDecisionResults);
-                if (!v1.valid) {
+                elapsedDt += committed.elapsedDt;
+                adaptiveDecisionResults = noteAdaptive(committed.substepResults, adaptiveDecisionResults);
+                if (!committed.substepResults.valid) {
                     break;
                 }
                 continue;
             }
 
+            const sampleShadow = mode === 'shadow'
+                && (shadowTick % SHADOW_SAMPLE_EVERY_N === 0)
+                && index === 0;
+            let shadowV2 = null;
+            if (sampleShadow) {
+                shadowV2 = sampleShadowFrame(backend, context, substepDt, startSimTime);
+            }
             const committed = commitV1Substep(context, substepDt);
             latestResults = committed.substepResults;
             adaptiveDecisionResults = noteAdaptive(committed.substepResults, adaptiveDecisionResults);
             elapsedDt += committed.elapsedDt;
-            if (mode === 'shadow' && shadowTick % sampleEveryN === 0 && index === 0) {
-                runShadowCompare(backend, context, committed.substepResults, substepDt, startSimTime);
+            if (sampleShadow) {
+                recordShadowCompare(backend, context, committed.substepResults, shadowV2);
             }
             if (!committed.substepResults.valid) {
                 break;

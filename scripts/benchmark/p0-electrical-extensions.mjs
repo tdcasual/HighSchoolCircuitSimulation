@@ -224,19 +224,16 @@ function runDcSolveScenario(def) {
     const circuit = def.build();
     circuit.solverBackend = createInjectedSolverBackend();
     circuit.dt = def.dt;
-    circuit.simTime = def.initialSimTime;
-    circuit.rebuildNodes();
-
-    let results = { valid: false, voltages: [], currents: new Map() };
-    for (let i = 0; i < def.steps; i++) {
-        circuit.ensureSolverPrepared();
-        results = circuit.solver.solve(circuit.dt, circuit.simTime);
-        circuit.lastResults = results;
-        if (!results.valid) break;
-        circuit.solver.updateDynamicComponents(results.voltages);
-        circuit.simTime += circuit.dt;
+    circuit.prepareSimulation();
+    if (Number.isFinite(def.initialSimTime) && def.initialSimTime !== 0) {
+        circuit.simTime = def.initialSimTime;
     }
-
+    for (let i = 0; i < def.steps; i++) {
+        circuit.step();
+        if (!circuit.lastResults?.valid) break;
+    }
+    circuit.haltSimulation();
+    const results = circuit.lastResults || { valid: false, voltages: [], currents: new Map() };
     const snapshot = collectSnapshotFields(circuit, results, def);
     snapshot.runner = RUNNER_DC_SOLVE;
     return snapshot;

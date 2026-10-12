@@ -292,12 +292,12 @@ function runScenario(def) {
 
     circuit.solverBackend = createInjectedSolverBackend();
     circuit.dt = def.dt;
-    // Frozen goldens are one wall-clock solve(dt) at t=0; keep that dt on the production loop.
+    // Golden snapshots use one production-loop substep of dt at t=0.
     circuit.maxAcSubstepsPerStep = 1;
     circuit.prepareSimulation();
     for (const comp of circuit.getAllComponents()) {
         if (comp.type !== 'Inductor') continue;
-        // First unprepared solve used factory prevCurrent=0, not circuitjs i0.
+        // First stamp uses factory prevCurrent=0; circuitjs i0 stays on initialCurrent.
         comp.prevCurrent = 0;
         const entry = circuit.simulationState?.get?.(comp.id);
         if (entry) {

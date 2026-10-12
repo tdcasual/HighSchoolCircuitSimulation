@@ -3,7 +3,6 @@ export {
     APP_DOCUMENT_VERSION,
     buildAppDocument,
     buildAppSaveData,
-    normalizeSolverBackendMode,
     parseAppDocument,
     restoreAppMetaFromSaveData,
     restoreAppUi,

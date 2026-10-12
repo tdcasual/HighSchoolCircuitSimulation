@@ -67,7 +67,7 @@ function refreshCircuitReadings(circuit) {
     circuit.prepareSimulation();
     circuit.step();
     circuit.haltSimulation();
-    // Frozen checks read scenario JSON paint; step() would overwrite it.
+    // Numeric checks read scenario JSON paint fields, not step() projection.
     for (const [id, paint] of display) {
         const comp = circuit.components.get(id);
         if (!comp) continue;

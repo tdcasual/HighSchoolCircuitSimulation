@@ -7,7 +7,7 @@ export const APP_DOCUMENT_VERSION = 1;
 const LEGACY_UI_META_KEYS = Object.freeze(['exerciseBoard', 'chartWorkspace']);
 const SOLVER_BACKEND_MODES = Object.freeze(['v1', 'v2', 'shadow']);
 
-export function normalizeSolverBackendMode(raw, options = {}) {
+function normalizeSolverBackendMode(raw, options = {}) {
     if (raw == null || raw === '') return null;
     const text = String(raw).trim().toLowerCase();
     if (!SOLVER_BACKEND_MODES.includes(text)) return 'v1';

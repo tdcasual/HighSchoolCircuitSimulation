@@ -308,4 +308,16 @@ describe('AppSerialization envelope', () => {
         });
         expect(locked.mode).toBe('v1');
     });
+
+    it('keeps v1 and omits ui.solverBackend when the key is missing', () => {
+        const solverBackend = { mode: 'v1' };
+        const warn = vi.fn();
+        restoreAppUi({ ui: {}, solverBackend, warn });
+        expect(solverBackend.mode).toBe('v1');
+        expect(warn).not.toHaveBeenCalled();
+
+        const circuit = new Circuit();
+        const doc = buildAppDocument({ circuit });
+        expect(doc.ui.solverBackend).toBeUndefined();
+    });
 });

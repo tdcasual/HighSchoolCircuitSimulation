@@ -99,14 +99,30 @@ describe('solverBackend wiring contracts', () => {
         const loop = readSource('src/core/services/CircuitSimulationLoopService.js');
         expect(loop).not.toContain('snapshotCircuitModel');
         expect(loop).not.toContain('applyViewMapToComponents');
+        expect(loop).not.toContain('shadowReady');
+        expect(loop).not.toContain('sampleEveryN');
+        expect(loop).not.toContain('function nowMs');
         expect(loop).toContain("mode === 'v1'");
         expect(loop).toContain('solveFrame');
         expect(loop).toContain('restoreStandby');
+        expect(loop).toContain('commitV1Substep');
+        expect(loop).toContain('SHADOW_SAMPLE_EVERY_N');
 
         const factory = readSource('src/v2/app/createInjectedSolverBackend.js');
         expect(factory).toContain("mode: normalizeMode(options.mode)");
         expect(factory).toContain("DEFAULT_SOLVER_BACKEND_MODE = 'v1'");
         expect(factory).toContain('runSimulationStepV2');
+        expect(factory).not.toContain('shadowReady');
+        expect(factory).not.toContain('sampleEveryN');
+
+        const adapter = readSource('src/app/simulation/ComponentViewAdapter.js');
+        expect(adapter).not.toContain('copyDynamicsToV1Standby');
+        expect(adapter).not.toContain('applySolverBackendRuntimeOptions');
+        expect(adapter).toContain('backend.restoreStandby');
+
+        const serialization = readSource('src/app/AppSerialization.js');
+        expect(serialization).not.toContain('normalizeSolverBackendMode');
+        expect(readSource('src/app/AppDocument.js')).not.toMatch(/export function normalizeSolverBackendMode/);
 
         const bootstrap = readSource('src/v2/main/bootstrapV2.js');
         expect(bootstrap).toContain('createInjectedSolverBackend');
@@ -131,6 +147,21 @@ describe('solverBackend wiring contracts', () => {
             expect(source, relPath).toContain('.step(');
             expect(source, relPath).toContain('haltSimulation');
         }
+    });
+
+    it('requires runDcSolveScenario to use prepare/step/halt instead of solver.solve', () => {
+        const source = readSource('scripts/benchmark/p0-electrical-extensions.mjs');
+        const dcStart = source.indexOf('function runDcSolveScenario');
+        const dcEnd = source.indexOf('function runScenario');
+        expect(dcStart).toBeGreaterThanOrEqual(0);
+        expect(dcEnd).toBeGreaterThan(dcStart);
+        const dcRunner = source.slice(dcStart, dcEnd);
+        expect(dcRunner).toContain('createInjectedSolverBackend');
+        expect(dcRunner).toContain('prepareSimulation');
+        expect(dcRunner).toContain('.step(');
+        expect(dcRunner).toContain('haltSimulation');
+        expect(dcRunner).not.toContain('solver.solve');
+        expect(dcRunner).not.toContain('ensureSolverPrepared');
     });
 });
 
@@ -157,6 +188,47 @@ describe('CircuitSimulationLoopService solverBackend dispatch', () => {
         expect(circuit.lastResults.currents.get('R1')).toBe(0.37);
         expect(circuit.simTime).toBeCloseTo(0.01, 12);
         expect(backend.reset).toHaveBeenCalled();
+    });
+
+    it('skips V1 display projection on v2 success after wrap writes ViewMap zeros', () => {
+        const circuit = buildSeriesFixture();
+        const resistor = circuit.getComponent('R1');
+        const liveNodes = resistor.nodes;
+        const circuitNodes = circuit.nodes;
+        const backend = createMockBackend({
+            solveFrame: vi.fn(() => ({
+                valid: true,
+                voltages: [0, 2.4],
+                currents: new Map([
+                    ['R1', 0.37],
+                    ['V1', 0.37]
+                ]),
+                backendUsed: 'v2',
+                viewMap: new Map([
+                    ['R1', {
+                        currentValue: 0,
+                        voltageValue: 2.4,
+                        powerValue: 0,
+                        nodes: [1, 0]
+                    }]
+                ])
+            }))
+        });
+        circuit.solverBackend = wrapSolverBackend(backend);
+        const projectionSpy = vi.spyOn(circuit.resultProjectionService, 'updateComponentDisplayValues');
+
+        circuit.prepareSimulation();
+        resistor.currentValue = 9;
+        circuit.step();
+        circuit.haltSimulation();
+
+        expect(projectionSpy).not.toHaveBeenCalled();
+        expect(circuit.lastResults.backendUsed).toBe('v2');
+        expect(circuit.lastResults.currents.get('R1')).toBe(0.37);
+        expect(resistor.currentValue).toBe(0);
+        expect(resistor.nodes).toBe(liveNodes);
+        expect(circuit.nodes).toBe(circuitNodes);
+        expect(backend.restoreStandby).toHaveBeenCalledWith(circuit);
     });
 
     it('keeps the v1 arm on solver.solve when mode is v1 or backend is missing', () => {
@@ -224,22 +296,30 @@ describe('CircuitSimulationLoopService solverBackend dispatch', () => {
 
     it('samples shadow on wall-clock ticks 0 and 5 at substep 0 only and does not run the adapter', () => {
         const circuit = buildAcFixture();
+        const resistor = circuit.getComponent('R1');
+        const solveFrame = vi.fn(() => ({
+            valid: true,
+            voltages: [0, 10],
+            currents: new Map([
+                ['R1', 0.37],
+                ['VAC', 0.37]
+            ]),
+            backendUsed: 'v2',
+            viewMap: new Map([
+                ['R1', { currentValue: 0, voltageValue: 0, powerValue: 0 }]
+            ])
+        }));
         const backend = createMockBackend({
             mode: 'shadow',
-            solveFrame: vi.fn(() => ({
-                valid: true,
-                voltages: [0, 10],
-                currents: new Map([
-                    ['R1', Math.SQRT2],
-                    ['VAC', Math.SQRT2]
-                ]),
-                backendUsed: 'v2'
-            }))
+            solveFrame
         });
-        circuit.solverBackend = backend;
+        const wrapped = wrapSolverBackend(backend);
+        circuit.solverBackend = wrapped;
         const solveSpy = vi.spyOn(circuit.solver, 'solve');
+        vi.spyOn(circuit.resultProjectionService, 'updateComponentDisplayValues').mockImplementation(() => {});
 
         circuit.prepareSimulation();
+        resistor.currentValue = 9;
         const substeps = circuit.getSimulationSubstepCount(circuit.dt);
         expect(substeps).toBeGreaterThan(1);
         for (let tick = 0; tick < 10; tick += 1) {
@@ -247,14 +327,65 @@ describe('CircuitSimulationLoopService solverBackend dispatch', () => {
         }
         circuit.haltSimulation();
 
-        expect(backend.solveFrame).toHaveBeenCalledTimes(2);
-        expect(backend.solveFrame.mock.calls[0][0].simTime).toBe(0);
+        expect(solveFrame).toHaveBeenCalledTimes(2);
+        expect(solveFrame.mock.calls[0][0].simTime).toBe(0);
+        expect(solveFrame.mock.calls[1][0].simTime).toBeCloseTo(0.05, 12);
         expect(backend.shadowWallClockTick).toBe(10);
         expect(solveSpy.mock.calls.length).toBe(10 * substeps);
         expect(circuit.lastResults.backendUsed).not.toBe('v2');
         expect(circuit.lastResults.currents.has('R1')).toBe(true);
-        expect(Math.abs(circuit.lastResults.currents.get('R1'))).toBeGreaterThan(0);
+        const lastV1 = solveSpy.mock.results.at(-1)?.value;
+        expect(circuit.lastResults.currents.get('R1')).toBe(lastV1.currents.get('R1'));
+        expect(Math.abs(circuit.lastResults.currents.get('R1'))).toBeCloseTo(Math.SQRT2, 1);
+        expect(circuit.lastResults.currents.get('R1')).not.toBe(0.37);
+        expect(resistor.currentValue).toBe(9);
         expect(circuit.simTime).toBeCloseTo(0.1, 12);
+    });
+
+    it('treats a missing V2 current key as a shadow mismatch even when V1 is 0', () => {
+        const probe = createTestCircuit();
+        addComponent(probe, 'PowerSource', 'V1', { voltage: 6, internalResistance: 0 });
+        addComponent(probe, 'Switch', 'S1', { closed: false });
+        addComponent(probe, 'Resistor', 'R1', { resistance: 10 });
+        connectWire(probe, 'W1', 'V1', 0, 'S1', 0);
+        connectWire(probe, 'W2', 'S1', 1, 'R1', 0);
+        connectWire(probe, 'W3', 'R1', 1, 'V1', 1);
+        probe.prepareSimulation();
+        probe.step();
+        probe.haltSimulation();
+        expect(probe.lastResults.currents.has('R1')).toBe(true);
+        expect(Math.abs(probe.lastResults.currents.get('R1'))).toBeLessThan(1e-7);
+        const v1Voltages = probe.lastResults.voltages.slice();
+        const v2Currents = new Map();
+        for (const [id, value] of probe.lastResults.currents) {
+            if (id !== 'R1') v2Currents.set(id, value);
+        }
+        expect(v2Currents.has('R1')).toBe(false);
+
+        const circuit = createTestCircuit();
+        addComponent(circuit, 'PowerSource', 'V1', { voltage: 6, internalResistance: 0 });
+        addComponent(circuit, 'Switch', 'S1', { closed: false });
+        addComponent(circuit, 'Resistor', 'R1', { resistance: 10 });
+        connectWire(circuit, 'W1', 'V1', 0, 'S1', 0);
+        connectWire(circuit, 'W2', 'S1', 1, 'R1', 0);
+        connectWire(circuit, 'W3', 'R1', 1, 'V1', 1);
+        const backend = createMockBackend({
+            mode: 'shadow',
+            solveFrame: vi.fn(() => ({
+                valid: true,
+                voltages: v1Voltages.slice(),
+                currents: new Map(v2Currents),
+                backendUsed: 'v2'
+            }))
+        });
+        circuit.solverBackend = backend;
+        circuit.prepareSimulation();
+        circuit.step();
+        circuit.haltSimulation();
+        expect(circuit.lastResults.currents.has('R1')).toBe(true);
+        expect(Math.abs(circuit.lastResults.currents.get('R1'))).toBeLessThan(1e-7);
+        expect(backend.shadowCompareCount).toBe(1);
+        expect(backend.shadowMismatchCount).toBe(1);
     });
 });
 
@@ -313,6 +444,16 @@ describe('wrapSolverBackend', () => {
         };
         wrapSolverBackend(shadowBackend).solveFrame({ circuit: shadowCircuit, dt: 0.01, simTime: 0 });
         expect(shadowResistor.currentValue).toBe(9);
+    });
+
+    it('copies runtimeOptions.solverBackend onto backend.mode', () => {
+        const backend = { mode: 'v1', solveFrame() {} };
+        wrapSolverBackend(backend, { runtimeOptions: { solverBackend: 'v2' } });
+        expect(backend.mode).toBe('v2');
+
+        const kept = { mode: 'v1', solveFrame() {} };
+        wrapSolverBackend(kept, { runtimeOptions: {} });
+        expect(kept.mode).toBe('v1');
     });
 });
 
@@ -403,6 +544,13 @@ describe('createInjectedSolverBackend', () => {
         expect(result.currents.has('R1')).toBe(true);
         expect(result.currents.get('R1')).toBeCloseTo(0.3, 6);
         expect(result.backendUsed).toBe('v2');
+        const liveNodes = circuit.nodes;
+        const resistorNodes = circuit.getComponent('R1').nodes;
+        const dynSpy = vi.spyOn(circuit.solver, 'updateDynamicComponents');
+        v2Backend.restoreStandby(circuit);
+        expect(circuit.nodes).toBe(liveNodes);
+        expect(circuit.getComponent('R1').nodes).toBe(resistorNodes);
+        expect(dynSpy).not.toHaveBeenCalled();
         v2Backend.fallbackCount = 3;
         v2Backend.reset();
         expect(v2Backend.fallbackCount).toBe(0);

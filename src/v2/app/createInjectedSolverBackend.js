@@ -133,9 +133,7 @@ export function createInjectedSolverBackend(options = {}) {
         shadowCompareCount: 0,
         shadowMismatchCount: 0,
         shadowErrorCount: 0,
-        shadowWallClockTick: 0,
-        shadowReady: true,
-        sampleEveryN: 5
+        shadowWallClockTick: 0
     };
 
     function getCachedSnapshot(circuit) {
@@ -229,7 +227,6 @@ export function createInjectedSolverBackend(options = {}) {
         backend.shadowMismatchCount = 0;
         backend.shadowErrorCount = 0;
         backend.shadowWallClockTick = 0;
-        backend.shadowReady = true;
     };
 
     return backend;
