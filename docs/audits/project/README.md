@@ -36,6 +36,7 @@
 - `docs/audits/project/2026-10-12-live-system-scorecard-b.md`：Codex 独立第二审计（综合 6.62）。
 - `docs/audits/project/2026-10-12-live-system-scorecard-a-rescore.md`：C1/C2 后 implementer 复评（综合 6.2）。
 - `docs/audits/project/2026-10-12-live-system-scorecard-b-rescore.md`：C1/C2 后 Codex 复评（综合 6.78）。诚实综合仍低于 8.0（Circuit/mixin/KD20）。
+- `docs/audits/project/2026-10-12-score-ceiling-closeout.md`：综合 >8.0 门禁 blocked；天花板 A=6.2 / B=6.78。未授权不拆 Circuit / mixin / V1。
 - `docs/audits/project/2026-10-12-next-issues.md`：default-on V2 之后的剩余债（KD20 soak → 剩余 ViewMap 读者 → Circuit/mixin）。
 - `docs/audits/project/2026-03-07-top30-closure-review.md`：本轮 Top30 全量闭环结论与剩余开放项。
 - `docs/audits/project/2026-03-08-final-remediation-summary.md`：本轮 confirmed audit 整改最终总结与下一轮 backlog。
