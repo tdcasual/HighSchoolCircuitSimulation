@@ -36,6 +36,9 @@ describe('v2 architecture boundaries guard', () => {
         expect(source).toContain("'src/v2/simulation/NodeBuilderV2.js'");
         expect(source).toContain("'../../utils/CanvasCoords.js'");
         expect(source).toContain("'../../utils/TerminalGeometry.js'");
+        expect(source).toContain("'src/v2/simulation/StampRegistryV2.js'");
+        expect(source).toContain("'src/v2/simulation/LinearAlgebraV2.js'");
+        expect(source).toContain("'../../utils/Physics.js'");
         expect(source).not.toContain("'../../../utils/");
         expect(source).not.toContain('src/core/topology/NodeBuilder.js');
     });

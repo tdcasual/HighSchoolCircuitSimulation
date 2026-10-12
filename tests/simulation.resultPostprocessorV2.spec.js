@@ -37,5 +37,60 @@ describe('ResultPostprocessorV2', () => {
 
         expect(currents.get('R1')).toBe(0);
     });
+
+    it('uses the extra unknown as-is for a closed switch instead of deltaV/1e-9', () => {
+        const currents = ResultPostprocessorV2.computeCurrents(
+            [
+                {
+                    id: 'S1',
+                    type: 'Switch',
+                    nodes: [1, 0],
+                    closed: true,
+                    vsIndex: 0
+                }
+            ],
+            [0, 1e-9],
+            new Map(),
+            { dt: 0.01, simTime: 0, solveVector: [0, 0.6], nodeCount: 2 }
+        );
+
+        expect(currents.get('S1')).toBeCloseTo(0.6, 12);
+    });
+
+    it('negates ideal source and ammeter extra unknowns but not motor', () => {
+        const solveVector = [0, 1.2, 0.3, 0.4];
+        const currents = ResultPostprocessorV2.computeCurrents(
+            [
+                {
+                    id: 'V1',
+                    type: 'PowerSource',
+                    nodes: [1, 0],
+                    internalResistance: 0,
+                    vsIndex: 0
+                },
+                {
+                    id: 'A1',
+                    type: 'Ammeter',
+                    nodes: [1, 0],
+                    resistance: 0,
+                    vsIndex: 1
+                },
+                {
+                    id: 'M1',
+                    type: 'Motor',
+                    nodes: [1, 0],
+                    resistance: 5,
+                    vsIndex: 2
+                }
+            ],
+            [0, 6],
+            new Map(),
+            { dt: 0.01, simTime: 0, solveVector, nodeCount: 2 }
+        );
+
+        expect(currents.get('V1')).toBeCloseTo(-1.2, 12);
+        expect(currents.get('A1')).toBeCloseTo(-0.3, 12);
+        expect(currents.get('M1')).toBeCloseTo(0.4, 12);
+    });
 });
 

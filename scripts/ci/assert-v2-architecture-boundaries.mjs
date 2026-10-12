@@ -22,6 +22,12 @@ const allowedOutsideV2Imports = Object.freeze({
     'src/v2/simulation/NodeBuilderV2.js': Object.freeze([
         '../../utils/CanvasCoords.js',
         '../../utils/TerminalGeometry.js'
+    ]),
+    'src/v2/simulation/StampRegistryV2.js': Object.freeze([
+        '../../utils/Physics.js'
+    ]),
+    'src/v2/simulation/LinearAlgebraV2.js': Object.freeze([
+        '../../utils/Physics.js'
     ])
 });
 

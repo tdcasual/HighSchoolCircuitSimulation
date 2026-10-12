@@ -4,10 +4,31 @@
  */
 import { ResultPostprocessorV2 } from './ResultPostprocessorV2.js';
 import { SimulationStateV2 } from './SimulationStateV2.js';
-
-const EPS = 1e-12;
-const LARGE_RESISTANCE = 1e12;
-const SMALL_RESISTANCE = 1e-9;
+import {
+    DefaultStampRegistryV2,
+    IDEAL_SOURCE_RESISTANCE_EPS,
+    resolveSourceInstantVoltage
+} from './StampRegistryV2.js';
+import {
+    applyGmin,
+    buildSystemMatrixCacheKey,
+    factorize,
+    GMIN,
+    solveWithFactorization,
+    stampCurrentSource,
+    stampResistor,
+    stampSeriesVoltageSource,
+    stampVoltageSource,
+    zeros,
+    zeroVector
+} from './LinearAlgebraV2.js';
+import {
+    resolveDynamicIntegrationMethod,
+    updateDynamicComponents,
+    updateFuseState,
+    updateJunctionLinearizationState,
+    updateRelayEnergizedStates
+} from './DynamicUpdateV2.js';
 
 function clonePlainValue(value) {
     if (value == null) return value;
@@ -41,11 +62,6 @@ function toFiniteNumber(value, fallback = 0) {
     return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-function clamp(value, min, max) {
-    if (!Number.isFinite(value)) return min;
-    return Math.min(max, Math.max(min, value));
-}
-
 function normalizeNodeIndex(value) {
     const parsed = Number(value);
     // Keep unconnected slots as -1; dropping a slot would stamp G to ground.
@@ -77,118 +93,6 @@ export function normalizeComponent(component, index) {
     };
 }
 
-function initMatrix(size) {
-    return Array.from({ length: size }, () => Array.from({ length: size }, () => 0));
-}
-
-function initVector(size) {
-    return Array.from({ length: size }, () => 0);
-}
-
-function nodeToMatrixIndex(node) {
-    if (!Number.isInteger(node) || node <= 0) return null;
-    return node - 1;
-}
-
-function hasDisconnectedTerminal(n1, n2) {
-    return !Number.isInteger(n1) || n1 < 0 || !Number.isInteger(n2) || n2 < 0;
-}
-
-function stampResistor(matrix, n1, n2, resistance) {
-    const r = Number(resistance);
-    if (!Number.isFinite(r) || r <= 0) return;
-    // -1 is unconnected, not earth (node 0). A singleton G stamp would leak current.
-    if (hasDisconnectedTerminal(n1, n2)) return;
-    const g = 1 / r;
-
-    const i1 = nodeToMatrixIndex(n1);
-    const i2 = nodeToMatrixIndex(n2);
-    if (i1 !== null) matrix[i1][i1] += g;
-    if (i2 !== null) matrix[i2][i2] += g;
-    if (i1 !== null && i2 !== null) {
-        matrix[i1][i2] -= g;
-        matrix[i2][i1] -= g;
-    }
-}
-
-function stampCurrentSource(vector, fromNode, toNode, current) {
-    const i = Number(current);
-    if (!Number.isFinite(i) || Math.abs(i) < 1e-18) return;
-    if (hasDisconnectedTerminal(fromNode, toNode)) return;
-
-    const from = nodeToMatrixIndex(fromNode);
-    const to = nodeToMatrixIndex(toNode);
-    if (from !== null) vector[from] -= i;
-    if (to !== null) vector[to] += i;
-}
-
-function stampIdealVoltageSource(matrix, vector, nodeCount, nPlus, nMinus, voltage, sourceIndex) {
-    if (!Number.isInteger(sourceIndex) || sourceIndex < 0) return;
-
-    const iPlus = nodeToMatrixIndex(nPlus);
-    const iMinus = nodeToMatrixIndex(nMinus);
-    const k = nodeCount - 1 + sourceIndex;
-    if (k < 0 || k >= matrix.length) return;
-
-    if (iPlus !== null) {
-        matrix[iPlus][k] += 1;
-        matrix[k][iPlus] += 1;
-    }
-    if (iMinus !== null) {
-        matrix[iMinus][k] -= 1;
-        matrix[k][iMinus] -= 1;
-    }
-    vector[k] += Number(voltage) || 0;
-}
-
-function solveLinearSystem(matrix, vector) {
-    const n = matrix.length;
-    if (n === 0) return [];
-
-    const a = matrix.map((row) => [...row]);
-    const b = [...vector];
-
-    for (let pivot = 0; pivot < n; pivot += 1) {
-        let maxRow = pivot;
-        let maxValue = Math.abs(a[pivot][pivot]);
-        for (let row = pivot + 1; row < n; row += 1) {
-            const candidate = Math.abs(a[row][pivot]);
-            if (candidate > maxValue) {
-                maxValue = candidate;
-                maxRow = row;
-            }
-        }
-
-        if (maxValue < EPS) return null;
-
-        if (maxRow !== pivot) {
-            [a[pivot], a[maxRow]] = [a[maxRow], a[pivot]];
-            [b[pivot], b[maxRow]] = [b[maxRow], b[pivot]];
-        }
-
-        for (let row = pivot + 1; row < n; row += 1) {
-            const factor = a[row][pivot] / a[pivot][pivot];
-            if (!Number.isFinite(factor) || Math.abs(factor) < 1e-18) continue;
-            for (let col = pivot; col < n; col += 1) {
-                a[row][col] -= factor * a[pivot][col];
-            }
-            b[row] -= factor * b[pivot];
-        }
-    }
-
-    const x = Array.from({ length: n }, () => 0);
-    for (let row = n - 1; row >= 0; row -= 1) {
-        let sum = b[row];
-        for (let col = row + 1; col < n; col += 1) {
-            sum -= a[row][col] * x[col];
-        }
-        if (Math.abs(a[row][row]) < EPS) return null;
-        x[row] = sum / a[row][row];
-    }
-
-    return x;
-}
-
 function inferNodeCount(netlist, components) {
     const explicitNodeCount = Array.isArray(netlist?.nodes) ? netlist.nodes.length : 0;
     let maxNode = 0;
@@ -202,284 +106,216 @@ function inferNodeCount(netlist, components) {
     return Math.max(explicitNodeCount, maxNode + 1, 2);
 }
 
-function resolveSourceVoltage(component, simTime = 0) {
-    if (component.type === 'ACVoltageSource') {
-        const rms = toFiniteNumber(component.rmsVoltage, toFiniteNumber(component.voltage, 0));
-        const frequency = toFiniteNumber(component.frequency, 50);
-        const phaseDeg = toFiniteNumber(component.phase, 0);
-        const offset = toFiniteNumber(component.offset, 0);
-        const omega = 2 * Math.PI * frequency;
-        const phaseRad = phaseDeg * Math.PI / 180;
-        return offset + (rms * Math.sqrt(2)) * Math.sin(omega * simTime + phaseRad);
-    }
-    return toFiniteNumber(component.voltage, 0);
+function isValidNode(nodeIdx) {
+    return nodeIdx !== undefined && nodeIdx !== null && nodeIdx >= 0;
 }
 
-function computeNtcThermistorResistance(component = {}) {
-    const r25 = Math.max(1e-6, toFiniteNumber(component.resistanceAt25, 1000));
-    const beta = Math.max(1, toFiniteNumber(component.beta, 3950));
-    const tempC = toFiniteNumber(component.temperatureC, 25);
-    const tKelvin = Math.max(1, tempC + 273.15);
-    const exponent = beta * ((1 / tKelvin) - (1 / 298.15));
-    return clamp(r25 * Math.exp(exponent), 1e-6, 1e15);
+function toMatrixIndex(nodeIdx) {
+    return isValidNode(nodeIdx) ? nodeIdx - 1 : null;
 }
 
-function computePhotoresistorResistance(component = {}) {
-    let dark = Math.max(1e-6, toFiniteNumber(component.resistanceDark, 100000));
-    let light = Math.max(1e-6, toFiniteNumber(component.resistanceLight, 500));
-    if (dark < light) {
-        [dark, light] = [light, dark];
-    }
-    const level = clamp(toFiniteNumber(component.lightLevel, 0.5), 0, 1);
-    const lnR = Math.log(dark) * (1 - level) + Math.log(light) * level;
-    return clamp(Math.exp(lnR), 1e-6, 1e15);
-}
+export function assignVoltageSourceIndices(components) {
+    let voltageSourceCount = 0;
+    let shortCircuitDetected = false;
+    let hasConnectedSwitch = false;
 
-function resolveDiodeResistance(component, stateEntry) {
-    const forwardVoltage = Math.max(0, toFiniteNumber(component.forwardVoltage, component.type === 'LED' ? 2 : 0.7));
-    const onResistance = Math.max(1e-6, toFiniteNumber(component.onResistance, component.type === 'LED' ? 2 : 1));
-    const offResistance = Math.max(1, toFiniteNumber(component.offResistance, 1e9));
-
-    const conducting = stateEntry && typeof stateEntry.conducting === 'boolean'
-        ? stateEntry.conducting
-        : !!component.conducting;
-    return {
-        resistance: conducting ? onResistance : offResistance,
-        forwardVoltage,
-        onResistance,
-        offResistance
-    };
-}
-
-function assignVoltageSourceIndices(components) {
-    let count = 0;
-    for (const component of components) {
-        component.vsIndex = undefined;
-        const n1 = component.nodes?.[0];
-        const n2 = component.nodes?.[1];
-        const hasTwoNodes = Number.isInteger(n1) && n1 >= 0 && Number.isInteger(n2) && n2 >= 0;
-        if (!hasTwoNodes) continue;
-
-        if (component.type === 'PowerSource' || component.type === 'ACVoltageSource') {
-            const internalResistance = toFiniteNumber(component.internalResistance, 0.5);
-            component.internalResistance = internalResistance;
-            if (internalResistance <= SMALL_RESISTANCE) {
-                component.vsIndex = count;
-                count += 1;
-            }
+    for (const comp of components) {
+        if (!comp || typeof comp !== 'object') continue;
+        comp.vsIndex = undefined;
+        const isPowerSource = comp.type === 'PowerSource' || comp.type === 'ACVoltageSource';
+        if (comp.type === 'Ground') {
+            comp._isShorted = false;
             continue;
         }
-
-        if (component.type === 'Ammeter') {
-            const resistance = toFiniteNumber(component.resistance, 0);
-            component.resistance = resistance;
-            if (resistance <= SMALL_RESISTANCE) {
-                component.vsIndex = count;
-                count += 1;
+        if (comp.nodes && comp.nodes.length >= 2) {
+            const n1 = comp.nodes[0];
+            const n2 = comp.type === 'SPDTSwitch'
+                ? comp.nodes[comp.position === 'b' ? 2 : 1]
+                : comp.nodes[1];
+            comp._isShorted = (n1 === n2 && n1 >= 0);
+            if (comp.type === 'Relay' || comp.type === 'Rheostat') {
+                comp._isShorted = false;
             }
-            continue;
+            if (comp._isShorted && isPowerSource) {
+                shortCircuitDetected = true;
+            }
+        } else {
+            comp._isShorted = false;
         }
 
-        if (component.type === 'Motor') {
-            component.vsIndex = count;
-            count += 1;
+        if (isPowerSource) {
+            const internalResistance = Number(comp.internalResistance);
+            comp.internalResistance = Number.isFinite(internalResistance) && internalResistance >= 0
+                ? internalResistance
+                : 0.5;
+            comp._nortonModel = comp.internalResistance >= IDEAL_SOURCE_RESISTANCE_EPS;
         }
     }
-    return count;
-}
 
-function stampRheostat(component, matrix) {
-    const [nLeft, nRight, nSlider] = component.nodes || [];
-    const minR = toFiniteNumber(component.minResistance, 0);
-    const maxR = Math.max(minR, toFiniteNumber(component.maxResistance, 100));
-    const position = clamp(toFiniteNumber(component.position, 0.5), 0, 1);
-    const range = Math.max(0, maxR - minR);
-    const r1 = Math.max(1e-9, minR + range * position);
-    const r2 = Math.max(1e-9, maxR - range * position);
-    const mode = String(component.connectionMode || 'none');
+    for (const comp of components) {
+        if (!comp || typeof comp !== 'object') continue;
 
-    switch (mode) {
-        case 'left-slider':
-            stampResistor(matrix, nLeft, nSlider, r1);
-            break;
-        case 'right-slider':
-            stampResistor(matrix, nSlider, nRight, r2);
-            break;
-        case 'left-right':
-            stampResistor(matrix, nLeft, nRight, Math.max(1e-9, maxR));
-            break;
-        case 'all': {
-            const leftEqSlider = nLeft === nSlider;
-            const rightEqSlider = nRight === nSlider;
-            const leftEqRight = nLeft === nRight;
-
-            if (leftEqSlider && rightEqSlider) return;
-            if (leftEqSlider) {
-                stampResistor(matrix, nSlider, nRight, r2);
-                return;
+        if (comp.type === 'PowerSource' || comp.type === 'ACVoltageSource') {
+            if (!(Number.isFinite(comp.internalResistance) && comp.internalResistance >= IDEAL_SOURCE_RESISTANCE_EPS)) {
+                if (!comp._isShorted) {
+                    const n1 = comp.nodes?.[0];
+                    const n2 = comp.nodes?.[1];
+                    if (isValidNode(n1) && isValidNode(n2)) {
+                        comp.vsIndex = voltageSourceCount++;
+                    }
+                }
             }
-            if (rightEqSlider) {
-                stampResistor(matrix, nLeft, nSlider, r1);
-                return;
+        } else if (comp.type === 'Motor') {
+            if (!comp._isShorted) {
+                const n1 = comp.nodes?.[0];
+                const n2 = comp.nodes?.[1];
+                if (isValidNode(n1) && isValidNode(n2)) {
+                    comp.vsIndex = voltageSourceCount++;
+                }
             }
-            if (leftEqRight) {
-                const parallelR = (r1 * r2) / (r1 + r2);
-                stampResistor(matrix, nLeft, nSlider, parallelR);
-                return;
+        } else if (comp.type === 'Ammeter') {
+            const ammeterResistance = Number(comp.resistance);
+            comp.resistance = Number.isFinite(ammeterResistance) && ammeterResistance >= 0
+                ? ammeterResistance
+                : 0;
+            if (comp.resistance <= 0) {
+                if (!comp._isShorted) {
+                    const n1 = comp.nodes?.[0];
+                    const n2 = comp.nodes?.[1];
+                    if (isValidNode(n1) && isValidNode(n2)) {
+                        comp.vsIndex = voltageSourceCount++;
+                    }
+                }
             }
-
-            stampResistor(matrix, nLeft, nSlider, r1);
-            stampResistor(matrix, nSlider, nRight, r2);
-            break;
+        } else if (comp.type === 'Switch') {
+            if (comp.closed && !comp._isShorted) {
+                const n1 = comp.nodes?.[0];
+                const n2 = comp.nodes?.[1];
+                if (isValidNode(n1) && isValidNode(n2)) {
+                    comp.vsIndex = voltageSourceCount++;
+                }
+            } else {
+                comp.vsIndex = undefined;
+            }
+        } else if (comp.type === 'SPDTSwitch') {
+            if (!comp._isShorted) {
+                const nCommon = comp.nodes?.[0];
+                const nA = comp.nodes?.[1];
+                const nB = comp.nodes?.[2];
+                const routeToB = comp.position === 'b';
+                const nOn = routeToB ? nB : nA;
+                if (isValidNode(nCommon) && isValidNode(nOn)) {
+                    comp.vsIndex = voltageSourceCount++;
+                }
+            } else {
+                comp.vsIndex = undefined;
+            }
         }
-        default:
-            break;
+
+        if (comp.type === 'Inductor' && !Number.isFinite(comp.prevCurrent)) {
+            comp.prevCurrent = Number.isFinite(comp.initialCurrent) ? comp.initialCurrent : 0;
+        }
+        if (comp.type === 'Inductor' && !Number.isFinite(comp.prevVoltage)) {
+            comp.prevVoltage = 0;
+        }
+        if ((comp.type === 'Capacitor' || comp.type === 'ParallelPlateCapacitor') && !Number.isFinite(comp.prevCurrent)) {
+            comp.prevCurrent = 0;
+        }
+        if ((comp.type === 'Capacitor' || comp.type === 'ParallelPlateCapacitor') && !Number.isFinite(comp.prevVoltage)) {
+            comp.prevVoltage = 0;
+        }
+        if (comp.type === 'Diode' || comp.type === 'LED') {
+            const defaultVf = comp.type === 'LED' ? 2.0 : 0.7;
+            const defaultRon = comp.type === 'LED' ? 2 : 1;
+            comp.forwardVoltage = Number.isFinite(comp.forwardVoltage) ? comp.forwardVoltage : defaultVf;
+            comp.onResistance = Number.isFinite(comp.onResistance) ? comp.onResistance : defaultRon;
+            comp.offResistance = Number.isFinite(comp.offResistance) ? comp.offResistance : 1e9;
+            comp.conducting = !!comp.conducting;
+        }
+        if (comp.type === 'Thermistor') {
+            comp.resistanceAt25 = Number.isFinite(comp.resistanceAt25) ? comp.resistanceAt25 : 1000;
+            comp.beta = Number.isFinite(comp.beta) ? comp.beta : 3950;
+            comp.temperatureC = Number.isFinite(comp.temperatureC) ? comp.temperatureC : 25;
+        }
+        if (comp.type === 'Photoresistor') {
+            comp.resistanceDark = Number.isFinite(comp.resistanceDark) ? comp.resistanceDark : 100000;
+            comp.resistanceLight = Number.isFinite(comp.resistanceLight) ? comp.resistanceLight : 500;
+            comp.lightLevel = Number.isFinite(comp.lightLevel) ? comp.lightLevel : 0.5;
+        }
+        if (comp.type === 'Relay') {
+            comp.coilResistance = Number.isFinite(comp.coilResistance) ? comp.coilResistance : 200;
+            comp.pullInCurrent = Number.isFinite(comp.pullInCurrent) ? comp.pullInCurrent : 0.02;
+            comp.dropOutCurrent = Number.isFinite(comp.dropOutCurrent) ? comp.dropOutCurrent : 0.01;
+            comp.contactOnResistance = Number.isFinite(comp.contactOnResistance) ? comp.contactOnResistance : 1e-3;
+            comp.contactOffResistance = Number.isFinite(comp.contactOffResistance) ? comp.contactOffResistance : 1e12;
+            comp.energized = !!comp.energized;
+        }
+        if (comp.type === 'Switch' || comp.type === 'SPDTSwitch') {
+            const n1 = comp.nodes?.[0];
+            const n2 = comp.type === 'SPDTSwitch'
+                ? comp.nodes?.[comp.position === 'b' ? 2 : 1]
+                : comp.nodes?.[1];
+            if (isValidNode(n1) && isValidNode(n2)) {
+                hasConnectedSwitch = true;
+            }
+        }
     }
+
+    return { voltageSourceCount, shortCircuitDetected, hasConnectedSwitch };
 }
 
-function stampComponent(component, context) {
-    const {
-        matrix,
-        vector,
+function isFiniteResistanceSource(comp) {
+    return (comp.type === 'PowerSource' || comp.type === 'ACVoltageSource')
+        && Number.isFinite(Number(comp.internalResistance))
+        && Number(comp.internalResistance) >= IDEAL_SOURCE_RESISTANCE_EPS;
+}
+
+function stampComponent(comp, A, z, nodeCount, contextExtras) {
+    if (comp.type === 'Ground') return;
+    if (!comp.nodes || comp.nodes.length < 2) return;
+    if (comp._isShorted && !isFiniteResistanceSource(comp)) return;
+
+    const n1 = comp.nodes[0];
+    const n2 = comp.nodes[1];
+    if (comp.type !== 'Rheostat' && comp.type !== 'SPDTSwitch' && comp.type !== 'Relay'
+        && (!isValidNode(n1) || !isValidNode(n2))) {
+        return;
+    }
+
+    const handler = DefaultStampRegistryV2.get(comp.type);
+    if (!handler || typeof handler.stamp !== 'function') return;
+
+    handler.stamp(comp, {
+        stampResistor: (i1, i2, r) => stampResistor(A, i1, i2, r),
+        stampCurrentSource: (from, to, current) => stampCurrentSource(z, from, to, current),
+        stampVoltageSource: (i1, i2, voltage, vsIndex, totalNodeCount) =>
+            stampVoltageSource(A, z, i1, i2, voltage, vsIndex, totalNodeCount),
+        stampSeriesVoltageSource: (i1, i2, voltage, seriesR, vsIndex, totalNodeCount) =>
+            stampSeriesVoltageSource(A, z, i1, i2, voltage, seriesR, vsIndex, totalNodeCount),
+        getSourceInstantVoltage: contextExtras.getSourceInstantVoltage,
+        dt: contextExtras.dt,
+        simTime: contextExtras.simTime,
+        resolveDynamicIntegrationMethod: contextExtras.resolveDynamicIntegrationMethod,
+        state: contextExtras.state
+    }, {
+        n1,
+        n2,
+        i1: toMatrixIndex(n1),
+        i2: toMatrixIndex(n2),
         nodeCount,
-        dt,
-        simTime,
-        state
-    } = context;
-
-    const stateEntry = state.ensure({
-        id: component.id,
-        type: component.type,
-        initialCurrent: component.initialCurrent
+        isValidNode
     });
+}
 
-    const n1 = component.nodes?.[0];
-    const n2 = component.nodes?.[1];
-
-    switch (component.type) {
-        case 'Ground':
-        case 'BlackBox':
-            return;
-        case 'Resistor':
-        case 'Bulb': {
-            const resistance = Math.max(1e-9, toFiniteNumber(component.resistance, 100));
-            stampResistor(matrix, n1, n2, resistance);
-            return;
-        }
-        case 'Thermistor': {
-            stampResistor(matrix, n1, n2, computeNtcThermistorResistance(component));
-            return;
-        }
-        case 'Photoresistor': {
-            stampResistor(matrix, n1, n2, computePhotoresistorResistance(component));
-            return;
-        }
-        case 'Diode':
-        case 'LED': {
-            const diodeModel = resolveDiodeResistance(component, stateEntry);
-            stampResistor(matrix, n1, n2, diodeModel.resistance);
-            return;
-        }
-        case 'Switch': {
-            const resistance = component.closed ? SMALL_RESISTANCE : LARGE_RESISTANCE;
-            stampResistor(matrix, n1, n2, resistance);
-            return;
-        }
-        case 'SPDTSwitch': {
-            const nCommon = component.nodes?.[0];
-            const nA = component.nodes?.[1];
-            const nB = component.nodes?.[2];
-            const onR = Math.max(SMALL_RESISTANCE, toFiniteNumber(component.onResistance, SMALL_RESISTANCE));
-            const offR = Math.max(onR, toFiniteNumber(component.offResistance, LARGE_RESISTANCE));
-            const routeToB = component.position === 'b';
-            stampResistor(matrix, nCommon, nA, routeToB ? offR : onR);
-            stampResistor(matrix, nCommon, nB, routeToB ? onR : offR);
-            return;
-        }
-        case 'Fuse': {
-            const blown = stateEntry.blown ?? !!component.blown;
-            const resistance = blown
-                ? Math.max(1, toFiniteNumber(component.blownResistance, LARGE_RESISTANCE))
-                : Math.max(SMALL_RESISTANCE, toFiniteNumber(component.coldResistance, 0.05));
-            stampResistor(matrix, n1, n2, resistance);
-            return;
-        }
-        case 'Ammeter': {
-            const resistance = toFiniteNumber(component.resistance, 0);
-            if (resistance > SMALL_RESISTANCE) {
-                stampResistor(matrix, n1, n2, resistance);
-                return;
-            }
-            stampIdealVoltageSource(matrix, vector, nodeCount, n1, n2, 0, component.vsIndex);
-            return;
-        }
-        case 'Voltmeter': {
-            const resistance = Number(component.resistance);
-            if (Number.isFinite(resistance) && resistance > 0) {
-                stampResistor(matrix, n1, n2, resistance);
-            }
-            return;
-        }
-        case 'Rheostat': {
-            stampRheostat(component, matrix);
-            return;
-        }
-        case 'Relay': {
-            const nCoilA = component.nodes?.[0];
-            const nCoilB = component.nodes?.[1];
-            const nContactA = component.nodes?.[2];
-            const nContactB = component.nodes?.[3];
-            const energized = stateEntry.energized ?? !!component.energized;
-            const coilR = Math.max(1e-9, toFiniteNumber(component.coilResistance, 200));
-            const onR = Math.max(1e-9, toFiniteNumber(component.contactOnResistance, 1e-3));
-            const offR = Math.max(1, toFiniteNumber(component.contactOffResistance, LARGE_RESISTANCE));
-            stampResistor(matrix, nCoilA, nCoilB, coilR);
-            stampResistor(matrix, nContactA, nContactB, energized ? onR : offR);
-            return;
-        }
-        case 'Capacitor':
-        case 'ParallelPlateCapacitor': {
-            const c = Math.max(1e-18, toFiniteNumber(component.capacitance, 0.001));
-            const req = Math.max(1e-9, dt / c);
-            const prevVoltage = toFiniteNumber(stateEntry.prevVoltage, 0);
-            const ieq = (c * prevVoltage) / dt;
-            stampResistor(matrix, n1, n2, req);
-            stampCurrentSource(vector, n2, n1, ieq);
-            return;
-        }
-        case 'Inductor': {
-            const l = Math.max(1e-12, toFiniteNumber(component.inductance, 0.1));
-            const req = Math.max(1e-9, l / dt);
-            const prevCurrent = toFiniteNumber(
-                stateEntry.prevCurrent,
-                toFiniteNumber(component.initialCurrent, 0)
-            );
-            stampResistor(matrix, n1, n2, req);
-            stampCurrentSource(vector, n1, n2, prevCurrent);
-            return;
-        }
-        case 'Motor': {
-            const resistance = Math.max(1e-9, toFiniteNumber(component.resistance, 5));
-            const backEmf = toFiniteNumber(stateEntry.backEmf, toFiniteNumber(component.backEmf, 0));
-            stampResistor(matrix, n1, n2, resistance);
-            stampIdealVoltageSource(matrix, vector, nodeCount, n1, n2, -backEmf, component.vsIndex);
-            return;
-        }
-        case 'PowerSource':
-        case 'ACVoltageSource': {
-            const sourceVoltage = resolveSourceVoltage(component, simTime);
-            const internalResistance = toFiniteNumber(component.internalResistance, 0.5);
-            if (internalResistance > SMALL_RESISTANCE) {
-                stampResistor(matrix, n1, n2, internalResistance);
-                stampCurrentSource(vector, n2, n1, sourceVoltage / internalResistance);
-                return;
-            }
-            stampIdealVoltageSource(matrix, vector, nodeCount, n1, n2, sourceVoltage, component.vsIndex);
-            return;
-        }
-        default:
-            return;
+function assemble(components, nodeCount, voltageSourceCount, contextExtras) {
+    const size = Math.max(0, nodeCount - 1 + voltageSourceCount);
+    const A = zeros(size, size);
+    const z = zeroVector(size);
+    for (const comp of components) {
+        stampComponent(comp, A, z, nodeCount, contextExtras);
     }
+    applyGmin(A, nodeCount, GMIN);
+    return { A, z, size };
 }
 
 function buildVoltageArray(nodeCount, solutionVector) {
@@ -490,85 +326,14 @@ function buildVoltageArray(nodeCount, solutionVector) {
     return voltages;
 }
 
-function updateDynamicStates({ components, voltages, currents, dt, state }) {
-    for (const component of components) {
-        const entry = state.ensure({
-            id: component.id,
-            type: component.type,
-            initialCurrent: component.initialCurrent
-        });
-        const n1 = component.nodes?.[0];
-        const n2 = component.nodes?.[1];
-        const v1 = Number.isInteger(n1) ? Number(voltages[n1] || 0) : 0;
-        const v2 = Number.isInteger(n2) ? Number(voltages[n2] || 0) : 0;
-        const deltaV = v1 - v2;
-        const current = Number(currents.get(component.id) || 0);
-
-        switch (component.type) {
-            case 'Capacitor':
-            case 'ParallelPlateCapacitor': {
-                const c = Math.max(1e-18, toFiniteNumber(component.capacitance, 0.001));
-                entry.prevVoltage = deltaV;
-                entry.prevCharge = c * deltaV;
-                entry.prevCurrent = current;
-                entry.dynamicHistoryReady = true;
-                break;
-            }
-            case 'Inductor': {
-                entry.prevCurrent = current;
-                entry.prevVoltage = deltaV;
-                entry.dynamicHistoryReady = true;
-                break;
-            }
-            case 'Motor': {
-                const torqueConstant = toFiniteNumber(component.torqueConstant, 0.1);
-                const emfConstant = toFiniteNumber(component.emfConstant, 0.1);
-                const inertia = Math.max(1e-6, toFiniteNumber(component.inertia, 0.01));
-                const loadTorque = toFiniteNumber(component.loadTorque, 0.01);
-                const speed = Math.max(0, toFiniteNumber(entry.speed, 0));
-                const acceleration = ((torqueConstant * current) - loadTorque) / inertia;
-                const nextSpeed = Math.max(0, speed + acceleration * dt);
-                entry.speed = nextSpeed;
-                entry.backEmf = emfConstant * nextSpeed;
-                break;
-            }
-            case 'Relay': {
-                const pullIn = Math.max(1e-9, toFiniteNumber(component.pullInCurrent, 0.02));
-                const dropOut = Math.min(
-                    pullIn,
-                    Math.max(1e-9, toFiniteNumber(component.dropOutCurrent, pullIn * 0.5))
-                );
-                const energized = !!entry.energized;
-                const absCoilCurrent = Math.abs(current);
-                entry.energized = energized
-                    ? absCoilCurrent >= dropOut
-                    : absCoilCurrent >= pullIn;
-                break;
-            }
-            case 'Fuse': {
-                const threshold = Math.max(1e-9, toFiniteNumber(component.i2tThreshold, 1));
-                const prevAccum = Math.max(0, toFiniteNumber(entry.i2tAccum, toFiniteNumber(component.i2tAccum, 0)));
-                const accum = prevAccum + current * current * dt;
-                entry.i2tAccum = accum;
-                entry.blown = !!entry.blown || !!component.blown || accum >= threshold;
-                break;
-            }
-            case 'Diode':
-            case 'LED': {
-                const forwardVoltage = Math.max(0, toFiniteNumber(component.forwardVoltage, component.type === 'LED' ? 2 : 0.7));
-                const referenceCurrent = component.type === 'LED'
-                    ? Math.max(1e-6, toFiniteNumber(component.ratedCurrent, 0.02))
-                    : Math.max(1e-6, toFiniteNumber(component.referenceCurrent, 0.001));
-                entry.conducting = deltaV >= forwardVoltage * 0.95 || current >= referenceCurrent * 0.02;
-                if (component.type === 'LED') {
-                    entry.brightness = clamp(Math.abs(current) / Math.max(1e-6, referenceCurrent), 0, 1);
-                }
-                break;
-            }
-            default:
-                break;
-        }
-    }
+function emptyResult(nodeCount, nextState, diagnostics, extra = {}) {
+    return {
+        valid: extra.valid !== false,
+        voltages: Array.from({ length: Math.max(nodeCount, 1) }, () => 0),
+        currents: extra.currents || new Map(),
+        nextState,
+        diagnostics
+    };
 }
 
 export function solveCircuitV2(netlistDTO, simulationState = new SimulationStateV2(), options = {}) {
@@ -579,95 +344,158 @@ export function solveCircuitV2(netlistDTO, simulationState = new SimulationState
 
     const dt = Math.max(1e-6, toFiniteNumber(options?.dt, 0.001));
     const simTime = toFiniteNumber(options?.simTime, 0);
-
-    const diagnostics = {
-        code: '',
-        warnings: [],
-        details: {}
-    };
+    const diagnostics = { code: '', warnings: [], details: {} };
 
     const nodeCount = inferNodeCount(dto, components);
-    const voltageSourceCount = assignVoltageSourceIndices(components);
+    const prepared = assignVoltageSourceIndices(components);
+    const voltageSourceCount = prepared.voltageSourceCount;
+    const hasConnectedSwitch = prepared.hasConnectedSwitch;
     const matrixSize = Math.max(0, nodeCount - 1 + voltageSourceCount);
 
     if (matrixSize === 0) {
-        return {
-            valid: true,
-            voltages: Array.from({ length: Math.max(nodeCount, 1) }, () => 0),
-            currents: new Map(),
-            nextState,
-            diagnostics
-        };
+        return emptyResult(nodeCount, nextState, diagnostics);
     }
 
-    const matrix = initMatrix(matrixSize);
-    const vector = initVector(matrixSize);
+    const contextExtras = {
+        dt,
+        simTime,
+        state: nextState,
+        getSourceInstantVoltage: (comp) => resolveSourceInstantVoltage(comp, simTime),
+        resolveDynamicIntegrationMethod: (comp) => resolveDynamicIntegrationMethod(
+            comp,
+            hasConnectedSwitch,
+            nextState.get(comp.id)
+        )
+    };
 
-    for (const component of components) {
-        stampComponent(component, {
-            matrix,
-            vector,
+    const hasJunction = components.some((comp) => comp?.type === 'Diode' || comp?.type === 'LED');
+    const hasRelay = components.some((comp) => comp?.type === 'Relay');
+    const hasStateful = hasJunction || hasRelay;
+    const maxIterations = hasStateful ? 40 : 1;
+    const junctionTolerance = 1e-6;
+
+    let factorizationCache = { key: null, factorization: null, matrixSize: -1 };
+    let solvedVoltages = Array.from({ length: Math.max(nodeCount, 1) }, () => 0);
+    let solvedCurrents = new Map();
+    let solvedValid = false;
+    let lastJunctionDelta = 0;
+
+    for (let iter = 0; iter < maxIterations; iter += 1) {
+        const { A, z, size } = assemble(components, nodeCount, voltageSourceCount, contextExtras);
+        const cacheKey = buildSystemMatrixCacheKey({
             nodeCount,
+            voltageSourceCount,
+            gmin: GMIN,
             dt,
-            simTime,
-            state: nextState
+            hasConnectedSwitch,
+            components,
+            simulationState: nextState,
+            resolveDynamicIntegrationMethod: contextExtras.resolveDynamicIntegrationMethod
         });
-    }
 
-    for (let node = 1; node < nodeCount; node += 1) {
-        const index = node - 1;
-        matrix[index][index] += 1e-12;
-    }
+        let factorization = null;
+        if (
+            factorizationCache.key === cacheKey
+            && factorizationCache.matrixSize === size
+            && factorizationCache.factorization
+        ) {
+            factorization = factorizationCache.factorization;
+        } else {
+            factorization = factorize(A);
+            if (!factorization) {
+                return emptyResult(nodeCount, nextState, {
+                    ...diagnostics,
+                    code: 'SIM_SINGULAR_MATRIX',
+                    details: { nodeCount, matrixSize: size }
+                }, { valid: false });
+            }
+            factorizationCache = { key: cacheKey, factorization, matrixSize: size };
+        }
 
-    const solution = solveLinearSystem(matrix, vector);
-    if (!solution) {
-        return {
-            valid: false,
-            voltages: Array.from({ length: Math.max(nodeCount, 1) }, () => 0),
-            currents: new Map(),
-            nextState,
-            diagnostics: {
+        const x = solveWithFactorization(factorization, z);
+        if (!x) {
+            return emptyResult(nodeCount, nextState, {
                 ...diagnostics,
                 code: 'SIM_SINGULAR_MATRIX',
-                details: {
-                    nodeCount,
-                    matrixSize
-                }
-            }
-        };
-    }
-
-    const voltages = buildVoltageArray(nodeCount, solution);
-    const voltageSourceCurrentsById = new Map();
-    for (const component of components) {
-        if (!Number.isInteger(component.vsIndex)) continue;
-        const k = nodeCount - 1 + component.vsIndex;
-        voltageSourceCurrentsById.set(component.id, -(Number(solution[k] || 0)));
-    }
-
-    const currents = ResultPostprocessorV2.computeCurrents(
-        components,
-        voltages,
-        voltageSourceCurrentsById,
-        {
-            dt,
-            simTime,
-            state: nextState
+                details: { nodeCount, matrixSize: size }
+            }, { valid: false });
         }
-    );
 
-    updateDynamicStates({
+        solvedVoltages = buildVoltageArray(nodeCount, x);
+        solvedCurrents = ResultPostprocessorV2.computeCurrents(
+            components,
+            solvedVoltages,
+            new Map(),
+            {
+                dt,
+                simTime,
+                state: nextState,
+                solveVector: x,
+                nodeCount,
+                getSourceInstantVoltage: contextExtras.getSourceInstantVoltage,
+                resolveDynamicIntegrationMethod: contextExtras.resolveDynamicIntegrationMethod
+            }
+        );
+        solvedValid = true;
+
+        if (!hasStateful) break;
+
+        let relayChanged = false;
+        if (hasJunction) {
+            const junctionUpdate = updateJunctionLinearizationState({
+                components,
+                voltages: solvedVoltages,
+                currents: solvedCurrents,
+                state: nextState
+            });
+            lastJunctionDelta = Number.isFinite(junctionUpdate.maxVoltageDelta)
+                ? junctionUpdate.maxVoltageDelta
+                : 0;
+            if (junctionUpdate.changed) {
+                factorizationCache = { key: null, factorization: null, matrixSize: -1 };
+            }
+        }
+        if (hasRelay) {
+            relayChanged = !!updateRelayEnergizedStates({
+                components,
+                currents: solvedCurrents,
+                state: nextState
+            });
+            if (relayChanged) {
+                factorizationCache = { key: null, factorization: null, matrixSize: -1 };
+            }
+        }
+
+        const junctionConverged = !hasJunction || lastJunctionDelta <= junctionTolerance;
+        if (junctionConverged && !relayChanged) break;
+    }
+
+    if (!solvedValid) {
+        return emptyResult(nodeCount, nextState, {
+            ...diagnostics,
+            code: 'SIM_SINGULAR_MATRIX',
+            details: { nodeCount, matrixSize }
+        }, { valid: false });
+    }
+
+    updateDynamicComponents({
         components,
-        voltages,
-        currents,
+        voltages: solvedVoltages,
+        currents: solvedCurrents,
+        dt,
+        state: nextState
+    });
+    updateFuseState({
+        components,
+        currents: solvedCurrents,
         dt,
         state: nextState
     });
 
     return {
         valid: true,
-        voltages,
-        currents,
+        voltages: solvedVoltages,
+        currents: solvedCurrents,
         nextState,
         diagnostics
     };

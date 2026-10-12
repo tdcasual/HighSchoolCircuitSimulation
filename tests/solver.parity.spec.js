@@ -29,7 +29,10 @@ describe('Solver parity harness', () => {
             'series-source-resistor',
             'divider-ideal-voltmeter',
             'series-ideal-ammeter',
-            'conflicting-ideal-sources'
+            'conflicting-ideal-sources',
+            'motor-stall-series',
+            'closed-switch-series',
+            'diode-forward-knee'
         ]);
     });
 

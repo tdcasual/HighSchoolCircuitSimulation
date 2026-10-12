@@ -43,7 +43,7 @@ describe('CI workflow coverage', () => {
             content.indexOf('  responsive-e2e:')
         );
 
-        expect(qualityBlock).toContain('npm run lint && npm run format:check && npm run check:v2:runtime-safety && npm run check:core-size && npm test && npm run baseline:p0 && npm run baseline:circuitjs && npm run baseline:ai && npm run baseline:p0:ext');
+        expect(qualityBlock).toContain('npm run lint && npm run format:check && npm run check:v2:runtime-safety && npm run check:core-size && npm run check:v2:stamp-parity && npm test && npm run baseline:p0 && npm run baseline:circuitjs && npm run baseline:ai && npm run baseline:p0:ext');
         expect(qualityBlock).not.toContain('npm run check:full');
         expect(qualityBlock).not.toContain('playwright install');
     });

@@ -1,3 +1,6 @@
+import { getTerminalWorldPosition } from '../../src/utils/TerminalGeometry.js';
+import { TopologyCoordinatorV2 } from '../../src/v2/app/coordinators/TopologyCoordinatorV2.js';
+import { snapshotCircuitModel } from '../../src/v2/simulation/snapshotCircuitModel.js';
 import { solveCircuitV2 } from '../../src/v2/simulation/SolveCircuitV2.js';
 import { SimulationStateV2 } from '../../src/v2/simulation/SimulationStateV2.js';
 import { addComponent, connectWire, createTestCircuit, solveCircuit } from './circuitTestUtils.js';
@@ -108,6 +111,69 @@ export const CANONICAL_SOLVER_CASES = Object.freeze([
                 type: 'PowerSource',
                 props: { voltage: 12, internalResistance: 0 },
                 terminals: ['vin', 'gnd']
+            }
+        ]
+    }),
+    createCase({
+        id: 'motor-stall-series',
+        components: [
+            {
+                id: 'V1',
+                type: 'PowerSource',
+                props: { voltage: 6, internalResistance: 0 },
+                terminals: ['vin', 'gnd']
+            },
+            {
+                id: 'M1',
+                type: 'Motor',
+                props: { resistance: 5 },
+                terminals: ['vin', 'gnd']
+            }
+        ]
+    }),
+    createCase({
+        id: 'closed-switch-series',
+        components: [
+            {
+                id: 'V1',
+                type: 'PowerSource',
+                props: { voltage: 6, internalResistance: 0 },
+                terminals: ['vin', 'gnd']
+            },
+            {
+                id: 'R1',
+                type: 'Resistor',
+                props: { resistance: 10 },
+                terminals: ['vin', 'mid']
+            },
+            {
+                id: 'S1',
+                type: 'Switch',
+                props: { closed: true },
+                terminals: ['mid', 'gnd']
+            }
+        ]
+    }),
+    createCase({
+        id: 'diode-forward-knee',
+        components: [
+            {
+                id: 'V1',
+                type: 'PowerSource',
+                props: { voltage: 5, internalResistance: 0 },
+                terminals: ['vin', 'gnd']
+            },
+            {
+                id: 'D1',
+                type: 'Diode',
+                props: { forwardVoltage: 0.7, onResistance: 1 },
+                terminals: ['vin', 'mid']
+            },
+            {
+                id: 'R1',
+                type: 'Resistor',
+                props: { resistance: 100 },
+                terminals: ['mid', 'gnd']
             }
         ]
     })
@@ -269,9 +335,27 @@ export function runRuntimeSolverCase(caseDefinition, options = {}) {
     };
 }
 
+export function buildV2NetlistFromCircuit(circuit) {
+    const snapshot = snapshotCircuitModel(circuit);
+    const coordinator = new TopologyCoordinatorV2();
+    return coordinator.buildNetlist(snapshot, {
+        getTerminalWorldPosition: (_componentId, terminalIndex, comp) => getTerminalWorldPosition(comp, terminalIndex)
+    });
+}
+
+export function solveV2FromCircuit(circuit, options = {}) {
+    const dto = buildV2NetlistFromCircuit(circuit);
+    const dt = Number.isFinite(Number(options.dt)) ? Number(options.dt) : 0.01;
+    const simTime = Number.isFinite(Number(options.simTime)) ? Number(options.simTime) : 0;
+    const state = options.state instanceof SimulationStateV2 ? options.state : new SimulationStateV2();
+    const result = solveCircuitV2(dto, state, { dt, simTime });
+    return { dto, result, state: result.nextState };
+}
+
 export function runV2SolverCase(caseDefinition, options = {}) {
     const definition = clonePlainValue(caseDefinition);
-    const dto = buildV2Dto(definition);
+    const runtime = buildRuntimeCircuit(definition);
+    const dto = buildV2NetlistFromCircuit(runtime.circuit);
     const dt = Number.isFinite(Number(options.dt)) ? Number(options.dt) : 0.01;
     const simTime = Number.isFinite(Number(options.simTime)) ? Number(options.simTime) : 0;
     const state = new SimulationStateV2();
