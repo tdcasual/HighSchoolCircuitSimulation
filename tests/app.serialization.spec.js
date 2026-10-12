@@ -274,7 +274,7 @@ describe('AppSerialization envelope', () => {
         expect(parsed.circuit.solverBackend).toBeUndefined();
     });
 
-    it('lowers archived ui.solverBackend=v2 to v1 before default-on', () => {
+    it('keeps archived ui.solverBackend=v2 and does not persist fallback state', () => {
         const solverBackend = { mode: 'shadow' };
         const warn = vi.fn();
         restoreAppUi({
@@ -282,9 +282,8 @@ describe('AppSerialization envelope', () => {
             solverBackend,
             warn
         });
-        expect(solverBackend.mode).toBe('v1');
-        expect(warn).toHaveBeenCalled();
-        expect(String(warn.mock.calls[0][0])).toMatch(/v1/);
+        expect(solverBackend.mode).toBe('v2');
+        expect(warn).not.toHaveBeenCalled();
 
         const kept = { mode: 'v1' };
         restoreAppUi({
@@ -302,19 +301,34 @@ describe('AppSerialization envelope', () => {
 
         const locked = { mode: 'v1' };
         restoreAppUi({
-            ui: { solverBackend: 'shadow' },
+            ui: { solverBackend: 'v2' },
             solverBackend: locked,
             applyMode: false
         });
         expect(locked.mode).toBe('v1');
+
+        const saved = buildAppDocument({
+            circuit: {
+                toJSON: () => bareCircuitPayload()
+            },
+            solverBackend: 'v2'
+        });
+        expect(saved.ui.solverBackend).toBe('v2');
+        expect(JSON.stringify(saved)).not.toContain('consecutiveFallbackSteps');
+        expect(JSON.stringify(saved)).not.toContain('fellBackThisStep');
+        expect(JSON.stringify(saved)).not.toContain('已回退');
     });
 
-    it('keeps v1 and omits ui.solverBackend when the key is missing', () => {
-        const solverBackend = { mode: 'v1' };
+    it('does not overwrite the live mode when ui.solverBackend is missing', () => {
+        const keepV2 = { mode: 'v2' };
         const warn = vi.fn();
-        restoreAppUi({ ui: {}, solverBackend, warn });
-        expect(solverBackend.mode).toBe('v1');
+        restoreAppUi({ ui: {}, solverBackend: keepV2, warn });
+        expect(keepV2.mode).toBe('v2');
         expect(warn).not.toHaveBeenCalled();
+
+        const keepV1 = { mode: 'v1' };
+        restoreAppUi({ ui: {}, solverBackend: keepV1 });
+        expect(keepV1.mode).toBe('v1');
 
         const circuit = new Circuit();
         const doc = buildAppDocument({ circuit });

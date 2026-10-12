@@ -110,10 +110,22 @@ describe('solverBackend wiring contracts', () => {
 
         const factory = readSource('src/v2/app/createInjectedSolverBackend.js');
         expect(factory).toContain("mode: normalizeMode(options.mode)");
-        expect(factory).toContain("DEFAULT_SOLVER_BACKEND_MODE = 'v1'");
+        expect(factory).toContain("DEFAULT_SOLVER_BACKEND_MODE = 'v2'");
         expect(factory).toContain('runSimulationStepV2');
         expect(factory).not.toContain('shadowReady');
         expect(factory).not.toContain('sampleEveryN');
+        expect(factory).toContain('consecutiveFallbackSteps');
+        expect(runtime).not.toContain('DEFAULT_SOLVER_BACKEND_MODE');
+        expect(readSource('src/embed/EmbedRuntimeOptions.js')).not.toContain('DEFAULT_SOLVER_BACKEND_MODE');
+        expect(readSource('src/app/AppDocument.js')).not.toContain('lowerArchivedV2');
+        expect(loop).toContain('consecutiveFallbackSteps');
+        expect(loop).toContain('fellBackThisStep');
+        expect(loop).not.toMatch(/backend\.mode\s*=\s*['"]v1['"]/);
+        expect(readSource('src/app/RuntimeUiBridge.js')).toContain('仿真已回退到稳定求解器');
+        expect(readSource('src/app/RuntimeUiBridge.js')).toContain('已回退');
+        expect(readSource('src/app/RuntimeUiBridge.js')).not.toMatch(/solverBackend\.mode\s*=/);
+        expect(readSource('README.md')).toContain('ui.solverBackend');
+        expect(readSource('AGENTS.md')).toContain('ui.solverBackend');
 
         const adapter = readSource('src/app/simulation/ComponentViewAdapter.js');
         expect(adapter).not.toContain('copyDynamicsToV1Standby');
@@ -142,7 +154,8 @@ describe('solverBackend wiring contracts', () => {
         ];
         for (const relPath of scripts) {
             const source = readSource(relPath);
-            expect(source, relPath).toContain('createInjectedSolverBackend');
+            expect(source, relPath).toContain('createInjectedSolverBackend()');
+            expect(source, relPath).not.toMatch(/createInjectedSolverBackend\(\s*\{/);
             expect(source, relPath).toContain('prepareSimulation');
             expect(source, relPath).toContain('.step(');
             expect(source, relPath).toContain('haltSimulation');
@@ -287,6 +300,9 @@ describe('CircuitSimulationLoopService solverBackend dispatch', () => {
         expect(backend.restoreStandby).toHaveBeenCalledWith(circuit);
         expect(callOrder).toEqual(['solveFrame', 'restoreStandby', 'solver.solve']);
         expect(backend.fallbackCount).toBe(1);
+        expect(backend.consecutiveFallbackSteps).toBe(1);
+        expect(backend.fellBackThisStep).toBe(true);
+        expect(backend.mode).toBe('v2');
         expect(circuit.lastResults.backendUsed).toBe('v1');
         expect(circuit.lastResults.valid).toBe(true);
         expect(circuit.lastResults.currents.has('R1')).toBe(true);
@@ -454,6 +470,15 @@ describe('wrapSolverBackend', () => {
         const kept = { mode: 'v1', solveFrame() {} };
         wrapSolverBackend(kept, { runtimeOptions: {} });
         expect(kept.mode).toBe('v1');
+
+        const factory = createInjectedSolverBackend();
+        expect(factory.mode).toBe('v2');
+        wrapSolverBackend(factory, { runtimeOptions: { solverBackend: 'v1' } });
+        expect(factory.mode).toBe('v1');
+
+        const classroom = createInjectedSolverBackend();
+        wrapSolverBackend(classroom, { runtimeOptions: {} });
+        expect(classroom.mode).toBe('v2');
     });
 });
 
@@ -527,13 +552,13 @@ describe('one-shot solveFrame callers', () => {
 });
 
 describe('createInjectedSolverBackend', () => {
-    it('defaults to v1 and solveFrame does not require isRunning', () => {
-        expect(DEFAULT_SOLVER_BACKEND_MODE).toBe('v1');
+    it('defaults to v2 and solveFrame does not require isRunning', () => {
+        expect(DEFAULT_SOLVER_BACKEND_MODE).toBe('v2');
         const backend = createInjectedSolverBackend();
-        expect(backend.mode).toBe('v1');
+        expect(backend.mode).toBe('v2');
         const circuit = buildSeriesFixture();
         expect(circuit.isRunning).toBe(false);
-        const v2Backend = createInjectedSolverBackend({ mode: 'v2' });
+        const v2Backend = createInjectedSolverBackend();
         const result = v2Backend.solveFrame({
             circuit,
             dt: circuit.dt,
@@ -552,8 +577,12 @@ describe('createInjectedSolverBackend', () => {
         expect(circuit.getComponent('R1').nodes).toBe(resistorNodes);
         expect(dynSpy).not.toHaveBeenCalled();
         v2Backend.fallbackCount = 3;
+        v2Backend.consecutiveFallbackSteps = 12;
+        v2Backend.fellBackThisStep = true;
         v2Backend.reset();
         expect(v2Backend.fallbackCount).toBe(0);
+        expect(v2Backend.consecutiveFallbackSteps).toBe(0);
+        expect(v2Backend.fellBackThisStep).toBe(false);
         expect(v2Backend.mode).toBe('v2');
     });
 });

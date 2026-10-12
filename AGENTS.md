@@ -226,6 +226,13 @@
 - 电容和电机涉及微分方程的数值积分
 - 实时更新代理状态用于显示
 
+### 求解后端旗标
+- 旗标名 `solverBackend`，存在应用信封 `ui.solverBackend`，不进 `circuit.meta`
+- 取值 `'v1' | 'v2' | 'shadow'`；课堂代码默认 `'v2'`（`src/v2` factory 的 `DEFAULT_SOLVER_BACKEND_MODE`）
+- 缺省键 = 代码默认；存档 `'v2'` 按字面尊重
+- 嵌入未显式 `solver=` 时钉 `'v1'`
+- V2 子步失败：restore standby 后用 V1 解该 `substepDt`；连续回退超过 50 个墙钟步状态栏保持「已回退」，不改持久化旗标
+
 ## 示例
 
 参考 `tests/circuit.io.spec.js` 的 3V / 8Ω 串联夹具：

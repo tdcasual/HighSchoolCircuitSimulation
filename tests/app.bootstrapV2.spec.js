@@ -30,7 +30,7 @@ describe('bootstrapV2 composition root', () => {
         expect(app.chartWorkspace).toBeDefined();
         expect(typeof app.openAIPanel).toBe('function');
         expect(app.options.solverBackend).toBeDefined();
-        expect(app.options.solverBackend.mode).toBe('v1');
+        expect(app.options.solverBackend.mode).toBe('v2');
         expect(typeof app.options.solverBackend.solveFrame).toBe('function');
         expect(typeof app.options.solverBackend.restoreStandby).toBe('function');
         expect(typeof app.options.solverBackend.reset).toBe('function');

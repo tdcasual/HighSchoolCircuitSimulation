@@ -178,6 +178,7 @@ export class CircuitSimulationLoopService {
         const shadowTick = !useV1 && mode === 'shadow'
             ? (Number(backend.shadowWallClockTick) || 0)
             : 0;
+        let stepHadFallback = false;
 
         for (let index = 0; index < substepCount; index++) {
             if (useV1) {
@@ -225,6 +226,7 @@ export class CircuitSimulationLoopService {
                 latestResults = committed.substepResults;
                 latestResults.backendUsed = 'v1';
                 backend.fallbackCount = (backend.fallbackCount || 0) + 1;
+                stepHadFallback = true;
                 elapsedDt += committed.elapsedDt;
                 adaptiveDecisionResults = noteAdaptive(committed.substepResults, adaptiveDecisionResults);
                 if (!committed.substepResults.valid) {
@@ -254,6 +256,16 @@ export class CircuitSimulationLoopService {
 
         if (mode === 'shadow') {
             backend.shadowWallClockTick = shadowTick + 1;
+        }
+
+        if (mode === 'v2') {
+            if (stepHadFallback) {
+                backend.consecutiveFallbackSteps = (backend.consecutiveFallbackSteps || 0) + 1;
+                backend.fellBackThisStep = true;
+            } else {
+                backend.consecutiveFallbackSteps = 0;
+                backend.fellBackThisStep = false;
+            }
         }
 
         if (adaptiveDecisionResults) {

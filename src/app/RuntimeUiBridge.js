@@ -1,6 +1,19 @@
 import { resolveRuntimeDiagnosticsForUpdate } from './RuntimeDiagnosticsPipeline.js';
 import { setSimulationControlsRunning, setStatusText } from './SimulationUiState.js';
 
+const SOLVER_FALLBACK_STATUS = '仿真已回退到稳定求解器';
+const SOLVER_FALLBACK_STICKY_STATUS = '已回退';
+const SOLVER_FALLBACK_STICKY_AFTER_STEPS = 50;
+
+function resolveSolverFallbackStatus(backend, results) {
+    if (!backend?.fellBackThisStep) return '';
+    if (results?.valid === false) return '';
+    const consecutive = Number(backend.consecutiveFallbackSteps) || 0;
+    return consecutive > SOLVER_FALLBACK_STICKY_AFTER_STEPS
+        ? SOLVER_FALLBACK_STICKY_STATUS
+        : SOLVER_FALLBACK_STATUS;
+}
+
 function getPrimaryRuntimeHint(runtimeDiagnostics = {}) {
     const hints = Array.isArray(runtimeDiagnostics?.hints) ? runtimeDiagnostics.hints : [];
     const primaryHint = hints.find((hint) => typeof hint === 'string' && hint.trim());
@@ -86,12 +99,14 @@ export class RuntimeUiBridge {
         this.app?.renderer?.updateWireAnimations?.(this.app?.circuit?.isRunning, results);
         this.app?.chartWorkspace?.onCircuitUpdate?.(results);
 
+        let statusWritten = false;
         if (runtimeDiagnostics.summary) {
             const shouldShow = !results?.valid || runtimeDiagnostics.code === 'SHORT_CIRCUIT';
             if (shouldShow) {
                 const runtimeStatusMessage = buildRuntimeDiagnosticsStatusMessage(runtimeDiagnostics);
                 this.app?.chartWorkspace?.setRuntimeStatus?.(runtimeStatusMessage);
                 this.updateStatus(runtimeStatusMessage);
+                statusWritten = true;
 
                 const primaryHint = getPrimaryRuntimeHint(runtimeDiagnostics);
                 this.app?.interaction?.showStatusAction?.({
@@ -104,6 +119,14 @@ export class RuntimeUiBridge {
                         this.updateStatus(runtimeStatusMessage);
                     }
                 });
+            }
+        }
+
+        if (!statusWritten) {
+            const fallbackStatus = resolveSolverFallbackStatus(this.app?.circuit?.solverBackend, results);
+            if (fallbackStatus) {
+                this.app?.chartWorkspace?.setRuntimeStatus?.(fallbackStatus);
+                this.updateStatus(fallbackStatus);
             }
         }
 

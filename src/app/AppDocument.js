@@ -7,16 +7,10 @@ export const APP_DOCUMENT_VERSION = 1;
 const LEGACY_UI_META_KEYS = Object.freeze(['exerciseBoard', 'chartWorkspace']);
 const SOLVER_BACKEND_MODES = Object.freeze(['v1', 'v2', 'shadow']);
 
-function normalizeSolverBackendMode(raw, options = {}) {
+function normalizeSolverBackendMode(raw) {
     if (raw == null || raw === '') return null;
     const text = String(raw).trim().toLowerCase();
     if (!SOLVER_BACKEND_MODES.includes(text)) return 'v1';
-    if (options.lowerArchivedV2 && text === 'v2') {
-        if (typeof options.warn === 'function') {
-            options.warn('ui.solverBackend=v2 lowered to v1 until default-on');
-        }
-        return 'v1';
-    }
     return text;
 }
 
@@ -145,17 +139,14 @@ export function restoreAppUi({
     chartWorkspace = null,
     ui = null,
     solverBackend = null,
-    warn = null,
+    warn: _warn = null,
     applyMode = true
 } = {}) {
     const blob = isPlainObject(ui) ? ui : {};
     safeInvokeMethod(exerciseBoard, 'fromJSON', blob.exerciseBoard);
     safeInvokeMethod(chartWorkspace, 'fromJSON', blob.chartWorkspace);
     if (!applyMode || !solverBackend) return;
-    const mode = normalizeSolverBackendMode(blob.solverBackend, {
-        lowerArchivedV2: true,
-        warn
-    });
+    const mode = normalizeSolverBackendMode(blob.solverBackend);
     if (mode) {
         solverBackend.mode = mode;
     }

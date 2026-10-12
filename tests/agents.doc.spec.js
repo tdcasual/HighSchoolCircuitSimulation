@@ -28,6 +28,15 @@ describe('AGENTS doc consistency', () => {
         expect(content).not.toContain('<parameter');
     });
 
+    it('describes the solverBackend flag and classroom default v2', () => {
+        const content = readFileSync(resolve(process.cwd(), 'AGENTS.md'), 'utf8');
+        expect(content).toContain('ui.solverBackend');
+        expect(content).toContain("默认 `'v2'`");
+        expect(content).toContain('已回退');
+        expect(content).not.toContain('SolveCircuitV2');
+        expect(content).not.toContain('runSimulationStepV2');
+    });
+
     it('points contributors at ComponentRegistry and the 6V classroom default', () => {
         const content = readFileSync(resolve(process.cwd(), 'AGENTS.md'), 'utf8');
         expect(content).toContain('ComponentRegistry');

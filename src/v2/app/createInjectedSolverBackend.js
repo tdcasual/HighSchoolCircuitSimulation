@@ -2,7 +2,7 @@ import { SimulationStateV2 } from '../simulation/SimulationStateV2.js';
 import { snapshotCircuitModel } from '../simulation/snapshotCircuitModel.js';
 import { runSimulationStepV2 } from './usecases/RunSimulationStepV2.js';
 
-export const DEFAULT_SOLVER_BACKEND_MODE = 'v1';
+export const DEFAULT_SOLVER_BACKEND_MODE = 'v2';
 
 const ALLOWED_MODES = new Set(['v1', 'v2', 'shadow']);
 
@@ -129,6 +129,8 @@ export function createInjectedSolverBackend(options = {}) {
     const backend = {
         mode: normalizeMode(options.mode),
         fallbackCount: 0,
+        consecutiveFallbackSteps: 0,
+        fellBackThisStep: false,
         shadowThrow: !!options.shadowThrow,
         shadowCompareCount: 0,
         shadowMismatchCount: 0,
@@ -223,6 +225,8 @@ export function createInjectedSolverBackend(options = {}) {
         cachedStepId = null;
         standbyById = new Map();
         backend.fallbackCount = 0;
+        backend.consecutiveFallbackSteps = 0;
+        backend.fellBackThisStep = false;
         backend.shadowCompareCount = 0;
         backend.shadowMismatchCount = 0;
         backend.shadowErrorCount = 0;

@@ -89,6 +89,116 @@ describe('RuntimeUiBridge', () => {
         expect(canvasContainer.classList.toggle).toHaveBeenCalledWith('canvas-empty', false);
     });
 
+    it('shows fallback copy on a valid V1 substep fallback and sticks after 50 wall-clock steps', () => {
+        const setStatusTextImpl = vi.fn();
+        const backend = {
+            mode: 'v2',
+            fellBackThisStep: true,
+            consecutiveFallbackSteps: 1
+        };
+        const app = {
+            circuit: { solverBackend: backend },
+            renderer: {
+                updateValues: vi.fn(),
+                updateWireAnimations: vi.fn()
+            },
+            chartWorkspace: {
+                onCircuitUpdate: vi.fn(),
+                setRuntimeStatus: vi.fn()
+            },
+            interaction: {
+                selectedComponent: null,
+                showStatusAction: vi.fn()
+            }
+        };
+        const bridge = new RuntimeUiBridge(app, {
+            setStatusTextImpl,
+            setSimulationControlsRunningImpl: vi.fn()
+        });
+        const results = {
+            valid: true,
+            backendUsed: 'v1',
+            currents: new Map([['R1', 0.3]])
+        };
+
+        bridge.onCircuitUpdate(results);
+        expect(setStatusTextImpl).toHaveBeenCalledWith('仿真已回退到稳定求解器');
+        expect(app.chartWorkspace.setRuntimeStatus).toHaveBeenCalledWith('仿真已回退到稳定求解器');
+        expect(backend.mode).toBe('v2');
+        expect(app.interaction.showStatusAction).not.toHaveBeenCalled();
+
+        setStatusTextImpl.mockClear();
+        app.chartWorkspace.setRuntimeStatus.mockClear();
+        backend.consecutiveFallbackSteps = 50;
+        bridge.onCircuitUpdate(results);
+        expect(setStatusTextImpl).toHaveBeenCalledWith('仿真已回退到稳定求解器');
+        expect(setStatusTextImpl).not.toHaveBeenCalledWith('已回退');
+
+        setStatusTextImpl.mockClear();
+        app.chartWorkspace.setRuntimeStatus.mockClear();
+        backend.consecutiveFallbackSteps = 51;
+        bridge.onCircuitUpdate(results);
+        expect(setStatusTextImpl).toHaveBeenCalledWith('已回退');
+        expect(setStatusTextImpl).not.toHaveBeenCalledWith('仿真已回退到稳定求解器');
+        expect(backend.mode).toBe('v2');
+
+        setStatusTextImpl.mockClear();
+        backend.fellBackThisStep = false;
+        backend.consecutiveFallbackSteps = 0;
+        bridge.onCircuitUpdate({
+            valid: true,
+            backendUsed: 'v2',
+            currents: new Map([['R1', 0.3]])
+        });
+        expect(setStatusTextImpl).not.toHaveBeenCalled();
+        expect(backend.mode).toBe('v2');
+    });
+
+    it('does not replace fatal diagnostics with fallback copy', () => {
+        const setStatusTextImpl = vi.fn();
+        const diagnostics = {
+            code: 'SINGULAR_MATRIX',
+            fatal: true,
+            summary: '电路方程不可解（矩阵奇异），请检查拓扑与元件参数。',
+            hints: ['确认电路至少存在一个参考地并形成闭合回路。']
+        };
+        const app = {
+            circuit: {
+                solverBackend: {
+                    mode: 'v2',
+                    fellBackThisStep: true,
+                    consecutiveFallbackSteps: 51
+                }
+            },
+            renderer: {
+                updateValues: vi.fn(),
+                updateWireAnimations: vi.fn()
+            },
+            chartWorkspace: {
+                onCircuitUpdate: vi.fn(),
+                setRuntimeStatus: vi.fn()
+            },
+            interaction: {
+                selectedComponent: null,
+                showStatusAction: vi.fn()
+            }
+        };
+        const bridge = new RuntimeUiBridge(app, {
+            setStatusTextImpl,
+            setSimulationControlsRunningImpl: vi.fn()
+        });
+
+        bridge.onCircuitUpdate({
+            valid: false,
+            backendUsed: 'v1',
+            runtimeDiagnostics: diagnostics
+        });
+
+        expect(setStatusTextImpl).toHaveBeenCalledWith(expect.stringContaining(diagnostics.summary));
+        expect(setStatusTextImpl).not.toHaveBeenCalledWith('已回退');
+        expect(setStatusTextImpl).not.toHaveBeenCalledWith('仿真已回退到稳定求解器');
+    });
+
     it('syncs empty state when circuit load or clear feedback is shown', () => {
         const bridge = new RuntimeUiBridge({
             circuit: {

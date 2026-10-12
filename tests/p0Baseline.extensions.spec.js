@@ -92,7 +92,8 @@ describe('P0 electrical extension scenarios', () => {
         expect(tickSource).toContain('prepareSimulation');
         expect(tickSource).toContain('haltSimulation');
         expect(tickSource).toMatch(/\.step\s*\(/);
-        expect(tickSource).not.toMatch(/\.solve\s*\(/);
+        expect(tickSource).toContain('solveFrame');
+        expect(tickSource).not.toMatch(/solver\.solve\s*\(/);
         expect(tickSource).not.toContain('solver.solve');
     });
 

@@ -166,27 +166,43 @@ function collectSnapshotFields(circuit, results, def) {
     };
 }
 
+function accumulateRmsSample(circuit, voltages, currents, buckets) {
+    buckets.sampleCount += 1;
+    for (const comp of circuit.getAllComponents()) {
+        const current = currents instanceof Map ? (currents.get(comp.id) || 0) : 0;
+        buckets.sumSqCurrent[comp.id] = (buckets.sumSqCurrent[comp.id] || 0) + current * current;
+        const n1 = Array.isArray(comp.nodes) ? comp.nodes[0] : -1;
+        const n2 = Array.isArray(comp.nodes) ? comp.nodes[1] : -1;
+        const v1 = Number.isInteger(n1) && n1 >= 0 ? (voltages?.[n1] || 0) : 0;
+        const v2 = Number.isInteger(n2) && n2 >= 0 ? (voltages?.[n2] || 0) : 0;
+        const voltage = v1 - v2;
+        buckets.sumSqVoltage[comp.id] = (buckets.sumSqVoltage[comp.id] || 0) + voltage * voltage;
+    }
+}
+
 function runProductionTickScenario(def) {
     const circuit = def.build();
     circuit.solverBackend = createInjectedSolverBackend();
     circuit.dt = def.dt;
-    const sumSqCurrent = {};
-    const sumSqVoltage = {};
-    let sampleCount = 0;
+    const buckets = {
+        sumSqCurrent: {},
+        sumSqVoltage: {},
+        sampleCount: 0
+    };
+    // V2 success skips V1 updateDynamicComponents; sample solveFrame per substep instead.
+    const backend = circuit.solverBackend;
+    const originalSolveFrame = backend.solveFrame.bind(backend);
+    backend.solveFrame = (input) => {
+        const result = originalSolveFrame(input);
+        if (result?.valid) {
+            accumulateRmsSample(circuit, result.voltages, result.currents, buckets);
+        }
+        return result;
+    };
     const solver = circuit.solver;
     const originalUpdate = solver.updateDynamicComponents.bind(solver);
     solver.updateDynamicComponents = (voltages, currents) => {
-        sampleCount += 1;
-        for (const comp of circuit.getAllComponents()) {
-            const current = currents instanceof Map ? (currents.get(comp.id) || 0) : 0;
-            sumSqCurrent[comp.id] = (sumSqCurrent[comp.id] || 0) + current * current;
-            const n1 = Array.isArray(comp.nodes) ? comp.nodes[0] : -1;
-            const n2 = Array.isArray(comp.nodes) ? comp.nodes[1] : -1;
-            const v1 = Number.isInteger(n1) && n1 >= 0 ? (voltages?.[n1] || 0) : 0;
-            const v2 = Number.isInteger(n2) && n2 >= 0 ? (voltages?.[n2] || 0) : 0;
-            const voltage = v1 - v2;
-            sumSqVoltage[comp.id] = (sumSqVoltage[comp.id] || 0) + voltage * voltage;
-        }
+        accumulateRmsSample(circuit, voltages, currents, buckets);
         return originalUpdate(voltages, currents);
     };
 
@@ -199,22 +215,23 @@ function runProductionTickScenario(def) {
         circuit.haltSimulation();
     } finally {
         solver.updateDynamicComponents = originalUpdate;
+        backend.solveFrame = originalSolveFrame;
     }
 
     const results = circuit.lastResults || { valid: false, voltages: [], currents: new Map() };
     const snapshot = collectSnapshotFields(circuit, results, def);
-    const n = sampleCount > 0 ? sampleCount : 1;
+    const n = buckets.sampleCount > 0 ? buckets.sampleCount : 1;
     const componentRmsCurrents = {};
     const componentRmsVoltages = {};
-    for (const id of Object.keys(sumSqCurrent).sort((a, b) => a.localeCompare(b))) {
-        componentRmsCurrents[id] = normalizeNumber(Math.sqrt(sumSqCurrent[id] / n));
+    for (const id of Object.keys(buckets.sumSqCurrent).sort((a, b) => a.localeCompare(b))) {
+        componentRmsCurrents[id] = normalizeNumber(Math.sqrt(buckets.sumSqCurrent[id] / n));
     }
-    for (const id of Object.keys(sumSqVoltage).sort((a, b) => a.localeCompare(b))) {
-        componentRmsVoltages[id] = normalizeNumber(Math.sqrt(sumSqVoltage[id] / n));
+    for (const id of Object.keys(buckets.sumSqVoltage).sort((a, b) => a.localeCompare(b))) {
+        componentRmsVoltages[id] = normalizeNumber(Math.sqrt(buckets.sumSqVoltage[id] / n));
     }
     snapshot.runner = RUNNER_PRODUCTION_TICK;
     snapshot.substepCount = circuit.getSimulationSubstepCount(def.dt);
-    snapshot.sampleCount = sampleCount;
+    snapshot.sampleCount = buckets.sampleCount;
     snapshot.componentRmsCurrents = componentRmsCurrents;
     snapshot.componentRmsVoltages = componentRmsVoltages;
     return snapshot;
