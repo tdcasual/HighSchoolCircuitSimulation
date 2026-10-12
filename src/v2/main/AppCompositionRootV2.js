@@ -13,14 +13,14 @@ function ensureRuntimeContract(appInstance) {
     return appInstance;
 }
 
-export function createAppCompositionRootV2({ AppClass } = {}) {
+export function createAppCompositionRootV2({ AppClass, appOptions } = {}) {
     if (typeof AppClass !== 'function') {
         throw new Error('AppCompositionRootV2 requires AppClass constructor');
     }
 
     return {
         createApp() {
-            const instance = new AppClass();
+            const instance = new AppClass(appOptions || {});
             return ensureRuntimeContract(instance);
         }
     };

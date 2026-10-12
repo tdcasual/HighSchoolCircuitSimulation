@@ -4,7 +4,7 @@ import { Circuit } from '../src/core/runtime/Circuit.js';
 describe('Circuit result projection delegation', () => {
     it('delegates simulation result projection to the injected service during step', () => {
         const resultProjectionService = {
-            applyStepResults: vi.fn(() => false)
+            updateComponentDisplayValues: vi.fn(() => false)
         };
         const persistenceAdapter = {
             loadSolverDebugFlag: vi.fn(() => false),
@@ -33,7 +33,7 @@ describe('Circuit result projection delegation', () => {
 
         circuit.step();
 
-        expect(resultProjectionService.applyStepResults).toHaveBeenCalledWith(circuit, results, 0.02);
+        expect(resultProjectionService.updateComponentDisplayValues).toHaveBeenCalledWith(circuit, results);
         expect(circuit.onUpdate).toHaveBeenCalledWith(results);
     });
 });

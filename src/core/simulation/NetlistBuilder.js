@@ -24,8 +24,7 @@ export class NetlistBuilder {
             id,
             type,
             nodes,
-            params: this.extractParams(safeComponent),
-            source: component
+            params: this.extractParams(safeComponent)
         };
     }
 

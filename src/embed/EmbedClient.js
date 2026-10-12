@@ -77,12 +77,17 @@ export function buildEmbedUrl(options = {}, baseHref = 'http://localhost/') {
     url.searchParams.set('autosave', options.autoSave ? '1' : '0');
     url.searchParams.set('restore', options.restoreFromStorage ? '1' : '0');
 
-    const parentOrigin = options.parentOrigin || options.targetOrigin || '*';
+    const parentOrigin = options.parentOrigin
+        || options.targetOrigin
+        || (typeof window !== 'undefined' ? window.location.origin : '');
     if (parentOrigin && parentOrigin !== '*') {
         url.searchParams.set('targetOrigin', parentOrigin);
     }
     if (Array.isArray(options.allowedParentOrigins) && options.allowedParentOrigins.length > 0) {
         url.searchParams.set('allowedOrigins', options.allowedParentOrigins.join(','));
+    }
+    if (options.capabilities?.unfreeze) {
+        url.searchParams.set('capabilities', 'unfreeze');
     }
 
     Object.entries(features).forEach(([key, value]) => {
@@ -96,7 +101,7 @@ export class HSCSApplet {
     constructor(options = {}, runtime = {}) {
         this.window = runtime.window || (typeof window !== 'undefined' ? window : null);
         this.document = runtime.document || (typeof document !== 'undefined' ? document : null);
-        const parentOrigin = options.parentOrigin || options.targetOrigin || this.window?.location?.origin || '*';
+        const parentOrigin = options.parentOrigin || options.targetOrigin || this.window?.location?.origin || '';
         this.options = {
             src: options.src || resolveDefaultEmbedSrc(),
             width: options.width || '100%',

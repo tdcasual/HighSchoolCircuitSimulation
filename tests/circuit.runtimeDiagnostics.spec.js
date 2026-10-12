@@ -98,6 +98,27 @@ describe('Circuit runtime diagnostics guard rails', () => {
     });
 
 
+    it('keeps floating-subcircuit warnings when the solve result is valid', () => {
+        const circuit = createTestCircuit();
+        const vMain = addComponent(circuit, 'PowerSource', 'Vmain', { voltage: 10, internalResistance: 0 });
+        const rMain = addComponent(circuit, 'Resistor', 'Rmain', { resistance: 10 });
+        connectWire(circuit, 'W1', vMain, 0, rMain, 0);
+        connectWire(circuit, 'W2', rMain, 1, vMain, 1);
+
+        const vFloat = addComponent(circuit, 'PowerSource', 'Vfloat', { voltage: 5, internalResistance: 0 });
+        const rFloat = addComponent(circuit, 'Resistor', 'Rfloat', { resistance: 5 });
+        connectWire(circuit, 'W3', vFloat, 0, rFloat, 0);
+        connectWire(circuit, 'W4', rFloat, 1, vFloat, 1);
+
+        const diagnostics = circuit.collectRuntimeDiagnostics({
+            valid: true,
+            voltages: [],
+            currents: new Map()
+        }, 0);
+
+        expect(diagnostics.code).toBe(FailureCategories.FloatingSubcircuit);
+    });
+
     it('stamps topology and simulation freshness versions on collected diagnostics', () => {
         const circuit = createTestCircuit();
         circuit.simulationStepId = 12;

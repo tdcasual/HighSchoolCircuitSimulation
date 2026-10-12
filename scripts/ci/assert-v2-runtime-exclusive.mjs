@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 
 const root = process.cwd();
@@ -50,6 +50,15 @@ if (/new\s+Circuit\s*\(/u.test(mainSource) || /new\s+Renderer\s*\(/u.test(mainSo
     fail('src/main.js must not directly instantiate legacy runtime modules');
 }
 
+if (!/from\s+['"]\.\.\/core\/runtime\/Circuit\.js['"]/u.test(runtimeSource)) {
+    fail('AppRuntimeV2 must import production Circuit');
+}
+if (/SolveCircuitV2|runSimulationStepV2|RendererRegistryV2/u.test(runtimeSource)) {
+    fail('AppRuntimeV2 must not import experimental v2 solver/renderer');
+}
+if (!/new Circuit\s*\(/u.test(runtimeSource)) {
+    fail('AppRuntimeV2 must instantiate Circuit');
+}
 if (!/export\s+class\s+AppRuntimeV2/u.test(runtimeSource)) {
     fail('src/app/AppRuntimeV2.js must export class AppRuntimeV2');
 }
@@ -58,6 +67,31 @@ if (!/chartWorkspace/u.test(runtimeSource)) {
 }
 if (!/openAIPanel/u.test(runtimeSource)) {
     fail('AppRuntimeV2 must expose openAIPanel runtime contract');
+}
+
+function walkJsFiles(dir, acc = []) {
+    for (const name of readdirSync(dir)) {
+        const full = path.join(dir, name);
+        const stat = statSync(full);
+        if (stat.isDirectory()) {
+            walkJsFiles(full, acc);
+        } else if (name.endsWith('.js')) {
+            acc.push(full);
+        }
+    }
+    return acc;
+}
+
+const experimentalSolverPattern = /SolveCircuitV2|runSimulationStepV2/;
+for (const relRoot of ['src/app', 'src/ui', 'src/core', 'src/embed']) {
+    const absRoot = path.resolve(root, relRoot);
+    if (!existsSync(absRoot)) continue;
+    for (const file of walkJsFiles(absRoot)) {
+        const source = readFileSync(file, 'utf8');
+        if (experimentalSolverPattern.test(source)) {
+            fail(`production path must not import experimental solver: ${path.relative(root, file)}`);
+        }
+    }
 }
 
 console.log('[v2-runtime-exclusive] ok');

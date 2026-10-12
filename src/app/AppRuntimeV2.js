@@ -4,6 +4,7 @@
  */
 
 import { Circuit } from '../core/runtime/Circuit.js';
+import { SimulationDriver } from './SimulationDriver.js';
 import { Renderer } from '../ui/Renderer.js';
 import { InteractionManager } from '../ui/Interaction.js';
 import { loadAIPanelClass } from '../ui/ai/loadAIPanel.js';
@@ -25,7 +26,7 @@ import { RuntimeActionRouter } from '../app/RuntimeActionRouter.js';
 import { RuntimeUiBridge } from '../app/RuntimeUiBridge.js';
 import { createRuntimeLogger } from '../utils/Logger.js';
 import { RuntimeStorageEntries } from '../utils/storage/StorageRegistry.js';
-import { buildAppSaveData } from '../app/AppSerialization.js';
+import { buildAppSaveData, parseAppDocument } from '../app/AppSerialization.js';
 import { safeGetStorageItem, safeSetStorageItem } from '../utils/storage/SafeStorage.js';
 import { InteractionModeStore } from './interaction/InteractionModeStore.js';
 import {
@@ -37,7 +38,7 @@ import {
 } from './AppRuntimeV2Delegates.js';
 
 export class AppRuntimeV2 {
-    constructor() {
+    constructor(options = {}) {
         this.runtimeOptions = parseEmbedRuntimeOptionsFromSearch(
             typeof window !== 'undefined' ? window.location.search : ''
         );
@@ -54,8 +55,11 @@ export class AppRuntimeV2 {
         };
         
         // 初始化电路引擎
-        this.circuit = new Circuit();
+        this.circuit = options.circuit || new Circuit();
         this.circuit.setLogger?.(this.logger.child('circuit'));
+        this.simulationDriver = typeof options.simulationDriverFactory === 'function'
+            ? options.simulationDriverFactory({ circuit: this.circuit })
+            : new SimulationDriver({ circuit: this.circuit });
         
         // 初始化渲染器
         this.renderer = new Renderer(this.svg, this.circuit);
@@ -386,9 +390,10 @@ debugCircuit() {
             if (!saved) return false;
 
             const circuitJSON = JSON.parse(saved);
+            const parsed = parseAppDocument(circuitJSON);
             const statusText = typeof options.statusText === 'string' && options.statusText
                 ? options.statusText
-                : `已从缓存恢复电路 (${circuitJSON.components.length} 个元器件)`;
+                : `已从缓存恢复电路 (${parsed.circuit.components.length} 个元器件)`;
             this.loadCircuitData(circuitJSON, {
                 statusText,
                 storageSource: options.storageSource || 'storage-restore'

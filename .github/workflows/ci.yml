@@ -72,7 +72,7 @@ jobs:
         run: npm run test:reliability
 
       - name: Run quality checks and regressions
-        run: npm run check:full
+        run: npm run lint && npm run format:check && npm run check:v2:runtime-safety && npm run check:core-size && npm test && npm run baseline:p0 && npm run baseline:circuitjs && npm run baseline:ai
 
   responsive-e2e:
     runs-on: ubuntu-latest
@@ -192,5 +192,36 @@ jobs:
         with:
           name: mode-conflict-matrix-artifacts
           path: output/e2e/mode-conflict
+          if-no-files-found: ignore
+          retention-days: 7
+
+  ai-mobile-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run AI mobile layout E2E
+        run: npm run test:e2e:ai-mobile
+
+      - name: Upload AI mobile E2E screenshots on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-mobile-e2e-screenshots
+          path: output/e2e/ai-mobile-layout
           if-no-files-found: ignore
           retention-days: 7

@@ -340,4 +340,141 @@ describe('Circuit IO gateway', () => {
             runtimeCircuit.isRunning = false;
         }
     });
+
+    it('fromJSON of invalid payload does not empty a 2-component circuit', () => {
+        const circuit = new Circuit();
+        circuit.addComponent(createComponent('PowerSource', 0, 0, 'V1'));
+        circuit.addComponent(createComponent('Resistor', 100, 0, 'R1'));
+        circuit.isRunning = true;
+
+        expect(() => circuit.fromJSON({ components: [], wires: [] })).toThrow();
+        expect(circuit.components.size).toBe(2);
+        expect(circuit.components.has('V1')).toBe(true);
+        expect(circuit.components.has('R1')).toBe(true);
+        expect(circuit.isRunning).toBe(true);
+    });
+
+    it('fromJSON of an app envelope throws without clearing the live circuit', () => {
+        const circuit = new Circuit();
+        circuit.addComponent(createComponent('Resistor', 0, 0, 'Rkeep'));
+        circuit.addComponent(createComponent('Resistor', 40, 0, 'R2'));
+
+        expect(() => circuit.fromJSON({
+            format: 'hscs-app',
+            formatVersion: 1,
+            circuit: {
+                meta: { version: 3, name: 'empty' },
+                components: [],
+                wires: []
+            },
+            ui: { exerciseBoard: { markdown: 'x' } }
+        })).toThrow(/未知字段|format/);
+        expect(circuit.components.size).toBe(2);
+        expect(circuit.components.has('Rkeep')).toBe(true);
+    });
+
+    it('ideal voltmeter resistance survives JSON.stringify as Infinity sentinel', () => {
+        const circuit = new Circuit();
+        const voltmeter = createComponent('Voltmeter', 0, 0, 'VM1');
+        voltmeter.resistance = Infinity;
+        circuit.addComponent(voltmeter);
+
+        const json = circuit.toJSON();
+        const dumped = json.components.find((component) => component.id === 'VM1')?.properties?.resistance;
+        expect(dumped).toBe('Infinity');
+        const serialized = JSON.stringify(json);
+        expect(serialized).toContain('"Infinity"');
+        expect(JSON.parse(serialized).components.find((component) => component.id === 'VM1').properties.resistance)
+            .toBe('Infinity');
+
+        const restored = new Circuit();
+        restored.fromJSON(JSON.parse(serialized));
+        expect(restored.getComponent('VM1').resistance).toBe(Infinity);
+    });
+
+    it('removeComponent drops referenced wires and leaves unreferenced segments', () => {
+        const circuit = new Circuit();
+        circuit.addComponent(createComponent('PowerSource', 0, 0, 'V1'));
+        circuit.addComponent(createComponent('Resistor', 100, 0, 'R1'));
+        circuit.addWire({
+            id: 'W1',
+            a: { x: 0, y: 0 },
+            b: { x: 100, y: 0 },
+            aRef: { componentId: 'V1', terminalIndex: 1 },
+            bRef: { componentId: 'R1', terminalIndex: 0 }
+        });
+        circuit.addWire({
+            id: 'Wloose',
+            a: { x: 10, y: 40 },
+            b: { x: 80, y: 40 }
+        });
+
+        circuit.removeComponent('R1');
+        expect(circuit.wires.has('W1')).toBe(false);
+        expect(circuit.wires.has('Wloose')).toBe(true);
+
+        const payload = circuit.toJSON();
+        expect(() => CircuitSchemaGateway.validate(payload)).not.toThrow();
+        expect(payload.wires.find((wire) => wire.id === 'W1')).toBeUndefined();
+        expect(payload.wires.find((wire) => wire.id === 'Wloose')).toBeTruthy();
+    });
+
+    it('omitted integrationMethod stays auto', () => {
+        const loaded = CircuitDeserializer.deserialize({
+            meta: { version: 3, name: 'cap-auto' },
+            components: [{
+                id: 'C1',
+                type: 'Capacitor',
+                x: 0,
+                y: 0,
+                properties: { capacitance: 0.001 }
+            }],
+            wires: []
+        });
+        expect(loaded.components[0].integrationMethod).toBe('auto');
+    });
+
+    it('explicit backward-euler is preserved', () => {
+        const loaded = CircuitDeserializer.deserialize({
+            meta: { version: 3, name: 'cap-be' },
+            components: [{
+                id: 'C1',
+                type: 'Capacitor',
+                x: 0,
+                y: 0,
+                properties: {
+                    capacitance: 0.001,
+                    integrationMethod: 'backward-euler'
+                }
+            }],
+            wires: []
+        });
+        expect(loaded.components[0].integrationMethod).toBe('backward-euler');
+    });
+
+    it('replaceLoadedCircuit drops reused-id dynamic fields from the previous circuit', () => {
+        const circuit = new Circuit();
+        const motor = createComponent('Motor', 0, 0, 'M1');
+        motor.backEmf = 9;
+        motor.speed = 12;
+        motor.prevVoltage = 4;
+        circuit.addComponent(motor);
+
+        circuit.fromJSON({
+            meta: { version: 3, name: 'reuse' },
+            components: [{
+                id: 'M1',
+                type: 'Motor',
+                x: 0,
+                y: 0,
+                properties: { resistance: 5 }
+            }],
+            wires: []
+        });
+
+        const loaded = circuit.getComponent('M1');
+        expect(loaded).not.toBe(motor);
+        expect(loaded.backEmf === undefined || loaded.backEmf === 0).toBe(true);
+        expect(loaded.speed === undefined || loaded.speed === 0).toBe(true);
+    });
 });

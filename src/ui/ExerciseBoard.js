@@ -12,6 +12,7 @@ import {
     safeInvoke,
     safeRemoveEventListener
 } from '../utils/RuntimeSafety.js';
+import { parseMarkdownSafe } from '../utils/markdown/sanitizeRenderedMarkdown.js';
 
 function safeNodeContains(node, target) {
     return !!safeInvoke(node, 'contains', [target], false);
@@ -601,25 +602,16 @@ export class ExerciseBoard {
         if (mode !== 'preview' && mode !== 'split') return;
 
         const text = this.state.markdown || '';
-        let html = '';
-
         const markedApi = typeof window !== 'undefined' ? window.marked : null;
-        const parsedHtml = safeInvoke(markedApi, 'parse', [text, { breaks: true }]);
-        if (typeof parsedHtml === 'string') {
-            html = parsedHtml;
-        } else {
-            html = this.escapeHtml(text).replace(/\n/g, '<br>');
-        }
-
-        if (this.previewInner) {
-            this.previewInner.innerHTML = html;
-        } else {
-            this.preview.innerHTML = html;
-        }
+        const html = parseMarkdownSafe(text, {
+            marked: markedApi,
+            documentRef: typeof document !== 'undefined' ? document : undefined
+        });
+        const target = this.previewInner || this.preview;
+        target.innerHTML = html;
 
         const mathJax = typeof window !== 'undefined' ? window.MathJax : null;
         if (typeof mathJax?.typesetPromise === 'function') {
-            const target = this.preview;
             this._typesetQueue = this._typesetQueue
                 .then(() => safeInvoke(mathJax, 'typesetPromise', [[target]]))
                 .catch(() => {});

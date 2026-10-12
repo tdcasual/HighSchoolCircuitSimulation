@@ -28,6 +28,15 @@ describe('buildEmbedUrl', () => {
         expect(url.searchParams.get('targetOrigin')).toBe('https://lms.example');
         expect(url.searchParams.get('toolbox')).toBe('0');
         expect(url.searchParams.get('ai')).toBe('1');
+        expect(url.searchParams.get('targetOrigin')).not.toBe('*');
+    });
+
+    it('defaults parent origin to window.location.origin and never writes *', () => {
+        vi.stubGlobal('window', { location: { origin: 'https://classroom.example' } });
+        const href = buildEmbedUrl({ src: 'embed.html' }, 'https://sim.example/app/');
+        const url = new URL(href);
+        expect(url.searchParams.get('targetOrigin')).toBe('https://classroom.example');
+        expect(href).not.toContain('*');
     });
 
     it('posts to iframe origin and forwards parent origin into runtime query', async () => {

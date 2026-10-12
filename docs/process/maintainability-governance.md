@@ -23,6 +23,9 @@
 | `src/app/interaction/InteractionOrchestrator.js` | 300 | 240 |
 | `src/core/simulation/MNASolver.js` | 650 | 550 |
 | `src/app/AppRuntimeV2.js` | 575 | 500 |
+| `src/ui/ExerciseBoard.js` | 1100 | 800 |
+| `src/ui/AIPanel.js` | 900 | 700 |
+| `src/ui/ai/ChatController.js` | 900 | 700 |
 
 ## 3. Bundle Budgets
 

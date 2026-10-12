@@ -27,6 +27,25 @@ describe('CI workflow coverage', () => {
         expect(content).toContain('npm run mode-conflict-matrix');
         expect(content).toContain('mode-conflict-matrix-artifacts');
         expect(content).toContain('output/e2e/mode-conflict');
+
+        expect(content).toContain('ai-mobile-e2e:');
+        expect(content).toContain('npm run test:e2e:ai-mobile');
+        expect(content).toContain('ai-mobile-e2e-screenshots');
+        expect(content).toContain('output/e2e/ai-mobile-layout');
+        expect(content).toContain('npx playwright install --with-deps chromium');
+    });
+
+    it('keeps the quality job free of Playwright e2e', () => {
+        const workflowPath = resolve(process.cwd(), '.github/workflows/ci.yml');
+        const content = readFileSync(workflowPath, 'utf8');
+        const qualityBlock = content.slice(
+            content.indexOf('  quality:'),
+            content.indexOf('  responsive-e2e:')
+        );
+
+        expect(qualityBlock).toContain('npm run lint && npm run format:check && npm run check:v2:runtime-safety && npm run check:core-size && npm test && npm run baseline:p0 && npm run baseline:circuitjs && npm run baseline:ai');
+        expect(qualityBlock).not.toContain('npm run check:full');
+        expect(qualityBlock).not.toContain('playwright install');
     });
 
     it('includes v0.10 stability release checklist', () => {

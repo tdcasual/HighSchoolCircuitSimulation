@@ -15,6 +15,9 @@ describe('v2 core-size budget guard', () => {
         expect(content).toContain('650');
         expect(content).toContain('src/app/AppRuntimeV2.js');
         expect(content).toContain('575');
+        expect(content).toContain('src/ui/ExerciseBoard.js');
+        expect(content).toContain('src/v2/simulation/SolveCircuitV2.js');
+        expect(content).not.toContain('src/v2/simulation/CircuitSolverV2.js');
     });
 
     it('uses target thresholds to emit warnings before hard failures', () => {

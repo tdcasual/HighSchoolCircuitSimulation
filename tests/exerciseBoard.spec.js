@@ -170,8 +170,83 @@ describe('ExerciseBoard.tryStartPanelDrag', () => {
         };
 
         expect(() => ExerciseBoard.prototype.renderNow.call(ctx)).not.toThrow();
-        expect(parse).toHaveBeenCalledWith('hello', { breaks: true });
+        expect(parse).toHaveBeenCalledWith('hello', expect.objectContaining({ breaks: true, gfm: true }));
         expect(ctx.preview.innerHTML).toBe('<p>ok</p>');
+    });
+
+    it('strips script tags from exercise preview', () => {
+        const parse = vi.fn(() => '<p>ok</p><script>alert(1)</script>');
+        vi.stubGlobal('window', {
+            marked: { parse },
+            MathJax: { typesetPromise: vi.fn(() => Promise.resolve()) }
+        });
+        const ctx = {
+            preview: { innerHTML: '' },
+            previewInner: null,
+            state: { mode: 'preview', markdown: 'unsafe' },
+            normalizeMode: (mode) => mode,
+            escapeHtml: ExerciseBoard.prototype.escapeHtml,
+            _typesetQueue: Promise.resolve()
+        };
+        ExerciseBoard.prototype.renderNow.call(ctx);
+        expect(ctx.preview.innerHTML).toContain('<p>ok</p>');
+        expect(ctx.preview.innerHTML).not.toMatch(/<script/i);
+    });
+
+    it('strips img onerror from exercise preview', () => {
+        const parse = vi.fn(() => '<p>ok</p><img src=x onerror=alert(1)>');
+        vi.stubGlobal('window', { marked: { parse } });
+        const ctx = {
+            preview: { innerHTML: '' },
+            previewInner: null,
+            state: { mode: 'preview', markdown: 'img' },
+            normalizeMode: (mode) => mode,
+            escapeHtml: ExerciseBoard.prototype.escapeHtml,
+            _typesetQueue: Promise.resolve()
+        };
+        ExerciseBoard.prototype.renderNow.call(ctx);
+        expect(ctx.preview.innerHTML).not.toMatch(/onerror/i);
+        expect(ctx.preview.innerHTML).not.toMatch(/<img/i);
+    });
+
+    it('neutralizes javascript: links in exercise preview', () => {
+        const parse = vi.fn(() => '<p><a href="javascript:alert(1)">x</a></p>');
+        vi.stubGlobal('window', { marked: { parse } });
+        const ctx = {
+            preview: { innerHTML: '' },
+            previewInner: null,
+            state: { mode: 'preview', markdown: 'js' },
+            normalizeMode: (mode) => mode,
+            escapeHtml: ExerciseBoard.prototype.escapeHtml,
+            _typesetQueue: Promise.resolve()
+        };
+        ExerciseBoard.prototype.renderNow.call(ctx);
+        expect(ctx.preview.innerHTML).not.toMatch(/javascript:/i);
+    });
+
+    it('typesets the same node that received sanitized HTML', () => {
+        const parse = vi.fn(() => '<p>ok</p>');
+        const typesetPromise = vi.fn(() => Promise.resolve());
+        vi.stubGlobal('window', {
+            marked: { parse },
+            MathJax: { typesetPromise }
+        });
+        const previewInner = { innerHTML: '' };
+        const preview = { innerHTML: '' };
+        const ctx = {
+            preview,
+            previewInner,
+            state: { mode: 'preview', markdown: 'hello' },
+            normalizeMode: (mode) => mode,
+            escapeHtml: ExerciseBoard.prototype.escapeHtml,
+            _typesetQueue: Promise.resolve()
+        };
+        ExerciseBoard.prototype.renderNow.call(ctx);
+        expect(previewInner.innerHTML).toBe('<p>ok</p>');
+        expect(preview.innerHTML).toBe('');
+        return ctx._typesetQueue.then(() => {
+            expect(typesetPromise).toHaveBeenCalledWith([previewInner]);
+        });
     });
 
     it('startPanelGesture does not throw when panel classList.add is non-callable', () => {

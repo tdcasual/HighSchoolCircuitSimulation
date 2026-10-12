@@ -104,17 +104,27 @@ export class NodeBuilder {
 
         const getTerminalPostId = (componentId, terminalIndex) => `T:${componentId}:${terminalIndex}`;
 
+        // Textbook earth: every Ground symbol shares one electrical node.
+        let firstGroundPostId = null;
+        for (const [id, comp] of componentMap) {
+            if (comp.type !== 'Ground') continue;
+            const postId = getTerminalPostId(id, 0);
+            if (!parent.has(postId)) parent.set(postId, postId);
+            if (!firstGroundPostId) {
+                firstGroundPostId = postId;
+            } else {
+                union(postId, firstGroundPostId);
+            }
+        }
+
         // Prefer explicit Ground terminal as reference node.
         let groundRoot = null;
-        let fallbackGroundRoot = null;
+        let fallbackGroundRoot = firstGroundPostId ? find(firstGroundPostId) : null;
         for (const [id, comp] of componentMap) {
             if (comp.type !== 'Ground') continue;
             const tKey = `${id}:0`;
             const postId = getTerminalPostId(id, 0);
             const root = find(postId);
-            if (!fallbackGroundRoot) {
-                fallbackGroundRoot = root;
-            }
             if (connectedTerminals.has(tKey)) {
                 groundRoot = root;
                 assignNodeIfNeeded(root);
@@ -125,7 +135,7 @@ export class NodeBuilder {
         // Fallback: connected power source negative terminal.
         for (const [id, comp] of componentMap) {
             if (groundRoot) break;
-            if (comp.type !== 'PowerSource') continue;
+            if (comp.type !== 'PowerSource' && comp.type !== 'ACVoltageSource') continue;
             const negKey = `${id}:1`;
             const negPostId = getTerminalPostId(id, 1);
             const root = find(negPostId);
@@ -157,7 +167,7 @@ export class NodeBuilder {
         // If still none (completely disconnected layout), fall back to first power source negative terminal if any.
         if (!groundRoot) {
             for (const [id, comp] of componentMap) {
-                if (comp.type !== 'PowerSource') continue;
+                if (comp.type !== 'PowerSource' && comp.type !== 'ACVoltageSource') continue;
                 const negPostId = getTerminalPostId(id, 1);
                 groundRoot = find(negPostId);
                 assignNodeIfNeeded(groundRoot);

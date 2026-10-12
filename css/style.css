@@ -28,11 +28,14 @@
     --border-color: var(--stroke-soft);
     --text-color: var(--text-strong);
     --text-light: var(--text-muted);
-    --primary-color: #2196F3;
-    --primary-dark: #1976D2;
-    --secondary-color: #4CAF50;
-    --danger-color: #f44336;
-    --warning-color: #ff9800;
+    --primary-color: var(--accent-instrument);
+    --primary-dark: color-mix(in oklch, var(--accent-instrument) 82%, black);
+    --secondary-color: var(--accent-run);
+    --danger-color: var(--accent-danger);
+    --warning-color: var(--accent-observe);
+    --tool-item-bg: var(--surface-inset);
+    --tool-item-hover-bg: color-mix(in oklch, var(--accent-instrument) 18%, var(--surface-elevated));
+    --tool-item-active-bg: color-mix(in oklch, var(--accent-instrument) 28%, var(--surface-elevated));
     --shadow: var(--shadow-soft);
     --toolbox-width: 180px;
     --side-panel-width: 340px;
@@ -410,19 +413,36 @@ body.layout-mode-phone .toolbox-close-btn {
     align-items: center;
     gap: 8px;
     padding: 8px;
+    min-height: 36px;
     margin-bottom: 5px;
     border: 1px solid var(--border-color);
     border-radius: 6px;
     cursor: grab;
-    transition: all 0.2s ease;
-    background: #fafafa;
+    transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+    background: var(--tool-item-bg);
     touch-action: manipulation;
+    font: inherit;
+    color: inherit;
+    text-align: left;
+    width: 100%;
+    appearance: none;
+    -webkit-appearance: none;
 }
 
 .tool-item:hover {
     border-color: var(--primary-color);
-    background: #e3f2fd;
+    background: var(--tool-item-hover-bg);
     transform: translateX(3px);
+}
+
+.tool-item:focus {
+    outline: none;
+}
+
+.tool-item:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+    box-shadow: 0 0 0 2px var(--primary-color);
 }
 
 .tool-item:active {
@@ -432,13 +452,13 @@ body.layout-mode-phone .toolbox-close-btn {
 .tool-item.dragging {
     opacity: 0.5;
     border-color: var(--primary-color);
-    background: #bbdefb;
+    background: var(--tool-item-active-bg);
 }
 
 .tool-item.tool-item-pending {
     border-color: var(--primary-color);
-    background: #e3f2fd;
-    box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.2);
+    background: var(--tool-item-hover-bg);
+    box-shadow: 0 0 0 2px color-mix(in oklch, var(--accent-instrument) 20%, transparent);
 }
 
 .tool-item svg {
@@ -452,7 +472,7 @@ body.layout-mode-phone .toolbox-close-btn {
 
 .tool-item-quick {
     justify-content: flex-start;
-    background: rgba(255, 255, 255, 0.92);
+    background: var(--tool-item-bg);
 }
 
 .tool-item-shortcut {
@@ -3622,7 +3642,7 @@ body.classroom-mode-enhanced .component .value-display {
     left: 220px;
     width: 420px;
     height: 360px;
-    min-width: 320px;
+    min-width: min(320px, 100%);
     min-height: 240px;
     max-width: calc(100vw - 32px);
     max-height: calc(100vh - var(--top-action-bar-height) - 24px);
@@ -5002,5 +5022,41 @@ body.layout-mode-phone #chat-send-btn {
 
     .wire-hit-area {
         stroke-width: 20;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+
+    .tool-item:hover {
+        transform: none;
+    }
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --surface-base: oklch(0.22 0.018 250);
+        --surface-elevated: oklch(0.28 0.016 250);
+        --surface-inset: oklch(0.20 0.014 250);
+        --stroke-soft: oklch(0.40 0.018 250);
+        --stroke-strong: oklch(0.55 0.022 250);
+        --text-strong: oklch(0.93 0.010 250);
+        --text-muted: oklch(0.76 0.012 250);
+        --shadow-soft: 0 2px 8px rgba(0, 0, 0, 0.35);
+        --shadow-elevated: 0 12px 32px rgba(0, 0, 0, 0.45);
+        --bg-color: var(--surface-base);
+        --panel-bg: var(--surface-elevated);
+        --border-color: var(--stroke-soft);
+        --text-color: var(--text-strong);
+        --text-light: var(--text-muted);
+        --primary-color: color-mix(in oklch, var(--accent-instrument) 70%, white);
+        --primary-dark: var(--accent-instrument);
     }
 }

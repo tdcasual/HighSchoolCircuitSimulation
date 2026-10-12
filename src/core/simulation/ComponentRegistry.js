@@ -76,6 +76,10 @@ DefaultComponentRegistry.register('Photoresistor', {
     }
 });
 
+function hasValidVsIndex(comp) {
+    return Number.isInteger(comp?.vsIndex) && comp.vsIndex >= 0;
+}
+
 DefaultComponentRegistry.register('Ammeter', {
     stamp: (comp, context, nodes) => {
         const resistance = Number(comp.resistance);
@@ -84,7 +88,7 @@ DefaultComponentRegistry.register('Ammeter', {
             context.stampResistor(nodes.i1, nodes.i2, resistance);
             return;
         }
-        if (typeof context.stampVoltageSource === 'function') {
+        if (hasValidVsIndex(comp) && typeof context.stampVoltageSource === 'function') {
             context.stampVoltageSource(nodes.i1, nodes.i2, 0, comp.vsIndex, nodes.nodeCount);
         }
     },
@@ -95,6 +99,7 @@ DefaultComponentRegistry.register('Ammeter', {
         if (hasFiniteResistance) {
             return dV / resistance;
         }
+        if (!hasValidVsIndex(comp)) return 0;
         const vector = Array.isArray(context.solveVector) ? context.solveVector : [];
         const nodeCount = Number.isFinite(context.nodeCount) ? context.nodeCount : 0;
         return -(vector[nodeCount - 1 + comp.vsIndex] || 0);
@@ -121,17 +126,21 @@ DefaultComponentRegistry.register('Voltmeter', {
 DefaultComponentRegistry.register('Switch', {
     stamp: (comp, context, nodes) => {
         if (comp.closed) {
+            const hasValidVsIndex = Number.isInteger(comp.vsIndex) && comp.vsIndex >= 0;
+            if (hasValidVsIndex && typeof context.stampSeriesVoltageSource === 'function') {
+                context.stampSeriesVoltageSource(nodes.i1, nodes.i2, 0, 1e-9, comp.vsIndex, nodes.nodeCount);
+                return;
+            }
             context.stampResistor(nodes.i1, nodes.i2, 1e-9);
             return;
         }
         context.stampResistor(nodes.i1, nodes.i2, 1e12);
     },
     current: (comp, context, nodes) => {
-        const dV = context.voltage(nodes.n1) - context.voltage(nodes.n2);
-        if (comp.closed) {
-            return dV / 1e-9;
-        }
-        return 0;
+        if (!comp.closed || !Number.isInteger(comp.vsIndex)) return 0;
+        const vector = context.solveVector || [];
+        const nodeCount = Number.isFinite(context.nodeCount) ? context.nodeCount : nodes.nodeCount;
+        return vector[nodeCount - 1 + comp.vsIndex] || 0;
     }
 });
 
@@ -150,23 +159,26 @@ DefaultComponentRegistry.register('SPDTSwitch', {
         const routeToB = comp.position === 'b';
         const onR = Math.max(1e-9, Number(comp.onResistance) || 1e-9);
         const offR = Math.max(onR, Number(comp.offResistance) || 1e12);
+        const iOn = routeToB ? iB : iA;
+        const iOff = routeToB ? iA : iB;
 
-        if (iCommon !== null && iA !== null) {
-            context.stampResistor(iCommon, iA, routeToB ? offR : onR);
+        if (iCommon !== null && iOn !== null) {
+            const hasValidVsIndex = Number.isInteger(comp.vsIndex) && comp.vsIndex >= 0;
+            if (hasValidVsIndex && typeof context.stampSeriesVoltageSource === 'function') {
+                context.stampSeriesVoltageSource(iCommon, iOn, 0, onR, comp.vsIndex, nodes.nodeCount);
+            } else {
+                context.stampResistor(iCommon, iOn, onR);
+            }
         }
-        if (iCommon !== null && iB !== null) {
-            context.stampResistor(iCommon, iB, routeToB ? onR : offR);
+        if (iCommon !== null && iOff !== null) {
+            context.stampResistor(iCommon, iOff, offR);
         }
     },
-    current: (comp, context) => {
-        const routeToB = comp.position === 'b';
-        const targetIdx = routeToB ? 2 : 1;
-        const commonNode = comp.nodes?.[0];
-        const targetNode = comp.nodes?.[targetIdx];
-        const vCommon = commonNode !== undefined && commonNode >= 0 ? context.voltage(commonNode) : 0;
-        const vTarget = targetNode !== undefined && targetNode >= 0 ? context.voltage(targetNode) : 0;
-        const onR = Math.max(1e-9, Number(comp.onResistance) || 1e-9);
-        return (vCommon - vTarget) / onR;
+    current: (comp, context, nodes) => {
+        if (!Number.isInteger(comp.vsIndex)) return 0;
+        const vector = context.solveVector || [];
+        const nodeCount = Number.isFinite(context.nodeCount) ? context.nodeCount : nodes.nodeCount;
+        return vector[nodeCount - 1 + comp.vsIndex] || 0;
     }
 });
 
@@ -225,12 +237,14 @@ DefaultComponentRegistry.register('LED', DefaultComponentRegistry.get('Diode'));
 
 DefaultComponentRegistry.register('Motor', {
     stamp: (comp, context, nodes) => {
-        if (typeof context.stampResistor === 'function') {
-            context.stampResistor(nodes.i1, nodes.i2, comp.resistance);
+        const backEmf = Number.isFinite(comp.backEmf) ? comp.backEmf : 0;
+        const ra = Number.isFinite(comp.resistance) && comp.resistance > 0 ? comp.resistance : 5;
+        if (hasValidVsIndex(comp) && typeof context.stampSeriesVoltageSource === 'function') {
+            context.stampSeriesVoltageSource(nodes.i1, nodes.i2, backEmf, ra, comp.vsIndex, nodes.nodeCount);
+            return;
         }
-        if (typeof context.stampVoltageSource === 'function') {
-            const backEmf = Number.isFinite(comp.backEmf) ? comp.backEmf : 0;
-            context.stampVoltageSource(nodes.i1, nodes.i2, -backEmf, comp.vsIndex, nodes.nodeCount);
+        if (typeof context.stampResistor === 'function') {
+            context.stampResistor(nodes.i1, nodes.i2, ra);
         }
     },
     current: (comp, context, nodes) => {
@@ -238,10 +252,12 @@ DefaultComponentRegistry.register('Motor', {
         const nodeCount = Number.isFinite(context.nodeCount)
             ? context.nodeCount
             : (Number.isFinite(nodes.nodeCount) ? nodes.nodeCount : 0);
-        if (!Number.isInteger(comp.vsIndex)) {
-            return 0;
+        if (hasValidVsIndex(comp)) {
+            return vector[nodeCount - 1 + comp.vsIndex] || 0;
         }
-        return -(vector[nodeCount - 1 + comp.vsIndex] || 0);
+        const ra = Number.isFinite(comp.resistance) && comp.resistance > 0 ? comp.resistance : 5;
+        const dV = context.voltage(nodes.n1) - context.voltage(nodes.n2);
+        return Number.isFinite(dV) ? dV / ra : 0;
     }
 });
 

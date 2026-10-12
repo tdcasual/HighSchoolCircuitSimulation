@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { CircuitSchemaGateway } from '../src/core/io/CircuitSchemaGateway.js';
 import { validateCircuitV3 } from '../src/v2/infra/io/CircuitSchemaV3.js';
 import { CircuitDeserializerV3 } from '../src/v2/infra/io/CircuitDeserializerV3.js';
+
+function validate(payload) {
+    return CircuitSchemaGateway.validate(payload);
+}
 
 const validV3Payload = {
     meta: {
@@ -44,7 +51,16 @@ const validV3Payload = {
 };
 
 describe('CircuitSchema v3 strict validator', () => {
+    it('uses CircuitSchemaGateway as the schema source of truth', () => {
+        const source = readFileSync(resolve(process.cwd(), 'src/v2/infra/io/CircuitSchemaV3.js'), 'utf8');
+        expect(source).toContain('CircuitSchemaGateway');
+        expect(source).not.toContain("new Set(['meta', 'components', 'wires', 'probes'])");
+        expect(validate(validV3Payload)).toBe(true);
+        expect(validateCircuitV3(validV3Payload)).toBe(true);
+    });
+
     it('accepts canonical schema v3 payload', () => {
+        expect(validate(validV3Payload)).toBe(true);
         expect(validateCircuitV3(validV3Payload)).toBe(true);
         const deserialized = CircuitDeserializerV3.deserialize(validV3Payload);
         expect(deserialized.meta.version).toBe(3);
@@ -57,9 +73,9 @@ describe('CircuitSchema v3 strict validator', () => {
         const legacyBinding = { ...validV3Payload, bindingMap: [] };
         const legacyPendingTool = { ...validV3Payload, pendingToolType: 'wire' };
 
-        expect(() => validateCircuitV3(legacyTemplate)).toThrow(/templateName/u);
-        expect(() => validateCircuitV3(legacyBinding)).toThrow(/bindingMap/u);
-        expect(() => validateCircuitV3(legacyPendingTool)).toThrow(/pendingToolType/u);
+        expect(() => validate(legacyTemplate)).toThrow(/templateName/u);
+        expect(() => validate(legacyBinding)).toThrow(/bindingMap/u);
+        expect(() => validate(legacyPendingTool)).toThrow(/pendingToolType/u);
     });
 
     it('rejects legacy wire aliases and unknown top-level keys', () => {
@@ -76,8 +92,8 @@ describe('CircuitSchema v3 strict validator', () => {
             compatMode: true
         };
 
-        expect(() => validateCircuitV3(legacyWire)).toThrow(/wire\.a|wire\.b|start|end/u);
-        expect(() => validateCircuitV3(withUnknown)).toThrow(/compatMode/u);
+        expect(() => validate(legacyWire)).toThrow(/wire\.a|wire\.b|start|end/u);
+        expect(() => validate(withUnknown)).toThrow(/compatMode/u);
     });
 
     it('rejects unknown component types', () => {
@@ -93,7 +109,7 @@ describe('CircuitSchema v3 strict validator', () => {
             ]
         };
 
-        expect(() => validateCircuitV3(badTypePayload)).toThrow(/unsupported component type|不支持的元器件类型/u);
+        expect(() => validate(badTypePayload)).toThrow(/unsupported component type|不支持的元器件类型/u);
     });
 
     it('rejects probe type outside supported probe set', () => {
@@ -104,7 +120,7 @@ describe('CircuitSchema v3 strict validator', () => {
             ]
         };
 
-        expect(() => validateCircuitV3(badProbePayload)).toThrow(/unsupported probe type|不支持的探针类型/u);
+        expect(() => validate(badProbePayload)).toThrow(/unsupported probe type|不支持的探针类型/u);
     });
 
     it('rejects probes that reference unknown wire ids', () => {
@@ -115,7 +131,7 @@ describe('CircuitSchema v3 strict validator', () => {
             ]
         };
 
-        expect(() => validateCircuitV3(badProbeWirePayload)).toThrow(/wireId.*not found|wireId.*不存在/u);
+        expect(() => validate(badProbeWirePayload)).toThrow(/wireId.*not found|wireId.*不存在/u);
     });
 
     it('rejects duplicate component ids', () => {
@@ -127,7 +143,7 @@ describe('CircuitSchema v3 strict validator', () => {
             ]
         };
 
-        expect(() => validateCircuitV3(duplicateComponentPayload)).toThrow(/duplicate component id|组件 id 重复/u);
+        expect(() => validate(duplicateComponentPayload)).toThrow(/duplicate component id|组件 id 重复/u);
     });
 
     it('rejects duplicate wire ids', () => {
@@ -147,7 +163,7 @@ describe('CircuitSchema v3 strict validator', () => {
             ]
         };
 
-        expect(() => validateCircuitV3(duplicateWirePayload)).toThrow(/duplicate wire id|导线 id 重复/u);
+        expect(() => validate(duplicateWirePayload)).toThrow(/duplicate wire id|导线 id 重复/u);
     });
 
     it('rejects duplicate probe ids', () => {
@@ -159,7 +175,7 @@ describe('CircuitSchema v3 strict validator', () => {
             ]
         };
 
-        expect(() => validateCircuitV3(duplicateProbePayload)).toThrow(/duplicate probe id|probe id 重复/u);
+        expect(() => validate(duplicateProbePayload)).toThrow(/duplicate probe id|probe id 重复/u);
     });
 
     it('rejects zero-length wires (same start/end point)', () => {
@@ -174,7 +190,7 @@ describe('CircuitSchema v3 strict validator', () => {
             ]
         };
 
-        expect(() => validateCircuitV3(badWirePayload)).toThrow(/wire endpoints overlap|导线起点与终点重合/u);
+        expect(() => validate(badWirePayload)).toThrow(/wire endpoints overlap|导线起点与终点重合/u);
     });
 
     it('rejects wire terminal refs pointing to unknown components', () => {
@@ -191,10 +207,10 @@ describe('CircuitSchema v3 strict validator', () => {
             ]
         };
 
-        expect(() => validateCircuitV3(badRefPayload)).toThrow(/componentId.*not found|componentId.*不存在/u);
+        expect(() => validate(badRefPayload)).toThrow(/componentId.*not found|componentId.*不存在/u);
     });
 
-    it('allows legacy meta.version only through explicit migration mode and records migration diagnostics', () => {
+    it('rejects legacy meta.version even when allowLegacyMigration is requested', () => {
         const legacyPayload = {
             ...validV3Payload,
             meta: {
@@ -204,17 +220,10 @@ describe('CircuitSchema v3 strict validator', () => {
         };
 
         expect(() => CircuitDeserializerV3.deserialize(legacyPayload)).toThrow(/meta\.version/u);
-
-        const migrated = CircuitDeserializerV3.deserialize(legacyPayload, {
+        expect(() => CircuitDeserializerV3.deserialize(legacyPayload, {
             allowLegacyMigration: true
-        });
-
-        expect(migrated.meta.version).toBe(3);
-        expect(migrated.migration).toEqual({
-            fromVersion: '1.0',
-            strategy: 'legacy-meta-upgrade',
-            warnings: ['meta.version migrated from legacy payload']
-        });
+        })).toThrow(/meta\.version/u);
+        expect(() => validate(legacyPayload)).toThrow(/meta\.version/u);
     });
 
     it('rejects wire terminal refs with out-of-range terminalIndex', () => {
@@ -231,6 +240,6 @@ describe('CircuitSchema v3 strict validator', () => {
             ]
         };
 
-        expect(() => validateCircuitV3(badTerminalIndexPayload)).toThrow(/terminalIndex.*out of range|terminalIndex.*超出范围/u);
+        expect(() => validate(badTerminalIndexPayload)).toThrow(/terminalIndex.*out of range|terminalIndex.*超出范围/u);
     });
 });

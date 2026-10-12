@@ -1,51 +1,10 @@
-function isPlainObject(value) {
-    return !!value && typeof value === 'object' && !Array.isArray(value);
-}
-
-export function safeInvokeMethod(target, methodName, ...args) {
-    const fn = target?.[methodName];
-    if (typeof fn !== 'function') return undefined;
-    try {
-        return fn.apply(target, args);
-    } catch (_) {
-        return undefined;
-    }
-}
-
-export function buildAppSaveData({
-    circuit = null,
-    exerciseBoard = null,
-    chartWorkspace = null
-} = {}) {
-    const serialized = safeInvokeMethod(circuit, 'toJSON');
-    const data = isPlainObject(serialized)
-        ? { ...serialized }
-        : {
-            components: [],
-            wires: []
-        };
-
-    data.meta = isPlainObject(serialized?.meta) ? { ...serialized.meta } : {};
-
-    const exerciseBoardData = safeInvokeMethod(exerciseBoard, 'toJSON');
-    if (exerciseBoardData !== undefined) {
-        data.meta.exerciseBoard = exerciseBoardData;
-    }
-
-    const chartWorkspaceData = safeInvokeMethod(chartWorkspace, 'toJSON');
-    if (chartWorkspaceData !== undefined) {
-        data.meta.chartWorkspace = chartWorkspaceData;
-    }
-
-    return data;
-}
-
-export function restoreAppMetaFromSaveData({
-    exerciseBoard = null,
-    chartWorkspace = null,
-    data = null
-} = {}) {
-    const meta = isPlainObject(data?.meta) ? data.meta : {};
-    safeInvokeMethod(exerciseBoard, 'fromJSON', meta.exerciseBoard);
-    safeInvokeMethod(chartWorkspace, 'fromJSON', meta.chartWorkspace);
-}
+export {
+    APP_DOCUMENT_FORMAT,
+    APP_DOCUMENT_VERSION,
+    buildAppDocument,
+    buildAppSaveData,
+    parseAppDocument,
+    restoreAppMetaFromSaveData,
+    restoreAppUi,
+    safeInvokeMethod
+} from './AppDocument.js';

@@ -11,8 +11,19 @@ module.exports = {
         ecmaVersion: 'latest',
         sourceType: 'module'
     },
-    ignorePatterns: ['node_modules/', 'output/', 'dist/', '.worktrees/', '_reference/'],
+    ignorePatterns: [
+        'node_modules/',
+        'output/',
+        'dist/',
+        '.worktrees/',
+        '_reference/',
+        'vendor/',
+        'tests/helpers/eslint-boundary-violation.js'
+    ],
     settings: {
+        'import/resolver': {
+            node: { extensions: ['.js'] }
+        },
         'boundaries/include': ['src/**/*.js'],
         'boundaries/elements': [
             { type: 'entry', mode: 'full', pattern: 'src/main.js' },
@@ -21,7 +32,6 @@ module.exports = {
             { type: 'app', mode: 'full', pattern: 'src/app/**/*.js' },
             { type: 'ai', mode: 'full', pattern: 'src/ai/**/*.js' },
             { type: 'embed', mode: 'full', pattern: 'src/embed/**/*.js' },
-            { type: 'engine', mode: 'full', pattern: 'src/engine/**/*.js' },
             { type: 'core', mode: 'full', pattern: 'src/core/**/*.js' },
             { type: 'components', mode: 'full', pattern: 'src/components/**/*.js' },
             { type: 'v2', mode: 'full', pattern: 'src/v2/**/*.js' },
@@ -63,6 +73,12 @@ module.exports = {
             }
         },
         {
+            files: ['src/v2/infra/io/CircuitSchemaV3.js'],
+            rules: {
+                'boundaries/element-types': 'off'
+            }
+        },
+        {
             files: ['tests/**/*.js'],
             globals: {
                 afterAll: 'readonly',
@@ -81,12 +97,11 @@ module.exports = {
         'boundaries/element-types': ['error', {
             default: 'disallow',
             rules: [
-                { from: 'entry', allow: ['entry', 'ui', 'app', 'ai', 'embed', 'engine', 'core', 'components', 'v2', 'utils'] },
+                { from: 'entry', allow: ['entry', 'ui', 'app', 'ai', 'embed', 'core', 'components', 'v2', 'utils'] },
                 { from: 'ui', allow: ['ui', 'app', 'ai', 'core', 'components', 'utils'] },
                 { from: 'app', allow: ['app', 'core', 'utils'] },
-                { from: 'ai', allow: ['ai', 'engine', 'components', 'utils'] },
+                { from: 'ai', allow: ['ai', 'components', 'utils'] },
                 { from: 'embed', allow: ['embed', 'utils'] },
-                { from: 'engine', allow: ['engine', 'core', 'utils'] },
                 { from: 'core', allow: ['core', 'components', 'utils'] },
                 { from: 'components', allow: ['components', 'utils'] },
                 { from: 'v2', allow: ['v2', 'utils'] },

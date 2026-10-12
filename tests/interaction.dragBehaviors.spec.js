@@ -126,7 +126,8 @@ describe('DragBehaviors auxiliary edit drags', () => {
         let onUpHandler = null;
         const context = {
             circuit: {
-                getComponent: vi.fn(() => comp)
+                getComponent: vi.fn(() => comp),
+                markSolverCircuitDirty: vi.fn()
             },
             beginHistoryTransaction: vi.fn(),
             commitHistoryTransaction: vi.fn(),
@@ -166,6 +167,51 @@ describe('DragBehaviors auxiliary edit drags', () => {
             source: 'dragBehaviors.startRheostatDrag:end',
             context: { isRheostatDragging: false }
         });
+        expect(context.commitHistoryTransaction).toHaveBeenCalledTimes(1);
+        expect(context.circuit.markSolverCircuitDirty).toHaveBeenCalledTimes(1);
+        expect(context.beginHistoryTransaction).toHaveBeenCalledWith('调节滑动变阻器');
+    });
+
+    it('records parallel-plate exploration drag in history and marks the solver dirty', () => {
+        const comp = {
+            id: 'C1',
+            type: 'ParallelPlateCapacitor',
+            explorationMode: true,
+            plateDistance: 0.001,
+            plateOffsetYPx: 0
+        };
+        let onUpHandler = null;
+        const context = {
+            circuit: {
+                getComponent: vi.fn(() => comp),
+                markSolverCircuitDirty: vi.fn()
+            },
+            selectedComponent: 'C1',
+            beginHistoryTransaction: vi.fn(),
+            commitHistoryTransaction: vi.fn(),
+            screenToCanvas: vi.fn(() => ({ x: 10, y: 10 })),
+            canvasToComponentLocal: vi.fn(() => ({ x: 0, y: 0 })),
+            recomputeParallelPlateCapacitance: vi.fn(),
+            renderer: { setSelected: vi.fn() },
+            updateStatus: vi.fn(),
+            registerDragListeners: vi.fn((_event, _onMove, onUp) => {
+                onUpHandler = onUp;
+                return vi.fn();
+            })
+        };
+        const event = {
+            clientX: 40,
+            clientY: 40,
+            preventDefault: vi.fn(),
+            stopPropagation: vi.fn()
+        };
+
+        DragBehaviors.startParallelPlateCapacitorDrag.call(context, 'C1', event);
+        expect(context.beginHistoryTransaction).toHaveBeenCalledWith('调节平行板电容');
+        expect(typeof onUpHandler).toBe('function');
+
+        onUpHandler();
+        expect(context.circuit.markSolverCircuitDirty).toHaveBeenCalledTimes(1);
         expect(context.commitHistoryTransaction).toHaveBeenCalledTimes(1);
     });
 

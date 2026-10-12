@@ -68,6 +68,7 @@ export class CircuitSimulationLoopService {
             elapsedDt += substepDt;
             context.solver.updateDynamicComponents(substepResults.voltages, substepResults.currents);
             context.syncSimulationStateToComponents();
+            context.resultProjectionService?.updateFuseState?.(context, substepResults, substepDt);
         }
 
         if (adaptiveDecisionResults) {

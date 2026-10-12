@@ -39,17 +39,18 @@ describe('DynamicIntegrator with SimulationState', () => {
         const state = new SimulationState();
         const voltages = [12, 0];
         const dt = 0.01;
+        const currentFor = () => (voltages[0] - voltages[1] - (motor.backEmf || 0)) / motor.resistance;
 
-        integrator.updateDynamicComponents([motor], voltages, null, dt, false, state);
+        integrator.updateDynamicComponents([motor], voltages, new Map([['M1', currentFor()]]), dt, false, state);
         const initialSpeed = motor.speed || 0;
         const initialBackEmf = motor.backEmf || 0;
-        const initialCurrent = (voltages[0] - voltages[1] - initialBackEmf) / motor.resistance;
+        const initialCurrent = currentFor();
 
         for (let i = 0; i < 100; i++) {
-            integrator.updateDynamicComponents([motor], voltages, null, dt, false, state);
+            integrator.updateDynamicComponents([motor], voltages, new Map([['M1', currentFor()]]), dt, false, state);
         }
 
-        const laterCurrent = (voltages[0] - voltages[1] - motor.backEmf) / motor.resistance;
+        const laterCurrent = currentFor();
         expect(motor.speed).toBeGreaterThan(initialSpeed);
         expect(motor.backEmf).toBeGreaterThan(initialBackEmf);
         expect(laterCurrent).toBeLessThan(initialCurrent);
@@ -70,7 +71,8 @@ describe('DynamicIntegrator with SimulationState', () => {
         const dt = 0.01;
 
         for (let i = 0; i < 50; i++) {
-            integrator.updateDynamicComponents([motor], voltages, null, dt, false, state);
+            const stallCurrent = (voltages[0] - voltages[1] - (motor.backEmf || 0)) / motor.resistance;
+            integrator.updateDynamicComponents([motor], voltages, new Map([['M1', stallCurrent]]), dt, false, state);
         }
 
         expect(motor.speed).toBeLessThan(1e-6);
@@ -88,7 +90,7 @@ describe('DynamicIntegrator with SimulationState', () => {
         motor.loadTorque = 0.01;
 
         const state = new SimulationState();
-        integrator.updateDynamicComponents([motor], [12, 0], null, 0.01, false, state);
+        integrator.updateDynamicComponents([motor], [12, 0], new Map([['M_bad', 0]]), 0.01, false, state);
 
         expect(Number.isFinite(motor.speed)).toBe(true);
         expect(Number.isFinite(motor.backEmf)).toBe(true);
@@ -96,5 +98,30 @@ describe('DynamicIntegrator with SimulationState', () => {
         const entry = state.get('M_bad');
         expect(Number.isFinite(entry?.speed)).toBe(true);
         expect(Number.isFinite(entry?.backEmf)).toBe(true);
+    });
+
+    it('does not fall back to (V-E)/R when solver current is zero', () => {
+        const integrator = new DynamicIntegrator();
+        const motor = createComponent('Motor', 0, 0, 'M1');
+        motor.nodes = [0, 1];
+        motor.resistance = 5;
+        motor.torqueConstant = 0.1;
+        motor.emfConstant = 0.1;
+        motor.inertia = 0.01;
+        motor.loadTorque = 0;
+
+        const state = new SimulationState();
+        integrator.updateDynamicComponents(
+            [motor],
+            [6, 0],
+            new Map([['M1', 0]]),
+            0.01,
+            false,
+            state
+        );
+
+        expect(motor.speed).toBe(0);
+        expect(motor.backEmf).toBe(0);
+        expect((6 - 0) / 5).toBeCloseTo(1.2, 6);
     });
 });

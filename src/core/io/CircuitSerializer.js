@@ -22,6 +22,15 @@ export class CircuitSerializer {
             ? options.hasWire
             : (wireId => (circuit?.wires instanceof Map ? circuit.wires.has(wireId) : false));
 
+        const componentIds = new Set(components.map((comp) => String(comp?.id)));
+        const serializeRef = (ref) => {
+            if (!ref || typeof ref !== 'object') return null;
+            const componentId = ref.componentId;
+            if (componentId === undefined || componentId === null) return null;
+            if (!componentIds.has(String(componentId))) return null;
+            return ref;
+        };
+
         return {
             meta: {
                 version: 3,
@@ -39,13 +48,17 @@ export class CircuitSerializer {
                 display: comp.display || null,
                 terminalExtensions: comp.terminalExtensions || null
             })),
-            wires: wires.map(wire => ({
-                id: wire.id,
-                a: { x: toCanvasInt(wire?.a?.x ?? 0), y: toCanvasInt(wire?.a?.y ?? 0) },
-                b: { x: toCanvasInt(wire?.b?.x ?? 0), y: toCanvasInt(wire?.b?.y ?? 0) },
-                ...(wire?.aRef ? { aRef: wire.aRef } : {}),
-                ...(wire?.bRef ? { bRef: wire.bRef } : {})
-            })),
+            wires: wires.map(wire => {
+                const aRef = serializeRef(wire?.aRef);
+                const bRef = serializeRef(wire?.bRef);
+                return {
+                    id: wire.id,
+                    a: { x: toCanvasInt(wire?.a?.x ?? 0), y: toCanvasInt(wire?.a?.y ?? 0) },
+                    b: { x: toCanvasInt(wire?.b?.x ?? 0), y: toCanvasInt(wire?.b?.y ?? 0) },
+                    ...(aRef ? { aRef } : {}),
+                    ...(bRef ? { bRef } : {})
+                };
+            }),
             probes: probes
                 .filter((probe) => probe?.wireId && hasWire(probe.wireId))
                 .map((probe) => ({

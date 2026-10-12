@@ -53,8 +53,22 @@ export function handleEmbedSetOptions(bridge, payload = {}) {
     return bridge.getStateSnapshot();
 }
 
+function assertCapability(bridge, method, payload) {
+    if (method === 'setReadonly' && payload?.readOnly === false && !bridge.capabilities?.unfreeze) {
+        throw createBridgeError('CAPABILITY_DENIED', 'unfreeze capability is required');
+    }
+    if (method === 'setOptions' && payload?.readOnly === false && !bridge.capabilities?.unfreeze) {
+        throw createBridgeError('CAPABILITY_DENIED', 'unfreeze capability is required');
+    }
+    if (method === 'setOptions' && payload?.mode && payload.mode !== 'readonly'
+        && bridge.isReadOnlyActive?.() && !bridge.capabilities?.unfreeze) {
+        throw createBridgeError('CAPABILITY_DENIED', 'unfreeze capability is required to leave readonly');
+    }
+}
+
 export function handleEmbedRuntimeRequest(bridge, method, payload = {}) {
     assertMutableEmbedRequestAllowed(bridge, method);
+    assertCapability(bridge, method, payload);
     switch (method) {
         case 'ping':
             return { pong: true, now: Date.now() };

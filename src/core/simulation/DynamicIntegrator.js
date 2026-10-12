@@ -68,11 +68,6 @@ export class DynamicIntegrator {
 
             if (comp.type === 'Motor') {
                 if (!comp.nodes || !isValidNode(comp.nodes[0]) || !isValidNode(comp.nodes[1])) continue;
-                const v1 = nodeVoltages[comp.nodes[0]] || 0;
-                const v2 = nodeVoltages[comp.nodes[1]] || 0;
-                const voltage = v1 - v2;
-                const resistanceRaw = Number(comp.resistance);
-                const resistance = Number.isFinite(resistanceRaw) && resistanceRaw > 0 ? resistanceRaw : 5;
                 const torqueConstantRaw = Number(comp.torqueConstant);
                 const torqueConstant = Number.isFinite(torqueConstantRaw) ? torqueConstantRaw : 0.1;
                 const emfConstantRaw = Number(comp.emfConstant);
@@ -81,13 +76,14 @@ export class DynamicIntegrator {
                 const inertia = Number.isFinite(inertiaRaw) && inertiaRaw > 0 ? inertiaRaw : 0.01;
                 const loadTorqueRaw = Number(comp.loadTorque);
                 const loadTorque = Number.isFinite(loadTorqueRaw) ? loadTorqueRaw : 0.01;
-                const prevBackEmf = Number.isFinite(entry?.backEmf)
-                    ? entry.backEmf
-                    : (Number.isFinite(comp.backEmf) ? comp.backEmf : 0);
                 const prevSpeed = Number.isFinite(entry?.speed)
                     ? entry.speed
                     : (Number.isFinite(comp.speed) ? comp.speed : 0);
-                const current = (voltage - prevBackEmf) / resistance;
+                const measured = currents?.get?.(comp.id);
+                if (!Number.isFinite(measured)) {
+                    continue;
+                }
+                const current = measured;
 
                 const torque = torqueConstant * current;
                 const acceleration = (torque - loadTorque) / inertia;

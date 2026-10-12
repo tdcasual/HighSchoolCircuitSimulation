@@ -277,6 +277,7 @@ export function startRheostatDrag(componentId, e) {
         }, {
             source: 'dragBehaviors.startRheostatDrag:end'
         });
+        this.circuit?.markSolverCircuitDirty?.();
         // 拖动结束后完整刷新一次属性面板
         this.updatePropertyPanel(comp);
         this.commitHistoryTransaction?.();
@@ -311,6 +312,7 @@ export function startParallelPlateCapacitorDrag(componentId, e) {
     const startGapPx = Math.min(maxGapPx, Math.max(minGapPx, startDistanceMm * pxPerMm));
     const startOffsetY = comp.plateOffsetYPx ?? 0;
     let cleanupDrag = null;
+    this.beginHistoryTransaction?.('调节平行板电容');
 
     const onMove = (moveE) => {
         const canvas = this.screenToCanvas(moveE.clientX, moveE.clientY);
@@ -329,6 +331,8 @@ export function startParallelPlateCapacitorDrag(componentId, e) {
 
     const onUp = () => {
         if (typeof cleanupDrag === 'function') cleanupDrag();
+        this.circuit?.markSolverCircuitDirty?.();
+        this.commitHistoryTransaction?.();
         this.updateStatus('已调整平行板电容参数');
     };
 

@@ -87,6 +87,29 @@ export class SolverMatrixAssembler {
                         }
                     }
                 }
+            } else if (comp.type === 'Switch') {
+                if (comp.closed && !comp._isShorted) {
+                    const n1 = comp.nodes?.[0];
+                    const n2 = comp.nodes?.[1];
+                    if (isValidNode(n1) && isValidNode(n2)) {
+                        comp.vsIndex = voltageSourceCount++;
+                    }
+                } else {
+                    comp.vsIndex = undefined;
+                }
+            } else if (comp.type === 'SPDTSwitch') {
+                if (!comp._isShorted) {
+                    const nCommon = comp.nodes?.[0];
+                    const nA = comp.nodes?.[1];
+                    const nB = comp.nodes?.[2];
+                    const routeToB = comp.position === 'b';
+                    const nOn = routeToB ? nB : nA;
+                    if (isValidNode(nCommon) && isValidNode(nOn)) {
+                        comp.vsIndex = voltageSourceCount++;
+                    }
+                } else {
+                    comp.vsIndex = undefined;
+                }
             }
 
             if (comp.type === 'Inductor' && !Number.isFinite(comp.prevCurrent)) {
@@ -211,6 +234,25 @@ export class SolverMatrixAssembler {
 
         if (i1 >= 0) A[equationRow][i1] = 1;
         if (i2 >= 0) A[equationRow][i2] = -1;
+        if (i1 >= 0) A[i1][equationRow] = 1;
+        if (i2 >= 0) A[i2][equationRow] = -1;
+        z[equationRow] = voltage;
+    }
+
+    stampSeriesVoltageSource(A, z, i1, i2, voltage, seriesR, vsIndex, nodeCount, logger = this.logger) {
+        if (!Number.isInteger(vsIndex) || vsIndex < 0) {
+            logger?.warn?.('Skip series voltage source stamp due to invalid vsIndex');
+            return;
+        }
+        const equationRow = nodeCount - 1 + vsIndex;
+        if (equationRow < 0 || equationRow >= A.length || !A[equationRow]) {
+            logger?.warn?.('Skip series voltage source stamp due to out-of-range equation row');
+            return;
+        }
+        const r = Math.max(Number(seriesR) || 0, 1e-12);
+        if (i1 >= 0) A[equationRow][i1] = 1;
+        if (i2 >= 0) A[equationRow][i2] = -1;
+        A[equationRow][equationRow] = -r;
         if (i1 >= 0) A[i1][equationRow] = 1;
         if (i2 >= 0) A[i2][equationRow] = -1;
         z[equationRow] = voltage;

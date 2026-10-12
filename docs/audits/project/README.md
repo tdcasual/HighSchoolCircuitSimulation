@@ -19,12 +19,19 @@
 ## Current Progress
 
 - 当前项目级状态（截至 2026-03-08）：`30 covered / 0 confirmed / 0 seed-hypothesis`。
+- 2026-10-11 复审：`docs/audits/project/2026-10-11-post-remediation-audit.md`。独立第二轮：`docs/audits/project/2026-10-11-second-pass-audit.md`。收口：`docs/audits/project/2026-10-11-second-pass-closeout.md`。下一轮：`docs/audits/project/2026-10-12-next-issues.md`。课堂 C1–C3 / H1–H11 与二次审计可修项已入库；架构双核与 Circuit 神对象仍开。**不要改写** `top30.md` 状态列。
 - Week0 ~ Week4 已完成：`PRJ-001`~`PRJ-006`、`PRJ-011`、`PRJ-014`~`PRJ-016`、`PRJ-018`、`PRJ-022`~`PRJ-025`、`PRJ-029` 已由自动化合同收口。
 - 当前 Top30 已无开放 confirmed 项，后续仅保留 commit 整理与下一轮 backlog 管理。
 
 ## Main Files
 
 - `docs/audits/project/top30.md`：项目总问题池与优先级总表。
+- `docs/audits/project/2026-10-10-full-project-audit.md`：P0 课堂洞发现（存档/撤销/XSS/电机）。
+- `docs/audits/project/2026-10-10-architecture-audit.md`：v2 入口 vs v1 内核。
+- `docs/audits/project/2026-10-11-post-remediation-audit.md`：P0+P1 实施后复审（Conditional Pass）。
+- `docs/audits/project/2026-10-11-second-pass-audit.md`：同日独立再审计；纠正滑变 dirty / 对话框覆盖评级。
+- `docs/audits/project/2026-10-11-second-pass-closeout.md`：二次审计可修项落地与 Vitest / 浏览器 / Codex 验收。
+- `docs/audits/project/2026-10-12-next-issues.md`：入库后剩余债与下一张工单（P0 基线扩展 → 隔离 v2 岛 → ViewMap）。
 - `docs/audits/project/2026-03-07-top30-closure-review.md`：本轮 Top30 全量闭环结论与剩余开放项。
 - `docs/audits/project/2026-03-08-final-remediation-summary.md`：本轮 confirmed audit 整改最终总结与下一轮 backlog。
 - `docs/audits/project/2026-03-08-remediation-evidence-matrix.md`：提交与测试证据矩阵。

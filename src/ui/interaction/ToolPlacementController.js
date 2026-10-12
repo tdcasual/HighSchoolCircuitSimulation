@@ -63,6 +63,13 @@ function safeRemoveClass(node, className) {
     safeInvokeMethod(node?.classList, 'remove', className);
 }
 
+function setToolItemPressed(node, pressed) {
+    if (!node) return;
+    if (pressed) safeAddClass(node, 'tool-item-pending');
+    else safeRemoveClass(node, 'tool-item-pending');
+    safeInvokeMethod(node, 'setAttribute', 'aria-pressed', pressed ? 'true' : 'false');
+}
+
 function clearSuspendedWiringSession(context) {
     if (!context) return;
     context.suspendedWiringSession = null;
@@ -323,9 +330,9 @@ export function setPendingToolType(type, item = null, options = {}) {
 
     this.pendingToolItem = item;
     if (hasDocument()) {
-        document.querySelectorAll('.tool-item.tool-item-pending').forEach((el) => safeRemoveClass(el, 'tool-item-pending'));
+        document.querySelectorAll('.tool-item.tool-item-pending').forEach((el) => setToolItemPressed(el, false));
     }
-    if (item) safeAddClass(item, 'tool-item-pending');
+    if (item) setToolItemPressed(item, true);
 
     if (type === 'Wire') {
         const fromMobileMode = options.source === 'mobile-mode';
@@ -364,12 +371,12 @@ export function setPendingToolType(type, item = null, options = {}) {
 export function clearPendingToolType(options = {}) {
     clearSuspendedWiringSession(this);
     if (this.pendingToolItem) {
-        safeRemoveClass(this.pendingToolItem, 'tool-item-pending');
+        setToolItemPressed(this.pendingToolItem, false);
         this.pendingToolItem = null;
     }
     if (!options.silent) {
         if (hasDocument()) {
-            document.querySelectorAll('.tool-item.tool-item-pending').forEach((el) => safeRemoveClass(el, 'tool-item-pending'));
+            document.querySelectorAll('.tool-item.tool-item-pending').forEach((el) => setToolItemPressed(el, false));
         }
     }
     const contextPatch = {

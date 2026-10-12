@@ -31,6 +31,11 @@ describe('ComponentFactory', () => {
         });
     });
 
+    it('createComponent PowerSource defaults to 6 V', () => {
+        const source = createComponent('PowerSource', 0, 0);
+        expect(source.voltage).toBe(6);
+    });
+
     it('maintains id counter semantics across reset and existing id sync', () => {
         resetIdCounter();
         expect(generateId('Resistor')).toBe('Resistor_1');

@@ -28,7 +28,7 @@ describe('ToolPlacementController.setPendingToolType', () => {
             querySelectorAll: vi.fn(() => [previous])
         });
 
-        const item = { classList: { add: vi.fn() } };
+        const item = { classList: { add: vi.fn() }, setAttribute: vi.fn() };
         const context = {
             pendingTool: null,
             pendingToolItem: null,
@@ -44,6 +44,7 @@ describe('ToolPlacementController.setPendingToolType', () => {
         expect(context.pendingToolItem).toBe(item);
         expect(previous.classList.remove).toHaveBeenCalledWith('tool-item-pending');
         expect(item.classList.add).toHaveBeenCalledWith('tool-item-pending');
+        expect(item.setAttribute).toHaveBeenCalledWith('aria-pressed', 'true');
         expect(context.updateStatus).toHaveBeenCalledWith(expect.stringContaining('已选择'));
         expect(context.syncInteractionModeStore).toHaveBeenCalledWith({
             mode: 'select',

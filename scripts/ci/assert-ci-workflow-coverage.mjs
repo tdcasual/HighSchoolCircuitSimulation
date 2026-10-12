@@ -133,12 +133,14 @@ const wireE2EJob = getJobBlock(content, 'wire-e2e');
 const responsiveE2EJob = getJobBlock(content, 'responsive-e2e');
 const observationE2EJob = getJobBlock(content, 'observation-e2e');
 const modeConflictMatrixE2EJob = getJobBlock(content, 'mode-conflict-matrix-e2e');
+const aiMobileE2EJob = getJobBlock(content, 'ai-mobile-e2e');
 
 const qualitySteps = parseNamedSteps(qualityJob);
 const wireSteps = parseNamedSteps(wireE2EJob);
 const responsiveSteps = parseNamedSteps(responsiveE2EJob);
 const observationSteps = parseNamedSteps(observationE2EJob);
 const modeConflictMatrixSteps = parseNamedSteps(modeConflictMatrixE2EJob);
+const aiMobileSteps = parseNamedSteps(aiMobileE2EJob);
 
 assertStepRun(
     qualitySteps,
@@ -228,7 +230,7 @@ assertStepRun(
     qualitySteps,
     'quality',
     'Run quality checks and regressions',
-    'npm run check:full'
+    'npm run lint && npm run format:check && npm run check:v2:runtime-safety && npm run check:core-size && npm test && npm run baseline:p0 && npm run baseline:circuitjs && npm run baseline:ai'
 );
 
 assertStepOrder(qualitySteps, 'quality', [
@@ -272,6 +274,29 @@ assertStepRun(
     'mode-conflict-matrix-e2e',
     'Run mode conflict matrix E2E',
     'npm run mode-conflict-matrix'
+);
+assertStepRun(
+    aiMobileSteps,
+    'ai-mobile-e2e',
+    'Run AI mobile layout E2E',
+    'npm run test:e2e:ai-mobile'
+);
+assertStepContains(
+    aiMobileSteps,
+    'ai-mobile-e2e',
+    'Install Playwright Chromium',
+    ['npx playwright install --with-deps chromium']
+);
+assertStepContains(
+    aiMobileSteps,
+    'ai-mobile-e2e',
+    'Upload AI mobile E2E screenshots on failure',
+    [
+        'if: failure()',
+        'uses: actions/upload-artifact@v4',
+        'name: ai-mobile-e2e-screenshots',
+        'path: output/e2e/ai-mobile-layout'
+    ]
 );
 assertStepContains(
     responsiveSteps,
@@ -324,14 +349,17 @@ const requiredJobSnippets = [
     'wire-e2e:',
     'observation-e2e:',
     'mode-conflict-matrix-e2e:',
+    'ai-mobile-e2e:',
     'responsive-e2e-screenshots',
     'wire-e2e-screenshots',
     'observation-e2e-screenshots',
     'mode-conflict-matrix-artifacts',
+    'ai-mobile-e2e-screenshots',
     'output/e2e/responsive-touch',
     'output/e2e/wire-interaction',
     'output/e2e/observation-touch',
-    'output/e2e/mode-conflict'
+    'output/e2e/mode-conflict',
+    'output/e2e/ai-mobile-layout'
 ];
 
 for (const snippet of requiredJobSnippets) {

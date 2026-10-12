@@ -27,4 +27,15 @@ describe('AGENTS doc consistency', () => {
         expect(content).not.toContain('<content>');
         expect(content).not.toContain('<parameter');
     });
+
+    it('points contributors at ComponentRegistry and the 6V classroom default', () => {
+        const content = readFileSync(resolve(process.cwd(), 'AGENTS.md'), 'utf8');
+        expect(content).toContain('ComponentRegistry');
+        expect(content).toContain('默认 6V');
+        expect(content).toContain('tests/circuit.io.spec.js');
+        expect(content).not.toContain('Solver.js');
+        expect(content).not.toContain('stampComponent');
+        expect(content).not.toContain('test_simple_circuit.json');
+        expect(content).not.toContain('默认 12V');
+    });
 });

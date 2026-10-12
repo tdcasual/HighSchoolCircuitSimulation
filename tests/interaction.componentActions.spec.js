@@ -57,7 +57,10 @@ describe('ComponentActions.toggleSwitch', () => {
     it('toggles normal switch and updates status', () => {
         const comp = { id: 'S1', type: 'Switch', closed: false };
         const context = {
-            circuit: { getComponent: vi.fn(() => comp) },
+            circuit: {
+                getComponent: vi.fn(() => comp),
+                markSolverCircuitDirty: vi.fn()
+            },
             renderer: {
                 refreshComponent: vi.fn(),
                 setSelected: vi.fn()
@@ -70,6 +73,7 @@ describe('ComponentActions.toggleSwitch', () => {
         const result = ComponentActions.toggleSwitch.call(context, 'S1');
 
         expect(comp.closed).toBe(true);
+        expect(context.circuit.markSolverCircuitDirty).toHaveBeenCalledTimes(1);
         expect(result).toEqual(expect.objectContaining({
             ok: true,
             type: 'switch.toggled',
@@ -89,7 +93,10 @@ describe('ComponentActions.toggleSwitch', () => {
     it('toggles SPDT switch position and updates status', () => {
         const comp = { id: 'S2', type: 'SPDTSwitch', position: 'a' };
         const context = {
-            circuit: { getComponent: vi.fn(() => comp) },
+            circuit: {
+                getComponent: vi.fn(() => comp),
+                markSolverCircuitDirty: vi.fn()
+            },
             renderer: {
                 refreshComponent: vi.fn(),
                 setSelected: vi.fn()
@@ -102,6 +109,7 @@ describe('ComponentActions.toggleSwitch', () => {
         const result = ComponentActions.toggleSwitch.call(context, 'S2');
 
         expect(comp.position).toBe('b');
+        expect(context.circuit.markSolverCircuitDirty).toHaveBeenCalledTimes(1);
         expect(result).toEqual(expect.objectContaining({
             ok: true,
             type: 'switch.toggled',

@@ -17,11 +17,13 @@ describe('Solver netlist DTO path', () => {
         circuit.ensureSolverPrepared();
 
         expect(setCircuitSpy).toHaveBeenCalledTimes(1);
-        const [netlist] = setCircuitSpy.mock.calls[0];
-        expect(netlist.meta).toEqual({ version: 1 });
-        expect(Array.isArray(netlist.nodes)).toBe(true);
-        expect(Array.isArray(netlist.components)).toBe(true);
-        expect(netlist.components[0]).toHaveProperty('source');
+        const [componentsArg, nodesArg] = setCircuitSpy.mock.calls[0];
+        expect(Array.isArray(componentsArg)).toBe(true);
+        expect(componentsArg.some((component) => component.id === 'V1')).toBe(true);
+        expect(Array.isArray(nodesArg)).toBe(true);
+        expect(circuit.netlist.meta).toEqual({ version: 1 });
+        expect(Array.isArray(circuit.netlist.components)).toBe(true);
+        expect(circuit.netlist.components[0]).not.toHaveProperty('source');
     });
 
     it('solves through netlist DTO path with unchanged electrical result', () => {

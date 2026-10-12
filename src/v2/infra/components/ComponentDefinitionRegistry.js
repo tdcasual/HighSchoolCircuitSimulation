@@ -44,7 +44,7 @@ const COMPONENT_DEFINITION_REGISTRY_INTERNAL = Object.freeze(Object.fromEntries(
             "displayName": "电源",
             "terminalCount": 2,
             "defaults": {
-                "voltage": 12,
+                "voltage": 6,
                 "internalResistance": 0.5
             }
         },

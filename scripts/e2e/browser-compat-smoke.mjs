@@ -101,14 +101,14 @@ async function createPlaywright() {
 }
 
 async function installCdnStubs(page) {
-    await page.route('**/cdn.jsdelivr.net/npm/marked@12.0.0/marked.min.js*', (route) => {
+    await page.route('**/vendor/marked-12.0.0.min.js*', (route) => {
         route.fulfill({
             status: 200,
             contentType: 'application/javascript; charset=utf-8',
             body: 'window.marked={parse:(s)=>String(s??"")};'
         });
     });
-    await page.route('**/cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js*', (route) => {
+    await page.route('**/vendor/mathjax-3.2.2/es5/tex-chtml.js*', (route) => {
         route.fulfill({
             status: 200,
             contentType: 'application/javascript; charset=utf-8',

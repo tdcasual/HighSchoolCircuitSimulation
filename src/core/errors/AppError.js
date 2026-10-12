@@ -7,6 +7,9 @@ export class AppError extends Error {
         this.code = code || ErrorCodes.APP_ERR_UNEXPECTED_STATE;
         this.traceId = options.traceId || '';
         this.details = options.details || null;
+        this.severity = options.severity || 'error';
+        this.hints = Array.isArray(options.hints) ? options.hints : [];
+        this.context = options.context || null;
         if (options.cause) {
             this.cause = options.cause;
         }

@@ -280,6 +280,28 @@ export function createSliderFormGroup(labelText, options = {}) {
 }
 
 /**
+ * 创建复选框表单组
+ * @param {string} labelText - 标签文本
+ * @param {Object} options - 选项
+ * @param {string} [hint] - 提示文本
+ * @returns {HTMLElement}
+ */
+export function createCheckboxFormGroup(labelText, options = {}, hint = null) {
+    const group = createElement('div', { className: 'form-group' });
+    group.appendChild(createElement('label', { textContent: labelText }));
+    const checkbox = createElement('input', {
+        id: options.id,
+        attrs: { type: 'checkbox' }
+    });
+    checkbox.checked = !!options.checked;
+    group.appendChild(checkbox);
+    if (hint) {
+        group.appendChild(createElement('p', { className: 'hint', textContent: hint }));
+    }
+    return group;
+}
+
+/**
  * 创建开关切换按钮组
  * @param {boolean} isClosed - 当前是否闭合
  * @returns {HTMLElement}

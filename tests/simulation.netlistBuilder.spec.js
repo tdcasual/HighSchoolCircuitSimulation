@@ -37,7 +37,7 @@ describe('NetlistBuilder', () => {
             voltage: 3,
             internalResistance: 2
         });
-        expect(netlist.components[0].source).toBe(source);
+        expect(netlist.components[0]).not.toHaveProperty('source');
         expect(netlist.components[1]).toMatchObject({
             id: 'R1',
             type: 'Resistor',
@@ -46,7 +46,7 @@ describe('NetlistBuilder', () => {
         expect(netlist.components[1].params).toMatchObject({
             resistance: 100
         });
-        expect(netlist.components[1].source).toBe(resistor);
+        expect(netlist.components[1]).not.toHaveProperty('source');
     });
 
     it('preserves numeric zero component id instead of fallback id', () => {

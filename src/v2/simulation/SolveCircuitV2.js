@@ -1,3 +1,7 @@
+/**
+ * @internal experimental
+ * Production classroom solver is Circuit + MNASolver. This island is tests-only.
+ */
 import { ResultPostprocessorV2 } from './ResultPostprocessorV2.js';
 import { SimulationStateV2 } from './SimulationStateV2.js';
 

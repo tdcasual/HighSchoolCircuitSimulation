@@ -39,7 +39,6 @@ export class Circuit {
         this.solver = new MNASolver();
         this.isRunning = false;
         this.lastResults = null;
-        this.simulationInterval = null;
         this.dt = 0.01;               // 10ms 时间步长
         this.currentDt = this.dt;     // 当前实际仿真步长（可用于自适应步长）
         this.enableAdaptiveTimeStep = false;
@@ -191,13 +190,10 @@ export class Circuit {
             nodes: this.nodes
         });
 
-        if (builtNetlist && Array.isArray(builtNetlist.components) && Array.isArray(builtNetlist.nodes)) {
-            this.netlist = builtNetlist;
-            this.solver.setCircuit(builtNetlist);
-        } else {
-            this.netlist = null;
-            this.solver.setCircuit(components, this.nodes);
-        }
+        this.netlist = builtNetlist && Array.isArray(builtNetlist.components)
+            ? builtNetlist
+            : null;
+        this.solver.setCircuit(components, this.nodes);
         if (typeof this.solver.setSimulationState === 'function') {
             this.solver.setSimulationState(this.simulationState);
         }
@@ -245,6 +241,15 @@ export class Circuit {
         const normalizedId = String(id);
         this.components.delete(normalizedId);
         this.invalidateComponentTerminalCache(normalizedId);
+        const dangling = [];
+        for (const [wireId, wire] of this.wires) {
+            if (wireReferencesComponent(wire, normalizedId)) {
+                dangling.push(wireId);
+            }
+        }
+        for (const wireId of dangling) {
+            this.removeWire(wireId);
+        }
         this.requestTopologyRebuild();
     }
 
@@ -691,17 +696,11 @@ export class Circuit {
     }
 
     /**
-     * 开始模拟
+     * Reset dynamic fields and arm stepping. The app-layer SimulationDriver owns the timer.
      */
-    startSimulation() {
+    prepareSimulation() {
         if (this.isRunning) return;
-        
-        // 清除任何现有的模拟计时器（防止内存泄漏）
-        if (this.simulationInterval) {
-            clearInterval(this.simulationInterval);
-            this.simulationInterval = null;
-        }
-        
+
         this.isRunning = true;
         this.simTime = 0;
         this.resetAdaptiveTimeStepState();
@@ -743,11 +742,13 @@ export class Circuit {
         // 准备求解器（仅在拓扑/关键参数变化后重建）
         this.solver.debugMode = this.debugMode;
         this.ensureSolverPrepared();
+    }
 
-        // 开始模拟循环
-        this.simulationInterval = setInterval(() => {
-            this.step();
-        }, this.dt * 1000);
+    /**
+     * 开始模拟
+     */
+    startSimulation() {
+        this.prepareSimulation();
     }
 
     resetSimulationState() {
@@ -790,12 +791,12 @@ export class Circuit {
     /**
      * 停止模拟
      */
-    stopSimulation() {
+    haltSimulation() {
         this.isRunning = false;
-        if (this.simulationInterval) {
-            clearInterval(this.simulationInterval);
-            this.simulationInterval = null;
-        }
+    }
+
+    stopSimulation() {
+        this.haltSimulation();
     }
 
     collectRuntimeDiagnostics(results = this.lastResults, simTime = this.simTime) {
@@ -804,7 +805,7 @@ export class Circuit {
             : { voltages: [], currents: new Map(), valid: false };
         const topologyValidationDeferred = this.topologyBatchDepth > 0 || this.topologyRebuildPending;
         this.refreshShortCircuitDiagnostics(normalizedResults);
-        const topologyReport = normalizedResults.valid || topologyValidationDeferred
+        const topologyReport = topologyValidationDeferred
             ? null
             : this.validateSimulationTopology(simTime);
         const diagnostics = this.diagnosticsAdapter.build({
@@ -847,10 +848,7 @@ export class Circuit {
         const loopResult = this.simulationLoopService.runStep(this);
         this.lastResults = loopResult.lastResults;
         this.simulationStepId += 1;
-        const elapsedStepDt = Number.isFinite(loopResult.elapsedDt) && loopResult.elapsedDt > 0
-            ? loopResult.elapsedDt
-            : (Number.isFinite(loopResult.stepDt) && loopResult.stepDt > 0 ? loopResult.stepDt : this.dt);
-        
+
         // 调试输出
         if (this.debugMode) {
             this.logger?.debug?.('Nodes:', this.nodes.length);
@@ -863,7 +861,7 @@ export class Circuit {
         this.attachRuntimeDiagnostics(this.lastResults, this.simTime);
 
         if (this.lastResults.valid) {
-            this.resultProjectionService.applyStepResults(this, this.lastResults, elapsedStepDt);
+            this.resultProjectionService?.updateComponentDisplayValues?.(this, this.lastResults);
         }
 
         // 触发更新事件
@@ -970,13 +968,10 @@ export class Circuit {
     }
 
     /**
-     * 清空电路
+     * Halt + reset solver/topology caches without installing new entities.
      */
-    clear() {
-        this.stopSimulation();
-        this.components.clear();
-        this.wires.clear();
-        this.observationProbes.clear();
+    resetRuntimeCaches() {
+        this.haltSimulation();
         this.nodes = [];
         this.netlist = null;
         this.lastResults = null;
@@ -1002,6 +997,35 @@ export class Circuit {
         if (typeof this.solver.setSimulationState === 'function') {
             this.solver.setSimulationState(this.simulationState);
         }
+    }
+
+    replaceLoadedCircuit(loaded) {
+        this.resetRuntimeCaches();
+        this.components = new Map();
+        this.wires = new Map();
+        this.observationProbes = new Map();
+        for (const comp of loaded.components || []) {
+            this.components.set(comp.id, comp);
+        }
+        for (const wire of loaded.wires || []) {
+            this.wires.set(wire.id, wire);
+        }
+        for (const probe of loaded.probes || []) {
+            const probeId = this.ensureUniqueObservationProbeId(probe.id);
+            this.observationProbes.set(probeId, { ...probe, id: probeId });
+        }
+        this.rebuildNodes();
+        this.markSolverCircuitDirty();
+    }
+
+    /**
+     * 清空电路
+     */
+    clear() {
+        this.resetRuntimeCaches();
+        this.components = new Map();
+        this.wires = new Map();
+        this.observationProbes = new Map();
     }
 
     /**
@@ -1039,21 +1063,15 @@ export class Circuit {
      * @param {Object} json - 电路JSON对象
      */
     fromJSON(json) {
-        this.clear();
         const loaded = CircuitDeserializer.deserialize(json, {
             normalizeObservationProbe: (probe) => this.normalizeObservationProbe(probe)
         });
-        for (const comp of loaded.components) {
-            this.components.set(comp.id, comp);
-        }
-        for (const wire of loaded.wires) {
-            this.wires.set(wire.id, wire);
-        }
-        for (const probe of loaded.probes) {
-            const probeId = this.ensureUniqueObservationProbeId(probe.id);
-            this.observationProbes.set(probeId, { ...probe, id: probeId });
-        }
-
-        this.rebuildNodes();
+        this.replaceLoadedCircuit(loaded);
     }
+}
+
+function wireReferencesComponent(wire, componentId) {
+    const target = String(componentId);
+    return String(wire?.aRef?.componentId) === target
+        || String(wire?.bRef?.componentId) === target;
 }

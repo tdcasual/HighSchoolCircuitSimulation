@@ -15,124 +15,109 @@ async function importFromRoot(relPath) {
     return import(pathToFileURL(absPath).href);
 }
 
-function buildNodeIndices(terminalCount) {
-    if (terminalCount <= 1) return [1];
-    if (terminalCount === 2) return [1, 0];
-    if (terminalCount === 3) return [1, 0, 2];
-    if (terminalCount === 4) return [1, 0, 2, 3];
-    return Array.from({ length: terminalCount }, (_, index) => index + 1);
-}
-
-function buildSampleComponent(type, manifest) {
-    const terminalCount = Number(manifest?.terminalCount || 2);
-    const defaults = manifest?.defaults && typeof manifest.defaults === 'object' ? manifest.defaults : {};
-    const nodes = buildNodeIndices(terminalCount);
-    const params = { ...defaults };
-
-    if (type === 'Rheostat') {
-        params.connectionMode = 'all';
-    }
-    if (type === 'Relay') {
-        params.energized = false;
-    }
-    if (type === 'SPDTSwitch') {
-        params.position = 'a';
-    }
-    if (type === 'Switch') {
-        params.closed = true;
-    }
-    if (type === 'Ammeter') {
-        params.resistance = 1;
-    }
-    if (type === 'Voltmeter' && params.resistance === Infinity) {
-        params.resistance = 1e12;
-    }
-    if (type === 'Ground') {
-        return {
-            id: `${type}_1`,
-            type,
-            nodes,
-            params
-        };
-    }
-
+function createRecordingStampContext() {
+    const calls = [];
+    const record = (name) => (...args) => {
+        calls.push({ name, args });
+    };
     return {
-        id: `${type}_1`,
-        type,
-        nodes,
-        params
+        calls,
+        stampResistor: record('stampResistor'),
+        stampCurrentSource: record('stampCurrentSource'),
+        stampVoltageSource: record('stampVoltageSource'),
+        stampSeriesVoltageSource: record('stampSeriesVoltageSource'),
+        getSourceInstantVoltage: () => 0,
+        voltage: () => 0,
+        dt: 0.01,
+        nodeCount: 4,
+        solveVector: [],
+        resolveDynamicIntegrationMethod: () => 'auto',
+        state: { get() { return {}; } }
     };
 }
 
-function buildSampleNetlist(component) {
-    const nodeSet = new Set([0]);
-    for (const node of component.nodes || []) {
-        if (Number.isInteger(node) && node >= 0) {
-            nodeSet.add(node);
-        }
+function nodesFor(type) {
+    const isValidNode = (n) => Number.isInteger(n) && n >= 0;
+    if (type === 'SPDTSwitch' || type === 'Rheostat') {
+        return { n1: 1, n2: 2, i1: 0, i2: 1, nodeCount: 4, isValidNode };
     }
-    const nodeCount = Math.max(2, ...Array.from(nodeSet)) + 1;
+    if (type === 'Relay') {
+        return { n1: 1, n2: 2, i1: 0, i2: 1, nodeCount: 5, isValidNode };
+    }
+    return { n1: 1, n2: 2, i1: 0, i2: 1, nodeCount: 3, isValidNode };
+}
+
+function stubComponent(type) {
+    const nodes = type === 'SPDTSwitch' || type === 'Rheostat'
+        ? [1, 2, 3]
+        : type === 'Relay'
+            ? [1, 2, 3, 4]
+            : [1, 2];
     return {
-        meta: { version: 2 },
-        nodes: Array.from({ length: nodeCount }, (_, index) => ({ id: String(index) })),
-        components: [component]
+        id: `${type}1`,
+        type,
+        nodes,
+        vsIndex: 0,
+        closed: true,
+        position: 'a',
+        resistance: 5,
+        connectionMode: 'all',
+        energized: false
     };
 }
 
 async function main() {
-    const manifestModule = await importFromRoot('src/v2/domain/components/ComponentManifest.js');
-    const rendererModule = await importFromRoot('src/v2/ui/renderers/RendererRegistryV2.js');
-    const solverModule = await importFromRoot('src/v2/simulation/SolveCircuitV2.js');
-    const stateModule = await importFromRoot('src/v2/simulation/SimulationStateV2.js');
+    const registryModule = await importFromRoot('src/core/simulation/ComponentRegistry.js');
+    const rendererModule = await importFromRoot('src/components/render/RendererRegistry.js');
+    const typesModule = await importFromRoot('src/v2/infra/components/ComponentDefinitionRegistry.js');
 
-    const { listComponentTypesV2, getComponentManifestV2 } = manifestModule;
-    const { getRendererV2 } = rendererModule;
-    const { solveCircuitV2 } = solverModule;
-    const { SimulationStateV2 } = stateModule;
+    const { DefaultComponentRegistry } = registryModule;
+    const { COMPONENT_RENDERER_METHODS } = rendererModule;
+    const { listComponentDefinitionTypes } = typesModule;
 
-    if (typeof listComponentTypesV2 !== 'function') {
-        fail('listComponentTypesV2 export is missing');
+    if (!DefaultComponentRegistry || typeof DefaultComponentRegistry.get !== 'function') {
+        fail('DefaultComponentRegistry is missing');
     }
-    if (typeof getRendererV2 !== 'function') {
-        fail('getRendererV2 export is missing');
+    if (!COMPONENT_RENDERER_METHODS || typeof COMPONENT_RENDERER_METHODS !== 'object') {
+        fail('production RendererRegistry methods are missing');
     }
-    if (typeof solveCircuitV2 !== 'function') {
-        fail('solveCircuitV2 export is missing');
+    if (typeof listComponentDefinitionTypes !== 'function') {
+        fail('listComponentDefinitionTypes export is missing');
     }
 
-    const componentTypes = listComponentTypesV2();
+    const componentTypes = listComponentDefinitionTypes();
     if (!Array.isArray(componentTypes) || componentTypes.length === 0) {
-        fail('component manifest is empty');
+        fail('component definition list is empty');
     }
 
+    const missingHandlers = [];
+    const stampFailures = [];
     const missingRenderers = [];
-    const unsupportedInSolver = [];
 
     for (const type of componentTypes) {
+        const handler = DefaultComponentRegistry.get(type);
+        if (!handler || typeof handler.stamp !== 'function' || typeof handler.current !== 'function') {
+            missingHandlers.push(type);
+            continue;
+        }
         try {
-            getRendererV2(type);
-        } catch (_) {
+            handler.stamp(stubComponent(type), createRecordingStampContext(), nodesFor(type));
+        } catch (error) {
+            stampFailures.push(`${type}: ${error?.message || String(error)}`);
+        }
+        if (!COMPONENT_RENDERER_METHODS[type]) {
             missingRenderers.push(type);
         }
-
-        const manifest = getComponentManifestV2(type);
-        const sample = buildSampleComponent(type, manifest);
-        const dto = buildSampleNetlist(sample);
-        const result = solveCircuitV2(dto, new SimulationStateV2(), { dt: 0.01, simTime: 0 });
-        const warnings = Array.isArray(result?.diagnostics?.warnings) ? result.diagnostics.warnings : [];
-        const hasUnsupportedWarning = warnings.some((item) =>
-            String(item).includes('unsupported component type')
-        );
-        if (hasUnsupportedWarning) {
-            unsupportedInSolver.push(type);
-        }
     }
 
+    if (missingHandlers.length > 0) {
+        fail(`missing production stamp/current for: ${missingHandlers.join(', ')}`);
+    }
+    if (stampFailures.length > 0) {
+        fail(`stamp threw for: ${stampFailures.join('; ')}`);
+    }
     if (missingRenderers.length > 0) {
-        fail(`missing renderer registration for: ${missingRenderers.join(', ')}`);
-    }
-    if (unsupportedInSolver.length > 0) {
-        fail(`solver still reports unsupported component type for: ${unsupportedInSolver.join(', ')}`);
+        fail(`missing production renderer registration for: ${missingRenderers.join(', ')}`);
     }
 
     console.log(`[v2-coverage] ok (${componentTypes.length} component types covered)`);

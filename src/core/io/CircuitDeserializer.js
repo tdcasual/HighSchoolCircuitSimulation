@@ -105,10 +105,14 @@ export class CircuitDeserializer {
             }
             applyComponentProperties(comp, compData.properties);
             sanitizeRuntimeCriticalProperties(comp);
-
-            if ((comp.type === 'Capacitor' || comp.type === 'Inductor' || comp.type === 'ParallelPlateCapacitor')
-                && !compData?.properties?.integrationMethod) {
-                comp.integrationMethod = 'backward-euler';
+            if (comp.type === 'Voltmeter') {
+                const raw = comp.resistance;
+                if (raw === null || raw === undefined || raw === 'Infinity' || raw === Infinity) {
+                    comp.resistance = Infinity;
+                } else {
+                    const n = Number(raw);
+                    comp.resistance = (!Number.isFinite(n) || n <= 0) ? Infinity : n;
+                }
             }
 
             if (comp.type === 'ParallelPlateCapacitor') {

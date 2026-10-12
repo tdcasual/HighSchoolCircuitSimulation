@@ -124,6 +124,25 @@ describe('parseEmbedRuntimeOptionsFromSearch', () => {
         expect(options.targetOrigin).toBe('https://lms.example');
         expect(options.allowedParentOrigins).toEqual(['https://lms.example']);
     });
+
+    it('disables embed when parent origin is empty or wildcard', () => {
+        const empty = parseEmbedRuntimeOptionsFromSearch('?embed=1');
+        expect(empty.enabled).toBe(false);
+        expect(empty.targetOrigin).toBe('');
+        expect(empty.allowedParentOrigins).toEqual([]);
+
+        const wildcard = parseEmbedRuntimeOptionsFromSearch('?embed=1&targetOrigin=*');
+        expect(wildcard.enabled).toBe(false);
+        expect(wildcard.allowedParentOrigins).toEqual([]);
+    });
+
+    it('parses unfreeze capability from query', () => {
+        const options = parseEmbedRuntimeOptionsFromSearch(
+            '?embed=1&targetOrigin=https%3A%2F%2Flms.example&capabilities=unfreeze'
+        );
+        expect(options.capabilities.unfreeze).toBe(true);
+        expect(options.enabled).toBe(true);
+    });
 });
 
 describe('EmbedRuntimeBridge', () => {
@@ -176,6 +195,7 @@ describe('EmbedRuntimeBridge', () => {
         bridge.handleRequest('run');
         expect(fixture.app.startSimulation).toHaveBeenCalledTimes(1);
 
+        expect(fixture.win.addEventListener).toHaveBeenCalled();
         const loadResult = bridge.handleRequest('loadCircuit', {
             circuit: { components: [], wires: [] }
         });
@@ -195,7 +215,7 @@ describe('EmbedRuntimeBridge', () => {
         expect(() => {
             new EmbedRuntimeBridge(
                 fixture.app,
-                { enabled: true, mode: 'readonly' },
+                { enabled: true, mode: 'readonly', targetOrigin: 'https://host.example' },
                 { window: fixture.win, document: fixture.doc }
             );
         }).not.toThrow();
@@ -255,5 +275,55 @@ describe('EmbedRuntimeBridge', () => {
 
         expect(() => bridge.applyFeatures({ sidePanel: false, unknownFeature: true })).not.toThrow();
         expect(fixture.body.classList.contains('embed-hide-side-panel')).toBe(true);
+    });
+
+    it('does not listen when origin allowlist is empty or wildcard', () => {
+        const fixture = createBridgeFixture();
+        const empty = new EmbedRuntimeBridge(
+            fixture.app,
+            { enabled: true, mode: 'edit' },
+            { window: fixture.win, document: fixture.doc }
+        );
+        expect(empty.enabled).toBe(false);
+        expect(fixture.win.addEventListener).not.toHaveBeenCalled();
+
+        const wildcard = new EmbedRuntimeBridge(
+            fixture.app,
+            { enabled: true, mode: 'edit', targetOrigin: '*', allowedParentOrigins: ['*'] },
+            { window: fixture.win, document: fixture.doc }
+        );
+        expect(wildcard.enabled).toBe(false);
+    });
+
+    it('denies leaving readonly without unfreeze capability', () => {
+        const fixture = createBridgeFixture();
+        const bridge = new EmbedRuntimeBridge(
+            fixture.app,
+            { enabled: true, mode: 'readonly', targetOrigin: 'https://host.example' },
+            { window: fixture.win, document: fixture.doc }
+        );
+        try {
+            bridge.handleRequest('setReadonly', { readOnly: false });
+            throw new Error('expected throw');
+        } catch (error) {
+            expect(error.code).toBe('CAPABILITY_DENIED');
+        }
+    });
+
+    it('allows leaving readonly when unfreeze capability is present', () => {
+        const fixture = createBridgeFixture();
+        const bridge = new EmbedRuntimeBridge(
+            fixture.app,
+            {
+                enabled: true,
+                mode: 'readonly',
+                targetOrigin: 'https://host.example',
+                capabilities: { unfreeze: true }
+            },
+            { window: fixture.win, document: fixture.doc }
+        );
+        const snapshot = bridge.handleRequest('setReadonly', { readOnly: false });
+        expect(bridge.readOnly).toBe(false);
+        expect(snapshot).toBeTruthy();
     });
 });

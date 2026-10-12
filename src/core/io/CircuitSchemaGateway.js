@@ -1,4 +1,14 @@
 import { ComponentDefaults, getComponentTerminalCount } from '../../components/Component.js';
+import { AppError } from '../errors/AppError.js';
+import { ErrorCodes } from '../errors/ErrorCodes.js';
+
+function schemaError(message, context = null) {
+    throw new AppError(ErrorCodes.IO_ERR_SCHEMA_REJECTED, message, {
+        severity: 'error',
+        hints: ['电路 meta 仅允许 version / name / timestamp', '应用存档请使用 hscs-app 信封'],
+        context
+    });
+}
 
 const SUPPORTED_COMPONENT_TYPES = new Set(Object.keys(ComponentDefaults));
 const LEGACY_ALIAS_KEYS = new Set(['templateName', 'bindingMap', 'pendingToolType']);
@@ -27,21 +37,21 @@ function isPlainObject(value) {
 
 function assertPlainObject(value, label) {
     if (!isPlainObject(value)) {
-        throw new Error(`${label} 不是对象`);
+        schemaError(`${label} 不是对象`);
     }
 }
 
 function assertKnownKeys(value, allowed, label) {
     for (const key of Object.keys(value)) {
         if (!allowed.has(key)) {
-            throw new Error(`${label} 包含未知字段: ${key}`);
+            schemaError(`${label} 包含未知字段: ${key}`, { path: label, key });
         }
     }
 }
 
 function assertFiniteNumber(value, label) {
     if (!Number.isFinite(Number(value))) {
-        throw new Error(`${label} 坐标非法: ${JSON.stringify(value)}`);
+        schemaError(`${label} 坐标非法: ${JSON.stringify(value)}`);
     }
 }
 
@@ -57,7 +67,7 @@ function assertNoLegacyAliases(value, path = 'payload') {
     if (!isPlainObject(value)) return;
     for (const [key, nested] of Object.entries(value)) {
         if (LEGACY_ALIAS_KEYS.has(key)) {
-            throw new Error(`legacy field "${key}" is not allowed at ${path}.${key}`);
+            schemaError(`legacy field "${key}" is not allowed at ${path}.${key}`);
         }
         assertNoLegacyAliases(nested, `${path}.${key}`);
     }
@@ -67,7 +77,7 @@ function validateVersion(meta) {
     const version = meta.version;
     const isV3 = version === 3 || version === '3' || version === '3.0';
     if (!isV3) {
-        throw new Error(`meta.version must be 3, received "${String(version)}"`);
+        schemaError(`meta.version must be 3, received "${String(version)}"`);
     }
 }
 
@@ -87,7 +97,7 @@ function validateRuntimeCriticalComponentProperties(component, label) {
         if (value === undefined) return null;
         const numeric = Number(value);
         if (!Number.isFinite(numeric)) {
-            throw new Error(`${label}.properties.${key} 非法: ${JSON.stringify(value)}`);
+            schemaError(`${label}.properties.${key} 非法: ${JSON.stringify(value)}`);
         }
         return numeric;
     };
@@ -95,14 +105,25 @@ function validateRuntimeCriticalComponentProperties(component, label) {
     if (component.type === 'PowerSource' || component.type === 'ACVoltageSource') {
         const internalResistance = ensureFinite('internalResistance');
         if (internalResistance !== null && internalResistance < 0) {
-            throw new Error(`${label}.properties.internalResistance 非法: ${JSON.stringify(readValue('internalResistance'))}`);
+            schemaError(`${label}.properties.internalResistance 非法: ${JSON.stringify(readValue('internalResistance'))}`);
         }
     }
 
     if (component.type === 'Ammeter') {
         const resistance = ensureFinite('resistance');
         if (resistance !== null && resistance < 0) {
-            throw new Error(`${label}.properties.resistance 非法: ${JSON.stringify(readValue('resistance'))}`);
+            schemaError(`${label}.properties.resistance 非法: ${JSON.stringify(readValue('resistance'))}`);
+        }
+    }
+
+    if (component.type === 'Voltmeter') {
+        const value = readValue('resistance');
+        if (value === undefined || value === null || value === 'Infinity' || value === Infinity) {
+            return;
+        }
+        const numeric = Number(value);
+        if (!Number.isFinite(numeric) || numeric < 0) {
+            schemaError(`${label}.properties.resistance 非法: ${JSON.stringify(value)}`);
         }
     }
 
@@ -110,10 +131,10 @@ function validateRuntimeCriticalComponentProperties(component, label) {
         const resistance = ensureFinite('resistance');
         const inertia = ensureFinite('inertia');
         if (resistance !== null && resistance <= 0) {
-            throw new Error(`${label}.properties.resistance 非法: ${JSON.stringify(readValue('resistance'))}`);
+            schemaError(`${label}.properties.resistance 非法: ${JSON.stringify(readValue('resistance'))}`);
         }
         if (inertia !== null && inertia <= 0) {
-            throw new Error(`${label}.properties.inertia 非法: ${JSON.stringify(readValue('inertia'))}`);
+            schemaError(`${label}.properties.inertia 非法: ${JSON.stringify(readValue('inertia'))}`);
         }
     }
 }
@@ -121,7 +142,7 @@ function validateRuntimeCriticalComponentProperties(component, label) {
 export class CircuitSchemaGateway {
     static validate(data) {
         if (!isPlainObject(data)) {
-            throw new Error('返回结果不是对象');
+            schemaError('返回结果不是对象');
         }
 
         assertNoLegacyAliases(data);
@@ -132,13 +153,13 @@ export class CircuitSchemaGateway {
         validateVersion(data.meta);
 
         if (!Array.isArray(data.components)) {
-            throw new Error('组件列表缺失或非法');
+            schemaError('组件列表缺失或非法');
         }
         if (!Array.isArray(data.wires)) {
-            throw new Error('导线列表缺失或非法');
+            schemaError('导线列表缺失或非法');
         }
         if (data.probes !== undefined && !Array.isArray(data.probes)) {
-            throw new Error('probes 必须是数组');
+            schemaError('probes 必须是数组');
         }
 
         const componentsById = new Map();
@@ -148,23 +169,23 @@ export class CircuitSchemaGateway {
             assertPlainObject(ref, label);
             assertKnownKeys(ref, TERMINAL_REF_KEYS, label);
             if (ref.componentId === undefined || ref.componentId === null) {
-                throw new Error(`${label} 缺少 componentId: ${JSON.stringify(ref)}`);
+                schemaError(`${label} 缺少 componentId: ${JSON.stringify(ref)}`);
             }
             if (ref.terminalIndex === undefined || ref.terminalIndex === null) {
-                throw new Error(`${label} 缺少 terminalIndex: ${JSON.stringify(ref)}`);
+                schemaError(`${label} 缺少 terminalIndex: ${JSON.stringify(ref)}`);
             }
             const componentId = String(ref.componentId);
             const boundComponent = componentsById.get(componentId);
             if (!boundComponent) {
-                throw new Error(`${label}.componentId 不存在: ${componentId}`);
+                schemaError(`${label}.componentId 不存在: ${componentId}`);
             }
             const idx = Number(ref.terminalIndex);
             if (!Number.isInteger(idx) || idx < 0) {
-                throw new Error(`${label}.terminalIndex 非法: ${ref.terminalIndex}`);
+                schemaError(`${label}.terminalIndex 非法: ${ref.terminalIndex}`);
             }
             const terminalCount = getComponentTerminalCount(boundComponent.type);
             if (idx >= terminalCount) {
-                throw new Error(`${label}.terminalIndex 超出范围: ${ref.terminalIndex}`);
+                schemaError(`${label}.terminalIndex 超出范围: ${ref.terminalIndex}`);
             }
             return true;
         };
@@ -173,17 +194,17 @@ export class CircuitSchemaGateway {
             assertPlainObject(comp, 'component');
             assertKnownKeys(comp, COMPONENT_KEYS, `component:${comp?.id || 'unknown'}`);
             if (!isPresentIdentifier(comp.id) || !isPresentIdentifier(comp.type)) {
-                throw new Error(`组件缺少 id/type: ${JSON.stringify(comp)}`);
+                schemaError(`组件缺少 id/type: ${JSON.stringify(comp)}`);
             }
             const type = String(comp.type);
             if (!SUPPORTED_COMPONENT_TYPES.has(type)) {
-                throw new Error(`不支持的元器件类型: ${type}`);
+                schemaError(`不支持的元器件类型: ${type}`);
             }
             assertFiniteNumber(comp.x, `component:${comp.id}.x`);
             assertFiniteNumber(comp.y, `component:${comp.id}.y`);
             const id = String(comp.id);
             if (componentsById.has(id)) {
-                throw new Error(`组件 id 重复: ${id}`);
+                schemaError(`组件 id 重复: ${id}`);
             }
             validateRuntimeCriticalComponentProperties(comp, `component:${id}`);
             componentsById.set(id, { ...comp, type });
@@ -194,20 +215,20 @@ export class CircuitSchemaGateway {
             assertPlainObject(wire, 'wire');
             assertKnownKeys(wire, WIRE_KEYS, `wire:${wire?.id || 'unknown'}`);
             if (wire.id === undefined || wire.id === null || String(wire.id).trim() === '') {
-                throw new Error(`导线缺少 id: ${JSON.stringify(wire)}`);
+                schemaError(`导线缺少 id: ${JSON.stringify(wire)}`);
             }
             const wireId = String(wire.id).trim();
             if (wireIds.has(wireId)) {
-                throw new Error(`导线 id 重复: ${wireId}`);
+                schemaError(`导线 id 重复: ${wireId}`);
             }
             wireIds.add(wireId);
             if (!wire.a || !wire.b) {
-                throw new Error(`导线必须使用 a/b 端点坐标: ${JSON.stringify(wire)}`);
+                schemaError(`导线必须使用 a/b 端点坐标: ${JSON.stringify(wire)}`);
             }
             validatePoint(wire.a, 'wire.a');
             validatePoint(wire.b, 'wire.b');
             if (Number(wire.a.x) === Number(wire.b.x) && Number(wire.a.y) === Number(wire.b.y)) {
-                throw new Error(`导线起点与终点重合: ${JSON.stringify(wire)}`);
+                schemaError(`导线起点与终点重合: ${JSON.stringify(wire)}`);
             }
             requireTerminalRef(wire.aRef, 'wire.aRef');
             requireTerminalRef(wire.bRef, 'wire.bRef');
@@ -220,23 +241,23 @@ export class CircuitSchemaGateway {
             if (!isPresentIdentifier(probe.id)
                 || !isPresentIdentifier(probe.type)
                 || !isPresentIdentifier(probe.wireId)) {
-                throw new Error(`probe 字段不完整: ${JSON.stringify(probe)}`);
+                schemaError(`probe 字段不完整: ${JSON.stringify(probe)}`);
             }
             const probeId = String(probe.id).trim();
             if (!probeId) {
-                throw new Error(`probe.id 非法: ${JSON.stringify(probe.id)}`);
+                schemaError(`probe.id 非法: ${JSON.stringify(probe.id)}`);
             }
             if (probeIds.has(probeId)) {
-                throw new Error(`probe id 重复: ${probeId}`);
+                schemaError(`probe id 重复: ${probeId}`);
             }
             probeIds.add(probeId);
             const probeType = String(probe.type).trim();
             if (!SUPPORTED_PROBE_TYPES.has(probeType)) {
-                throw new Error(`不支持的探针类型: ${probeType}`);
+                schemaError(`不支持的探针类型: ${probeType}`);
             }
             const wireId = String(probe.wireId).trim();
             if (!wireIds.has(wireId)) {
-                throw new Error(`probe.wireId 不存在: ${wireId}`);
+                schemaError(`probe.wireId 不存在: ${wireId}`);
             }
         }
 

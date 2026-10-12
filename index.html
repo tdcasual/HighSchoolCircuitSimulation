@@ -9,13 +9,16 @@
         window.MathJax = {
             tex: {
                 inlineMath: [['$', '$'], ['\\(', '\\)']],
-                displayMath: [['$$', '$$'], ['\\[', '\\]']]
+                displayMath: [['$$', '$$'], ['\\[', '\\]']],
+                packages: { '[-]': ['require', 'autoload', 'html', 'href'] }
             },
+            loader: { load: [] },
+            options: { enableMenu: false },
             svg: { fontCache: 'global' }
         };
     </script>
-    <script src="https://cdn.jsdelivr.net/npm/marked@12.0.0/marked.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js" id="MathJax-script" async></script>
+    <script src="vendor/marked-12.0.0.min.js" defer></script>
+    <script src="vendor/mathjax-3.2.2/es5/tex-chtml.js" id="MathJax-script" defer></script>
 </head>
 <body>
     <div id="top-action-bar" role="toolbar" aria-label="实验操作">
@@ -62,34 +65,34 @@
                     <h3>课堂常用</h3>
                     <span class="toolbox-section-tag">快速开始</span>
                 </div>
-                <div class="tool-item tool-item-quick" data-type="PowerSource" draggable="true">
+                <button type="button" class="tool-item tool-item-quick" data-type="PowerSource" draggable="true" aria-pressed="false">
                     <span class="tool-item-shortcut">6V</span>
                     <span>电源</span>
-                </div>
-                <div class="tool-item tool-item-quick" data-type="Resistor" draggable="true">
+                </button>
+                <button type="button" class="tool-item tool-item-quick" data-type="Resistor" draggable="true" aria-pressed="false">
                     <span class="tool-item-shortcut">R</span>
                     <span>定值电阻</span>
-                </div>
-                <div class="tool-item tool-item-quick" data-type="Bulb" draggable="true">
+                </button>
+                <button type="button" class="tool-item tool-item-quick" data-type="Bulb" draggable="true" aria-pressed="false">
                     <span class="tool-item-shortcut">灯</span>
                     <span>灯泡</span>
-                </div>
-                <div class="tool-item tool-item-quick" data-type="Switch" draggable="true">
+                </button>
+                <button type="button" class="tool-item tool-item-quick" data-type="Switch" draggable="true" aria-pressed="false">
                     <span class="tool-item-shortcut">S</span>
                     <span>开关</span>
-                </div>
-                <div class="tool-item tool-item-quick" data-type="Voltmeter" draggable="true">
+                </button>
+                <button type="button" class="tool-item tool-item-quick" data-type="Voltmeter" draggable="true" aria-pressed="false">
                     <span class="tool-item-shortcut">V</span>
                     <span>电压表</span>
-                </div>
-                <div class="tool-item tool-item-quick" data-type="Wire" draggable="true">
+                </button>
+                <button type="button" class="tool-item tool-item-quick" data-type="Wire" draggable="true" aria-pressed="false">
                     <span class="tool-item-shortcut">线</span>
                     <span>导线</span>
-                </div>
+                </button>
             </div>
             <div class="tool-category" data-category="power">
                 <h3>电源</h3>
-                <div class="tool-item" data-type="Ground" draggable="true">
+                <button type="button" class="tool-item" data-type="Ground" draggable="true" aria-pressed="false">
                     <svg viewBox="0 0 60 40" width="60" height="40">
                         <line x1="30" y1="4" x2="30" y2="14" stroke="#333" stroke-width="2"/>
                         <line x1="18" y1="14" x2="42" y2="14" stroke="#333" stroke-width="2"/>
@@ -97,8 +100,8 @@
                         <line x1="26" y1="24" x2="34" y2="24" stroke="#333" stroke-width="2"/>
                     </svg>
                     <span>接地</span>
-                </div>
-                <div class="tool-item" data-type="PowerSource" draggable="true">
+                </button>
+                <button type="button" class="tool-item" data-type="PowerSource" draggable="true" aria-pressed="false">
                     <svg viewBox="0 0 60 40" width="60" height="40">
                         <line x1="0" y1="20" x2="20" y2="20" stroke="#333" stroke-width="2"/>
                         <line x1="20" y1="8" x2="20" y2="32" stroke="#333" stroke-width="3"/>
@@ -106,8 +109,8 @@
                         <line x1="28" y1="20" x2="60" y2="20" stroke="#333" stroke-width="2"/>
                     </svg>
                     <span>电源</span>
-                </div>
-                <div class="tool-item" data-type="ACVoltageSource" draggable="true">
+                </button>
+                <button type="button" class="tool-item" data-type="ACVoltageSource" draggable="true" aria-pressed="false">
                     <svg viewBox="0 0 60 40" width="60" height="40">
                         <line x1="0" y1="20" x2="14" y2="20" stroke="#333" stroke-width="2"/>
                         <circle cx="30" cy="20" r="14" fill="none" stroke="#333" stroke-width="2"/>
@@ -115,19 +118,19 @@
                         <line x1="46" y1="20" x2="60" y2="20" stroke="#333" stroke-width="2"/>
                     </svg>
                     <span>交流电源</span>
-                </div>
+                </button>
             </div>
             <div class="tool-category" data-category="resistors">
                 <h3>电阻类</h3>
-                <div class="tool-item" data-type="Resistor" draggable="true">
+                <button type="button" class="tool-item" data-type="Resistor" draggable="true" aria-pressed="false">
                     <svg viewBox="0 0 60 40" width="60" height="40">
                         <line x1="0" y1="20" x2="10" y2="20" stroke="#333" stroke-width="2"/>
                         <rect x="10" y="12" width="40" height="16" fill="none" stroke="#333" stroke-width="2"/>
                         <line x1="50" y1="20" x2="60" y2="20" stroke="#333" stroke-width="2"/>
                     </svg>
                     <span>定值电阻</span>
-                </div>
-                <div class="tool-item" data-type="Diode" draggable="true">
+                </button>
+                <button type="button" class="tool-item" data-type="Diode" draggable="true" aria-pressed="false">
                     <svg viewBox="0 0 60 40" width="60" height="40">
                         <line x1="0" y1="20" x2="16" y2="20" stroke="#333" stroke-width="2"/>
                         <polygon points="16,10 16,30 34,20" fill="#fff" stroke="#333" stroke-width="2"/>
@@ -135,8 +138,8 @@
                         <line x1="37" y1="20" x2="60" y2="20" stroke="#333" stroke-width="2"/>
                     </svg>
                     <span>二极管</span>
-                </div>
-                <div class="tool-item" data-type="Thermistor" draggable="true">
+                </button>
+                <button type="button" class="tool-item" data-type="Thermistor" draggable="true" aria-pressed="false">
                     <svg viewBox="0 0 60 40" width="60" height="40">
                         <line x1="0" y1="20" x2="10" y2="20" stroke="#333" stroke-width="2"/>
                         <rect x="10" y="12" width="40" height="16" fill="none" stroke="#333" stroke-width="2"/>
@@ -145,8 +148,8 @@
                         <line x1="50" y1="20" x2="60" y2="20" stroke="#333" stroke-width="2"/>
                     </svg>
                     <span>热敏电阻</span>
-                </div>
-                <div class="tool-item" data-type="Photoresistor" draggable="true">
+                </button>
+                <button type="button" class="tool-item" data-type="Photoresistor" draggable="true" aria-pressed="false">
                     <svg viewBox="0 0 60 40" width="60" height="40">
                         <line x1="0" y1="20" x2="10" y2="20" stroke="#333" stroke-width="2"/>
                         <rect x="10" y="12" width="40" height="16" fill="none" stroke="#333" stroke-width="2"/>
@@ -157,8 +160,8 @@
                         <line x1="50" y1="20" x2="60" y2="20" stroke="#333" stroke-width="2"/>
                     </svg>
                     <span>光敏电阻</span>
-                </div>
-                <div class="tool-item" data-type="LED" draggable="true">
+                </button>
+                <button type="button" class="tool-item" data-type="LED" draggable="true" aria-pressed="false">
                     <svg viewBox="0 0 60 40" width="60" height="40">
                         <line x1="0" y1="20" x2="14" y2="20" stroke="#333" stroke-width="2"/>
                         <polygon points="14,10 14,30 32,20" fill="#fff5f7" stroke="#333" stroke-width="2"/>
@@ -170,8 +173,8 @@
                         <polygon points="34,8 32,9 33,6" fill="#e91e63"/>
                     </svg>
                     <span>LED</span>
-                </div>
-                <div class="tool-item" data-type="Rheostat" draggable="true">
+                </button>
+                <button type="button" class="tool-item" data-type="Rheostat" draggable="true" aria-pressed="false">
                     <svg viewBox="0 0 60 40" width="60" height="40">
                         <line x1="0" y1="20" x2="10" y2="20" stroke="#333" stroke-width="2"/>
                         <rect x="10" y="12" width="40" height="16" fill="none" stroke="#333" stroke-width="2"/>
@@ -179,11 +182,11 @@
                         <line x1="20" y1="5" x2="40" y2="30" stroke="#333" stroke-width="2" marker-end="url(#arrowhead)"/>
                     </svg>
                     <span>滑动变阻器</span>
-                </div>
+                </button>
             </div>
             <div class="tool-category" data-category="others">
                 <h3>其他元件</h3>
-                <div class="tool-item" data-type="Bulb" draggable="true">
+                <button type="button" class="tool-item" data-type="Bulb" draggable="true" aria-pressed="false">
                     <svg viewBox="0 0 60 40" width="60" height="40">
                         <line x1="0" y1="20" x2="15" y2="20" stroke="#333" stroke-width="2"/>
                         <circle cx="30" cy="20" r="12" fill="none" stroke="#333" stroke-width="2"/>
@@ -192,8 +195,8 @@
                         <line x1="45" y1="20" x2="60" y2="20" stroke="#333" stroke-width="2"/>
                     </svg>
                     <span>灯泡</span>
-                </div>
-                <div class="tool-item" data-type="Capacitor" draggable="true">
+                </button>
+                <button type="button" class="tool-item" data-type="Capacitor" draggable="true" aria-pressed="false">
                     <svg viewBox="0 0 60 40" width="60" height="40">
                         <line x1="0" y1="20" x2="25" y2="20" stroke="#333" stroke-width="2"/>
                         <line x1="25" y1="8" x2="25" y2="32" stroke="#333" stroke-width="2"/>
@@ -201,16 +204,16 @@
                         <line x1="35" y1="20" x2="60" y2="20" stroke="#333" stroke-width="2"/>
                     </svg>
                     <span>电容</span>
-                </div>
-                <div class="tool-item" data-type="Inductor" draggable="true">
+                </button>
+                <button type="button" class="tool-item" data-type="Inductor" draggable="true" aria-pressed="false">
                     <svg viewBox="0 0 60 40" width="60" height="40">
                         <line x1="0" y1="20" x2="10" y2="20" stroke="#333" stroke-width="2"/>
                         <path d="M10 20 a5 5 0 0 1 10 0 a5 5 0 0 1 10 0 a5 5 0 0 1 10 0 a5 5 0 0 1 10 0" fill="none" stroke="#333" stroke-width="2"/>
                         <line x1="50" y1="20" x2="60" y2="20" stroke="#333" stroke-width="2"/>
                     </svg>
                     <span>电感</span>
-                </div>
-                <div class="tool-item" data-type="ParallelPlateCapacitor" draggable="true">
+                </button>
+                <button type="button" class="tool-item" data-type="ParallelPlateCapacitor" draggable="true" aria-pressed="false">
                     <svg viewBox="0 0 60 40" width="60" height="40">
                         <line x1="0" y1="20" x2="23" y2="20" stroke="#333" stroke-width="2"/>
                         <rect x="23" y="8" width="4" height="24" fill="none" stroke="#333" stroke-width="2"/>
@@ -220,8 +223,8 @@
                         <line x1="40" y1="7" x2="45" y2="9" stroke="#333" stroke-width="1.5"/>
                     </svg>
                     <span>平行板电容</span>
-                </div>
-                <div class="tool-item" data-type="Motor" draggable="true">
+                </button>
+                <button type="button" class="tool-item" data-type="Motor" draggable="true" aria-pressed="false">
                     <svg viewBox="0 0 60 40" width="60" height="40">
                         <line x1="0" y1="20" x2="12" y2="20" stroke="#333" stroke-width="2"/>
                         <circle cx="30" cy="20" r="15" fill="none" stroke="#333" stroke-width="2"/>
@@ -229,8 +232,8 @@
                         <line x1="48" y1="20" x2="60" y2="20" stroke="#333" stroke-width="2"/>
                     </svg>
                     <span>电动机</span>
-                </div>
-                <div class="tool-item" data-type="Switch" draggable="true">
+                </button>
+                <button type="button" class="tool-item" data-type="Switch" draggable="true" aria-pressed="false">
                     <svg viewBox="0 0 60 40" width="60" height="40">
                         <line x1="0" y1="20" x2="18" y2="20" stroke="#333" stroke-width="2"/>
                         <circle cx="20" cy="20" r="3" fill="#333"/>
@@ -239,8 +242,8 @@
                         <line x1="42" y1="20" x2="60" y2="20" stroke="#333" stroke-width="2"/>
                     </svg>
                     <span>开关</span>
-                </div>
-                <div class="tool-item" data-type="SPDTSwitch" draggable="true">
+                </button>
+                <button type="button" class="tool-item" data-type="SPDTSwitch" draggable="true" aria-pressed="false">
                     <svg viewBox="0 0 60 40" width="60" height="40">
                         <line x1="0" y1="20" x2="18" y2="20" stroke="#333" stroke-width="2"/>
                         <circle cx="20" cy="20" r="2.8" fill="#333"/>
@@ -251,8 +254,8 @@
                         <line x1="42" y1="28" x2="60" y2="28" stroke="#333" stroke-width="2"/>
                     </svg>
                     <span>单刀双掷开关</span>
-                </div>
-                <div class="tool-item" data-type="Relay" draggable="true">
+                </button>
+                <button type="button" class="tool-item" data-type="Relay" draggable="true" aria-pressed="false">
                     <svg viewBox="0 0 60 40" width="60" height="40">
                         <line x1="0" y1="13" x2="10" y2="13" stroke="#333" stroke-width="2"/>
                         <path d="M10 13 a3 3 0 0 1 6 0 a3 3 0 0 1 6 0 a3 3 0 0 1 6 0 a3 3 0 0 1 6 0" fill="none" stroke="#333" stroke-width="2"/>
@@ -263,8 +266,8 @@
                         <line x1="30" y1="16" x2="30" y2="23" stroke="#333" stroke-width="1.2"/>
                     </svg>
                     <span>继电器</span>
-                </div>
-                <div class="tool-item" data-type="Fuse" draggable="true">
+                </button>
+                <button type="button" class="tool-item" data-type="Fuse" draggable="true" aria-pressed="false">
                     <svg viewBox="0 0 60 40" width="60" height="40">
                         <line x1="0" y1="20" x2="18" y2="20" stroke="#333" stroke-width="2"/>
                         <rect x="18" y="13" width="24" height="14" rx="6" ry="6" fill="#fffde7" stroke="#8d6e63" stroke-width="2"/>
@@ -272,19 +275,19 @@
                         <line x1="42" y1="20" x2="60" y2="20" stroke="#333" stroke-width="2"/>
                     </svg>
                     <span>保险丝</span>
-                </div>
-                <div class="tool-item" data-type="BlackBox" draggable="true">
+                </button>
+                <button type="button" class="tool-item" data-type="BlackBox" draggable="true" aria-pressed="false">
                     <svg viewBox="0 0 60 40" width="60" height="40">
                         <rect x="14" y="9" width="32" height="22" rx="6" ry="6" fill="none" stroke="#333" stroke-width="2"/>
                         <circle cx="14" cy="20" r="3" fill="#2196F3" stroke="#1565C0" stroke-width="1"/>
                         <circle cx="46" cy="20" r="3" fill="#2196F3" stroke="#1565C0" stroke-width="1"/>
                     </svg>
                     <span>黑箱</span>
-                </div>
+                </button>
             </div>
             <div class="tool-category" data-category="meters">
                 <h3>测量仪表</h3>
-                <div class="tool-item" data-type="Ammeter" draggable="true">
+                <button type="button" class="tool-item" data-type="Ammeter" draggable="true" aria-pressed="false">
                     <svg viewBox="0 0 60 40" width="60" height="40">
                         <line x1="0" y1="20" x2="12" y2="20" stroke="#333" stroke-width="2"/>
                         <circle cx="30" cy="20" r="14" fill="#fff" stroke="#c00" stroke-width="2"/>
@@ -292,8 +295,8 @@
                         <line x1="48" y1="20" x2="60" y2="20" stroke="#333" stroke-width="2"/>
                     </svg>
                     <span>电流表</span>
-                </div>
-                <div class="tool-item" data-type="Voltmeter" draggable="true">
+                </button>
+                <button type="button" class="tool-item" data-type="Voltmeter" draggable="true" aria-pressed="false">
                     <svg viewBox="0 0 60 40" width="60" height="40">
                         <line x1="0" y1="20" x2="12" y2="20" stroke="#333" stroke-width="2"/>
                         <circle cx="30" cy="20" r="14" fill="#fff" stroke="#00c" stroke-width="2"/>
@@ -301,18 +304,18 @@
                         <line x1="48" y1="20" x2="60" y2="20" stroke="#333" stroke-width="2"/>
                     </svg>
                     <span>电压表</span>
-                </div>
+                </button>
             </div>
             <div class="tool-category" data-category="wiring">
                 <h3>连接</h3>
-                <div class="tool-item" data-type="Wire" draggable="true">
+                <button type="button" class="tool-item" data-type="Wire" draggable="true" aria-pressed="false">
                     <svg viewBox="0 0 60 40" width="60" height="40">
                         <line x1="8" y1="20" x2="52" y2="20" stroke="#333" stroke-width="3" stroke-linecap="round"/>
                         <circle cx="8" cy="20" r="3" fill="#2196F3" stroke="#1565C0" stroke-width="1"/>
                         <circle cx="52" cy="20" r="3" fill="#2196F3" stroke="#1565C0" stroke-width="1"/>
                     </svg>
                     <span>导线</span>
-                </div>
+                </button>
             </div>
         </aside>
 

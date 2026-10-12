@@ -24,7 +24,10 @@ const CORE_FILE_BUDGETS = [
     { file: 'src/ui/charts/ChartWindowController.js', hardMaxLines: 450, targetMaxLines: 360 },
     { file: 'src/app/interaction/InteractionOrchestrator.js', hardMaxLines: 300, targetMaxLines: 240 },
     { file: 'src/core/simulation/MNASolver.js', hardMaxLines: 650, targetMaxLines: 550 },
-    { file: 'src/app/AppRuntimeV2.js', hardMaxLines: 575, targetMaxLines: 500 }
+    { file: 'src/app/AppRuntimeV2.js', hardMaxLines: 575, targetMaxLines: 500 },
+    { file: 'src/ui/ExerciseBoard.js', hardMaxLines: 1100, targetMaxLines: 800 },
+    { file: 'src/ui/AIPanel.js', hardMaxLines: 900, targetMaxLines: 700 },
+    { file: 'src/ui/ai/ChatController.js', hardMaxLines: 900, targetMaxLines: 700 }
 ];
 
 function formatKiB(bytes) {

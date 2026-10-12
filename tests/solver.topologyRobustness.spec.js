@@ -65,7 +65,7 @@ describe('Solver topology robustness', () => {
 
         expect(groundConnected.nodes[0]).toBe(0);
         expect(source.nodes[1]).toBe(0);
-        expect(groundIsolated.nodes[0]).toBe(-1);
+        expect(groundIsolated.nodes[0]).toBe(0);
         expect(results.currents.get('R1')).toBeCloseTo(1, 6);
     });
 

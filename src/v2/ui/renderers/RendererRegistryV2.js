@@ -1,3 +1,7 @@
+/**
+ * @internal experimental
+ * Production classroom renderer is src/components/render/RendererRegistry.js.
+ */
 import {
     renderAmmeterV2,
     renderBulbV2,

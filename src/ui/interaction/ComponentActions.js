@@ -47,6 +47,11 @@ function createFailureResult(
 
 export function addComponent(type, x, y) {
     logDebug(this, 'Adding component:', type, 'at', x, y);
+    if (this.app?.getRuntimeCapabilityFlags?.().allowsCircuitMutation === false) {
+        const message = '当前模式不允许修改电路';
+        this.updateStatus(message);
+        return createFailureResult('component.add_blocked', null, message, undefined, true, ErrorCodes.APP_ERR_ACTION_FAILED);
+    }
     let createdComponent = null;
     try {
         this.runWithHistory(`添加${ComponentNames[type] || type}`, () => {
@@ -83,7 +88,7 @@ export function deleteComponent(id) {
             this.circuit.removeComponent(id);
             this.renderer.removeComponent(id);
 
-            // Model C: wires are independent segments; deleting a component does not delete wires.
+            // Bound wires (aRef/bRef) are removed with the component; unreferenced segments stay.
             this.renderer.renderWires();
             this.clearSelection();
             this.app.chartWorkspace?.refreshComponentOptions();
@@ -178,6 +183,7 @@ export function toggleSwitch(id) {
             } else {
                 comp.position = comp.position === 'b' ? 'a' : 'b';
             }
+            this.circuit.markSolverCircuitDirty();
             this.renderer.refreshComponent(comp);
             this.renderer.setSelected(id, true);
             this.selectComponent(id);

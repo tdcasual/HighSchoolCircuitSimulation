@@ -16,6 +16,10 @@ import {
     safeInvoke,
     safeSetAttribute
 } from '../utils/RuntimeSafety.js';
+import {
+    isSafeLinkHref as isSafeMarkdownLinkHref,
+    sanitizeRenderedMarkdown as sanitizeRenderedMarkdownHtml
+} from '../utils/markdown/sanitizeRenderedMarkdown.js';
 
 export class AIPanel {
     constructor(app) {
@@ -229,81 +233,13 @@ export class AIPanel {
     }
 
     isSafeLinkHref(href) {
-        const text = String(href || '').trim();
-        if (!text) return false;
-        if (text.startsWith('#') || text.startsWith('/')) return true;
-        try {
-            const parsed = new URL(text, 'https://example.com');
-            const protocol = String(parsed.protocol || '').toLowerCase();
-            return protocol === 'http:' || protocol === 'https:' || protocol === 'mailto:' || protocol === 'tel:';
-        } catch (_) {
-            return false;
-        }
+        return isSafeMarkdownLinkHref(href);
     }
 
     sanitizeRenderedMarkdown(html) {
-        if (!html) return '';
-        if (typeof document === 'undefined') {
-            return this.escapeHtml(String(html));
-        }
-        const allowedTags = new Set([
-            'p', 'br', 'strong', 'em', 'code', 'pre', 'blockquote', 'a',
-            'ul', 'ol', 'li', 'hr', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
-            'table', 'thead', 'tbody', 'tr', 'th', 'td', 'del', 'sup', 'sub'
-        ]);
-        const template = document.createElement('template');
-        template.innerHTML = String(html);
-
-        const sanitizeElement = (element) => {
-            const tag = String(element.tagName || '').toLowerCase();
-            if (!allowedTags.has(tag)) {
-                const textNode = document.createTextNode(element.textContent || '');
-                element.replaceWith(textNode);
-                return false;
-            }
-            const attrs = Array.from(element.attributes || []);
-            attrs.forEach((attr) => {
-                const attrName = String(attr.name || '').toLowerCase();
-                if (attrName.startsWith('on') || attrName === 'style') {
-                    element.removeAttribute(attr.name);
-                    return;
-                }
-                if (tag === 'a' && (attrName === 'href' || attrName === 'title')) return;
-                if (tag === 'code' && attrName === 'class') {
-                    const classValue = String(attr.value || '').trim();
-                    if (/^language-[a-z0-9_-]+$/i.test(classValue)) return;
-                }
-                element.removeAttribute(attr.name);
-            });
-            if (tag === 'a') {
-                const href = element.getAttribute('href');
-                if (!this.isSafeLinkHref(href)) {
-                    element.removeAttribute('href');
-                }
-                safeSetAttribute(element, 'target', '_blank');
-                safeSetAttribute(element, 'rel', 'noopener noreferrer');
-            }
-            return true;
-        };
-
-        const walk = (node) => {
-            let child = node.firstChild;
-            while (child) {
-                const next = child.nextSibling;
-                if (child.nodeType === 1) {
-                    const shouldTraverse = sanitizeElement(child);
-                    if (shouldTraverse) {
-                        walk(child);
-                    }
-                } else if (child.nodeType === 8) {
-                    child.remove();
-                }
-                child = next;
-            }
-        };
-
-        walk(template.content);
-        return template.innerHTML;
+        return sanitizeRenderedMarkdownHtml(html, {
+            documentRef: typeof document !== 'undefined' ? document : undefined
+        });
     }
 
     bindMathJaxLoadListener() {

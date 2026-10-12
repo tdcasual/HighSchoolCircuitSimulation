@@ -138,7 +138,10 @@ describe('release docs integrity', () => {
         );
 
         expect(readme).toContain('请以当前 CI 运行结果为准');
+        expect(readme).toContain('src/core/scenarios/ClassroomScenarioPack.js');
+        expect(readme).not.toContain(['src', 'engine', 'scenarios', 'ClassroomScenarioPack.js'].join('/'));
         expect(readme).not.toContain('质量门禁：`check:full` + P0/CircuitJS/AI 三组 baseline 回归通过');
+        expect(readme).not.toContain('旧观察存档自动归一化');
         expect(legacyReport).not.toContain('npm run check:legacy-prune-readiness');
     });
 });

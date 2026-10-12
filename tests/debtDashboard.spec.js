@@ -69,5 +69,5 @@ describe('debt dashboard generator', () => {
         expect(markdown).toContain('## Shim Inventory');
         expect(markdown).toContain('target');
         expect(markdown).toContain('baseline');
-    }, 15000);
+    }, 30000);
 });

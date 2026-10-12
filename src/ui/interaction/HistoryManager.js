@@ -9,25 +9,41 @@ function normalizeIdentifier(value) {
     return normalized === '' ? null : normalized;
 }
 
+function sortById(a, b) {
+    return String(a?.id).localeCompare(String(b?.id));
+}
+
 export class HistoryManager {
     constructor(interaction, options = {}) {
         this.interaction = interaction;
         this.undoStack = [];
         this.redoStack = [];
         this.maxEntries = Number.isFinite(options.maxEntries) ? Math.max(1, Math.floor(options.maxEntries)) : 100;
-        this.transaction = null; // { label, beforeState, beforeKey, selectionBefore }
+        this.transaction = null;
         this.isRestoring = false;
     }
 
     captureState() {
-        const json = safeInvokeMethod(this.interaction?.circuit, 'toJSON') ?? {};
+        const toJSON = this.interaction?.circuit?.toJSON;
+        if (typeof toJSON !== 'function') {
+            throw new TypeError('circuit.toJSON is required');
+        }
+        const json = toJSON.call(this.interaction.circuit) || {};
         const components = Array.isArray(json.components) ? [...json.components] : [];
         const wires = Array.isArray(json.wires) ? [...json.wires] : [];
         const probes = Array.isArray(json.probes) ? [...json.probes] : [];
-        components.sort((a, b) => String(a.id).localeCompare(String(b.id)));
-        wires.sort((a, b) => String(a.id).localeCompare(String(b.id)));
-        probes.sort((a, b) => String(a.id).localeCompare(String(b.id)));
-        return { components, wires, probes };
+        components.sort(sortById);
+        wires.sort(sortById);
+        probes.sort(sortById);
+        return {
+            meta: {
+                version: 3,
+                name: json.meta?.name
+            },
+            components,
+            wires,
+            probes
+        };
     }
 
     stateKey(state) {
@@ -118,52 +134,71 @@ export class HistoryManager {
 
     applyState(state, selection) {
         if (!state) return;
+        const fromJSON = this.interaction?.circuit?.fromJSON;
+        if (typeof fromJSON !== 'function') {
+            throw new TypeError('circuit.fromJSON is required');
+        }
+        const payload = {
+            meta: {
+                version: 3,
+                name: state.meta?.name
+            },
+            components: state.components || [],
+            wires: state.wires || [],
+            probes: state.probes || []
+        };
+        fromJSON.call(this.interaction.circuit, payload);
+
         const app = this.interaction?.app;
-
-        // Editing during simulation is error-prone; keep semantics simple.
-        if (app?.circuit?.isRunning) {
-            safeInvokeMethod(app, 'stopSimulation');
+        if (typeof app?.stopSimulation === 'function') {
+            app.stopSimulation();
         }
 
-        this.isRestoring = true;
-        try {
-            safeInvokeMethod(this.interaction?.circuit, 'fromJSON', {
-                components: state.components || [],
-                wires: state.wires || [],
-                probes: state.probes || []
-            });
+        const allIds = [
+            ...(state.components || []).map((component) => component.id),
+            ...(state.wires || []).map((wire) => wire.id)
+        ]
+            .map((id) => normalizeIdentifier(id))
+            .filter((id) => typeof id === 'string');
+        updateEntityIdCounterFromExisting(allIds);
 
-            const allIds = [
-                ...(state.components || []).map((component) => component.id),
-                ...(state.wires || []).map((wire) => wire.id)
-            ]
-                .map((id) => normalizeIdentifier(id))
-                .filter((id) => typeof id === 'string');
-            updateEntityIdCounterFromExisting(allIds);
-
-            safeInvokeMethod(this.interaction?.renderer, 'render');
-            safeInvokeMethod(app?.chartWorkspace, 'refreshComponentOptions');
-            safeInvokeMethod(app?.chartWorkspace, 'refreshDialGauges');
-
-            this.restoreSelectionSnapshot(selection);
-        } finally {
-            this.isRestoring = false;
-        }
+        this.interaction?.renderer?.render?.();
+        app?.chartWorkspace?.refreshComponentOptions?.();
+        app?.chartWorkspace?.refreshDialGauges?.();
+        this.restoreSelectionSnapshot(selection);
     }
 
     undo() {
         const entry = this.undoStack.pop();
         if (!entry) return;
-        this.redoStack.push(entry);
-        this.applyState(entry.before, entry.selectionBefore);
-        safeInvokeMethod(this.interaction, 'updateStatus', entry.label ? `撤销：${entry.label}` : '已撤销');
+        this.isRestoring = true;
+        try {
+            this.applyState(entry.before, entry.selectionBefore);
+            this.redoStack.push(entry);
+            this.interaction?.updateStatus?.(entry.label ? `撤销：${entry.label}` : '已撤销');
+        } catch (error) {
+            this.undoStack.push(entry);
+            this.interaction?.updateStatus?.(`撤销失败：${error.message}`);
+            this.interaction?.logger?.error?.('undo failed', error);
+        } finally {
+            this.isRestoring = false;
+        }
     }
 
     redo() {
         const entry = this.redoStack.pop();
         if (!entry) return;
-        this.undoStack.push(entry);
-        this.applyState(entry.after, entry.selectionAfter);
-        safeInvokeMethod(this.interaction, 'updateStatus', entry.label ? `重做：${entry.label}` : '已重做');
+        this.isRestoring = true;
+        try {
+            this.applyState(entry.after, entry.selectionAfter);
+            this.undoStack.push(entry);
+            this.interaction?.updateStatus?.(entry.label ? `重做：${entry.label}` : '已重做');
+        } catch (error) {
+            this.redoStack.push(entry);
+            this.interaction?.updateStatus?.(`重做失败：${error.message}`);
+            this.interaction?.logger?.error?.('redo failed', error);
+        } finally {
+            this.isRestoring = false;
+        }
     }
 }

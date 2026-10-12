@@ -45,7 +45,7 @@
 **作用**：提供恒定的电动势，模拟电池或电源供应。
 
 **属性**：
-- `voltage`: 电动势 (V)，默认 12V
+- `voltage`: 电动势 (V)，默认 6V
 - `internalResistance`: 内阻 (Ω)，默认 0.5Ω
 
 **行为/方程**：
@@ -145,7 +145,7 @@
 - `loadTorque`: 负载转矩 (N·m)，默认 0.01
 
 **行为/方程**：
-- 电阻印记 + 反电动势电压源
+- 串联电枢：V = E + I·Ra（额外未知量取电流）
 - 反电动势 E = k × ω（ω通过积分计算）
 - 转矩 T = k × I - T_load
 - 角加速度 α = T / J
@@ -164,7 +164,7 @@
 - `closed`: 开关状态，true=闭合，false=断开，默认 false
 
 **行为/方程**：
-- 闭合：极小电阻 (1e-9Ω)
+- 闭合：串联 Rε=1e-9Ω 额外未知量取电流
 - 断开：极大电阻 (1e12Ω)
 
 **终端**：2个
@@ -228,7 +228,7 @@
 
 ## 示例
 
-参考 `test_simple_circuit.json`：
+参考 `tests/circuit.io.spec.js` 的 3V / 8Ω 串联夹具：
 - PowerSource提供3V电源（内阻2Ω）
 - Resistor提供8Ω负载
 - 串联连接形成简单电路
@@ -240,7 +240,7 @@
 1. 在 `ComponentDefaults` 中定义默认属性
 2. 在 `ComponentNames` 中添加显示名称
 3. 在 `SVGRenderer` 中实现渲染方法
-4. 在 `Solver.js` 的 `stampComponent` 中添加印记逻辑
+4. 在 `ComponentRegistry` 中添加印记逻辑
 5. 更新 `Circuit.js` 的节点重建逻辑（如三端器件）
 
 此文档为开发者和教育者提供代理行为的完整参考。

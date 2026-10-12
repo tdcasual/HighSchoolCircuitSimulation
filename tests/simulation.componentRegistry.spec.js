@@ -100,8 +100,22 @@ describe('ComponentRegistry', () => {
         switchHandler.stamp({ closed: false }, context, { i1: 0, i2: 1 });
         expect(calls[0]).toEqual({ i1: 0, i2: 1, r: 1e-9 });
         expect(calls[1]).toEqual({ i1: 0, i2: 1, r: 1e12 });
-        expect(switchHandler.current({ closed: true }, context, { n1: 1, n2: 2 })).toBeCloseTo(4e9, 0);
+        expect(switchHandler.current({ closed: true, vsIndex: 0 }, {
+            ...context,
+            nodeCount: 3,
+            solveVector: [0, 0, 0.6]
+        }, { n1: 1, n2: 2, nodeCount: 3 })).toBeCloseTo(0.6, 9);
         expect(switchHandler.current({ closed: false }, context, { n1: 1, n2: 2 })).toBe(0);
+
+        const fallbackResistorCalls = [];
+        const seriesCalls = [];
+        const fallbackContext = {
+            stampSeriesVoltageSource: (...args) => seriesCalls.push(args),
+            stampResistor: (i1, i2, r) => fallbackResistorCalls.push({ i1, i2, r })
+        };
+        switchHandler.stamp({ closed: true }, fallbackContext, { i1: 0, i2: 1, nodeCount: 2 });
+        expect(seriesCalls).toEqual([]);
+        expect(fallbackResistorCalls).toEqual([{ i1: 0, i2: 1, r: 1e-9 }]);
 
         const fuseHandler = DefaultComponentRegistry.get('Fuse');
         fuseHandler.stamp({ blown: false, coldResistance: 0.05 }, context, { i1: 2, i2: 3 });
@@ -134,10 +148,18 @@ describe('ComponentRegistry', () => {
             { i1: 0, i2: 1, r: 2 },
             { i1: 0, i2: 2, r: 10 }
         ]);
-        expect(handler.current(comp, context, nodes)).toBeCloseTo(2, 9);
+        expect(handler.current({ ...comp, vsIndex: 0 }, {
+            ...context,
+            nodeCount: 4,
+            solveVector: [0, 0, 0, 2]
+        }, { ...nodes, nodeCount: 4 })).toBeCloseTo(2, 9);
 
         comp.position = 'b';
-        expect(handler.current(comp, context, nodes)).toBeCloseTo(4, 9);
+        expect(handler.current({ ...comp, vsIndex: 0 }, {
+            ...context,
+            nodeCount: 4,
+            solveVector: [0, 0, 0, 4]
+        }, { ...nodes, nodeCount: 4 })).toBeCloseTo(4, 9);
     });
 
     it('covers day9 relay/rheostat target types with stamp/current handlers', () => {
@@ -262,7 +284,7 @@ describe('ComponentRegistry', () => {
     });
 
     it('uses motor registry stamp/current behaviors equivalent to solver and postprocessor logic', () => {
-        const calls = [];
+        const series = [];
         const handler = DefaultComponentRegistry.get('Motor');
         const comp = {
             type: 'Motor',
@@ -272,30 +294,61 @@ describe('ComponentRegistry', () => {
         };
         const nodes = { i1: 0, i2: 1, nodeCount: 4, n1: 1, n2: 2 };
         const context = {
-            stampResistor: (i1, i2, r) => calls.push({ kind: 'R', i1, i2, r }),
-            stampVoltageSource: (i1, i2, voltage, vsIndex, nodeCount) => calls.push({
-                kind: 'V',
-                i1,
-                i2,
-                voltage,
-                vsIndex,
-                nodeCount
-            }),
+            stampSeriesVoltageSource: (i1, i2, voltage, r, vsIndex, nodeCount) => {
+                series.push({
+                    kind: 'seriesV',
+                    i1,
+                    i2,
+                    voltage,
+                    r,
+                    vsIndex,
+                    nodeCount
+                });
+            },
+            stampResistor: () => {
+                throw new Error('valid vsIndex must not fall back to resistor-only stamp');
+            },
             solveVector: [0, 0, 0, 0, 0.3]
         };
 
         handler.stamp(comp, context, nodes);
-        expect(calls[0]).toEqual({ kind: 'R', i1: 0, i2: 1, r: 5 });
-        expect(calls[1]).toEqual({
-            kind: 'V',
+        expect(series[0]).toEqual({
+            kind: 'seriesV',
             i1: 0,
             i2: 1,
-            voltage: -2.5,
+            voltage: 2.5,
+            r: 5,
             vsIndex: 1,
             nodeCount: 4
         });
 
-        expect(handler.current(comp, { ...context, nodeCount: 4 }, nodes)).toBeCloseTo(-0.3, 12);
+        expect(handler.current(comp, { ...context, nodeCount: 4 }, nodes)).toBeCloseTo(0.3, 12);
+    });
+
+    it('falls back to armature resistance when motor vsIndex is invalid', () => {
+        const calls = [];
+        const handler = DefaultComponentRegistry.get('Motor');
+        const nodes = { i1: 0, i2: 1, nodeCount: 4, n1: 1, n2: 2 };
+        handler.stamp({
+            type: 'Motor',
+            resistance: 5,
+            backEmf: 2.5,
+            vsIndex: -1
+        }, {
+            stampSeriesVoltageSource: () => {
+                throw new Error('invalid vsIndex must not stamp a series source');
+            },
+            stampResistor: (i1, i2, r) => calls.push({ i1, i2, r })
+        }, nodes);
+
+        expect(calls).toEqual([{ i1: 0, i2: 1, r: 5 }]);
+        expect(handler.current({
+            type: 'Motor',
+            resistance: 5,
+            vsIndex: -1
+        }, {
+            voltage: (nodeIdx) => ({ 1: 6, 2: 0 }[nodeIdx] || 0)
+        }, nodes)).toBeCloseTo(1.2, 6);
     });
 
     it('covers day12 special target types with stamp/current handlers', () => {

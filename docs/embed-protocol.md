@@ -55,6 +55,21 @@ Error response:
 }
 ```
 
+Leaving readonly without the `unfreeze` capability:
+
+```json
+{
+  "channel": "HSCS_EMBED_V1",
+  "apiVersion": 1,
+  "type": "error",
+  "id": "req-1",
+  "error": {
+    "code": "CAPABILITY_DENIED",
+    "message": "unfreeze capability is required"
+  }
+}
+```
+
 ### Viewer -> Host (event)
 
 ```json
@@ -86,6 +101,7 @@ Error response:
 
 ## Security Recommendations
 
-- Host should pass `targetOrigin` (parent origin) and avoid `*`.
-- Viewer should configure `allowedOrigins` when possible.
+- Host SDK defaults `parentOrigin` to `window.location.origin` and never `*`.
+- Empty allowlists or `*` disable the bridge: no `message` listener and no `postMessage`.
+- Leaving readonly requires `?capabilities=unfreeze`. Failure code is `CAPABILITY_DENIED`.
 - Host should reject messages from origins other than embed runtime origin.

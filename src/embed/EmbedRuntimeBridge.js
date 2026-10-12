@@ -5,9 +5,11 @@ import {
     EMBED_MODE_CLASSROOM,
     EMBED_MODE_EDIT,
     EMBED_MODE_READONLY,
+    isOriginAllowed,
     normalizeClassroomLevel,
     normalizeFeatureFlags,
-    normalizeMode
+    normalizeMode,
+    originsAreUsable
 } from './EmbedRuntimeOptions.js';
 import {
     handleEmbedRuntimeRequest,
@@ -33,14 +35,18 @@ export class EmbedRuntimeBridge {
         this.parentWindow = this.window?.parent || null;
         this.logger = app?.logger?.child?.('embedBridge') || createRuntimeLogger({ scope: 'embedBridge' });
 
-        this.enabled = !!options.enabled;
+        this.capabilities = { unfreeze: !!options.capabilities?.unfreeze };
         this.mode = normalizeMode(options.mode);
         this.readOnly = !!options.readOnly;
         this.classroomLevel = normalizeClassroomLevel(options.classroomLevel, this.mode);
-        this.targetOrigin = options.targetOrigin || '*';
+        this.targetOrigin = options.targetOrigin && options.targetOrigin !== '*' ? options.targetOrigin : '';
         this.allowedParentOrigins = Array.isArray(options.allowedParentOrigins)
-            ? options.allowedParentOrigins
+            ? [...options.allowedParentOrigins]
             : [];
+        if (this.allowedParentOrigins.length === 0 && this.targetOrigin) {
+            this.allowedParentOrigins.push(this.targetOrigin);
+        }
+        this.enabled = !!options.enabled && originsAreUsable(this.targetOrigin, this.allowedParentOrigins);
         this.featureFlags = normalizeFeatureFlags(this.mode, options.features);
         this.parentOrigin = null;
         this.boundMessage = (event) => this.onWindowMessage(event);
@@ -82,11 +88,7 @@ export class EmbedRuntimeBridge {
     }
 
     isOriginAllowed(origin) {
-        if (!origin || origin === 'null') return false;
-        if (!Array.isArray(this.allowedParentOrigins) || this.allowedParentOrigins.length === 0) {
-            return true;
-        }
-        return this.allowedParentOrigins.includes(origin);
+        return isOriginAllowed(origin, this.allowedParentOrigins);
     }
 
     applyRuntimeOptions() {
@@ -157,12 +159,14 @@ export class EmbedRuntimeBridge {
             method,
             payload
         };
-        this.postEnvelope(envelope, this.parentOrigin || this.targetOrigin || '*');
+        this.postEnvelope(envelope, this.parentOrigin || this.targetOrigin);
     }
 
-    postEnvelope(envelope, targetOrigin = '*') {
+    postEnvelope(envelope, targetOrigin) {
+        const dest = targetOrigin || this.parentOrigin || this.targetOrigin;
+        if (!dest || dest === '*') return;
         if (!this.parentWindow || typeof this.parentWindow.postMessage !== 'function') return;
-        this.parentWindow.postMessage(envelope, targetOrigin || '*');
+        this.parentWindow.postMessage(envelope, dest);
     }
 
     postResponse(method, id, payload, origin) {

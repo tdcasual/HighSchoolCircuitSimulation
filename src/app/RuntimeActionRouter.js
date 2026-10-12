@@ -2,7 +2,8 @@ import { resetEntityIdCounter, updateEntityIdCounterFromExisting } from '../util
 import { buildRuntimeDiagnostics } from '../core/simulation/RuntimeDiagnostics.js';
 import { RuntimeStorageEntries } from '../utils/storage/StorageRegistry.js';
 import { safeRemoveStorageItem } from '../utils/storage/SafeStorage.js';
-import { safeInvokeMethod } from './AppSerialization.js';
+import { parseAppDocument, restoreAppUi } from './AppDocument.js';
+import { isActiveSourceType } from '../core/simulation/SourceTypes.js';
 
 export class RuntimeActionRouter {
     constructor(app, options = {}) {
@@ -22,7 +23,7 @@ export class RuntimeActionRouter {
 
         let hasPower = false;
         for (const comp of this.app?.circuit?.components?.values?.() || []) {
-            if (comp?.type === 'PowerSource') {
+            if (isActiveSourceType(comp?.type)) {
                 hasPower = true;
                 break;
             }
@@ -47,13 +48,21 @@ export class RuntimeActionRouter {
             ? topologyDiagnostics.summary
             : '';
 
-        this.app?.circuit?.startSimulation?.();
+        if (this.app?.simulationDriver && typeof this.app.simulationDriver.start === 'function') {
+            this.app.simulationDriver.start();
+        } else {
+            this.app?.circuit?.startSimulation?.();
+        }
         this.uiBridge?.showSimulationStarted?.(topologyWarning);
         return true;
     }
 
     stopSimulation() {
-        this.app?.circuit?.stopSimulation?.();
+        if (this.app?.simulationDriver && typeof this.app.simulationDriver.stop === 'function') {
+            this.app.simulationDriver.stop();
+        } else {
+            this.app?.circuit?.stopSimulation?.();
+        }
         this.uiBridge?.showSimulationStopped?.();
         return true;
     }
@@ -77,18 +86,24 @@ export class RuntimeActionRouter {
             statusText = '',
             silent = false
         } = options;
-        if (!data || !Array.isArray(data.components) || !Array.isArray(data.wires)) {
-            throw new Error('无效的电路 JSON：缺少 components/wires');
+        const parsed = parseAppDocument(data);
+        this.app?.circuit?.fromJSON?.(parsed.circuit);
+        if (parsed.recoveredLegacyUi) {
+            this.app?.logger?.warn?.('recoveredLegacyUi: peeled exerciseBoard/chartWorkspace from circuit meta');
         }
-
-        this.app?.beginCircuitStorageOwnership?.(options.storageSource || 'runtime-load');
         this.stopSimulationImpl();
-        this.app?.circuit?.fromJSON?.(data);
-        safeInvokeMethod(this.app?.exerciseBoard, 'fromJSON', data.meta?.exerciseBoard);
+        this.app?.beginCircuitStorageOwnership?.(options.storageSource || 'runtime-load');
+        restoreAppUi({
+            exerciseBoard: this.app?.exerciseBoard,
+            chartWorkspace: this.app?.chartWorkspace,
+            ui: parsed.ui
+        });
 
+        const components = parsed.circuit.components;
+        const wires = parsed.circuit.wires;
         const allIds = [
-            ...data.components.map((component) => component.id),
-            ...data.wires.map((wire) => wire.id)
+            ...components.map((component) => component.id),
+            ...wires.map((wire) => wire.id)
         ];
         this.updateIdCounterFromExistingImpl(allIds);
 
@@ -96,12 +111,12 @@ export class RuntimeActionRouter {
         this.app?.interaction?.clearSelection?.();
         this.app?.chartWorkspace?.refreshComponentOptions?.();
         this.app?.chartWorkspace?.refreshDialGauges?.();
-        safeInvokeMethod(this.app?.chartWorkspace, 'fromJSON', data.meta?.chartWorkspace);
-        this.uiBridge?.showCircuitLoaded?.({ data, statusText, silent });
+        const resolvedStatus = statusText || `已导入电路: ${parsed.circuit.meta?.name || '未命名'}`;
+        this.uiBridge?.showCircuitLoaded?.({ data: parsed.circuit, statusText: resolvedStatus, silent });
 
         return {
-            componentCount: data.components.length,
-            wireCount: data.wires.length
+            componentCount: components.length,
+            wireCount: wires.length
         };
     }
 
@@ -127,8 +142,9 @@ export class RuntimeActionRouter {
         reader.onload = (event) => {
             try {
                 const data = JSON.parse(event.target.result);
+                const parsed = parseAppDocument(data);
                 this.loadCircuitData(data, {
-                    statusText: `已导入电路: ${data.meta?.name || '未命名'}`,
+                    statusText: `已导入电路: ${parsed.circuit.meta?.name || '未命名'}`,
                     storageSource: 'manual-import'
                 });
             } catch (err) {

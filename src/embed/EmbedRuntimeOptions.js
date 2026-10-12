@@ -25,6 +25,19 @@ function parseBooleanFlag(rawValue, fallbackValue) {
     return fallbackValue;
 }
 
+export function isOriginAllowed(origin, allowedParentOrigins) {
+    if (!origin || origin === 'null') return false;
+    if (!Array.isArray(allowedParentOrigins) || allowedParentOrigins.length === 0) return false;
+    if (allowedParentOrigins.includes('*')) return false;
+    return allowedParentOrigins.includes(origin);
+}
+
+export function originsAreUsable(targetOrigin, allowedParentOrigins) {
+    const list = Array.isArray(allowedParentOrigins) ? allowedParentOrigins : [];
+    if (!targetOrigin || targetOrigin === '*' || list.includes('*') || list.length === 0) return false;
+    return true;
+}
+
 export function createBridgeError(code, message, details = null) {
     const error = new Error(message);
     error.code = code;
@@ -116,24 +129,32 @@ export function parseEmbedRuntimeOptionsFromSearch(search = '') {
         rawFeatureFlags[featureKey] = parseBooleanFlag(params.get(queryKey), undefined);
     });
 
-    const targetOrigin = params.get('targetOrigin') || '*';
+    const targetOrigin = params.get('targetOrigin') || '';
     const allowedParentOrigins = (params.get('allowedOrigins') || '')
         .split(',')
         .map((item) => item.trim())
         .filter(Boolean);
-    if (allowedParentOrigins.length === 0 && targetOrigin !== '*') {
+    if (allowedParentOrigins.length === 0 && targetOrigin && targetOrigin !== '*') {
         allowedParentOrigins.push(targetOrigin);
     }
+    const capabilitiesRaw = (params.get('capabilities') || '')
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean);
+    const capabilities = { unfreeze: capabilitiesRaw.includes('unfreeze') };
+    const usable = originsAreUsable(targetOrigin, allowedParentOrigins);
+    const embedRequested = enabled;
 
     return {
-        enabled,
+        enabled: embedRequested && usable,
         mode,
         readOnly: mode === EMBED_MODE_READONLY || parseBooleanFlag(params.get('readonly'), false),
         classroomLevel: normalizeClassroomLevel(params.get('classroomLevel'), mode),
-        targetOrigin,
-        allowedParentOrigins,
-        autoSave: enabled ? parseBooleanFlag(params.get('autosave'), false) : true,
-        restoreFromStorage: enabled ? parseBooleanFlag(params.get('restore'), false) : true,
+        targetOrigin: usable ? targetOrigin : '',
+        allowedParentOrigins: usable ? allowedParentOrigins : [],
+        capabilities,
+        autoSave: embedRequested ? parseBooleanFlag(params.get('autosave'), false) : true,
+        restoreFromStorage: embedRequested ? parseBooleanFlag(params.get('restore'), false) : true,
         features: normalizeFeatureFlags(mode, rawFeatureFlags)
     };
 }

@@ -14,7 +14,10 @@ const requiredHotspotFiles = [
     'src/ui/charts/ChartWindowController.js',
     'src/app/interaction/InteractionOrchestrator.js',
     'src/core/simulation/MNASolver.js',
-    'src/app/AppRuntimeV2.js'
+    'src/app/AppRuntimeV2.js',
+    'src/ui/ExerciseBoard.js',
+    'src/ui/AIPanel.js',
+    'src/ui/ai/ChatController.js'
 ];
 
 function fail(message) {

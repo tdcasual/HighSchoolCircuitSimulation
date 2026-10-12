@@ -11,9 +11,12 @@ const budgets = [
     { file: 'src/app/interaction/InteractionOrchestrator.js', hardMaxLines: 300, targetMaxLines: 240, track: 'interaction hotspot' },
     { file: 'src/core/simulation/MNASolver.js', hardMaxLines: 650, targetMaxLines: 550, track: 'simulation hotspot' },
     { file: 'src/app/AppRuntimeV2.js', hardMaxLines: 575, targetMaxLines: 500, track: 'runtime hotspot', optional: true },
-    { file: 'src/v2/domain/CircuitModel.js', hardMaxLines: 800, targetMaxLines: 650, track: 'v2 core', optional: true },
-    { file: 'src/v2/simulation/CircuitSolverV2.js', hardMaxLines: 800, targetMaxLines: 650, track: 'v2 core', optional: true },
-    { file: 'src/v2/infra/io/CircuitDeserializerV3.js', hardMaxLines: 800, targetMaxLines: 650, track: 'v2 core', optional: true }
+    { file: 'src/ui/ExerciseBoard.js', hardMaxLines: 1100, targetMaxLines: 800, track: 'ui hotspot' },
+    { file: 'src/ui/AIPanel.js', hardMaxLines: 900, targetMaxLines: 700, track: 'ui hotspot' },
+    { file: 'src/ui/ai/ChatController.js', hardMaxLines: 900, targetMaxLines: 700, track: 'ui hotspot' },
+    { file: 'src/v2/domain/CircuitModel.js', hardMaxLines: 800, targetMaxLines: 650, track: 'experimental v2', optional: true },
+    { file: 'src/v2/simulation/SolveCircuitV2.js', hardMaxLines: 800, targetMaxLines: 650, track: 'experimental v2', optional: true },
+    { file: 'src/v2/infra/io/CircuitDeserializerV3.js', hardMaxLines: 800, targetMaxLines: 650, track: 'experimental v2', optional: true }
 ];
 
 function fail(message) {

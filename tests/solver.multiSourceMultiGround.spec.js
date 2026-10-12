@@ -74,7 +74,7 @@ describe('Solver multi-source / multi-ground cases', () => {
         expect(iLoad).toBeCloseTo(1, 6);
     });
 
-    it('keeps floating ground from becoming the global reference', () => {
+    it('unions every Ground symbol onto the common earth node', () => {
         const circuit = createTestCircuit();
         const gMain = addComponent(circuit, 'Ground', 'GMAIN');
         const source = addComponent(circuit, 'PowerSource', 'V1', { voltage: 10, internalResistance: 0 });
@@ -95,7 +95,7 @@ describe('Solver multi-source / multi-ground cases', () => {
         const results = solveCircuit(circuit);
         expect(results.valid).toBe(true);
         expect(gMain.nodes[0]).toBe(0);
-        expect(gFloat.nodes[0]).not.toBe(0);
+        expect(gFloat.nodes[0]).toBe(0);
 
         const iMain = results.currents.get('R1') || 0;
         const iFloat = results.currents.get('R2') || 0;

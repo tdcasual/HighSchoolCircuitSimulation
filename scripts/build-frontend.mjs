@@ -21,6 +21,7 @@ const FILE_COPIES = Object.freeze([
 
 const DIR_COPIES = Object.freeze([
     ['css', 'css', true],
+    ['vendor', 'vendor', true],
     ['examples', 'examples', false]
 ]);
 

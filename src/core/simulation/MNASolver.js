@@ -348,6 +348,8 @@ detectPowerSourceShortCircuits(voltages, currents) {
                 stampCurrentSource: (cFrom, cTo, current) => this.stampCurrentSource(z, cFrom, cTo, current),
                 stampVoltageSource: (vI1, vI2, voltage, vsIndex, totalNodeCount) =>
                     this.stampVoltageSource(A, z, vI1, vI2, voltage, vsIndex, totalNodeCount),
+                stampSeriesVoltageSource: (vI1, vI2, voltage, seriesR, vsIndex, totalNodeCount) =>
+                    this.stampSeriesVoltageSource(A, z, vI1, vI2, voltage, seriesR, vsIndex, totalNodeCount),
                 getSourceInstantVoltage: (targetComp) => this.getSourceInstantVoltage(targetComp),
                 dt: this.dt,
                 resolveDynamicIntegrationMethod: (targetComp) => this.resolveDynamicIntegrationMethod(targetComp),
@@ -418,6 +420,20 @@ stampVoltageSource(A, z, i1, i2, V, vsIndex, nodeCount) {
             i1,
             i2,
             V,
+            vsIndex,
+            nodeCount,
+            this.logger
+        );
+    }
+
+    stampSeriesVoltageSource(A, z, i1, i2, voltage, seriesR, vsIndex, nodeCount) {
+        return this.matrixAssembler.stampSeriesVoltageSource(
+            A,
+            z,
+            i1,
+            i2,
+            voltage,
+            seriesR,
             vsIndex,
             nodeCount,
             this.logger

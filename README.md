@@ -74,9 +74,9 @@
 
 ## 🔄 迁移说明（v0.9 RC）
 
-- Observation 配置可直接沿用旧存档，加载时会自动归一化到 v2 schema。
-- 场景包导入路径更新为：
-  - `src/engine/scenarios/ClassroomScenarioPack.js`
+- 电路 payload 使用 schema v3，无 v2-and-below 兼容迁移。应用存档使用 `{ format: "hscs-app", formatVersion: 1, circuit, ui }` 信封；习题板/图表 UI 放在 `ui`，不进电路 `meta`。
+- 场景包导入路径：
+  - `src/core/scenarios/ClassroomScenarioPack.js`
 - 嵌入打包脚本对 `examples/` 目录改为可选；缺失时不会阻塞 `build:frontend / package:embed / docker build`。
 
 ## 🚀 快速开始

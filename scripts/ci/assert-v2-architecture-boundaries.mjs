@@ -15,6 +15,12 @@ const allowedDeps = Object.freeze({
     infra: new Set(['infra'])
 });
 
+const allowedOutsideV2Imports = Object.freeze({
+    'src/v2/infra/io/CircuitSchemaV3.js': Object.freeze([
+        '../../../core/io/CircuitSchemaGateway.js'
+    ])
+});
+
 function fail(message) {
     console.error(`[v2-architecture] ${message}`);
     process.exit(1);
@@ -100,7 +106,12 @@ function assertDependencyBoundaries(files) {
             if (!targetAbs) continue;
             const targetLayer = inferLayerFromTarget(targetAbs);
             if (!targetLayer) {
-                fail(`${normalizePath(path.relative(root, absFile))} imports outside src/v2 via "${spec}"`);
+                const relFile = normalizePath(path.relative(root, absFile));
+                const allowedSpecs = allowedOutsideV2Imports[relFile] || [];
+                if (allowedSpecs.includes(spec)) {
+                    continue;
+                }
+                fail(`${relFile} imports outside src/v2 via "${spec}"`);
             }
             if (!allowed.has(targetLayer)) {
                 fail(

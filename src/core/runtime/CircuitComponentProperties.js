@@ -1,3 +1,10 @@
+function dumpVoltmeterResistance(value) {
+    if (value === Infinity || value === 'Infinity' || value === null || value === undefined) {
+        return 'Infinity';
+    }
+    return value;
+}
+
 function getAutoIntegrationProperties(comp, fields = []) {
     const result = {};
     for (const field of fields) {
@@ -113,9 +120,14 @@ export function getCircuitComponentProperties(comp = {}) {
                 blown: !!comp.blown
             };
         case 'Ammeter':
-        case 'Voltmeter':
             return {
                 resistance: comp.resistance,
+                range: comp.range,
+                selfReading: !!comp.selfReading
+            };
+        case 'Voltmeter':
+            return {
+                resistance: dumpVoltmeterResistance(comp.resistance),
                 range: comp.range,
                 selfReading: !!comp.selfReading
             };
