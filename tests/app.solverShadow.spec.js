@@ -122,6 +122,35 @@ describe('compareSolveSnapshots', () => {
         );
         expect(bothOver.mismatchCount).toBeGreaterThan(0);
     });
+
+    it('mismatches voltage-only snapshots while currents stay aligned', () => {
+        const currents = { R1: 0.3 };
+
+        const missingKey = compareSolveSnapshots(
+            { currents, terminalVoltages: { R1: [1, 0] } },
+            { currents, terminalVoltages: {} }
+        );
+        expect(missingKey.mismatchCount).toBeGreaterThan(0);
+
+        const overThreshold = compareSolveSnapshots(
+            { currents, terminalVoltages: { R1: [1, 0] } },
+            { currents, terminalVoltages: { R1: [1.002, 0] } }
+        );
+        expect(overThreshold.mismatchCount).toBeGreaterThan(0);
+
+        const tinyAbsolute = compareSolveSnapshots(
+            { currents, terminalVoltages: { R1: [0] } },
+            { currents, terminalVoltages: { R1: [1e-7] } }
+        );
+        expect(tinyAbsolute.mismatchCount).toBe(0);
+
+        const lengthMismatch = compareSolveSnapshots(
+            { currents, terminalVoltages: { R1: [1, 0] } },
+            { currents, terminalVoltages: { R1: [1, 0, 0] } }
+        );
+        expect(lengthMismatch.mismatchCount).toBeGreaterThan(0);
+        expect(lengthMismatch.mismatches.some((item) => item.path === 'terminalVoltages.R1.length')).toBe(true);
+    });
 });
 
 describe('solver shadow harness (tests only)', () => {
@@ -193,7 +222,7 @@ describe('solver shadow harness (tests only)', () => {
         addComponent(circuit, 'ACVoltageSource', 'VAC', {
             rmsVoltage: 10,
             frequency: 50,
-            phase: 0,
+            phase: 90,
             offset: 0,
             internalResistance: 0
         });
@@ -201,6 +230,9 @@ describe('solver shadow harness (tests only)', () => {
         connectWire(circuit, 'W1', 'VAC', 0, 'R1', 0);
         connectWire(circuit, 'W2', 'R1', 1, 'VAC', 1);
 
+        expect(circuit.getComponent('VAC').frequency).toBe(50);
+        expect(circuit.getComponent('VAC').phase).toBe(90);
+        expect(circuit.getComponent('R1').resistance).toBe(10);
         expect(circuit.getAllWires().length).toBe(2);
         const substepCount = circuit.getSimulationSubstepCount(circuit.dt);
         expect(substepCount).toBeGreaterThan(1);
@@ -216,6 +248,7 @@ describe('solver shadow harness (tests only)', () => {
         let v2SolveCount = 0;
         let comparedSubsteps = [];
         let mismatchCount = 0;
+        const sampledAbsCurrent = [];
         const ticks = 10;
 
         for (let tick = 0; tick < ticks; tick += 1) {
@@ -245,6 +278,8 @@ describe('solver shadow harness (tests only)', () => {
                         Array.from(circuit.components.values())
                     );
                     const v2Snapshot = collectSolveSnapshot(v2.solveResult, v2.netlist.components);
+                    expect(Object.prototype.hasOwnProperty.call(v1Snapshot.currents, 'R1')).toBe(true);
+                    sampledAbsCurrent.push(Math.abs(v1Snapshot.currents.R1));
                     mismatchCount += compareSolveSnapshots(v1Snapshot, v2Snapshot).mismatchCount;
                 }
 
@@ -260,6 +295,11 @@ describe('solver shadow harness (tests only)', () => {
             { tick: 5, sub: 0 }
         ]);
         expect(v2SolveCount).not.toBe(ticks * substepCount);
+        expect(sampledAbsCurrent).toHaveLength(2);
+        expect(sampledAbsCurrent[0]).toBeGreaterThan(1);
+        expect(sampledAbsCurrent[1]).toBeGreaterThan(1);
+        expect(sampledAbsCurrent[0]).toBeCloseTo(Math.SQRT2, 2);
+        expect(sampledAbsCurrent[0]).not.toBe(0);
         expect(mismatchCount).toBe(0);
         expect(circuit.simTime).toBeCloseTo(ticks * circuit.dt, 12);
         expect(circuit.lastResults).toBe(lastResultsSentinel);

@@ -328,6 +328,34 @@ describe('ResultProjector v2', () => {
         }).viewMap.get('RH1');
         expect(leftRight.voltageValue).toBeCloseTo(5, 12);
         expect(leftRight.voltageSegLeft).toBeCloseTo(5, 12);
+
+        const rightSlider = projectResultV2({
+            netlist: {
+                components: [{
+                    ...base,
+                    params: { connectionMode: 'right-slider', maxResistance: 100, position: 0.5 }
+                }]
+            },
+            solveResult: { valid: true, voltages, currents: new Map([['RH1', 0.05]]) }
+        }).viewMap.get('RH1');
+        expect(rightSlider.voltageValue).toBeCloseTo(3, 12);
+        expect(rightSlider.voltageSegRight).toBeCloseTo(3, 12);
+        expect(rightSlider.voltageSegLeft).toBeUndefined();
+        expect(rightSlider.voltageValue).not.toBeCloseTo(2, 12);
+        expect(rightSlider.voltageValue).not.toBeCloseTo(5, 12);
+
+        const allMode = projectResultV2({
+            netlist: {
+                components: [{
+                    ...base,
+                    params: { connectionMode: 'all', maxResistance: 100, position: 0.5 }
+                }]
+            },
+            solveResult: { valid: true, voltages, currents: new Map([['RH1', 0.05]]) }
+        }).viewMap.get('RH1');
+        expect(allMode.voltageValue).toBeCloseTo(5, 12);
+        expect(allMode.voltageSegLeft).toBeCloseTo(2, 12);
+        expect(allMode.voltageSegRight).toBeCloseTo(3, 12);
     });
 
     it('projects SPDT voltage from the conducting throw, not the idle throw', () => {
@@ -425,6 +453,84 @@ describe('ResultProjector v2', () => {
         }).viewMap.get('LED1');
         expect(ledOff.conducting).toBe(false);
         expect(ledOff.brightness).toBe(0);
+    });
+
+    it('projects relay coil voltage plus contact power, not coil-only |V·I|', () => {
+        const state = new SimulationStateV2();
+        state.applyPatch({ id: 'K1', type: 'Relay' }, { energized: true });
+        const view = projectResultV2({
+            netlist: {
+                components: [{
+                    id: 'K1',
+                    type: 'Relay',
+                    nodes: [1, 0, 2, 3],
+                    params: { contactOnResistance: 2 }
+                }]
+            },
+            solveResult: {
+                valid: true,
+                voltages: [0, 5, 12, 2],
+                currents: new Map([['K1', 0.1]]),
+                nextState: state
+            }
+        }).viewMap.get('K1');
+        expect(view.voltageValue).toBeCloseTo(5, 12);
+        expect(view.voltageValue).not.toBeCloseTo(10, 12);
+        expect(view.powerValue).toBeCloseTo(50.5, 12);
+        expect(view.powerValue).not.toBeCloseTo(0.5, 12);
+        expect(view.powerValue).not.toBeCloseTo(1, 12);
+        expect(view.energized).toBe(true);
+    });
+
+    it('copies motor and fuse dynamic fields from nextState', () => {
+        const state = new SimulationStateV2();
+        state.applyPatch({ id: 'M1', type: 'Motor' }, { speed: 12, backEmf: 1.2 });
+        state.applyPatch({ id: 'F1', type: 'Fuse' }, { blown: true, i2tAccum: 0.4 });
+        state.applyPatch({ id: 'D1', type: 'Diode' }, { conducting: true });
+        const viewModel = projectResultV2({
+            netlist: {
+                components: [
+                    { id: 'M1', type: 'Motor', nodes: [1, 0], params: { resistance: 5 } },
+                    { id: 'F1', type: 'Fuse', nodes: [1, 0], params: { ratedCurrent: 3 } },
+                    { id: 'D1', type: 'Diode', nodes: [1, 0], params: {} }
+                ]
+            },
+            solveResult: {
+                valid: true,
+                voltages: [0, 6],
+                currents: new Map([
+                    ['M1', 1.2],
+                    ['F1', 2],
+                    ['D1', 0.01]
+                ]),
+                nextState: state
+            }
+        });
+        const motor = viewModel.viewMap.get('M1');
+        expect(motor.speed).toBe(12);
+        expect(motor.backEmf).toBe(1.2);
+        const fuse = viewModel.viewMap.get('F1');
+        expect(fuse.blown).toBe(true);
+        expect(fuse.i2tAccum).toBe(0.4);
+        expect(viewModel.viewMap.get('D1').conducting).toBe(true);
+    });
+
+    it('zeros a shorted two-terminal even when a current key is present', () => {
+        const view = projectResultV2({
+            netlist: {
+                components: [{ id: 'R1', type: 'Resistor', nodes: [1, 1], params: {} }]
+            },
+            solveResult: {
+                valid: true,
+                voltages: [0, 5],
+                currents: new Map([['R1', 0.3]])
+            }
+        }).viewMap.get('R1');
+        expect(view.status).toBe('shorted');
+        expect(view.currentValue).toBe(0);
+        expect(view.currentValue).not.toBe(0.3);
+        expect(view.voltageValue).toBe(0);
+        expect(view.powerValue).toBe(0);
     });
 
     it('projects non-zero voltage for a wire-connected resistor whose circuitModel has no nodes', () => {

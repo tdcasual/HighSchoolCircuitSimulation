@@ -180,10 +180,11 @@ export class Renderer {
         const showCurrent = display.current ?? this.defaultDisplay.current;
         const showVoltage = display.voltage ?? this.defaultDisplay.voltage;
         const showPower = display.power ?? this.defaultDisplay.power;
-        SVGRenderer.updateValueDisplay(g, comp, showCurrent, showVoltage, showPower);
+        const record = this.resolveValueDisplayRecord(comp);
+        SVGRenderer.updateValueDisplay(g, record, showCurrent, showVoltage, showPower);
         this.valueDisplaySnapshot.set(
             comp.id,
-            this.buildValueDisplaySnapshot(comp, showCurrent, showVoltage, showPower)
+            this.formatValueDisplaySnapshot(record, showCurrent, showVoltage, showPower)
         );
         return g;
     }
@@ -309,33 +310,49 @@ export class Renderer {
         return String(value);
     }
 
-    buildValueDisplaySnapshot(comp, showCurrent, showVoltage, showPower) {
+    resolveValueDisplayRecord(comp) {
         const viewId = comp?.id === undefined || comp?.id === null ? '' : String(comp.id);
         const view = this.viewMap instanceof Map && viewId
             ? this.viewMap.get(viewId)
             : undefined;
-        const usingView = view != null && typeof view === 'object';
-        if (!usingView) {
+        if (view == null || typeof view !== 'object') {
             this.viewMapFallbackCount = (Number(this.viewMapFallbackCount) || 0) + 1;
+            return comp;
         }
-        const currentValue = usingView ? view.currentValue : comp?.currentValue;
-        const voltageValue = usingView ? view.voltageValue : comp?.voltageValue;
-        const powerValue = usingView ? view.powerValue : comp?.powerValue;
-        const voltageSegLeft = usingView ? view.voltageSegLeft : comp?.voltageSegLeft;
-        const voltageSegRight = usingView ? view.voltageSegRight : comp?.voltageSegRight;
+        return {
+            ...comp,
+            currentValue: view.currentValue,
+            voltageValue: view.voltageValue,
+            powerValue: view.powerValue,
+            voltageSegLeft: view.voltageSegLeft,
+            voltageSegRight: view.voltageSegRight,
+            brightness: view.brightness != null ? view.brightness : comp.brightness
+        };
+    }
+
+    formatValueDisplaySnapshot(record, showCurrent, showVoltage, showPower) {
         return [
-            comp?.type || 'Unknown',
+            record?.type || 'Unknown',
             showCurrent ? '1' : '0',
             showVoltage ? '1' : '0',
             showPower ? '1' : '0',
-            this.formatValueSnapshotNumber(currentValue),
-            this.formatValueSnapshotNumber(voltageValue),
-            this.formatValueSnapshotNumber(powerValue),
-            this.formatValueSnapshotNumber(voltageSegLeft),
-            this.formatValueSnapshotNumber(voltageSegRight),
-            this.formatValueSnapshotNumber(comp?.ratedPower),
-            this.formatValueSnapshotNumber(comp?.boxHeight)
+            this.formatValueSnapshotNumber(record?.currentValue),
+            this.formatValueSnapshotNumber(record?.voltageValue),
+            this.formatValueSnapshotNumber(record?.powerValue),
+            this.formatValueSnapshotNumber(record?.voltageSegLeft),
+            this.formatValueSnapshotNumber(record?.voltageSegRight),
+            this.formatValueSnapshotNumber(record?.ratedPower),
+            this.formatValueSnapshotNumber(record?.boxHeight)
         ].join('|');
+    }
+
+    buildValueDisplaySnapshot(comp, showCurrent, showVoltage, showPower) {
+        return this.formatValueDisplaySnapshot(
+            this.resolveValueDisplayRecord(comp),
+            showCurrent,
+            showVoltage,
+            showPower
+        );
     }
 
     /**
@@ -354,11 +371,12 @@ export class Renderer {
                 const showCurrent = display.current ?? this.defaultDisplay.current;
                 const showVoltage = display.voltage ?? this.defaultDisplay.voltage;
                 const showPower = display.power ?? this.defaultDisplay.power;
-                const snapshot = this.buildValueDisplaySnapshot(comp, showCurrent, showVoltage, showPower);
+                const record = this.resolveValueDisplayRecord(comp);
+                const snapshot = this.formatValueDisplaySnapshot(record, showCurrent, showVoltage, showPower);
                 if (!force && this.valueDisplaySnapshot.get(id) === snapshot) {
                     continue;
                 }
-                SVGRenderer.updateValueDisplay(g, comp, showCurrent, showVoltage, showPower);
+                SVGRenderer.updateValueDisplay(g, record, showCurrent, showVoltage, showPower);
                 this.valueDisplaySnapshot.set(id, snapshot);
             }
         }
@@ -534,10 +552,11 @@ export class Renderer {
             const showCurrent = display.current ?? this.defaultDisplay.current;
             const showVoltage = display.voltage ?? this.defaultDisplay.voltage;
             const showPower = display.power ?? this.defaultDisplay.power;
-            SVGRenderer.updateValueDisplay(newG, comp, showCurrent, showVoltage, showPower);
+            const record = this.resolveValueDisplayRecord(comp);
+            SVGRenderer.updateValueDisplay(newG, record, showCurrent, showVoltage, showPower);
             this.valueDisplaySnapshot.set(
                 comp.id,
-                this.buildValueDisplaySnapshot(comp, showCurrent, showVoltage, showPower)
+                this.formatValueDisplaySnapshot(record, showCurrent, showVoltage, showPower)
             );
         }
     }

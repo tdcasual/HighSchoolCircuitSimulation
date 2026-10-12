@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Renderer } from '../src/ui/Renderer.js';
 import { SVGRenderer } from '../src/components/Component.js';
+import { applyViewMapToComponents } from '../src/app/simulation/ComponentViewAdapter.js';
 
 function createRendererContext(component, element = {}) {
     const renderer = Object.create(Renderer.prototype);
@@ -70,9 +71,65 @@ describe('Renderer value snapshot updates', () => {
         expect(viewParts[4]).not.toBe(renderer.formatValueSnapshotNumber(0.5));
         expect(viewParts[5]).not.toBe(renderer.formatValueSnapshotNumber(4));
 
-        renderer.setViewMap(null);
-        Renderer.prototype.buildValueDisplaySnapshot.call(renderer, component, true, false, false);
+        renderer.setViewMap(new Map([
+            ['OTHER', {
+                currentValue: 9,
+                voltageValue: 9,
+                powerValue: 9,
+                status: 'ok'
+            }]
+        ]));
+        const missingIdSnapshot = Renderer.prototype.buildValueDisplaySnapshot.call(
+            renderer,
+            component,
+            true,
+            false,
+            false
+        );
         expect(renderer.viewMapFallbackCount).toBe(2);
+        const missingIdParts = missingIdSnapshot.split('|');
+        expect(missingIdParts[4]).toBe(renderer.formatValueSnapshotNumber(0.5));
+        expect(missingIdParts[4]).not.toBe(renderer.formatValueSnapshotNumber(9));
+        expect(missingIdParts[5]).toBe(renderer.formatValueSnapshotNumber(4));
+    });
+
+    it('paints ViewMap current 0 instead of live 0.5 and still paints 0 after adapter copy', () => {
+        const component = {
+            id: 'R1',
+            type: 'Resistor',
+            currentValue: 0.5,
+            voltageValue: 4,
+            powerValue: 2,
+            display: {}
+        };
+        const renderer = createRendererContext(component, {});
+        renderer.viewMap = null;
+        renderer.viewMapFallbackCount = 0;
+        const painted = [];
+        vi.spyOn(SVGRenderer, 'updateValueDisplay').mockImplementation((_g, record) => {
+            painted.push(record?.currentValue);
+        });
+
+        renderer.setViewMap(new Map([
+            ['R1', {
+                currentValue: 0,
+                voltageValue: 2.4,
+                powerValue: 0,
+                status: 'ok'
+            }]
+        ]));
+        Renderer.prototype.updateValues.call(renderer);
+        expect(painted).toEqual([0]);
+        expect(painted[0]).not.toBe(0.5);
+
+        applyViewMapToComponents({
+            components: new Map([[component.id, component]])
+        }, renderer.viewMap);
+        expect(component.currentValue).toBe(0);
+        expect(component.currentValue).not.toBe(0.5);
+
+        Renderer.prototype.updateValues.call(renderer, true);
+        expect(painted).toEqual([0, 0]);
     });
 
     it('skips value display writes when snapshot is unchanged', () => {

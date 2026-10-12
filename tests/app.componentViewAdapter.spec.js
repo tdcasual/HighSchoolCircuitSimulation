@@ -53,6 +53,7 @@ describe('ComponentViewAdapter', () => {
                 voltageValue: 0,
                 powerValue: 0,
                 voltageSegLeft: 9,
+                voltageSegRight: 0,
                 nodes: [9, 8],
                 status: 'ok'
             }],
@@ -77,7 +78,9 @@ describe('ComponentViewAdapter', () => {
         expect(resistor.currentValue).toBe(0);
         expect(resistor.voltageValue).toBe(0);
         expect(resistor.powerValue).toBe(0);
-        expect(resistor.voltageSegLeft).toBe(1);
+        expect(resistor.voltageSegLeft).toBe(9);
+        expect(resistor.voltageSegRight).toBe(0);
+        expect(resistor.status).toBeUndefined();
         expect(resistor.nodes).toBe(liveResistorNodes);
         expect(resistor.nodes).toEqual([1, 0]);
         expect(led.brightness).toBe(0);

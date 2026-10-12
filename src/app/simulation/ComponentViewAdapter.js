@@ -19,6 +19,8 @@ export function applyViewMapToComponents(circuit, viewMap) {
         comp.currentValue = view.currentValue;
         comp.voltageValue = view.voltageValue;
         comp.powerValue = view.powerValue;
+        comp.voltageSegLeft = view.voltageSegLeft;
+        comp.voltageSegRight = view.voltageSegRight;
         if (view.brightness != null) comp.brightness = view.brightness;
         if (view.conducting != null) comp.conducting = view.conducting;
         if (view.energized != null) comp.energized = view.energized;
