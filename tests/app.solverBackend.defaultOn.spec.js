@@ -195,7 +195,6 @@ describe('solverBackend default-on v2', () => {
         circuit.step();
         expect(backend.fallbackCount).toBe(1);
         expect(backend.consecutiveFallbackSteps).toBe(1);
-        expect(backend.fellBackThisStep).toBe(true);
         expect(circuit.lastResults.backendUsed).toBe('v1');
         expect(circuit.lastResults.currents.has('R1')).toBe(true);
         expect(circuit.lastResults.currents.get('R1')).toBeCloseTo(0.3, 6);
@@ -204,12 +203,146 @@ describe('solverBackend default-on v2', () => {
         circuit.step();
         circuit.haltSimulation();
         expect(backend.consecutiveFallbackSteps).toBe(0);
-        expect(backend.fellBackThisStep).toBe(false);
         expect(backend.mode).toBe('v2');
         expect(circuit.lastResults.backendUsed).toBe('v2');
         expect(circuit.lastResults.currents.has('R1')).toBe(true);
         expect(circuit.lastResults.currents.get('R1')).toBeCloseTo(0.3, 6);
         expect(circuit.simTime).toBeCloseTo(0.02, 12);
+    });
+
+    it('wraps the factory so ViewMap writes live 3V/8Ω current not the seed', () => {
+        const circuit = buildSeriesFixture();
+        const backend = createInjectedSolverBackend();
+        circuit.solverBackend = wrapSolverBackend(backend);
+        const dynSpy = vi.spyOn(circuit.solver, 'updateDynamicComponents');
+
+        circuit.prepareSimulation();
+        const resistor = circuit.getComponent('R1');
+        const liveNodes = resistor.nodes;
+        const circuitNodes = circuit.nodes;
+        resistor.currentValue = 9;
+        circuit.step();
+        circuit.haltSimulation();
+
+        expect(circuit.lastResults.backendUsed).toBe('v2');
+        expect(circuit.lastResults.valid).toBe(true);
+        expect(circuit.lastResults.currents.has('R1')).toBe(true);
+        expect(circuit.lastResults.currents.get('R1')).toBeCloseTo(0.3, 6);
+        expect(circuit.lastResults.viewMap.has('R1')).toBe(true);
+        expect(circuit.lastResults.viewMap.get('R1').currentValue).toBeCloseTo(0.3, 6);
+        expect(resistor.currentValue).toBeCloseTo(0.3, 6);
+        expect(resistor.currentValue).not.toBe(9);
+        expect(resistor.currentValue).not.toBe(0);
+        expect(dynSpy).not.toHaveBeenCalled();
+        expect(resistor.nodes).toBe(liveNodes);
+        expect(circuit.nodes).toBe(circuitNodes);
+        expect(backend.fallbackCount).toBe(0);
+        expect(backend.consecutiveFallbackSteps).toBe(0);
+    });
+
+    it('counts four V1 fallbacks in one wall-clock step as one consecutive step', () => {
+        const circuit = buildSeriesFixture();
+        const backend = createInjectedSolverBackend();
+        backend.solveFrame = () => ({
+            valid: false,
+            voltages: [],
+            currents: new Map(),
+            backendUsed: 'v2'
+        });
+        circuit.solverBackend = backend;
+        vi.spyOn(circuit.simulationLoopService, 'getSimulationSubstepCount').mockReturnValue(4);
+
+        circuit.prepareSimulation();
+        circuit.step();
+        circuit.haltSimulation();
+
+        expect(backend.fallbackCount).toBe(4);
+        expect(backend.consecutiveFallbackSteps).toBe(1);
+        expect(circuit.lastResults.backendUsed).toBe('v1');
+        expect(circuit.lastResults.valid).toBe(true);
+        expect(circuit.lastResults.currents.has('R1')).toBe(true);
+        expect(circuit.lastResults.currents.get('R1')).toBeCloseTo(0.3, 6);
+        expect(circuit.simTime).toBeCloseTo(0.01, 12);
+        expect(backend.mode).toBe('v2');
+    });
+
+    it('recaptures V1-advanced capacitor history after consecutive wall-clock fallbacks', () => {
+        const circuit = buildRcFixture();
+        const backend = createInjectedSolverBackend();
+        const innerSolveFrame = backend.solveFrame.bind(backend);
+        let failV2 = false;
+        backend.solveFrame = (input) => {
+            if (failV2) {
+                return {
+                    valid: false,
+                    voltages: [],
+                    currents: new Map(),
+                    backendUsed: 'v2'
+                };
+            }
+            return innerSolveFrame(input);
+        };
+        const originalSolve = circuit.solver.solve.bind(circuit.solver);
+        const v1Solves = [];
+        circuit.solver.solve = (dt, simTime) => {
+            const cap = circuit.getComponent('C1');
+            v1Solves.push({
+                dt,
+                simTime,
+                prevVoltage: cap.prevVoltage,
+                statePrevVoltage: circuit.simulationState.get('C1')?.prevVoltage
+            });
+            return originalSolve(dt, simTime);
+        };
+        circuit.solverBackend = backend;
+
+        circuit.prepareSimulation();
+        circuit.step();
+        expect(circuit.lastResults.backendUsed).toBe('v2');
+        expect(circuit.lastResults.nextState.get('C1')).toBeDefined();
+        const voltageA = circuit.lastResults.nextState.get('C1').prevVoltage;
+        expect(Number.isFinite(voltageA)).toBe(true);
+        expect(Math.abs(voltageA)).toBeGreaterThan(0.01);
+        expect(backend.fallbackCount).toBe(0);
+
+        failV2 = true;
+        circuit.step();
+        expect(v1Solves).toHaveLength(1);
+        expect(v1Solves[0].prevVoltage).toBe(voltageA);
+        expect(v1Solves[0].statePrevVoltage).toBe(voltageA);
+        expect(circuit.lastResults.backendUsed).toBe('v1');
+        expect(circuit.simulationState.get('C1')).toBeDefined();
+        const voltageB = circuit.simulationState.get('C1').prevVoltage;
+        expect(Number.isFinite(voltageB)).toBe(true);
+        expect(voltageB).not.toBe(voltageA);
+        expect(Math.abs(voltageB - voltageA)).toBeGreaterThan(1e-6);
+        expect(backend.consecutiveFallbackSteps).toBe(1);
+
+        circuit.step();
+        expect(v1Solves).toHaveLength(2);
+        expect(v1Solves[1].prevVoltage).toBe(voltageB);
+        expect(v1Solves[1].statePrevVoltage).toBe(voltageB);
+        expect(v1Solves[1].prevVoltage).not.toBe(voltageA);
+        expect(circuit.lastResults.backendUsed).toBe('v1');
+        const voltageC = circuit.simulationState.get('C1').prevVoltage;
+        expect(Number.isFinite(voltageC)).toBe(true);
+        expect(voltageC).not.toBe(voltageB);
+        expect(Math.abs(voltageC - voltageB)).toBeGreaterThan(1e-6);
+        expect(backend.consecutiveFallbackSteps).toBe(2);
+        expect(backend.fallbackCount).toBe(2);
+
+        failV2 = false;
+        circuit.step();
+        circuit.haltSimulation();
+        expect(circuit.lastResults.backendUsed).toBe('v2');
+        expect(circuit.lastResults.nextState.get('C1')).toBeDefined();
+        const voltageD = circuit.lastResults.nextState.get('C1').prevVoltage;
+        expect(Number.isFinite(voltageD)).toBe(true);
+        expect(voltageD).not.toBe(voltageA);
+        expect(voltageD).not.toBe(voltageB);
+        expect(voltageD).toBeGreaterThan(voltageC - 1e-12);
+        expect(backend.consecutiveFallbackSteps).toBe(0);
+        expect(circuit.simTime).toBeCloseTo(0.04, 12);
     });
 
     it('keeps embed without solver= pinned to v1 while classroom factory default is v2', () => {

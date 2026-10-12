@@ -118,6 +118,79 @@ function writeStandbyEntry(entry, comp, snap) {
     return blownChanged;
 }
 
+const STANDBY_VALUE_KEYS = [
+    'prevVoltage',
+    'prevCharge',
+    'prevCurrent',
+    'speed',
+    'backEmf',
+    'junctionVoltage',
+    'junctionCurrent',
+    'conducting',
+    'energized',
+    'i2tAccum',
+    'blown'
+];
+
+function assignHistoryReady(snap, source) {
+    if (!source || hasOwn(snap, '_dynamicHistoryReady')) return;
+    if (hasOwn(source, 'dynamicHistoryReady')) {
+        snap._dynamicHistoryReady = !!source.dynamicHistoryReady;
+        return;
+    }
+    if (hasOwn(source, '_dynamicHistoryReady')) {
+        snap._dynamicHistoryReady = !!source._dynamicHistoryReady;
+    }
+}
+
+function assignStandbyValues(snap, source) {
+    if (!source) return;
+    for (const key of STANDBY_VALUE_KEYS) {
+        if (!hasOwn(source, key)) continue;
+        if (hasOwn(snap, key)) continue;
+        snap[key] = source[key];
+    }
+}
+
+function captureStandbyFromLiveCircuit(circuit) {
+    const standby = new Map();
+    if (!circuit?.components) return standby;
+    const sim = circuit.simulationState;
+    for (const [id, comp] of circuit.components) {
+        const snap = {};
+        const simEntry = readStateEntry(sim, id);
+        assignHistoryReady(snap, simEntry);
+        assignStandbyValues(snap, simEntry);
+        assignHistoryReady(snap, comp);
+        assignStandbyValues(snap, comp);
+        if (comp?.type === 'Fuse') {
+            if (Number.isFinite(comp.i2tAccum)) snap.i2tAccum = comp.i2tAccum;
+            if (typeof comp.blown === 'boolean') snap.blown = comp.blown;
+        }
+        if (Object.keys(snap).length > 0) {
+            standby.set(id, snap);
+        }
+    }
+    return standby;
+}
+
+function seedSimulationStateV2(state, standby, circuit) {
+    if (!state || typeof state.applyPatch !== 'function' || !(standby instanceof Map)) return;
+    for (const [id, snap] of standby) {
+        if (!snap) continue;
+        const patch = {};
+        if (hasOwn(snap, '_dynamicHistoryReady')) {
+            patch.dynamicHistoryReady = !!snap._dynamicHistoryReady;
+        }
+        for (const key of STANDBY_VALUE_KEYS) {
+            if (hasOwn(snap, key)) patch[key] = snap[key];
+        }
+        if (Object.keys(patch).length === 0) continue;
+        const comp = circuit?.components?.get?.(id);
+        state.applyPatch(comp || { id }, patch);
+    }
+}
+
 export function createInjectedSolverBackend(options = {}) {
     let simulationState = new SimulationStateV2();
     let shadowState = new SimulationStateV2();
@@ -130,7 +203,6 @@ export function createInjectedSolverBackend(options = {}) {
         mode: normalizeMode(options.mode),
         fallbackCount: 0,
         consecutiveFallbackSteps: 0,
-        fellBackThisStep: false,
         shadowThrow: !!options.shadowThrow,
         shadowCompareCount: 0,
         shadowMismatchCount: 0,
@@ -217,6 +289,13 @@ export function createInjectedSolverBackend(options = {}) {
         }
     };
 
+    // After a committed V1 fallback, standby and SimulationStateV2 must match that substep.
+    backend.commitStandbyFromCircuit = function commitStandbyFromCircuit(circuit) {
+        if (!circuit?.components) return;
+        standbyById = captureStandbyFromLiveCircuit(circuit);
+        seedSimulationStateV2(simulationState, standbyById, circuit);
+    };
+
     backend.reset = function reset() {
         simulationState = new SimulationStateV2();
         shadowState = new SimulationStateV2();
@@ -226,7 +305,6 @@ export function createInjectedSolverBackend(options = {}) {
         standbyById = new Map();
         backend.fallbackCount = 0;
         backend.consecutiveFallbackSteps = 0;
-        backend.fellBackThisStep = false;
         backend.shadowCompareCount = 0;
         backend.shadowMismatchCount = 0;
         backend.shadowErrorCount = 0;

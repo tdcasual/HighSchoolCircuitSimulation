@@ -232,6 +232,7 @@ export class CircuitSimulationLoopService {
                 if (!committed.substepResults.valid) {
                     break;
                 }
+                backend.commitStandbyFromCircuit?.(context);
                 continue;
             }
 
@@ -261,10 +262,8 @@ export class CircuitSimulationLoopService {
         if (mode === 'v2') {
             if (stepHadFallback) {
                 backend.consecutiveFallbackSteps = (backend.consecutiveFallbackSteps || 0) + 1;
-                backend.fellBackThisStep = true;
             } else {
                 backend.consecutiveFallbackSteps = 0;
-                backend.fellBackThisStep = false;
             }
         }
 

@@ -276,14 +276,11 @@ describe('AppSerialization envelope', () => {
 
     it('keeps archived ui.solverBackend=v2 and does not persist fallback state', () => {
         const solverBackend = { mode: 'shadow' };
-        const warn = vi.fn();
         restoreAppUi({
             ui: { solverBackend: 'v2' },
-            solverBackend,
-            warn
+            solverBackend
         });
         expect(solverBackend.mode).toBe('v2');
-        expect(warn).not.toHaveBeenCalled();
 
         const kept = { mode: 'v1' };
         restoreAppUi({
@@ -321,10 +318,8 @@ describe('AppSerialization envelope', () => {
 
     it('does not overwrite the live mode when ui.solverBackend is missing', () => {
         const keepV2 = { mode: 'v2' };
-        const warn = vi.fn();
-        restoreAppUi({ ui: {}, solverBackend: keepV2, warn });
+        restoreAppUi({ ui: {}, solverBackend: keepV2 });
         expect(keepV2.mode).toBe('v2');
-        expect(warn).not.toHaveBeenCalled();
 
         const keepV1 = { mode: 'v1' };
         restoreAppUi({ ui: {}, solverBackend: keepV1 });

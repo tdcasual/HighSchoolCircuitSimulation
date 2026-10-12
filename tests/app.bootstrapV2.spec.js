@@ -33,6 +33,7 @@ describe('bootstrapV2 composition root', () => {
         expect(app.options.solverBackend.mode).toBe('v2');
         expect(typeof app.options.solverBackend.solveFrame).toBe('function');
         expect(typeof app.options.solverBackend.restoreStandby).toBe('function');
+        expect(typeof app.options.solverBackend.commitStandbyFromCircuit).toBe('function');
         expect(typeof app.options.solverBackend.reset).toBe('function');
     });
 

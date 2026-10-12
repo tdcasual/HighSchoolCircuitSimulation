@@ -36,6 +36,7 @@ function createMockBackend(overrides = {}) {
             simTime
         })),
         restoreStandby: vi.fn(),
+        commitStandbyFromCircuit: vi.fn(),
         reset: vi.fn(),
         ...overrides
     };
@@ -115,12 +116,16 @@ describe('solverBackend wiring contracts', () => {
         expect(factory).not.toContain('shadowReady');
         expect(factory).not.toContain('sampleEveryN');
         expect(factory).toContain('consecutiveFallbackSteps');
+        expect(factory).toContain('commitStandbyFromCircuit');
+        expect(factory).not.toContain('fellBackThisStep');
         expect(runtime).not.toContain('DEFAULT_SOLVER_BACKEND_MODE');
         expect(readSource('src/embed/EmbedRuntimeOptions.js')).not.toContain('DEFAULT_SOLVER_BACKEND_MODE');
         expect(readSource('src/app/AppDocument.js')).not.toContain('lowerArchivedV2');
         expect(loop).toContain('consecutiveFallbackSteps');
-        expect(loop).toContain('fellBackThisStep');
+        expect(loop).toContain('commitStandbyFromCircuit');
+        expect(loop).not.toContain('fellBackThisStep');
         expect(loop).not.toMatch(/backend\.mode\s*=\s*['"]v1['"]/);
+        expect(readSource('src/app/RuntimeUiBridge.js')).not.toContain('fellBackThisStep');
         expect(readSource('src/app/RuntimeUiBridge.js')).toContain('仿真已回退到稳定求解器');
         expect(readSource('src/app/RuntimeUiBridge.js')).toContain('已回退');
         expect(readSource('src/app/RuntimeUiBridge.js')).not.toMatch(/solverBackend\.mode\s*=/);
@@ -282,6 +287,9 @@ describe('CircuitSimulationLoopService solverBackend dispatch', () => {
             }),
             restoreStandby: vi.fn(() => {
                 callOrder.push('restoreStandby');
+            }),
+            commitStandbyFromCircuit: vi.fn(() => {
+                callOrder.push('commitStandbyFromCircuit');
             })
         });
         const originalSolve = circuit.solver.solve.bind(circuit.solver);
@@ -298,10 +306,11 @@ describe('CircuitSimulationLoopService solverBackend dispatch', () => {
         expect(backend.solveFrame).toHaveBeenCalledTimes(1);
         expect(backend.restoreStandby).toHaveBeenCalledTimes(1);
         expect(backend.restoreStandby).toHaveBeenCalledWith(circuit);
-        expect(callOrder).toEqual(['solveFrame', 'restoreStandby', 'solver.solve']);
+        expect(backend.commitStandbyFromCircuit).toHaveBeenCalledTimes(1);
+        expect(backend.commitStandbyFromCircuit).toHaveBeenCalledWith(circuit);
+        expect(callOrder).toEqual(['solveFrame', 'restoreStandby', 'solver.solve', 'commitStandbyFromCircuit']);
         expect(backend.fallbackCount).toBe(1);
         expect(backend.consecutiveFallbackSteps).toBe(1);
-        expect(backend.fellBackThisStep).toBe(true);
         expect(backend.mode).toBe('v2');
         expect(circuit.lastResults.backendUsed).toBe('v1');
         expect(circuit.lastResults.valid).toBe(true);
@@ -578,11 +587,11 @@ describe('createInjectedSolverBackend', () => {
         expect(dynSpy).not.toHaveBeenCalled();
         v2Backend.fallbackCount = 3;
         v2Backend.consecutiveFallbackSteps = 12;
-        v2Backend.fellBackThisStep = true;
         v2Backend.reset();
         expect(v2Backend.fallbackCount).toBe(0);
         expect(v2Backend.consecutiveFallbackSteps).toBe(0);
-        expect(v2Backend.fellBackThisStep).toBe(false);
+        expect(v2Backend).not.toHaveProperty('fellBackThisStep');
         expect(v2Backend.mode).toBe('v2');
+        expect(typeof v2Backend.commitStandbyFromCircuit).toBe('function');
     });
 });

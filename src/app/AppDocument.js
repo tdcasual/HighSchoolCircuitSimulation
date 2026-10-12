@@ -139,7 +139,6 @@ export function restoreAppUi({
     chartWorkspace = null,
     ui = null,
     solverBackend = null,
-    warn: _warn = null,
     applyMode = true
 } = {}) {
     const blob = isPlainObject(ui) ? ui : {};

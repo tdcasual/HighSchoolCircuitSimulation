@@ -6,9 +6,9 @@ const SOLVER_FALLBACK_STICKY_STATUS = '已回退';
 const SOLVER_FALLBACK_STICKY_AFTER_STEPS = 50;
 
 function resolveSolverFallbackStatus(backend, results) {
-    if (!backend?.fellBackThisStep) return '';
     if (results?.valid === false) return '';
-    const consecutive = Number(backend.consecutiveFallbackSteps) || 0;
+    const consecutive = Number(backend?.consecutiveFallbackSteps) || 0;
+    if (consecutive === 0) return '';
     return consecutive > SOLVER_FALLBACK_STICKY_AFTER_STEPS
         ? SOLVER_FALLBACK_STICKY_STATUS
         : SOLVER_FALLBACK_STATUS;
@@ -55,6 +55,7 @@ export class RuntimeUiBridge {
         this.app = app;
         this.setStatusTextImpl = options.setStatusTextImpl || setStatusText;
         this.setSimulationControlsRunningImpl = options.setSimulationControlsRunningImpl || setSimulationControlsRunning;
+        this.solverFallbackNoticeActive = false;
     }
 
     updateStatus(text) {
@@ -127,6 +128,11 @@ export class RuntimeUiBridge {
             if (fallbackStatus) {
                 this.app?.chartWorkspace?.setRuntimeStatus?.(fallbackStatus);
                 this.updateStatus(fallbackStatus);
+                this.solverFallbackNoticeActive = true;
+            } else if (this.solverFallbackNoticeActive && results?.valid) {
+                this.solverFallbackNoticeActive = false;
+                this.app?.chartWorkspace?.setRuntimeStatus?.('');
+                this.updateStatus(this.app?.circuit?.isRunning ? '模拟运行中' : '');
             }
         }
 
