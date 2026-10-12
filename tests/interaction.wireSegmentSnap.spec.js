@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Circuit } from '../src/core/runtime/Circuit.js';
-import { InteractionManager } from '../src/ui/Interaction.js';
+import { interactionMethodMaps } from '../src/ui/interaction/interactionMethodMaps.js';
 import { getComponentHitBox } from '../src/components/geometry/ComponentGeometry.js';
 
 function createInteractionModeStore(modeContext = {}) {
@@ -45,7 +45,7 @@ describe('Interaction wire segment snap/split helpers', () => {
             screenToCanvas: vi.fn(() => ({ x: 40, y: 30 }))
         };
 
-        InteractionManager.prototype.startWiringFromPoint.call(ctx, { x: 21, y: 29 }, { clientX: 40, clientY: 30 });
+        interactionMethodMaps.startWiringFromPoint.call(ctx, { x: 21, y: 29 }, { clientX: 40, clientY: 30 });
 
         expect(snapPoint).toHaveBeenCalledWith(21, 29, {
             allowWireSegmentSnap: true,
@@ -70,7 +70,7 @@ describe('Interaction wire segment snap/split helpers', () => {
             syncInteractionModeStore: vi.fn()
         };
 
-        InteractionManager.prototype.startWiringFromPoint.call(ctx, { x: 30, y: 30 }, { clientX: 31, clientY: 33 });
+        interactionMethodMaps.startWiringFromPoint.call(ctx, { x: 30, y: 30 }, { clientX: 31, clientY: 33 });
 
         expect(ctx.syncInteractionModeStore).toHaveBeenCalledWith(expect.objectContaining({
             mode: 'wire'
@@ -88,7 +88,7 @@ describe('Interaction wire segment snap/split helpers', () => {
             }
         };
 
-        const found = InteractionManager.prototype.findNearbyWireSegment.call(ctx, 47, 6, 15);
+        const found = interactionMethodMaps.findNearbyWireSegment.call(ctx, 47, 6, 15);
         expect(found).toEqual({ wireId: 'W1', x: 47, y: 0 });
     });
 
@@ -103,7 +103,7 @@ describe('Interaction wire segment snap/split helpers', () => {
             }
         };
 
-        const nearStart = InteractionManager.prototype.findNearbyWireSegment.call(ctx, 1, 0, 15);
+        const nearStart = interactionMethodMaps.findNearbyWireSegment.call(ctx, 1, 0, 15);
         expect(nearStart).toBeNull();
     });
 
@@ -118,7 +118,7 @@ describe('Interaction wire segment snap/split helpers', () => {
             }
         };
 
-        const found = InteractionManager.prototype.findNearbyWireSegment.call(ctx, 40, 50, 20);
+        const found = interactionMethodMaps.findNearbyWireSegment.call(ctx, 40, 50, 20);
         expect(found).toEqual({ wireId: 'W1', x: 45, y: 45 });
     });
 
@@ -139,7 +139,7 @@ describe('Interaction wire segment snap/split helpers', () => {
             }
         };
 
-        const result = InteractionManager.prototype.splitWireAtPointInternal.call(
+        const result = interactionMethodMaps.splitWireAtPointInternal.call(
             ctx,
             'W1',
             40,
@@ -175,7 +175,7 @@ describe('Interaction wire segment snap/split helpers', () => {
             }
         };
 
-        const result = InteractionManager.prototype.splitWireAtPointInternal.call(
+        const result = interactionMethodMaps.splitWireAtPointInternal.call(
             ctx,
             'W1',
             2,
@@ -204,7 +204,7 @@ describe('Interaction wire segment snap/split helpers', () => {
             }
         };
 
-        const result = InteractionManager.prototype.splitWireAtPointInternal.call(
+        const result = interactionMethodMaps.splitWireAtPointInternal.call(
             ctx,
             'W1',
             50,
@@ -235,7 +235,7 @@ describe('Interaction wire segment snap/split helpers', () => {
             commitHistoryTransaction
         };
 
-        InteractionManager.prototype.onMouseUp.call(ctx, {
+        interactionMethodMaps.onMouseUp.call(ctx, {
             target: { classList: { contains: () => false } }
         });
 
@@ -269,7 +269,7 @@ describe('Interaction wire segment snap/split helpers', () => {
             splitWireAtPointInternal
         };
 
-        InteractionManager.prototype.onMouseUp.call(ctx, {
+        interactionMethodMaps.onMouseUp.call(ctx, {
             target: { classList: { contains: () => false } }
         });
 
@@ -300,7 +300,7 @@ describe('Interaction wire segment snap/split helpers', () => {
             commitHistoryTransaction
         };
 
-        InteractionManager.prototype.onMouseLeave.call(ctx, {});
+        interactionMethodMaps.onMouseLeave.call(ctx, {});
 
         expect(ctx.isDraggingWireEndpoint).toBe(false);
         expect(ctx.wireEndpointDrag).toBeNull();
@@ -339,7 +339,7 @@ describe('Interaction wire segment snap/split helpers', () => {
             syncInteractionModeStore: vi.fn()
         };
 
-        InteractionManager.prototype.cancelWiring.call(ctx);
+        interactionMethodMaps.cancelWiring.call(ctx);
 
         expect(ctx.syncInteractionModeStore).toHaveBeenCalledWith({
             source: 'wire.cancelWiring',
@@ -374,7 +374,7 @@ describe('Interaction wire segment snap/split helpers', () => {
             updateStatus: vi.fn()
         };
 
-        const result = InteractionManager.prototype.renameObservationProbe.call(ctx, 'P1', '新名称');
+        const result = interactionMethodMaps.renameObservationProbe.call(ctx, 'P1', '新名称');
 
         expect(result).toBe(true);
         expect(circuit.getObservationProbe('P1')?.label).toBe('新名称');
@@ -401,7 +401,7 @@ describe('Interaction wire segment snap/split helpers', () => {
             updateStatus: vi.fn()
         };
 
-        const result = InteractionManager.prototype.deleteObservationProbe.call(ctx, 'P1');
+        const result = interactionMethodMaps.deleteObservationProbe.call(ctx, 'P1');
 
         expect(result).toBe(true);
         expect(circuit.getObservationProbe('P1')).toBeUndefined();
@@ -425,7 +425,7 @@ describe('Interaction wire segment snap/split helpers', () => {
             updateStatus: vi.fn()
         };
 
-        const result = InteractionManager.prototype.addProbePlot.call(ctx, 'P1');
+        const result = interactionMethodMaps.addProbePlot.call(ctx, 'P1');
 
         expect(result).toBe(true);
         expect(addPlotForSource).toHaveBeenCalledWith('P1');
@@ -458,7 +458,7 @@ describe('Interaction wire segment snap/split helpers', () => {
             stopPropagation: vi.fn()
         };
 
-        InteractionManager.prototype.startWireEndpointDrag.call(ctx, 'W1', 'a', event);
+        interactionMethodMaps.startWireEndpointDrag.call(ctx, 'W1', 'a', event);
 
         expect(beginHistoryTransaction).toHaveBeenCalledWith('移动导线端点');
         expect(ctx.isDraggingWireEndpoint).toBe(true);
@@ -494,7 +494,7 @@ describe('Interaction wire segment snap/split helpers', () => {
             stopPropagation: vi.fn()
         };
 
-        InteractionManager.prototype.startWireEndpointDrag.call(ctx, 'W1', 'a', event);
+        interactionMethodMaps.startWireEndpointDrag.call(ctx, 'W1', 'a', event);
 
         expect(beginHistoryTransaction).not.toHaveBeenCalled();
         expect(ctx.isDraggingWireEndpoint).not.toBe(true);
@@ -547,7 +547,7 @@ describe('Interaction wire segment snap/split helpers', () => {
             stopPropagation: vi.fn()
         };
 
-        InteractionManager.prototype.onMouseDown.call(ctx, event);
+        interactionMethodMaps.onMouseDown.call(ctx, event);
 
         expect(selectWire).toHaveBeenCalledWith('W1');
         expect(splitWireAtPoint).toHaveBeenCalledWith('W1', 88, 44);
@@ -569,7 +569,7 @@ describe('Interaction wire segment snap/split helpers', () => {
             showPropertyDialog
         };
 
-        InteractionManager.prototype.onDoubleClick.call(ctx, { target });
+        interactionMethodMaps.onDoubleClick.call(ctx, { target });
 
         expect(splitWireAtPoint).not.toHaveBeenCalled();
         expect(showPropertyDialog).not.toHaveBeenCalled();
@@ -602,7 +602,7 @@ describe('Interaction wire segment snap/split helpers', () => {
             updateStatus: vi.fn()
         };
 
-        InteractionManager.prototype.onMouseUp.call(ctx, {
+        interactionMethodMaps.onMouseUp.call(ctx, {
             target: { classList: { contains: () => false } },
             clientX: 100,
             clientY: 50
@@ -649,7 +649,7 @@ describe('Interaction wire segment snap/split helpers', () => {
             updateStatus: vi.fn()
         };
 
-        InteractionManager.prototype.finishWiringToPoint.call(ctx, { x: 90, y: 20 }, { pointerType: 'mouse' });
+        interactionMethodMaps.finishWiringToPoint.call(ctx, { x: 90, y: 20 }, { pointerType: 'mouse' });
 
         expect(splitWireAtPointInternal).toHaveBeenCalledWith('WS', 10, 20, expect.any(Object));
         expect(splitWireAtPointInternal).toHaveBeenCalledWith('WE', 90, 20, expect.any(Object));
@@ -685,7 +685,7 @@ describe('Interaction wire segment snap/split helpers', () => {
             updateStatus: vi.fn()
         };
 
-        InteractionManager.prototype.finishWiringToPoint.call(ctx, {
+        interactionMethodMaps.finishWiringToPoint.call(ctx, {
             x: 90,
             y: 20,
             snap: { type: 'grid' }
@@ -729,7 +729,7 @@ describe('Interaction wire segment snap/split helpers', () => {
             updateStatus: vi.fn()
         };
 
-        InteractionManager.prototype.finishWiringToPoint.call(ctx, {
+        interactionMethodMaps.finishWiringToPoint.call(ctx, {
             x: 120,
             y: 65,
             snap: { type: 'grid' }
@@ -762,7 +762,7 @@ describe('Interaction wire segment snap/split helpers', () => {
             stopPropagation: vi.fn()
         };
 
-        InteractionManager.prototype.startWireEndpointDrag.call(ctx, 'W1', 'a', event);
+        interactionMethodMaps.startWireEndpointDrag.call(ctx, 'W1', 'a', event);
 
         const affectedSet = new Set(ctx.wireEndpointDrag.affected.map((item) => `${item.wireId}:${item.end}`));
         expect(affectedSet).toEqual(new Set(['W1:a', 'W2:a', 'W3:b']));
@@ -771,7 +771,7 @@ describe('Interaction wire segment snap/split helpers', () => {
     it('uses larger snap threshold for touch pointers', () => {
         const ctx = {
             lastPrimaryPointerType: 'mouse',
-            getAdaptiveSnapThreshold: InteractionManager.prototype.getAdaptiveSnapThreshold,
+            getAdaptiveSnapThreshold: interactionMethodMaps.getAdaptiveSnapThreshold,
             findNearbyTerminal: () => null,
             findNearbyWireSegment: () => null,
             findNearbyWireEndpoint: (_x, _y, threshold) => {
@@ -780,10 +780,10 @@ describe('Interaction wire segment snap/split helpers', () => {
             }
         };
 
-        const mouseSnap = InteractionManager.prototype.snapPoint.call(ctx, 0, 0, { pointerType: 'mouse' });
+        const mouseSnap = interactionMethodMaps.snapPoint.call(ctx, 0, 0, { pointerType: 'mouse' });
         expect(mouseSnap.snap?.type).toBe('grid');
 
-        const touchSnap = InteractionManager.prototype.snapPoint.call(ctx, 0, 0, { pointerType: 'touch' });
+        const touchSnap = interactionMethodMaps.snapPoint.call(ctx, 0, 0, { pointerType: 'touch' });
         expect(touchSnap.snap).toEqual({ type: 'wire-endpoint', wireId: 'W1', end: 'a' });
         expect(touchSnap.x).toBe(20);
         expect(touchSnap.y).toBe(0);

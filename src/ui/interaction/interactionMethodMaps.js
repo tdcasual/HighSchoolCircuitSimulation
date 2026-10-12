@@ -70,7 +70,50 @@ export const interactionMethodMaps = {
     ...interactionTailProbeMethods,
 };
 
-export function installInteractionMethodMaps(InteractionManagerClass) {
-    assignInteractionMethods(InteractionManagerClass, interactionMethodMaps);
+export function installInteractionMethodMaps(host) {
+    host.controllers = {
+        circuit: {
+            ...interactionCoreCircuitActionMethods,
+            ...interactionCoreCircuitDragMethods,
+            ...interactionCoreCircuitSnapMethods,
+            ...interactionCoreCircuitWireCompactionMethods,
+            ...interactionCoreCircuitWireDragMethods,
+            ...interactionCoreCircuitWireSearchMethods,
+            ...interactionCoreCircuitWireSplitMethods,
+            ...interactionCoreCircuitWiringFlowMethods
+        },
+        input: {
+            ...interactionCoreInputBindingsMethods,
+            ...interactionCoreInputCoordinateMethods,
+            ...interactionCoreInputMouseContextMethods,
+            ...interactionCoreInputMouseFlowMethods,
+            ...interactionCoreInputPanelStateMethods,
+            ...interactionCoreInputPlacementMethods,
+            ...interactionCoreInputPointerGestureMethods,
+            ...interactionCoreInputPointerLifecycleMethods,
+            ...interactionCoreInputPointerSnapMethods,
+            ...interactionCoreInputTargetResolverMethods,
+            ...interactionCoreInputToolboxMethods,
+            ...interactionCoreInputViewportControlMethods
+        },
+        panel: {
+            ...interactionCorePanelPropertyMethods,
+            ...interactionCorePanelReadoutCapacitorMethods,
+            ...interactionCorePanelReadoutComponentMethods,
+            ...interactionCorePanelReadoutMeterMethods,
+            ...interactionCorePanelSelectionMethods
+        },
+        tail: {
+            ...interactionTailAlignmentMethods,
+            ...interactionTailContextMenuMethods,
+            ...interactionTailDialogLifecycleMethods,
+            ...interactionTailDialogUtilityMethods,
+            ...interactionTailHistoryNavigationMethods,
+            ...interactionTailHistorySnapshotMethods,
+            ...interactionTailHistoryTransactionMethods,
+            ...interactionTailProbeMethods
+        }
+    };
+    assignInteractionMethods(host, interactionMethodMaps);
 }
 

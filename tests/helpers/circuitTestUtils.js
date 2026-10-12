@@ -1,12 +1,47 @@
 import { Circuit } from '../../src/core/runtime/Circuit.js';
 import { createComponent } from '../../src/components/Component.js';
 import { getTerminalWorldPosition } from '../../src/utils/TerminalGeometry.js';
+import { MNASolver } from '../../src/core/simulation/MNASolver.js';
+import { createInjectedSolverBackend } from '../../src/v2/app/createInjectedSolverBackend.js';
+import { resolveComponentViewRecord } from '../../src/utils/componentViewRecord.js';
 
 export function createTestCircuit() {
     const circuit = new Circuit();
     // Deterministic, non-overlapping placement for tests (avoid accidental coordinate-based connections).
     circuit.__testPlacementIndex = 0;
+    circuit.solver = new MNASolver();
+    circuit.solverBackend = createInjectedSolverBackend();
     return circuit;
+}
+
+export function getTestSolver(circuit) {
+    if (!circuit.solver || typeof circuit.solver.solve !== 'function') {
+        circuit.solver = new MNASolver();
+    }
+    return circuit.solver;
+}
+
+export function stepV1(circuit) {
+    const solver = getTestSolver(circuit);
+    if (circuit.simulationState && typeof solver.setSimulationState === 'function') {
+        solver.setSimulationState(circuit.simulationState);
+    }
+    solver.setCircuit(Array.from(circuit.components.values()), circuit.nodes);
+    const dt = Number.isFinite(circuit.dt) && circuit.dt > 0 ? circuit.dt : 0.01;
+    const simTime = Number.isFinite(circuit.simTime) ? circuit.simTime : 0;
+    const results = solver.solve(dt, simTime);
+    circuit.lastResults = results;
+    if (results?.valid && typeof solver.updateDynamicComponents === 'function') {
+        solver.updateDynamicComponents(results.voltages, results.currents);
+        circuit.simTime = simTime + dt;
+    }
+    return results;
+}
+
+export function viewOf(circuit, idOrComp) {
+    const id = typeof idOrComp === 'string' ? idOrComp : idOrComp?.id;
+    const comp = (id !== undefined && circuit.components?.get?.(id)) || idOrComp;
+    return resolveComponentViewRecord(comp, circuit.lastResults?.viewMap);
 }
 
 export function addComponent(circuit, type, id, props = {}, position = null) {
@@ -48,17 +83,10 @@ export function connectWire(circuit, id, startComponent, startTerminalIndex, end
 }
 
 export function solveCircuit(circuit, simTime = 0) {
-    const backend = circuit.solverBackend;
-    if (backend && backend.mode !== 'v1' && typeof backend.solveFrame === 'function') {
-        return backend.solveFrame({
-            circuit,
-            dt: circuit.dt,
-            simTime
-        });
-    }
-    circuit.solver.setCircuit(
+    const solver = circuit.solver || new MNASolver();
+    solver.setCircuit(
         Array.from(circuit.components.values()),
         circuit.nodes
     );
-    return circuit.solver.solve(circuit.dt, simTime);
+    return solver.solve(circuit.dt, simTime);
 }

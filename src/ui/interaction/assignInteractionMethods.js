@@ -1,9 +1,9 @@
-export function assignInteractionMethods(InteractionManagerClass, ...methodMaps) {
-    const proto = InteractionManagerClass.prototype;
+export function assignInteractionMethods(host, ...methodMaps) {
+    if (!host) return;
     for (const map of methodMaps) {
         if (!map) continue;
         for (const name of Object.keys(map)) {
-            proto[name] = map[name];
+            host[name] = map[name];
         }
     }
 }

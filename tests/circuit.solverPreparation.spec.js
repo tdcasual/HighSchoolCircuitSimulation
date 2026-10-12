@@ -1,4 +1,5 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+import { createInjectedSolverBackend } from '../src/v2/app/createInjectedSolverBackend.js';
 import { createTestCircuit, addComponent, connectWire } from './helpers/circuitTestUtils.js';
 
 function buildSeriesCircuit() {
@@ -11,62 +12,49 @@ function buildSeriesCircuit() {
 }
 
 describe('Circuit solver preparation caching', () => {
-    it('reuses solver preparation across steady simulation steps', () => {
+    it('runs v2 steps without V1 setCircuit', () => {
         const circuit = buildSeriesCircuit();
-        const originalSetCircuit = circuit.solver.setCircuit.bind(circuit.solver);
-        let setCircuitCount = 0;
-        circuit.solver.setCircuit = (...args) => {
-            setCircuitCount += 1;
-            return originalSetCircuit(...args);
-        };
+        circuit.solverBackend = createInjectedSolverBackend();
+        const setCircuit = vi.spyOn(circuit.solver, 'setCircuit');
 
-        circuit.isRunning = true;
+        circuit.prepareSimulation();
         circuit.step();
         circuit.step();
         circuit.step();
-        circuit.isRunning = false;
+        circuit.haltSimulation();
 
-        expect(setCircuitCount).toBe(1);
+        expect(setCircuit).not.toHaveBeenCalled();
+        expect(circuit.lastResults?.valid).toBe(true);
+        expect(circuit.lastResults.backendUsed).toBe('v2');
+    });
+
+    it('stays on v2 after topology rebuild', () => {
+        const circuit = buildSeriesCircuit();
+        circuit.solverBackend = createInjectedSolverBackend();
+        const setCircuit = vi.spyOn(circuit.solver, 'setCircuit');
+
+        circuit.prepareSimulation();
+        circuit.step();
+        circuit.rebuildNodes();
+        circuit.step();
+        circuit.haltSimulation();
+
+        expect(setCircuit).not.toHaveBeenCalled();
         expect(circuit.lastResults?.valid).toBe(true);
     });
 
-    it('re-prepares solver after topology rebuild', () => {
+    it('stays on v2 after markSolverCircuitDirty', () => {
         const circuit = buildSeriesCircuit();
-        const originalSetCircuit = circuit.solver.setCircuit.bind(circuit.solver);
-        let setCircuitCount = 0;
-        circuit.solver.setCircuit = (...args) => {
-            setCircuitCount += 1;
-            return originalSetCircuit(...args);
-        };
+        circuit.solverBackend = createInjectedSolverBackend();
+        const setCircuit = vi.spyOn(circuit.solver, 'setCircuit');
 
-        circuit.isRunning = true;
+        circuit.prepareSimulation();
         circuit.step();
-        expect(setCircuitCount).toBe(1);
-
-        circuit.rebuildNodes();
-        circuit.step();
-        circuit.isRunning = false;
-
-        expect(setCircuitCount).toBe(2);
-    });
-
-    it('re-prepares solver when marked dirty by parameter updates', () => {
-        const circuit = buildSeriesCircuit();
-        const originalSetCircuit = circuit.solver.setCircuit.bind(circuit.solver);
-        let setCircuitCount = 0;
-        circuit.solver.setCircuit = (...args) => {
-            setCircuitCount += 1;
-            return originalSetCircuit(...args);
-        };
-
-        circuit.isRunning = true;
-        circuit.step();
-        expect(setCircuitCount).toBe(1);
-
         circuit.markSolverCircuitDirty();
         circuit.step();
-        circuit.isRunning = false;
+        circuit.haltSimulation();
 
-        expect(setCircuitCount).toBe(2);
+        expect(setCircuit).not.toHaveBeenCalled();
+        expect(circuit.lastResults?.valid).toBe(true);
     });
 });

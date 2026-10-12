@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
+import { createInjectedSolverBackend } from '../src/v2/app/createInjectedSolverBackend.js';
 import { addComponent, connectWire, createTestCircuit } from './helpers/circuitTestUtils.js';
+
+function attachFrame(circuit, solveFrame) {
+    circuit.solverBackend = {
+        mode: 'v2',
+        solveFrame
+    };
+}
 
 describe('Adaptive simulation timestep', () => {
     it('reduces internal step size after a failed/non-converged solve', () => {
@@ -13,8 +21,7 @@ describe('Adaptive simulation timestep', () => {
         connectWire(circuit, 'W1', source, 0, resistor, 0);
         connectWire(circuit, 'W2', resistor, 1, source, 1);
 
-        const originalSolve = circuit.solver.solve.bind(circuit.solver);
-        circuit.solver.solve = () => ({
+        attachFrame(circuit, () => ({
             valid: false,
             voltages: [],
             currents: new Map(),
@@ -23,12 +30,11 @@ describe('Adaptive simulation timestep', () => {
                 iterations: 40,
                 maxIterations: 40
             }
-        });
+        }));
 
         circuit.isRunning = true;
         circuit.step();
         circuit.isRunning = false;
-        circuit.solver.solve = originalSolve;
 
         expect(circuit.currentDt).toBeCloseTo(0.005, 9);
     });
@@ -45,8 +51,7 @@ describe('Adaptive simulation timestep', () => {
         connectWire(circuit, 'W1', source, 0, resistor, 0);
         connectWire(circuit, 'W2', resistor, 1, source, 1);
 
-        const originalSolve = circuit.solver.solve.bind(circuit.solver);
-        circuit.solver.solve = () => ({
+        attachFrame(circuit, () => ({
             valid: true,
             voltages: [0, 5],
             currents: new Map([
@@ -58,14 +63,42 @@ describe('Adaptive simulation timestep', () => {
                 iterations: 1,
                 maxIterations: 40
             }
-        });
+        }));
 
         circuit.isRunning = true;
         for (let i = 0; i < 6; i++) {
             circuit.step();
         }
         circuit.isRunning = false;
-        circuit.solver.solve = originalSolve;
+
+        expect(circuit.currentDt).toBeGreaterThan(0.00125);
+        expect(circuit.currentDt).toBeLessThanOrEqual(0.01);
+    });
+
+    it('grows adaptive dt from shipped V2 solveFrame iteration meta', () => {
+        const circuit = createTestCircuit();
+        circuit.dt = 0.01;
+        circuit.enableAdaptiveTimeStep = true;
+        circuit.currentDt = 0.00125;
+        circuit.maxAdaptiveDt = 0.01;
+        circuit.minAdaptiveDt = 0.001;
+
+        const source = addComponent(circuit, 'PowerSource', 'V1', { voltage: 5, internalResistance: 0 });
+        const resistor = addComponent(circuit, 'Resistor', 'R1', { resistance: 100 });
+        connectWire(circuit, 'W1', source, 0, resistor, 0);
+        connectWire(circuit, 'W2', resistor, 1, source, 1);
+
+        circuit.isRunning = true;
+        circuit.step();
+        expect(circuit.lastResults?.valid).toBe(true);
+        expect(circuit.lastResults.meta?.iterations).toBeGreaterThan(0);
+        expect(circuit.lastResults.meta?.converged).toBe(true);
+        expect(circuit.lastResults.meta?.maxIterations).toBeGreaterThan(0);
+
+        for (let i = 0; i < 5; i++) {
+            circuit.step();
+        }
+        circuit.isRunning = false;
 
         expect(circuit.currentDt).toBeGreaterThan(0.00125);
         expect(circuit.currentDt).toBeLessThanOrEqual(0.01);
@@ -94,6 +127,7 @@ describe('Adaptive simulation timestep', () => {
         connectWire(circuit, 'W2', fuse, 1, resistor, 0);
         connectWire(circuit, 'W3', resistor, 1, source, 1);
 
+        circuit.solverBackend = createInjectedSolverBackend();
         circuit.isRunning = true;
         const startSimTime = circuit.simTime;
         circuit.step();
@@ -102,7 +136,9 @@ describe('Adaptive simulation timestep', () => {
         const elapsedSimTime = circuit.simTime - startSimTime;
         const current = Math.abs(circuit.lastResults?.currents?.get('F1') || 0);
         const expectedI2t = current * current * elapsedSimTime;
-        expect(fuse.i2tAccum).toBeCloseTo(expectedI2t, 12);
+        const view = circuit.lastResults?.viewMap?.get('F1');
+        const accumulated = Number.isFinite(view?.i2tAccum) ? view.i2tAccum : fuse.i2tAccum;
+        expect(accumulated).toBeCloseTo(expectedI2t, 12);
     });
 
     it('counts easy-convergence streak once per AC outer step instead of once per substep', () => {
@@ -124,8 +160,7 @@ describe('Adaptive simulation timestep', () => {
         connectWire(circuit, 'W1', acSource, 0, resistor, 0);
         connectWire(circuit, 'W2', resistor, 1, acSource, 1);
 
-        const originalSolve = circuit.solver.solve.bind(circuit.solver);
-        circuit.solver.solve = () => ({
+        attachFrame(circuit, () => ({
             valid: true,
             voltages: [0, 10],
             currents: new Map([
@@ -137,14 +172,13 @@ describe('Adaptive simulation timestep', () => {
                 iterations: 1,
                 maxIterations: 40
             }
-        });
+        }));
 
         circuit.isRunning = true;
         for (let i = 0; i < 3; i += 1) {
             circuit.step();
         }
         circuit.isRunning = false;
-        circuit.solver.solve = originalSolve;
 
         expect(circuit.currentDt).toBeCloseTo(0.001875, 12);
     });

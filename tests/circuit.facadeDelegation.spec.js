@@ -42,14 +42,11 @@ describe('Circuit façade delegation', () => {
                 viewMap: new Map()
             }))
         };
-        const setCircuit = vi.spyOn(circuit.solver, 'setCircuit');
-
         circuit.prepareSimulation();
-        setCircuit.mockClear();
         circuit.step();
 
         expect(circuit.solverBackend.solveFrame).toHaveBeenCalledTimes(1);
-        expect(setCircuit).not.toHaveBeenCalled();
+        expect(circuit.solver).toBeUndefined();
         expect(circuit.lastResults.backendUsed).toBe('v2');
     });
 });

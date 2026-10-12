@@ -184,8 +184,8 @@ describe('CircuitAIAgent', () => {
             components: new Map(),
             rebuildNodes: vi.fn(),
             ensureSolverPrepared: vi.fn(),
-            solver: {
-                solve: vi.fn().mockReturnValue({
+            solverBackend: {
+                solveFrame: vi.fn().mockReturnValue({
                     valid: false,
                     voltages: [0],
                     currents: new Map(),
@@ -195,8 +195,7 @@ describe('CircuitAIAgent', () => {
                         summary: '检测到电源短路风险，请检查导线连接。',
                         hints: ['检查电源正负极是否被导线直接短接。']
                     }
-                }),
-                updateDynamicComponents: vi.fn()
+                })
             }
         };
         const knowledgeProvider = {

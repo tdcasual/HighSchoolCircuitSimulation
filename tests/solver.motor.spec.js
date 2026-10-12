@@ -17,6 +17,5 @@ describe('Motor series armature', () => {
 
         expect(circuit.lastResults?.valid).toBe(true);
         expect(circuit.lastResults.currents.get('M1')).toBeCloseTo(1.2, 6);
-        expect(motor.currentValue).toBeCloseTo(1.2, 6);
     });
 });

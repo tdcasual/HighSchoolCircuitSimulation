@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { addComponent, connectWire, createTestCircuit } from './helpers/circuitTestUtils.js';
+import { addComponent, connectWire, createTestCircuit, stepV1 } from './helpers/circuitTestUtils.js';
 
 describe('RC/RL transient recurrence (backward-euler)', () => {
     it('matches RC charging recurrence over two steps', () => {
@@ -55,19 +55,17 @@ describe('RC/RL transient recurrence (backward-euler)', () => {
         capacitor.prevCharge = capacitor.capacitance * vExpected;
         capacitor.prevVoltage = vExpected;
 
-        circuit.isRunning = true;
-        circuit.step();
+        stepV1(circuit);
         vExpected = vExpected / (1 + alpha);
         const v1 = (circuit.lastResults?.voltages?.[capacitor.nodes[0]] || 0)
             - (circuit.lastResults?.voltages?.[capacitor.nodes[1]] || 0);
         expect(v1).toBeCloseTo(vExpected, 6);
 
-        circuit.step();
+        stepV1(circuit);
         vExpected = vExpected / (1 + alpha);
         const v2 = (circuit.lastResults?.voltages?.[capacitor.nodes[0]] || 0)
             - (circuit.lastResults?.voltages?.[capacitor.nodes[1]] || 0);
         expect(v2).toBeCloseTo(vExpected, 6);
-        circuit.isRunning = false;
     });
 
     it('matches RL current rise recurrence over two steps', () => {
@@ -92,11 +90,11 @@ describe('RC/RL transient recurrence (backward-euler)', () => {
         circuit.isRunning = true;
         circuit.step();
         iExpected = (iExpected + beta) / (1 + alpha);
-        expect(inductor.currentValue).toBeCloseTo(iExpected, 6);
+        expect(circuit.lastResults.currents.get('L1')).toBeCloseTo(iExpected, 6);
 
         circuit.step();
         iExpected = (iExpected + beta) / (1 + alpha);
-        expect(inductor.currentValue).toBeCloseTo(iExpected, 6);
+        expect(circuit.lastResults.currents.get('L1')).toBeCloseTo(iExpected, 6);
         circuit.isRunning = false;
     });
 
@@ -120,14 +118,12 @@ describe('RC/RL transient recurrence (backward-euler)', () => {
         inductor.prevCurrent = iExpected;
         inductor.prevVoltage = 0;
 
-        circuit.isRunning = true;
-        circuit.step();
+        stepV1(circuit);
         iExpected = iExpected / (1 + alpha);
-        expect(inductor.currentValue).toBeCloseTo(iExpected, 6);
+        expect(circuit.lastResults.currents.get('L1')).toBeCloseTo(iExpected, 6);
 
-        circuit.step();
+        stepV1(circuit);
         iExpected = iExpected / (1 + alpha);
-        expect(inductor.currentValue).toBeCloseTo(iExpected, 6);
-        circuit.isRunning = false;
+        expect(circuit.lastResults.currents.get('L1')).toBeCloseTo(iExpected, 6);
     });
 });

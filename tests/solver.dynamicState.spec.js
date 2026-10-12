@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Circuit } from '../src/core/runtime/Circuit.js';
 import { createComponent } from '../src/components/Component.js';
+import { getTestSolver } from './helpers/circuitTestUtils.js';
 
 describe('Solver uses SimulationState', () => {
     it('drops stale dynamic entries after clear + reset', () => {
@@ -39,9 +40,10 @@ describe('Solver uses SimulationState', () => {
         circuit.rebuildNodes();
         circuit.resetSimulationState();
 
-        circuit.solver.setCircuit([diode], circuit.nodes);
-        circuit.solver.setSimulationState(circuit.simulationState);
-        const result = circuit.solver.solve(0.01, 0);
+        const solver = getTestSolver(circuit);
+        solver.setCircuit([diode], circuit.nodes);
+        solver.setSimulationState(circuit.simulationState);
+        const result = solver.solve(0.01, 0);
 
         const entry = circuit.simulationState.get('D1');
         expect(result.valid).toBe(true);

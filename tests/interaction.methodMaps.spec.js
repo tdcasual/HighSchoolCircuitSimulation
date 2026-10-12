@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { InteractionManager } from '../src/ui/Interaction.js';
+import { interactionMethodMaps } from '../src/ui/interaction/interactionMethodMaps.js';
 import { interactionCoreCircuitWireSearchMethods } from '../src/ui/interaction/InteractionCoreCircuitWireSearchDelegates.js';
 import { interactionCoreInputPlacementMethods } from '../src/ui/interaction/InteractionCoreInputPlacementDelegates.js';
 import * as WireInteractions from '../src/ui/interaction/WireInteractions.js';
@@ -24,12 +24,13 @@ describe('InteractionManager composed method maps', () => {
         vi.restoreAllMocks();
     });
 
-    it('ships findNearbyWireEndpoint from the composed map onto InteractionManager', () => {
-        expect(InteractionManager.prototype.findNearbyWireEndpoint)
+    it('ships findNearbyWireEndpoint from the composed map onto InteractionManager instances', () => {
+        expect(interactionMethodMaps.findNearbyWireEndpoint)
             .toBe(interactionCoreCircuitWireSearchMethods.findNearbyWireEndpoint);
 
         const spy = vi.spyOn(WireInteractions, 'findNearbyWireEndpoint').mockReturnValue(null);
-        const instance = Object.create(InteractionManager.prototype);
+        const instance = {};
+        instance.findNearbyWireEndpoint = interactionMethodMaps.findNearbyWireEndpoint;
         const excludeWireEndpoints = new Set(['W1:a']);
         const excludeWireIds = new Set(['W1', 'W2']);
 
@@ -56,9 +57,9 @@ describe('InteractionManager composed method maps', () => {
     });
 
     it('ships getInteractionModeSnapshot from the composed placement map', () => {
-        expect(InteractionManager.prototype.getInteractionModeSnapshot)
+        expect(interactionMethodMaps.getInteractionModeSnapshot)
             .toBe(interactionCoreInputPlacementMethods.getInteractionModeSnapshot);
-        expect(typeof InteractionManager.prototype.getInteractionModeSnapshot).toBe('function');
+        expect(typeof interactionMethodMaps.getInteractionModeSnapshot).toBe('function');
     });
 
     it('installs method maps from one production site', () => {

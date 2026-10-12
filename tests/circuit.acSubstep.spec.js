@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { createInjectedSolverBackend } from '../src/v2/app/createInjectedSolverBackend.js';
 import { addComponent, connectWire, createTestCircuit } from './helpers/circuitTestUtils.js';
 
 describe('Circuit AC substep simulation', () => {
@@ -20,12 +21,14 @@ describe('Circuit AC substep simulation', () => {
 
         expect(circuit.getSimulationSubstepCount()).toBeGreaterThan(1);
 
+        circuit.solverBackend = createInjectedSolverBackend();
         circuit.isRunning = true;
         circuit.step();
         circuit.isRunning = false;
 
         expect(circuit.lastResults?.valid).toBe(true);
-        expect(Math.abs(resistor.currentValue)).toBeGreaterThan(1e-3);
+        const current = Math.abs(Number(circuit.lastResults.currents.get('R1')));
+        expect(current).toBeGreaterThan(1e-3);
         expect(circuit.simTime).toBeCloseTo(0.01, 12);
     });
 
@@ -63,25 +66,26 @@ describe('Circuit AC substep simulation', () => {
 
         expect(circuit.getSimulationSubstepCount(circuit.currentDt)).toBeGreaterThan(1);
 
-        const originalSolve = circuit.solver.solve.bind(circuit.solver);
-        circuit.solver.solve = () => ({
-            valid: true,
-            voltages: [0, 10],
-            currents: new Map([
-                ['VAC', 1],
-                ['R1', 1]
-            ]),
-            meta: {
-                converged: true,
-                iterations: 1,
-                maxIterations: 40
-            }
-        });
+        circuit.solverBackend = {
+            mode: 'v2',
+            solveFrame: () => ({
+                valid: true,
+                voltages: [0, 10],
+                currents: new Map([
+                    ['VAC', 1],
+                    ['R1', 1]
+                ]),
+                meta: {
+                    converged: true,
+                    iterations: 1,
+                    maxIterations: 40
+                }
+            })
+        };
 
         circuit.isRunning = true;
         circuit.step();
         circuit.isRunning = false;
-        circuit.solver.solve = originalSolve;
 
         expect(circuit.currentDt).toBeCloseTo(0.00125, 12);
     });

@@ -64,7 +64,7 @@ describe('Circuit topology batch', () => {
         const circuit = new Circuit();
         circuit.addWire({ id: 'W1', a: { x: 0, y: 0 }, b: { x: 10, y: 0 } });
         circuit.addWire({ id: 'W2', a: { x: 10, y: 0 }, b: { x: 20, y: 0 } });
-        circuit.ensureSolverPrepared();
+        circuit.solverCircuitDirty = false;
 
         const versionBefore = circuit.topologyVersion;
         expect(circuit.solverCircuitDirty).toBe(false);

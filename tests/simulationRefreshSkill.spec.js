@@ -2,9 +2,8 @@ import { describe, it, expect, vi } from 'vitest';
 import { SimulationRefreshSkill } from '../src/ai/skills/SimulationRefreshSkill.js';
 
 describe('SimulationRefreshSkill', () => {
-    it('refreshes circuit values through one-shot solve', () => {
-        const updateDynamicComponents = vi.fn();
-        const solve = vi.fn().mockReturnValue({
+    it('refreshes circuit values through one-shot solveFrame', () => {
+        const solveFrame = vi.fn().mockReturnValue({
             valid: true,
             voltages: [0, 1],
             currents: new Map()
@@ -12,9 +11,9 @@ describe('SimulationRefreshSkill', () => {
         const circuit = {
             dt: 0.01,
             simTime: 1,
-            solver: {
-                solve,
-                updateDynamicComponents
+            solverBackend: {
+                mode: 'v2',
+                solveFrame
             },
             rebuildNodes: vi.fn(),
             ensureSolverPrepared: vi.fn(),
@@ -25,9 +24,8 @@ describe('SimulationRefreshSkill', () => {
 
         expect(result.ok).toBe(true);
         expect(result.valid).toBe(true);
-        expect(solve).toHaveBeenCalledTimes(1);
-        expect(updateDynamicComponents).toHaveBeenCalledTimes(1);
-        expect(circuit.simTime).toBeCloseTo(1.01, 8);
+        expect(solveFrame).toHaveBeenCalledTimes(1);
+        expect(circuit.simTime).toBe(1);
     });
 
     it('returns graceful failure when solver is missing', () => {
@@ -81,15 +79,14 @@ describe('SimulationRefreshSkill', () => {
         const circuit = {
             dt: 0.01,
             simTime: 0,
-            solver: {
-                shortCircuitDetected: true,
-                solve: vi.fn().mockReturnValue({
+            solverBackend: {
+                mode: 'v2',
+                solveFrame: vi.fn().mockReturnValue({
                     valid: false,
                     voltages: [0],
                     currents: new Map(),
                     meta: { invalidReason: 'solve_failed' }
-                }),
-                updateDynamicComponents: vi.fn()
+                })
             },
             rebuildNodes: vi.fn(),
             ensureSolverPrepared: vi.fn(),

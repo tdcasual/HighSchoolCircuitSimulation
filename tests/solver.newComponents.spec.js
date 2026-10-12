@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addComponent, connectWire, createTestCircuit, solveCircuit } from './helpers/circuitTestUtils.js';
+import { addComponent, connectWire, createTestCircuit, solveCircuit, viewOf } from './helpers/circuitTestUtils.js';
 import { computeNtcThermistorResistance, computePhotoresistorResistance } from '../src/utils/Physics.js';
 
 describe('New component models (Ground / AC source / Inductor / SPDT / Fuse / Diode / LED / Thermistor / Photoresistor / Relay)', () => {
@@ -109,8 +109,9 @@ describe('New component models (Ground / AC source / Inductor / SPDT / Fuse / Di
         for (const expectedCurrent of expectedCurrents) {
             circuit.step();
             expect(circuit.lastResults?.valid).toBe(true);
-            expect(inductor.currentValue).toBeCloseTo(expectedCurrent, 6);
-            expect(inductor.prevCurrent).toBeCloseTo(expectedCurrent, 6);
+            const view = viewOf(circuit, inductor);
+            expect(circuit.lastResults.currents.get('L1')).toBeCloseTo(expectedCurrent, 6);
+            expect(view.prevCurrent).toBeCloseTo(expectedCurrent, 6);
         }
         circuit.isRunning = false;
     });
@@ -144,7 +145,7 @@ describe('New component models (Ground / AC source / Inductor / SPDT / Fuse / Di
         circuit.step();
         circuit.isRunning = false;
 
-        expect(inductor.currentValue).toBeCloseTo(expectedFirstStepCurrent, 6);
+        expect(circuit.lastResults.currents.get('L1')).toBeCloseTo(expectedFirstStepCurrent, 6);
     });
 
     it('routes SPDT switch current through the selected throw', () => {
@@ -205,8 +206,9 @@ describe('New component models (Ground / AC source / Inductor / SPDT / Fuse / Di
 
         circuit.isRunning = true;
         circuit.step();
-        expect(fuse.blown).toBe(true);
-        expect((fuse.i2tAccum || 0)).toBeGreaterThanOrEqual(0.2);
+        const fuseView = viewOf(circuit, fuse);
+        expect(fuseView.blown).toBe(true);
+        expect((fuseView.i2tAccum || 0)).toBeGreaterThanOrEqual(0.2);
 
         circuit.step();
         const fuseCurrent = Math.abs(circuit.lastResults?.currents?.get('F1') || 0);
@@ -346,7 +348,9 @@ describe('New component models (Ground / AC source / Inductor / SPDT / Fuse / Di
         circuit.isRunning = true;
         circuit.step();
         circuit.isRunning = false;
-        expect(led.brightness).toBeCloseTo(Math.min(1, Math.abs(ledCurrent) / 0.02), 3);
+        const ledView = viewOf(circuit, led);
+        const steppedCurrent = circuit.lastResults.currents.get('LED1') || 0;
+        expect(ledView.brightness).toBeCloseTo(Math.min(1, Math.abs(steppedCurrent) / 0.02), 3);
     });
 
     it('caps LED brightness at 1 when current exceeds rated current', () => {
@@ -381,7 +385,7 @@ describe('New component models (Ground / AC source / Inductor / SPDT / Fuse / Di
         circuit.isRunning = true;
         circuit.step();
         circuit.isRunning = false;
-        expect(led.brightness).toBeCloseTo(1, 6);
+        expect(viewOf(circuit, led).brightness).toBeCloseTo(1, 6);
     });
 
     it('keeps LED off under reverse bias', () => {

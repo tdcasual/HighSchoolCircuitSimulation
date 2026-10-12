@@ -2,17 +2,13 @@ import { describe, expect, it, vi } from 'vitest';
 import { Circuit } from '../src/core/runtime/Circuit.js';
 
 describe('Circuit result projection delegation', () => {
-    it('delegates simulation result projection to the injected service during step', () => {
-        const resultProjectionService = {
-            updateComponentDisplayValues: vi.fn(() => false)
-        };
+    it('classroom V2 step does not copy results onto live components; onUpdate still fires', () => {
         const persistenceAdapter = {
             loadSolverDebugFlag: vi.fn(() => false),
             saveSolverDebugFlag: vi.fn(() => true)
         };
         const circuit = new Circuit({
-            persistenceAdapter,
-            resultProjectionService
+            persistenceAdapter
         });
         const results = {
             valid: true,
@@ -33,7 +29,7 @@ describe('Circuit result projection delegation', () => {
 
         circuit.step();
 
-        expect(resultProjectionService.updateComponentDisplayValues).toHaveBeenCalledWith(circuit, results);
+        expect(circuit.resultProjectionService).toBeUndefined();
         expect(circuit.onUpdate).toHaveBeenCalledWith(results);
     });
 });

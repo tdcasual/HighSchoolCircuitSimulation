@@ -1,6 +1,5 @@
 export function debugRuntimeCircuit(app) {
     const logger = app.logger.child('debugCircuit');
-    app.circuit.solver.debugMode = true;
 
     logger.info('=== Circuit Debug Info ===');
     logger.info('Components:', app.circuit.components.size);
@@ -50,23 +49,13 @@ export function debugRuntimeCircuit(app) {
     }
 
     const backend = app.circuit.solverBackend;
-    const useBackend = !!backend && backend.mode !== 'v1' && typeof backend.solveFrame === 'function';
-    let results;
-    if (useBackend) {
-        results = backend.solveFrame({
+    const results = backend && typeof backend.solveFrame === 'function'
+        ? backend.solveFrame({
             circuit: app.circuit,
             dt: app.circuit.dt,
             simTime: app.circuit.simTime
-        });
-        logger.info('VoltageSourceCount:', app.circuit.solver.voltageSourceCount);
-    } else {
-        app.circuit.solver.setCircuit(
-            Array.from(app.circuit.components.values()),
-            app.circuit.nodes
-        );
-        logger.info('VoltageSourceCount:', app.circuit.solver.voltageSourceCount);
-        results = app.circuit.solver.solve(app.circuit.dt);
-    }
+        })
+        : { valid: false, voltages: [], currents: new Map(), backendUsed: 'v2' };
 
     logger.info('\n--- Solve Results ---');
     logger.info('Valid:', results.valid);
@@ -78,17 +67,12 @@ export function debugRuntimeCircuit(app) {
     }
     logger.info('solverBackend:', backend?.mode);
     logger.info('backendUsed:', results?.backendUsed);
-    logger.info('shadowMismatchCount:', backend?.shadowMismatchCount);
 
-    app.circuit.solver.debugMode = false;
     return {
         circuit: app.circuit,
         results,
         solverBackend: backend?.mode,
-        backendUsed: results?.backendUsed,
-        shadowMismatchCount: backend?.shadowMismatchCount,
-        shadowErrorCount: backend?.shadowErrorCount,
-        shadowCompareCount: backend?.shadowCompareCount
+        backendUsed: results?.backendUsed
     };
 }
 

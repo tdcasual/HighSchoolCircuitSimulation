@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { addComponent, connectWire, createTestCircuit } from './helpers/circuitTestUtils.js';
+import { addComponent, connectWire, createTestCircuit, stepV1 } from './helpers/circuitTestUtils.js';
 
 describe('Integration method selection', () => {
     it('switches capacitor auto from backward-euler to trapezoidal after history', () => {
@@ -18,8 +18,8 @@ describe('Integration method selection', () => {
         expect(circuit.solver.resolveDynamicIntegrationMethod(capacitor)).toBe('backward-euler');
 
         circuit.isRunning = true;
-        circuit.step();
-        circuit.step();
+        stepV1(circuit);
+        stepV1(circuit);
 
         expect(circuit.solver.resolveDynamicIntegrationMethod(capacitor)).toBe('trapezoidal');
         circuit.isRunning = false;
@@ -42,8 +42,8 @@ describe('Integration method selection', () => {
 
         circuit.solver.setCircuit(Array.from(circuit.components.values()), circuit.nodes);
         circuit.isRunning = true;
-        circuit.step();
-        circuit.step();
+        stepV1(circuit);
+        stepV1(circuit);
 
         expect(circuit.solver.resolveDynamicIntegrationMethod(capacitor)).toBe('backward-euler');
         circuit.isRunning = false;
@@ -65,8 +65,8 @@ describe('Integration method selection', () => {
         expect(circuit.solver.resolveDynamicIntegrationMethod(capacitor)).toBe('backward-euler');
 
         circuit.isRunning = true;
-        circuit.step();
-        circuit.step();
+        stepV1(circuit);
+        stepV1(circuit);
 
         expect(circuit.solver.resolveDynamicIntegrationMethod(capacitor)).toBe('backward-euler');
         circuit.isRunning = false;
@@ -88,8 +88,8 @@ describe('Integration method selection', () => {
         expect(circuit.solver.resolveDynamicIntegrationMethod(capacitor)).toBe('backward-euler');
 
         circuit.isRunning = true;
-        circuit.step();
-        circuit.step();
+        stepV1(circuit);
+        stepV1(circuit);
 
         expect(circuit.solver.resolveDynamicIntegrationMethod(capacitor)).toBe('trapezoidal');
         circuit.isRunning = false;
@@ -111,8 +111,8 @@ describe('Integration method selection', () => {
         expect(circuit.solver.resolveDynamicIntegrationMethod(inductor)).toBe('backward-euler');
 
         circuit.isRunning = true;
-        circuit.step();
-        circuit.step();
+        stepV1(circuit);
+        stepV1(circuit);
 
         expect(circuit.solver.resolveDynamicIntegrationMethod(inductor)).toBe('trapezoidal');
         circuit.isRunning = false;
@@ -135,8 +135,8 @@ describe('Integration method selection', () => {
 
         circuit.solver.setCircuit(Array.from(circuit.components.values()), circuit.nodes);
         circuit.isRunning = true;
-        circuit.step();
-        circuit.step();
+        stepV1(circuit);
+        stepV1(circuit);
 
         expect(circuit.solver.resolveDynamicIntegrationMethod(inductor)).toBe('backward-euler');
         circuit.isRunning = false;
@@ -158,8 +158,8 @@ describe('Integration method selection', () => {
         expect(circuit.solver.resolveDynamicIntegrationMethod(inductor)).toBe('backward-euler');
 
         circuit.isRunning = true;
-        circuit.step();
-        circuit.step();
+        stepV1(circuit);
+        stepV1(circuit);
 
         expect(circuit.solver.resolveDynamicIntegrationMethod(inductor)).toBe('backward-euler');
         circuit.isRunning = false;
@@ -181,8 +181,8 @@ describe('Integration method selection', () => {
         expect(circuit.solver.resolveDynamicIntegrationMethod(inductor)).toBe('backward-euler');
 
         circuit.isRunning = true;
-        circuit.step();
-        circuit.step();
+        stepV1(circuit);
+        stepV1(circuit);
 
         expect(circuit.solver.resolveDynamicIntegrationMethod(inductor)).toBe('trapezoidal');
         circuit.isRunning = false;

@@ -23,8 +23,6 @@ describe('closed switch series current unknown', () => {
         const current = circuit.lastResults.currents.get('S1');
         expect(current).toBeGreaterThan(0.59);
         expect(current).toBeLessThan(0.61);
-        expect(sw.currentValue).toBeGreaterThan(0.59);
-        expect(sw.currentValue).toBeLessThan(0.61);
     });
 
     it('solves two parallel closed switches whose currents sum to the load current', () => {
@@ -95,7 +93,5 @@ describe('closed switch series current unknown', () => {
         const current = circuit.lastResults.currents.get('S1');
         expect(current).toBeGreaterThan(0.59);
         expect(current).toBeLessThan(0.61);
-        expect(sw.currentValue).toBeGreaterThan(0.59);
-        expect(sw.currentValue).toBeLessThan(0.61);
     });
 });

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { getTerminalWorldPosition } from '../src/utils/TerminalGeometry.js';
 import { addComponent, connectWire, createTestCircuit } from './helpers/circuitTestUtils.js';
 
 describe('Rheostat live Circuit.step', () => {
@@ -22,6 +23,10 @@ describe('Rheostat live Circuit.step', () => {
         expect(circuit.lastResults.currents.get('Rh1')).toBeCloseTo(0.24, 4);
 
         rheo.position = 0.25;
+        const sliderPos = getTerminalWorldPosition(rheo, 2);
+        const sliderWire = circuit.getWire('W2');
+        sliderWire.a = { x: sliderPos.x, y: sliderPos.y };
+        circuit.markSolverCircuitDirty();
         circuit.step();
         expect(circuit.lastResults?.valid).toBe(true);
         expect(circuit.lastResults.currents.get('Rh1')).toBeCloseTo(0.48, 4);

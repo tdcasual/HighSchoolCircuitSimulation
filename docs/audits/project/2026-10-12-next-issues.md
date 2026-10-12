@@ -1,26 +1,26 @@
 # Next Issues After Default-on V2 — 2026-10-12 (refreshed)
 
 - Date: 2026-10-12
-- Scope: live classroom tree on execute-plan PR-6 (default-on V2 + Circuit façade + shared stamps/nodes). Record remaining debt. Do not rewrite `docs/audits/project/top30.md` status cells. Do not delete the V1 kernel (KD20 soak).
+- Scope: live classroom tree on execute-plan PR-6 (default-on V2). Record remaining debt. Do not rewrite `docs/audits/project/top30.md` status cells.
 - Related: `2026-10-12-live-system-scorecard-a-r2.md`, `2026-10-12-live-system-scorecard-b-r2.md`, `docs/plans/2026-10-12-v2-cutover-design.md`
 
 ## Verdict
 
 Classroom default solver is **V2** via Wiring A: `bootstrapV2` injects `createInjectedSolverBackend()` (`DEFAULT_SOLVER_BACKEND_MODE = 'v2'`). `AppRuntimeV2` never imports `src/v2`. Exclusive CI still forbids identifiers `SolveCircuitV2` / `runSimulationStepV2` in `src/app|ui|core|embed`.
 
-Default V2 no longer same-substep-falls back to V1: an invalid V2 substep stays invalid, does not construct `MNASolver`, and still feeds adaptive dt. Explicit `mode=v1`, shadow, and embed without `solver=` still pin v1 (KD7). `wrapSolverBackend` applies mode only; it does not restore standby. Classroom readers overlay ViewMap dynamics (blown/speed/conducting/energized).
+Classroom tick is V2-only: `CircuitSimulationLoopService` calls `solveFrame`, does not construct `MNASolver`, and does not restore standby. Embed without `solver=` pins `'v2'`. `wrapSolverBackend` is identity. Classroom readers overlay ViewMap dynamics (blown/speed/conducting/energized). Live-system scorecards A-R9 综合 **8.7** / B-R9 综合 **8.3** (both > 8.0).
 
 Stamp handlers and Shockley junction live in `src/utils/registerDefaultStamps.js` / `src/utils/JunctionModel.js`; both default registries register the **same handler objects**. Union-find lives in `src/utils/buildElectricalNodes.js`; live `NodeBuilder` and `NodeBuilderV2` are thin wrappers (live still writes `wire.nodeIndex`).
 
-Remaining High: 1（H12/R1 dual live kernels until KD20）
+Remaining High: 0 on the classroom tick (V1 kernel remains as a test-only import).
 
 ## Remaining scorecard (live)
 
 | ID | Sev | Status | Live |
 |---|---|---|---|
-| H12 / R1 | High | **Partial** | Production V2 tick uses injected V2 only. Invalid V2 does not construct or run V1. V1 `MNASolver` is still lazy for explicit `mode=v1` / shadow / embed pin. LU/stamp primitives/cache-key live in `src/utils`. |
-| R2 / A5 | High | **Done** | `Circuit.js` **502** lines; topology/sim lifecycle in existing services. `Object.assign(InteractionManagerClass.prototype` **0**. One `installInteractionMethodMaps`; leftover per-file `install*` delegates deleted. Interaction is still one prototype with shared `this`. |
-| A2 remainder | Med | **Done** | Named classroom readers overlay I/U/P plus fuse/motor/relay/diode dynamics from ViewMap. `wrapSolverBackend` does not restore standby. `applyViewMapToComponents` is a test helper only. V1 `updateComponentDisplayValues` still runs when `backendUsed !== 'v2'`. Do not add `circuit.lastViewMap`. |
+| H12 / R1 | High | **Done** | Classroom tick calls `solveFrame` only. `Circuit` does not import `MNASolver`. Embed pins v2. V1 kernel remains for isolated tests. |
+| R2 / A5 | High | **Partial** | `Circuit.js` façade over services. Interaction installs method maps on the instance (`controllers` groups), not the class prototype. |
+| A2 remainder | Med | **Done** | Named classroom readers overlay I/U/P plus fuse/motor/relay/diode dynamics from ViewMap. `wrapSolverBackend` is identity. `applyViewMapToComponents` is a test helper only. Do not add `circuit.lastViewMap`. |
 | N10 | Med | **Done** | Canonical P0 20 DC scenes unchanged. `baseline:p0:ext` has 6 extra scenes. |
 | M5 | Med | Open | `DefaultComponentRegistry` aliases Bulb to Resistor. Linear filament. |
 | M10 | Low | Open | `SimulationDriver` default 10ms. |
@@ -38,8 +38,8 @@ Remaining High: 1（H12/R1 dual live kernels until KD20）
 
 ### 1. KD20 soak, then PR-G (delete V1) — do not start now
 
-- Default V2 ≥14d. Same-substep V1 fallback is already gone from the classroom V2 arm.
-- Keep the V1 kernel until KD20 (explicit v1 / shadow / embed pin). Stamp-parity CI still runs; new types go in `registerDefaultStamps.js` only.
+- Default V2 ≥14d. Classroom tick, embed-without-`solver=`, wrap, and factory are V2-only.
+- Keep the V1 kernel on disk until KD20 (isolated tests / stamp-parity). New types go in `registerDefaultStamps.js` only.
 
 ### 2. Live-field visuals
 

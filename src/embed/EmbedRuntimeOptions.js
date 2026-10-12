@@ -146,13 +146,12 @@ export function parseEmbedRuntimeOptionsFromSearch(search = '') {
     const embedRequested = enabled;
     const embedEnabled = embedRequested && usable;
     const solverRaw = String(params.get('solver') || '').trim().toLowerCase();
-    const solverExplicit = params.has('solver')
-        && (solverRaw === 'v1' || solverRaw === 'v2' || solverRaw === 'shadow');
+    const solverExplicit = params.has('solver') && solverRaw === 'v2';
     let solverBackend;
     if (solverExplicit) {
-        solverBackend = solverRaw;
+        solverBackend = 'v2';
     } else if (embedEnabled) {
-        solverBackend = 'v1';
+        solverBackend = 'v2';
     }
 
     return {

@@ -3,7 +3,6 @@
  * 持有可变电路文档与仿真时钟，把拓扑、步进、投影、诊断交给已有服务。
  */
 
-import { MNASolver } from '../simulation/MNASolver.js';
 import { NodeBuilder } from '../topology/NodeBuilder.js';
 import { WireCompactor } from '../topology/WireCompactor.js';
 import { getTopologyStateSnapshot } from '../topology/TopologyState.js';
@@ -11,7 +10,6 @@ import { ConnectivityCache } from '../topology/ConnectivityCache.js';
 import { CircuitSerializer } from '../io/CircuitSerializer.js';
 import { CircuitDeserializer } from '../io/CircuitDeserializer.js';
 import { SimulationState } from '../simulation/SimulationState.js';
-import { NetlistBuilder } from '../simulation/NetlistBuilder.js';
 import { createRuntimeLogger } from '../../utils/Logger.js';
 import { CircuitPersistenceAdapter } from './CircuitPersistenceAdapter.js';
 import { CircuitDiagnosticsAdapter } from './CircuitDiagnosticsAdapter.js';
@@ -20,7 +18,6 @@ import { CircuitSimulationLoopService } from '../services/CircuitSimulationLoopS
 import { CircuitObservationProbeService } from '../services/CircuitObservationProbeService.js';
 import { CircuitTopologyValidationService } from '../services/CircuitTopologyValidationService.js';
 import { CircuitFlowAnalysisService } from '../services/CircuitFlowAnalysisService.js';
-import { CircuitResultProjectionService } from '../services/CircuitResultProjectionService.js';
 import { getCircuitComponentProperties } from './CircuitComponentProperties.js';
 import { resolveComponentViewRecord } from '../../utils/componentViewRecord.js';
 import {
@@ -35,7 +32,6 @@ export class Circuit {
         this.wires = new Map();
         this.observationProbes = new Map();
         this.nodes = [];
-        this._solver = null;
         this.isRunning = false;
         this.lastResults = null;
         this.dt = 0.01;
@@ -72,11 +68,9 @@ export class Circuit {
         this.observationProbeService = options.observationProbeService || new CircuitObservationProbeService();
         this.topologyValidationService = options.topologyValidationService || new CircuitTopologyValidationService();
         this.flowAnalysisService = options.flowAnalysisService || new CircuitFlowAnalysisService();
-        this.resultProjectionService = options.resultProjectionService || new CircuitResultProjectionService();
         this.componentTerminalTopologyKeys = new Map();
         this.terminalWorldPosCache = new Map();
         this.simulationState = new SimulationState();
-        this.netlistBuilder = new NetlistBuilder();
         this.netlist = null;
         this.debugMode = false;
         this.logger = createRuntimeLogger({ scope: 'circuit' });
@@ -87,22 +81,8 @@ export class Circuit {
         this.loadDebugFlag();
     }
 
-    get solver() {
-        if (!this._solver) {
-            this._solver = new MNASolver();
-            this._solver.setLogger?.(this.logger?.child?.('solver') || this.logger);
-            this._solver.debugMode = this.debugMode;
-        }
-        return this._solver;
-    }
-
-    set solver(value) {
-        this._solver = value;
-    }
-
     setLogger(logger) {
         this.logger = logger || createRuntimeLogger({ scope: 'circuit' });
-        this._solver?.setLogger?.(this.logger.child?.('solver') || this.logger);
     }
 
     beginTopologyBatch() {
@@ -195,7 +175,7 @@ export class Circuit {
             simulationVersion: Number.isFinite(this.simulationStepId) ? this.simulationStepId : null,
             components: new Map(Array.from(this.components.entries()).map(([id, component]) => [id, { ...component }])),
             observationProbes: this.getAllObservationProbes(),
-            solverShortCircuitDetected: !!this._solver?.shortCircuitDetected,
+            solverShortCircuitDetected: !!this.lastResults?.diagnostics?.shortCircuitDetected,
             shortedSourceIds: Array.isArray(this.shortedSourceIds) ? [...this.shortedSourceIds] : null,
             shortedWireIds: Array.isArray(this.shortedWireIds) ? [...this.shortedWireIds] : null,
             topologyValidationDeferred: this.topologyBatchDepth > 0 || this.topologyRebuildPending
@@ -332,7 +312,7 @@ export class Circuit {
             results: normalizedResults,
             topologyVersion: this.topologyVersion,
             simulationVersion: this.simulationStepId,
-            solverShortCircuitDetected: !!this._solver?.shortCircuitDetected,
+            solverShortCircuitDetected: !!this.lastResults?.diagnostics?.shortCircuitDetected,
             shortedSourceIds: this.shortedSourceIds,
             shortedWireIds: this.shortedWireIds,
             invalidParameterIssues: this.invalidParameterIssues
@@ -372,10 +352,6 @@ export class Circuit {
         }
 
         this.attachRuntimeDiagnostics(this.lastResults, this.simTime);
-
-        if (this.lastResults.valid && this.lastResults.backendUsed !== 'v2') {
-            this.resultProjectionService?.updateComponentDisplayValues?.(this, this.lastResults);
-        }
 
         if (this.onUpdate) {
             this.onUpdate(this.lastResults);
@@ -483,7 +459,6 @@ export class Circuit {
     setDebugMode(flag) {
         this.debugMode = !!flag;
         this.persistenceAdapter.saveSolverDebugFlag(this.debugMode);
-        if (this._solver) this._solver.debugMode = this.debugMode;
     }
 
     toJSON() {

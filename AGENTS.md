@@ -228,11 +228,11 @@
 
 ### 求解后端旗标
 - 旗标名 `solverBackend`，存在应用信封 `ui.solverBackend`，不进 `circuit.meta`
-- 取值 `'v1' | 'v2' | 'shadow'`；课堂代码默认 `'v2'`（`src/v2` factory 的 `DEFAULT_SOLVER_BACKEND_MODE`）
+- 取值 `'v2'`；课堂代码默认 `'v2'`（`src/v2` factory 的 `DEFAULT_SOLVER_BACKEND_MODE`）
 - 缺省键 = 代码默认；存档 `'v2'` 按字面尊重
-- 嵌入未显式 `solver=` 时钉 `'v1'`
-- 课堂默认 V2 子步失败：保持 `valid:false` / `backendUsed:'v2'`，不回退 V1、不构造 `MNASolver`
-- 显式 `mode=v1`、shadow、嵌入未传 `solver=` 仍走 V1；连续回退超过 50 个墙钟步状态栏保持「已回退」，不改持久化旗标
+- 嵌入未显式 `solver=` 时钉 `'v2'`
+- 课堂 V2 子步失败：保持 `valid:false` / `backendUsed:'v2'`，不回退 V1、不构造 `MNASolver`
+- 连续回退超过 50 个墙钟步状态栏保持「已回退」，不改持久化旗标
 
 ## 示例
 

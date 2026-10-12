@@ -5,6 +5,7 @@ import { CircuitSerializer } from '../src/core/io/CircuitSerializer.js';
 import { CircuitDeserializer } from '../src/core/io/CircuitDeserializer.js';
 import { CircuitSchemaGateway } from '../src/core/io/CircuitSchemaGateway.js';
 import { getClassroomScenarioPack } from '../src/core/scenarios/ClassroomScenarioPack.js';
+import { createInjectedSolverBackend } from '../src/v2/app/createInjectedSolverBackend.js';
 
 describe('Circuit IO gateway', () => {
     it('round-trips an empty circuit without schema rejection', () => {
@@ -320,6 +321,7 @@ describe('Circuit IO gateway', () => {
             expect(loaded.wires.length).toBeGreaterThan(0);
 
             const runtimeCircuit = new Circuit();
+            runtimeCircuit.solverBackend = createInjectedSolverBackend();
             runtimeCircuit.fromJSON(scenario.circuit);
             runtimeCircuit.dt = Number.isFinite(Number(scenario?.simulation?.dt))
                 ? Number(scenario.simulation.dt)

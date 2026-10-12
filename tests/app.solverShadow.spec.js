@@ -237,7 +237,7 @@ describe('solver shadow harness (tests only)', () => {
         expect(substepCount).toBeGreaterThan(1);
 
         circuit.resetSimulationState();
-        circuit.ensureSolverPrepared();
+        circuit.solver.setCircuit(Array.from(circuit.components.values()), circuit.nodes);
         circuit.solver.setSimulationState(circuit.simulationState);
         circuit.simTime = 0;
         circuit.lastResults = { sentinel: true };

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { addComponent, connectWire, createTestCircuit } from './helpers/circuitTestUtils.js';
+import { addComponent, connectWire, createTestCircuit, stepV1 } from './helpers/circuitTestUtils.js';
 
 function runSteps(circuit, steps) {
     circuit.isRunning = true;
@@ -66,7 +66,8 @@ describe('Dynamic integration methods (capacitor/inductor)', () => {
         connectWire(circuit, 'W4', sw, 0, source, 0);
         connectWire(circuit, 'W5', sw, 1, source, 1);
 
-        runSteps(circuit, 2);
+        stepV1(circuit);
+        stepV1(circuit);
         const vCap = readCapVoltage(circuit, capacitor);
 
         expect(circuit.solver.hasConnectedSwitch).toBe(true);
@@ -95,13 +96,11 @@ describe('Dynamic integration methods (capacitor/inductor)', () => {
         capacitor.prevCharge = capacitor.capacitance * v0;
         capacitor.prevCurrent = 0;
 
-        circuit.isRunning = true;
-        circuit.step();
+        stepV1(circuit);
         const vCap = readCapVoltage(circuit, capacitor);
         const iCap = Math.abs(circuit.lastResults?.currents?.get('C1') || 0);
         expect(vCap).toBeCloseTo(v0, 6);
         expect(iCap).toBeLessThan(1e-6);
-        circuit.isRunning = false;
     });
 
     it('decays inductor current from initial state with no applied voltage', () => {
@@ -124,15 +123,13 @@ describe('Dynamic integration methods (capacitor/inductor)', () => {
         inductor.prevCurrent = iExpected;
         inductor.prevVoltage = 0;
 
-        circuit.isRunning = true;
-        circuit.step();
+        stepV1(circuit);
         iExpected = iExpected / (1 + alpha);
-        expect(inductor.currentValue).toBeCloseTo(iExpected, 6);
+        expect(circuit.lastResults.currents.get('L1')).toBeCloseTo(iExpected, 6);
 
-        circuit.step();
+        stepV1(circuit);
         iExpected = iExpected / (1 + alpha);
-        expect(inductor.currentValue).toBeCloseTo(iExpected, 6);
-        circuit.isRunning = false;
+        expect(circuit.lastResults.currents.get('L1')).toBeCloseTo(iExpected, 6);
     });
 
     it('matches capacitor inrush current on the first backward-euler step', () => {

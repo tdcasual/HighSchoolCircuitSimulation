@@ -75,14 +75,13 @@ describe('AI teaching reliability', () => {
             components: new Map(),
             rebuildNodes: vi.fn(),
             ensureSolverPrepared: vi.fn(),
-            solver: {
-                solve: vi.fn().mockReturnValue({
+            solverBackend: {
+                solveFrame: vi.fn().mockReturnValue({
                     valid: false,
                     voltages: [0],
                     currents: new Map(),
                     runtimeDiagnostics
-                }),
-                updateDynamicComponents: vi.fn()
+                })
             }
         };
         const knowledgeProvider = {

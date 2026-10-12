@@ -20,8 +20,7 @@ export class InteractionManager {
         };
         this.touchActionController = new TouchActionController(this);
         this.quickActionBar = new QuickActionBarController(this);
+        installInteractionMethodMaps(this);
         this.bindEvents();
     }
 }
-
-installInteractionMethodMaps(InteractionManager);

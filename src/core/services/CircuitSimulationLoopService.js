@@ -1,10 +1,5 @@
 import { SimulationState } from '../simulation/SimulationState.js';
 
-function shouldPrepareV1Solver(context) {
-    const mode = context?.solverBackend?.mode;
-    return !mode || mode === 'v1' || mode === 'shadow';
-}
-
 function getAdaptiveSeverity(results = {}) {
     const meta = results?.meta || {};
     const valid = results?.valid !== false;
@@ -18,74 +13,6 @@ function getAdaptiveSeverity(results = {}) {
     return iterations;
 }
 
-const SHADOW_REL_TOL = 1e-3;
-const SHADOW_ABS_TOL = 1e-6;
-const SHADOW_SAMPLE_EVERY_N = 5;
-const SHADOW_TIMEOUT_MS = 8;
-
-function numericMismatch(left, right) {
-    if (!Number.isFinite(left) || !Number.isFinite(right)) return true;
-    const absolute = Math.abs(left - right);
-    const scale = Math.max(Math.abs(left), Math.abs(right));
-    const relative = scale === 0 ? 0 : absolute / scale;
-    return relative > SHADOW_REL_TOL && absolute > SHADOW_ABS_TOL;
-}
-
-function readCurrent(currents, id) {
-    if (currents instanceof Map) {
-        if (!currents.has(id)) return { has: false, value: undefined };
-        return { has: true, value: currents.get(id) };
-    }
-    if (currents && typeof currents === 'object' && Object.prototype.hasOwnProperty.call(currents, id)) {
-        return { has: true, value: currents[id] };
-    }
-    return { has: false, value: undefined };
-}
-
-function countShadowMismatches(v1, v2, context) {
-    let count = 0;
-    const ids = new Set();
-    if (v1?.currents instanceof Map) {
-        for (const key of v1.currents.keys()) ids.add(key);
-    } else if (v1?.currents && typeof v1.currents === 'object') {
-        for (const key of Object.keys(v1.currents)) ids.add(key);
-    }
-    if (v2?.currents instanceof Map) {
-        for (const key of v2.currents.keys()) ids.add(key);
-    } else if (v2?.currents && typeof v2.currents === 'object') {
-        for (const key of Object.keys(v2.currents)) ids.add(key);
-    }
-    if (context?.components) {
-        for (const id of context.components.keys()) ids.add(id);
-    }
-    for (const id of ids) {
-        const left = readCurrent(v1?.currents, id);
-        const right = readCurrent(v2?.currents, id);
-        if (!left.has || !right.has) {
-            count += 1;
-            continue;
-        }
-        if (numericMismatch(left.value, right.value)) count += 1;
-    }
-    if (context?.components) {
-        for (const [, comp] of context.components) {
-            const nodes = Array.isArray(comp?.nodes) ? comp.nodes : [];
-            for (let index = 0; index < nodes.length; index += 1) {
-                const nodeIndex = nodes[index];
-                if (!Number.isInteger(nodeIndex) || nodeIndex < 0) continue;
-                const leftHas = Array.isArray(v1?.voltages) && nodeIndex < v1.voltages.length;
-                const rightHas = Array.isArray(v2?.voltages) && nodeIndex < v2.voltages.length;
-                if (!leftHas || !rightHas) {
-                    count += 1;
-                    continue;
-                }
-                if (numericMismatch(v1.voltages[nodeIndex], v2.voltages[nodeIndex])) count += 1;
-            }
-        }
-    }
-    return count;
-}
-
 function noteAdaptive(current, candidate) {
     if (!candidate || getAdaptiveSeverity(current) >= getAdaptiveSeverity(candidate)) {
         return current;
@@ -93,49 +20,8 @@ function noteAdaptive(current, candidate) {
     return candidate;
 }
 
-function commitV1Substep(context, substepDt) {
-    const substepResults = context.solver.solve(substepDt, context.simTime);
-    if (!substepResults.valid) {
-        return { substepResults, elapsedDt: 0 };
-    }
-    context.simTime += substepDt;
-    context.solver.updateDynamicComponents(substepResults.voltages, substepResults.currents);
-    context.syncSimulationStateToComponents();
-    context.resultProjectionService?.updateFuseState?.(context, substepResults, substepDt);
-    return { substepResults, elapsedDt: substepDt };
-}
-
-function sampleShadowFrame(backend, context, substepDt, startSimTime) {
-    const started = globalThis.performance?.now?.();
-    let v2 = null;
-    try {
-        v2 = backend.solveFrame({
-            circuit: context,
-            dt: substepDt,
-            simTime: startSimTime
-        });
-    } catch (_) {
-        backend.shadowErrorCount = (backend.shadowErrorCount || 0) + 1;
-        return null;
-    }
-    const ended = globalThis.performance?.now?.();
-    if (Number.isFinite(started) && Number.isFinite(ended) && (ended - started) > SHADOW_TIMEOUT_MS) {
-        backend.shadowErrorCount = (backend.shadowErrorCount || 0) + 1;
-        return null;
-    }
-    return v2;
-}
-
-function recordShadowCompare(backend, context, v1, v2) {
-    if (!v2) return;
-    backend.shadowCompareCount = (backend.shadowCompareCount || 0) + 1;
-    const mismatches = countShadowMismatches(v1, v2, context);
-    if (mismatches > 0) {
-        backend.shadowMismatchCount = (backend.shadowMismatchCount || 0) + 1;
-        if (backend.shadowThrow) {
-            throw new Error('solver shadow mismatch');
-        }
-    }
+function emptyFrameResult() {
+    return { valid: false, voltages: [], currents: new Map(), backendUsed: 'v2' };
 }
 
 export class CircuitSimulationLoopService {
@@ -171,15 +57,8 @@ export class CircuitSimulationLoopService {
 
     runStep(context) {
         const backend = context.solverBackend;
-        const mode = backend?.mode;
-        const useV1 = !backend || mode === 'v1';
-        if (useV1 || mode === 'shadow') {
-            context.ensureSolverPrepared();
-            context.solver.debugMode = context.debugMode;
-        } else {
-            context.solverCircuitDirty = false;
-            context.solverPreparedTopologyVersion = context.topologyVersion;
-        }
+        context.solverCircuitDirty = false;
+        context.solverPreparedTopologyVersion = context.topologyVersion;
 
         const stepDt = this.resolveSimulationStepDt(context);
         const substepCount = this.getSimulationSubstepCount(context, stepDt);
@@ -187,85 +66,42 @@ export class CircuitSimulationLoopService {
         let latestResults = null;
         let adaptiveDecisionResults = null;
         let elapsedDt = 0;
-        const shadowTick = !useV1 && mode === 'shadow'
-            ? (Number(backend.shadowWallClockTick) || 0)
-            : 0;
+
         for (let index = 0; index < substepCount; index++) {
-            if (useV1) {
-                const substepResults = context.solver.solve(substepDt, context.simTime);
-                latestResults = substepResults;
-                if (!adaptiveDecisionResults || getAdaptiveSeverity(substepResults) >= getAdaptiveSeverity(adaptiveDecisionResults)) {
-                    adaptiveDecisionResults = substepResults;
-                }
-
-                if (!substepResults.valid) {
-                    break;
-                }
-
-                context.simTime += substepDt;
-                elapsedDt += substepDt;
-                context.solver.updateDynamicComponents(substepResults.voltages, substepResults.currents);
-                context.syncSimulationStateToComponents();
-                context.resultProjectionService?.updateFuseState?.(context, substepResults, substepDt);
-                continue;
-            }
-
             const startSimTime = context.simTime;
-            if (mode === 'v2') {
-                let result;
+            let result = emptyFrameResult();
+            if (backend && typeof backend.solveFrame === 'function') {
                 try {
                     result = backend.solveFrame({
                         circuit: context,
                         dt: substepDt,
                         simTime: startSimTime
-                    });
+                    }) || emptyFrameResult();
                 } catch (_) {
-                    result = { valid: false, voltages: [], currents: new Map() };
+                    result = emptyFrameResult();
                 }
-                if (result?.valid) {
-                    latestResults = result;
-                    latestResults.backendUsed = 'v2';
-                    adaptiveDecisionResults = noteAdaptive(result, adaptiveDecisionResults);
-                    context.simTime += substepDt;
-                    elapsedDt += substepDt;
-                    continue;
-                }
-                latestResults = {
-                    valid: false,
-                    voltages: Array.isArray(result?.voltages) ? result.voltages : [],
-                    currents: result?.currents instanceof Map ? result.currents : new Map(),
-                    backendUsed: 'v2',
-                    diagnostics: result?.diagnostics,
-                    meta: result?.meta
-                };
-                adaptiveDecisionResults = noteAdaptive(latestResults, adaptiveDecisionResults);
-                break;
             }
-
-            const sampleShadow = mode === 'shadow'
-                && (shadowTick % SHADOW_SAMPLE_EVERY_N === 0)
-                && index === 0;
-            let shadowV2 = null;
-            if (sampleShadow) {
-                shadowV2 = sampleShadowFrame(backend, context, substepDt, startSimTime);
+            if (result?.valid) {
+                latestResults = result;
+                latestResults.backendUsed = 'v2';
+                adaptiveDecisionResults = noteAdaptive(result, adaptiveDecisionResults);
+                context.simTime += substepDt;
+                elapsedDt += substepDt;
+                continue;
             }
-            const committed = commitV1Substep(context, substepDt);
-            latestResults = committed.substepResults;
-            adaptiveDecisionResults = noteAdaptive(committed.substepResults, adaptiveDecisionResults);
-            elapsedDt += committed.elapsedDt;
-            if (sampleShadow) {
-                recordShadowCompare(backend, context, committed.substepResults, shadowV2);
-            }
-            if (!committed.substepResults.valid) {
-                break;
-            }
+            latestResults = {
+                valid: false,
+                voltages: Array.isArray(result?.voltages) ? result.voltages : [],
+                currents: result?.currents instanceof Map ? result.currents : new Map(),
+                backendUsed: 'v2',
+                diagnostics: result?.diagnostics,
+                meta: result?.meta
+            };
+            adaptiveDecisionResults = noteAdaptive(latestResults, adaptiveDecisionResults);
+            break;
         }
 
-        if (mode === 'shadow') {
-            backend.shadowWallClockTick = shadowTick + 1;
-        }
-
-        if (mode === 'v2') {
+        if (backend) {
             backend.consecutiveFallbackSteps = 0;
         }
 
@@ -274,7 +110,7 @@ export class CircuitSimulationLoopService {
         }
 
         if (!latestResults) {
-            latestResults = { voltages: [], currents: new Map(), valid: false };
+            latestResults = emptyFrameResult();
         }
 
         return {
@@ -286,27 +122,8 @@ export class CircuitSimulationLoopService {
         };
     }
 
-    ensureSolverPrepared(context) {
-        const needsPrepare = context.solverCircuitDirty
-            || context.solverPreparedTopologyVersion !== context.topologyVersion;
-        if (!needsPrepare) return false;
-
-        const components = Array.from(context.components.values());
-        const builtNetlist = context.netlistBuilder?.build?.({
-            components,
-            nodes: context.nodes
-        });
-
-        context.netlist = builtNetlist && Array.isArray(builtNetlist.components)
-            ? builtNetlist
-            : null;
-        context.solver.setCircuit(components, context.nodes);
-        if (typeof context.solver.setSimulationState === 'function') {
-            context.solver.setSimulationState(context.simulationState);
-        }
-        context.solverPreparedTopologyVersion = context.topologyVersion;
-        context.solverCircuitDirty = false;
-        return true;
+    ensureSolverPrepared() {
+        return false;
     }
 
     getMaxConnectedAcFrequencyHz(context) {
@@ -427,26 +244,18 @@ export class CircuitSimulationLoopService {
             }
         }
 
-        if (shouldPrepareV1Solver(context)) {
-            context.solver.debugMode = context.debugMode;
-            context.ensureSolverPrepared();
-        } else {
-            context.solverCircuitDirty = false;
-            context.solverPreparedTopologyVersion = context.topologyVersion;
-        }
+        context.solverCircuitDirty = false;
+        context.solverPreparedTopologyVersion = context.topologyVersion;
     }
 
     resetSimulationState(context) {
         context.simulationState = new SimulationState();
         context.simulationState.resetForComponents(Array.from(context.components.values()));
-        const solver = context._solver;
-        if (solver && typeof solver.setSimulationState === 'function') {
-            solver.setSimulationState(context.simulationState);
-        }
         context.solverBackend?.reset?.();
     }
 
     syncSimulationStateToComponents(context) {
+        if (!context?.simulationState || typeof context.simulationState.get !== 'function') return;
         for (const comp of context.components.values()) {
             const entry = context.simulationState.get(comp.id);
             if (!entry) continue;
@@ -503,9 +312,6 @@ export class CircuitSimulationLoopService {
         context.componentTerminalTopologyKeys = new Map();
         context.terminalWorldPosCache = new Map();
         context.simulationState = new SimulationState();
-        const solver = context._solver;
-        if (solver && typeof solver.setSimulationState === 'function') {
-            solver.setSimulationState(context.simulationState);
-        }
+        context.solverBackend?.reset?.();
     }
 }

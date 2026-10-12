@@ -324,13 +324,23 @@ function buildVoltageArray(nodeCount, solutionVector) {
     return voltages;
 }
 
-function emptyResult(nodeCount, nextState, diagnostics, extra = {}) {
+function iterationMeta(iterations, maxIterations, converged) {
     return {
-        valid: extra.valid !== false,
+        converged: !!converged,
+        iterations: Number.isFinite(iterations) ? iterations : 0,
+        maxIterations: Number.isFinite(maxIterations) ? maxIterations : 0
+    };
+}
+
+function emptyResult(nodeCount, nextState, diagnostics, extra = {}) {
+    const valid = extra.valid !== false;
+    return {
+        valid,
         voltages: Array.from({ length: Math.max(nodeCount, 1) }, () => 0),
         currents: extra.currents || new Map(),
         nextState,
-        diagnostics
+        diagnostics,
+        meta: extra.meta || iterationMeta(extra.iterations, extra.maxIterations, valid && extra.converged !== false)
     };
 }
 
@@ -378,8 +388,10 @@ export function solveCircuitV2(netlistDTO, simulationState = new SimulationState
     let solvedValid = false;
     let lastJunctionDelta = 0;
     let converged = !hasStateful;
+    let iterationsUsed = 0;
 
     for (let iter = 0; iter < maxIterations; iter += 1) {
+        iterationsUsed = iter + 1;
         const { A, z, size } = assemble(components, nodeCount, voltageSourceCount, contextExtras);
         const cacheKey = buildSystemMatrixCacheKey({
             nodeCount,
@@ -406,7 +418,12 @@ export function solveCircuitV2(netlistDTO, simulationState = new SimulationState
                     ...diagnostics,
                     code: 'SIM_SINGULAR_MATRIX',
                     details: { nodeCount, matrixSize: size }
-                }, { valid: false });
+                }, {
+                    valid: false,
+                    iterations: iterationsUsed,
+                    maxIterations,
+                    converged: false
+                });
             }
             factorizationCache = { key: cacheKey, factorization, matrixSize: size };
         }
@@ -417,7 +434,12 @@ export function solveCircuitV2(netlistDTO, simulationState = new SimulationState
                 ...diagnostics,
                 code: 'SIM_SINGULAR_MATRIX',
                 details: { nodeCount, matrixSize: size }
-            }, { valid: false });
+            }, {
+                valid: false,
+                iterations: iterationsUsed,
+                maxIterations,
+                converged: false
+            });
         }
 
         solvedVoltages = buildVoltageArray(nodeCount, x);
@@ -479,7 +501,12 @@ export function solveCircuitV2(netlistDTO, simulationState = new SimulationState
             ...diagnostics,
             code: 'SIM_SINGULAR_MATRIX',
             details: { nodeCount, matrixSize }
-        }, { valid: false });
+        }, {
+            valid: false,
+            iterations: iterationsUsed,
+            maxIterations,
+            converged: false
+        });
     }
 
     updateDynamicComponents({
@@ -513,6 +540,7 @@ export function solveCircuitV2(netlistDTO, simulationState = new SimulationState
         voltages: solvedVoltages,
         currents: solvedCurrents,
         nextState,
-        diagnostics
+        diagnostics,
+        meta: iterationMeta(iterationsUsed, maxIterations, valid && converged)
     };
 }

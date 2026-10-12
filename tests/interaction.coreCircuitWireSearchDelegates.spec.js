@@ -4,7 +4,6 @@ import { assignInteractionMethods } from '../src/ui/interaction/assignInteractio
 import { interactionCoreCircuitWireSearchMethods } from '../src/ui/interaction/InteractionCoreCircuitWireSearchDelegates.js';
 
 class InteractionHarness {}
-assignInteractionMethods(InteractionHarness, interactionCoreCircuitWireSearchMethods);
 
 describe('InteractionCoreCircuitWireSearchDelegates', () => {
     afterEach(() => {
@@ -14,6 +13,7 @@ describe('InteractionCoreCircuitWireSearchDelegates', () => {
     it('forwards excludeWireIds when searching nearby wire endpoints', () => {
         const spy = vi.spyOn(WireInteractions, 'findNearbyWireEndpoint').mockReturnValue(null);
         const instance = new InteractionHarness();
+        assignInteractionMethods(instance, interactionCoreCircuitWireSearchMethods);
         const excludeWireEndpoints = new Set(['W1:a']);
         const excludeWireIds = new Set(['W1', 'W2']);
 

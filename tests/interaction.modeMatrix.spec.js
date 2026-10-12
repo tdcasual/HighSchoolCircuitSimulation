@@ -63,16 +63,16 @@ function createContext(overrides = {}) {
 }
 
 describe('Interaction mode matrix diagnostics', () => {
-    it('installs getInteractionModeSnapshot delegate on interaction manager', () => {
-        class FakeInteractionManager {}
-        assignInteractionMethods(FakeInteractionManager, interactionCoreInputPlacementMethods);
+    it('installs getInteractionModeSnapshot delegate on the interaction host', () => {
+        const host = {};
+        assignInteractionMethods(host, interactionCoreInputPlacementMethods);
 
-        expect(typeof FakeInteractionManager.prototype.getInteractionModeSnapshot).toBe('function');
+        expect(typeof host.getInteractionModeSnapshot).toBe('function');
     });
 
     it('keeps endpoint-edit authoritative even when wire restore config is retained', () => {
-        class FakeInteractionManager {}
-        assignInteractionMethods(FakeInteractionManager, interactionCoreInputPlacementMethods);
+        const host = {};
+        assignInteractionMethods(host, interactionCoreInputPlacementMethods);
         vi.stubGlobal('document', {
             body: {
                 classList: {
@@ -102,7 +102,7 @@ describe('Interaction mode matrix diagnostics', () => {
                 })
             }
         });
-        const snapshot = FakeInteractionManager.prototype.getInteractionModeSnapshot.call(context);
+        const snapshot = host.getInteractionModeSnapshot.call(context);
 
         expect(snapshot.mode).toBe('endpoint-edit');
         expect(snapshot.hasConflict).toBe(false);
@@ -117,8 +117,8 @@ describe('Interaction mode matrix diagnostics', () => {
     });
 
     it('captures phone/classroom/embed runtime matrix in wire mode snapshot', () => {
-        class FakeInteractionManager {}
-        assignInteractionMethods(FakeInteractionManager, interactionCoreInputPlacementMethods);
+        const host = {};
+        assignInteractionMethods(host, interactionCoreInputPlacementMethods);
         vi.stubGlobal('document', {
             body: {
                 classList: {
@@ -137,7 +137,7 @@ describe('Interaction mode matrix diagnostics', () => {
             wireModeSticky: true,
             endpointAutoBridgeMode: 'on'
         });
-        const snapshot = FakeInteractionManager.prototype.getInteractionModeSnapshot.call(context);
+        const snapshot = host.getInteractionModeSnapshot.call(context);
 
         expect(snapshot.mode).toBe('wire');
         expect(snapshot.hasConflict).toBe(false);
@@ -154,8 +154,8 @@ describe('Interaction mode matrix diagnostics', () => {
     });
 
     it('prefers interaction mode-store context when runtime flags lag behind', () => {
-        class FakeInteractionManager {}
-        assignInteractionMethods(FakeInteractionManager, interactionCoreInputPlacementMethods);
+        const host = {};
+        assignInteractionMethods(host, interactionCoreInputPlacementMethods);
         vi.stubGlobal('document', {
             body: {
                 classList: {
@@ -185,7 +185,7 @@ describe('Interaction mode matrix diagnostics', () => {
             }
         });
 
-        const snapshot = FakeInteractionManager.prototype.getInteractionModeSnapshot.call(context);
+        const snapshot = host.getInteractionModeSnapshot.call(context);
         expect(snapshot.mode).toBe('wire');
         expect(snapshot.pendingTool).toBe('Wire');
         expect(snapshot.wireSignals).toEqual({

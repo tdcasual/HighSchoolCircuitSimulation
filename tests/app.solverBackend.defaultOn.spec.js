@@ -108,12 +108,12 @@ describe('solverBackend default-on v2', () => {
         vi.spyOn(circuit.simulationLoopService, 'getSimulationSubstepCount').mockReturnValue(4);
 
         circuit.prepareSimulation();
-        expect(circuit._solver).toBeNull();
+        expect(circuit._solver).toBeUndefined();
         circuit.step();
         circuit.haltSimulation();
 
         expect(frame).toBe(2);
-        expect(circuit._solver).toBeNull();
+        expect(circuit._solver).toBeUndefined();
         expect(backend.fallbackCount).toBe(0);
         expect(backend.consecutiveFallbackSteps).toBe(0);
         expect(backend.mode).toBe('v2');
@@ -142,7 +142,7 @@ describe('solverBackend default-on v2', () => {
         circuit.solverBackend = backend;
         circuit.prepareSimulation();
         circuit.step();
-        expect(circuit._solver).toBeNull();
+        expect(circuit._solver).toBeUndefined();
         expect(backend.fallbackCount).toBe(0);
         expect(backend.consecutiveFallbackSteps).toBe(0);
         expect(circuit.lastResults.backendUsed).toBe('v2');
@@ -152,7 +152,7 @@ describe('solverBackend default-on v2', () => {
         wallClock = 1;
         circuit.step();
         circuit.haltSimulation();
-        expect(circuit._solver).toBeNull();
+        expect(circuit._solver).toBeUndefined();
         expect(backend.consecutiveFallbackSteps).toBe(0);
         expect(backend.mode).toBe('v2');
         expect(circuit.lastResults.backendUsed).toBe('v2');
@@ -165,7 +165,7 @@ describe('solverBackend default-on v2', () => {
     it('wraps the factory so ViewMap holds 3V/8Ω current and live seed stays stale', () => {
         const circuit = buildSeriesFixture();
         const backend = createInjectedSolverBackend();
-        const restoreSpy = vi.spyOn(backend, 'restoreStandby');
+        expect(backend.restoreStandby).toBeUndefined();
         circuit.solverBackend = wrapSolverBackend(backend);
         const dynSpy = vi.spyOn(circuit.solver, 'updateDynamicComponents');
 
@@ -189,7 +189,6 @@ describe('solverBackend default-on v2', () => {
         expect(circuit.nodes).toBe(circuitNodes);
         expect(backend.fallbackCount).toBe(0);
         expect(backend.consecutiveFallbackSteps).toBe(0);
-        expect(restoreSpy).not.toHaveBeenCalled();
     });
 
     it('keeps live fuse unblown while ViewMap reports the blown V2 state', () => {
@@ -236,7 +235,7 @@ describe('solverBackend default-on v2', () => {
         expect(circuit.lastResults.viewMap.get('F1').blown).toBe(true);
         expect(circuit.getComponentProperties(fuse).blown).toBe(true);
         expect(circuit.getComponentProperties(fuse).i2tAccum).toBe(4);
-        expect(circuit._solver).toBeNull();
+        expect(circuit._solver).toBeUndefined();
     });
 
     it('calls solveFrame once when every v2 substep would be invalid', () => {
@@ -256,7 +255,7 @@ describe('solverBackend default-on v2', () => {
         circuit.haltSimulation();
 
         expect(backend.solveFrame).toHaveBeenCalledTimes(1);
-        expect(circuit._solver).toBeNull();
+        expect(circuit._solver).toBeUndefined();
         expect(backend.fallbackCount).toBe(0);
         expect(backend.consecutiveFallbackSteps).toBe(0);
         expect(circuit.lastResults.backendUsed).toBe('v2');
@@ -285,7 +284,7 @@ describe('solverBackend default-on v2', () => {
 
         circuit.prepareSimulation();
         circuit.step();
-        expect(circuit._solver).toBeNull();
+        expect(circuit._solver).toBeUndefined();
         expect(circuit.lastResults.backendUsed).toBe('v2');
         expect(circuit.lastResults.nextState.get('C1')).toBeDefined();
         const voltageA = circuit.lastResults.nextState.get('C1').prevVoltage;
@@ -295,7 +294,7 @@ describe('solverBackend default-on v2', () => {
 
         failV2 = true;
         circuit.step();
-        expect(circuit._solver).toBeNull();
+        expect(circuit._solver).toBeUndefined();
         expect(circuit.lastResults.backendUsed).toBe('v2');
         expect(circuit.lastResults.valid).toBe(false);
         expect(circuit.simTime).toBeCloseTo(0.01, 12);
@@ -303,7 +302,7 @@ describe('solverBackend default-on v2', () => {
         failV2 = false;
         circuit.step();
         circuit.haltSimulation();
-        expect(circuit._solver).toBeNull();
+        expect(circuit._solver).toBeUndefined();
         expect(circuit.lastResults.backendUsed).toBe('v2');
         expect(circuit.lastResults.valid).toBe(true);
         expect(circuit.lastResults.nextState.get('C1')).toBeDefined();
@@ -315,13 +314,13 @@ describe('solverBackend default-on v2', () => {
         expect(circuit.simTime).toBeCloseTo(0.02, 12);
     });
 
-    it('keeps embed without solver= pinned to v1 while classroom factory default is v2', () => {
+    it('pins embed without solver= to v2 matching the classroom factory default', () => {
         expect(DEFAULT_SOLVER_BACKEND_MODE).toBe('v2');
         const embed = parseEmbedRuntimeOptionsFromSearch(
             '?embed=1&targetOrigin=https%3A%2F%2Flms.example'
         );
         expect(embed.enabled).toBe(true);
-        expect(embed.solverBackend).toBe('v1');
+        expect(embed.solverBackend).toBe('v2');
         expect(embed.solverBackendExplicit).toBe(false);
 
         const classroom = parseEmbedRuntimeOptionsFromSearch('');
@@ -331,6 +330,6 @@ describe('solverBackend default-on v2', () => {
         const backend = createInjectedSolverBackend();
         expect(backend.mode).toBe('v2');
         wrapSolverBackend(backend, { runtimeOptions: embed });
-        expect(backend.mode).toBe('v1');
+        expect(backend.mode).toBe('v2');
     });
 });

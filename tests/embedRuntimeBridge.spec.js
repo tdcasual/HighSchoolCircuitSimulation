@@ -143,16 +143,16 @@ describe('parseEmbedRuntimeOptionsFromSearch', () => {
         expect(options.capabilities.unfreeze).toBe(true);
         expect(options.enabled).toBe(true);
         expect(options.capabilities.unfreeze).toBe(true);
-        expect(options.solverBackend).toBe('v1');
+        expect(options.solverBackend).toBe('v2');
         expect(options.solverBackendExplicit).toBe(false);
     });
 
-    it('pins solverBackend=v1 for embed when solver is not explicit', () => {
+    it('pins solverBackend=v2 for embed when solver is not explicit', () => {
         const pinned = parseEmbedRuntimeOptionsFromSearch(
             '?embed=1&targetOrigin=https%3A%2F%2Flms.example'
         );
         expect(pinned.enabled).toBe(true);
-        expect(pinned.solverBackend).toBe('v1');
+        expect(pinned.solverBackend).toBe('v2');
         expect(pinned.solverBackendExplicit).toBe(false);
         expect(pinned.capabilities.unfreeze).toBe(false);
     });
@@ -167,14 +167,14 @@ describe('parseEmbedRuntimeOptionsFromSearch', () => {
 
         const classroomShadow = parseEmbedRuntimeOptionsFromSearch('?solver=shadow&shadowThrow=1');
         expect(classroomShadow.enabled).toBe(false);
-        expect(classroomShadow.solverBackend).toBe('shadow');
-        expect(classroomShadow.solverBackendExplicit).toBe(true);
+        expect(classroomShadow.solverBackend).toBeUndefined();
+        expect(classroomShadow.solverBackendExplicit).toBe(false);
         expect(classroomShadow.shadowThrow).toBe(true);
 
         const unknown = parseEmbedRuntimeOptionsFromSearch(
             '?embed=1&targetOrigin=https%3A%2F%2Flms.example&solver=experimental'
         );
-        expect(unknown.solverBackend).toBe('v1');
+        expect(unknown.solverBackend).toBe('v2');
         expect(unknown.solverBackendExplicit).toBe(false);
 
         const classroomDefault = parseEmbedRuntimeOptionsFromSearch('');

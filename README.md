@@ -75,7 +75,7 @@
 ## 🔄 迁移说明（v0.9 RC）
 
 - 电路 payload 使用 schema v3，无 v2-and-below 兼容迁移。应用存档使用 `{ format: "hscs-app", formatVersion: 1, circuit, ui }` 信封；习题板/图表 UI 放在 `ui`，不进电路 `meta`。
-- 求解后端旗标 `ui.solverBackend`：`'v1' | 'v2' | 'shadow'`。课堂代码默认 `'v2'`（`src/v2/app/createInjectedSolverBackend.js` 的 `DEFAULT_SOLVER_BACKEND_MODE`）；缺省键用该代码默认。嵌入页未显式 `solver=` 时钉 `'v1'`。开发者可用 `?solver=v1|v2|shadow` 覆盖。V2 子步失败时同一子步回退 V1，不改持久化旗标；连续回退超过 50 个墙钟步状态栏保持「已回退」。
+- 求解后端旗标 `ui.solverBackend`：课堂代码默认 `'v2'`（`src/v2/app/createInjectedSolverBackend.js` 的 `DEFAULT_SOLVER_BACKEND_MODE`）；缺省键用该代码默认。嵌入页未显式 `solver=` 时钉 `'v2'`。V2 子步失败保持无效，不回退 V1，不改持久化旗标；连续回退超过 50 个墙钟步状态栏保持「已回退」。
 - 场景包导入路径：
   - `src/core/scenarios/ClassroomScenarioPack.js`
 - 嵌入打包脚本对 `examples/` 目录改为可选；缺失时不会阻塞 `build:frontend / package:embed / docker build`。

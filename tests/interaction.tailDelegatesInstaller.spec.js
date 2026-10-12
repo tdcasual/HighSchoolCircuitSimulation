@@ -1,16 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { InteractionManager } from '../src/ui/Interaction.js';
+import { interactionMethodMaps } from '../src/ui/interaction/interactionMethodMaps.js';
 
 describe('InteractionTailDelegates installer', () => {
-    it('installs tail delegate methods on InteractionManager prototype', () => {
-        expect(typeof InteractionManager.prototype.showPropertyDialog).toBe('function');
-        expect(typeof InteractionManager.prototype.hideDialog).toBe('function');
-        expect(typeof InteractionManager.prototype.applyDialogChanges).toBe('function');
-        expect(typeof InteractionManager.prototype.showContextMenu).toBe('function');
-        expect(typeof InteractionManager.prototype.addObservationProbeForWire).toBe('function');
-        expect(typeof InteractionManager.prototype.captureHistoryState).toBe('function');
-        expect(typeof InteractionManager.prototype.undo).toBe('function');
-        expect(typeof InteractionManager.prototype.updateStatus).toBe('function');
-        expect(typeof InteractionManager.prototype.detectAlignment).toBe('function');
+    it('ships tail delegate methods on the composed instance map', () => {
+        expect(typeof interactionMethodMaps.showPropertyDialog).toBe('function');
+        expect(typeof interactionMethodMaps.hideDialog).toBe('function');
+        expect(typeof interactionMethodMaps.applyDialogChanges).toBe('function');
+        expect(typeof interactionMethodMaps.showContextMenu).toBe('function');
+        expect(typeof interactionMethodMaps.addObservationProbeForWire).toBe('function');
+        expect(typeof interactionMethodMaps.captureHistoryState).toBe('function');
+        expect(typeof interactionMethodMaps.undo).toBe('function');
+        expect(typeof interactionMethodMaps.updateStatus).toBe('function');
+        expect(typeof interactionMethodMaps.detectAlignment).toBe('function');
     });
 });
