@@ -84,6 +84,43 @@ describe('ObservationSources', () => {
         expect(evaluateSourceQuantity(circuit, 'C1', QuantityIds.Charge)).toBeCloseTo(6e-6, 12);
     });
 
+    it('prefers ViewMap fuse/motor/relay dynamics over live seed', () => {
+        const circuit = {
+            simTime: 0,
+            components: new Map([
+                ['F1', {
+                    id: 'F1',
+                    type: 'Fuse',
+                    blown: false,
+                    coldResistance: 0.05,
+                    blownResistance: 1e12,
+                    currentValue: 9
+                }],
+                ['M1', { id: 'M1', type: 'Motor', speed: 0, backEmf: 0, currentValue: 9 }],
+                ['K1', {
+                    id: 'K1',
+                    type: 'Relay',
+                    energized: false,
+                    contactOnResistance: 0.001,
+                    contactOffResistance: 1e12,
+                    currentValue: 9
+                }]
+            ]),
+            lastResults: {
+                viewMap: new Map([
+                    ['F1', { blown: true, currentValue: 0 }],
+                    ['M1', { speed: 12, backEmf: 1.2, currentValue: 0.2 }],
+                    ['K1', { energized: true, currentValue: 0.01 }]
+                ])
+            }
+        };
+        expect(evaluateSourceQuantity(circuit, 'F1', QuantityIds.Resistance)).toBe(1e12);
+        expect(evaluateSourceQuantity(circuit, 'M1', QuantityIds.MotorSpeedRpm)).toBeCloseTo(12 * 60 / (2 * Math.PI), 12);
+        expect(evaluateSourceQuantity(circuit, 'M1', QuantityIds.MotorBackEmf)).toBeCloseTo(1.2, 12);
+        expect(evaluateSourceQuantity(circuit, 'K1', QuantityIds.SwitchClosed)).toBe(1);
+        expect(evaluateSourceQuantity(circuit, 'K1', QuantityIds.Resistance)).toBeCloseTo(0.001, 12);
+    });
+
     it('supports numeric zero source ids by normalizing to string keys', () => {
         const circuit = {
             simTime: 0,

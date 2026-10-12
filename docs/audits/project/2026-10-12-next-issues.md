@@ -8,7 +8,7 @@
 
 Classroom default solver is **V2** via Wiring A: `bootstrapV2` injects `createInjectedSolverBackend()` (`DEFAULT_SOLVER_BACKEND_MODE = 'v2'`). `AppRuntimeV2` never imports `src/v2`. Exclusive CI still forbids identifiers `SolveCircuitV2` / `runSimulationStepV2` in `src/app|ui|core|embed`.
 
-Same-substep V1 fallback remains: restoreStandby → V1 for that `substepDt` → `commitStandbyFromCircuit`. Embed without `solver=` still pins v1 (KD7).
+Default V2 no longer same-substep-falls back to V1: an invalid V2 substep stays invalid, does not construct `MNASolver`, and still feeds adaptive dt. Explicit `mode=v1`, shadow, and embed without `solver=` still pin v1 (KD7). `wrapSolverBackend` applies mode only; it does not restore standby. Classroom readers overlay ViewMap dynamics (blown/speed/conducting/energized).
 
 Stamp handlers and Shockley junction live in `src/utils/registerDefaultStamps.js` / `src/utils/JunctionModel.js`; both default registries register the **same handler objects**. Union-find lives in `src/utils/buildElectricalNodes.js`; live `NodeBuilder` and `NodeBuilderV2` are thin wrappers (live still writes `wire.nodeIndex`).
 
@@ -18,9 +18,9 @@ Remaining High: 1（H12/R1 dual live kernels until KD20）
 
 | ID | Sev | Status | Live |
 |---|---|---|---|
-| H12 / R1 | High | Open (soak) | Production tick uses injected V2. V1 `MNASolver` is constructed lazily on fallback/v1/shadow, not on the V2 success path. LU/stamp primitives/cache-key live in `src/utils`. Dual kernels remain until KD20. |
+| H12 / R1 | High | **Partial** | Production V2 tick uses injected V2 only. Invalid V2 does not construct or run V1. V1 `MNASolver` is still lazy for explicit `mode=v1` / shadow / embed pin. LU/stamp primitives/cache-key live in `src/utils`. |
 | R2 / A5 | High | **Done** | `Circuit.js` **502** lines; topology/sim lifecycle in existing services. `Object.assign(InteractionManagerClass.prototype` **0**. One `installInteractionMethodMaps`; leftover per-file `install*` delegates deleted. Interaction is still one prototype with shared `this`. |
-| A2 remainder | Med | **Done** | Named classroom readers prefer `resolveComponentViewRecord`. `wrapSolverBackend` restores standby only. `applyViewMapToComponents` left production (test helper only). V1 `updateComponentDisplayValues` still runs when `backendUsed !== 'v2'`. Do not add `circuit.lastViewMap`. |
+| A2 remainder | Med | **Done** | Named classroom readers overlay I/U/P plus fuse/motor/relay/diode dynamics from ViewMap. `wrapSolverBackend` does not restore standby. `applyViewMapToComponents` is a test helper only. V1 `updateComponentDisplayValues` still runs when `backendUsed !== 'v2'`. Do not add `circuit.lastViewMap`. |
 | N10 | Med | **Done** | Canonical P0 20 DC scenes unchanged. `baseline:p0:ext` has 6 extra scenes. |
 | M5 | Med | Open | `DefaultComponentRegistry` aliases Bulb to Resistor. Linear filament. |
 | M10 | Low | Open | `SimulationDriver` default 10ms. |
@@ -38,12 +38,12 @@ Remaining High: 1（H12/R1 dual live kernels until KD20）
 
 ### 1. KD20 soak, then PR-G (delete V1) — do not start now
 
-- Default V2 ≥14d and fallback/step <0.1%.
-- Until then keep the fallback. Stamp-parity CI still runs; new types go in `registerDefaultStamps.js` only.
+- Default V2 ≥14d. Same-substep V1 fallback is already gone from the classroom V2 arm.
+- Keep the V1 kernel until KD20 (explicit v1 / shadow / embed pin). Stamp-parity CI still runs; new types go in `registerDefaultStamps.js` only.
 
-### 2. Live-field visuals (optional purity)
+### 2. Live-field visuals
 
-- Named readers already prefer ViewMap. Leftover live `currentValue` paint is V1/fallback only.
+- Named readers overlay ViewMap dynamics. Leftover live `currentValue` paint is V1-mode only.
 - Do not add `circuit.lastViewMap` unless a shipped reader needs it.
 
 ### 3. Later

@@ -86,12 +86,11 @@ describe('solverBackend default-on v2', () => {
         expect(circuit.lastResults.currents.get('R1')).toBeCloseTo(0.3, 6);
     });
 
-    it('restores capacitor prevVoltage from V2 standby on a singular substep-2 fallback', () => {
-        const circuit = buildRcFixture();
+    it('stops the v2 step on the first invalid substep without constructing V1', () => {
+        const circuit = buildSeriesFixture();
         const backend = createInjectedSolverBackend();
         const innerSolveFrame = backend.solveFrame.bind(backend);
         let frame = 0;
-        let standbyPrevVoltage;
         backend.solveFrame = (input) => {
             frame += 1;
             if (frame === 2) {
@@ -103,78 +102,28 @@ describe('solverBackend default-on v2', () => {
                     diagnostics: { code: 'SIM_SINGULAR_MATRIX' }
                 };
             }
-            const result = innerSolveFrame(input);
-            if (frame === 1) {
-                const entry = result.nextState?.get?.('C1');
-                standbyPrevVoltage = entry?.prevVoltage;
-            }
-            return result;
-        };
-        const innerRestore = backend.restoreStandby.bind(backend);
-        const restoreSnapshots = [];
-        backend.restoreStandby = (target) => {
-            const cap = target.getComponent('C1');
-            const entry = target.simulationState?.get?.('C1');
-            restoreSnapshots.push({
-                phase: 'before',
-                comp: cap.prevVoltage,
-                state: entry?.prevVoltage
-            });
-            innerRestore(target);
-            restoreSnapshots.push({
-                phase: 'after',
-                comp: cap.prevVoltage,
-                state: target.simulationState?.get?.('C1')?.prevVoltage
-            });
-        };
-        const originalSolve = circuit.solver.solve.bind(circuit.solver);
-        const v1SolveArgs = [];
-        circuit.solver.solve = (dt, simTime) => {
-            const cap = circuit.getComponent('C1');
-            v1SolveArgs.push({
-                dt,
-                simTime,
-                prevVoltage: cap.prevVoltage,
-                statePrevVoltage: circuit.simulationState.get('C1')?.prevVoltage
-            });
-            return originalSolve(dt, simTime);
+            return innerSolveFrame(input);
         };
         circuit.solverBackend = backend;
         vi.spyOn(circuit.simulationLoopService, 'getSimulationSubstepCount').mockReturnValue(4);
 
         circuit.prepareSimulation();
-        const cap = circuit.getComponent('C1');
-        expect(cap.prevVoltage).toBe(0);
-        expect(circuit.simulationState.get('C1')?.prevVoltage).toBe(0);
-
+        expect(circuit._solver).toBeNull();
         circuit.step();
         circuit.haltSimulation();
 
-        expect(frame).toBe(4);
-        expect(v1SolveArgs).toHaveLength(1);
-        expect(v1SolveArgs[0].dt).toBeCloseTo(0.0025, 12);
-        expect(v1SolveArgs[0].simTime).toBeCloseTo(0.0025, 12);
-        expect(Number.isFinite(standbyPrevVoltage)).toBe(true);
-        expect(Math.abs(standbyPrevVoltage)).toBeGreaterThan(0.01);
-        expect(restoreSnapshots.some((snap) => snap.phase === 'before')).toBe(true);
-        const before = restoreSnapshots.find((snap) => snap.phase === 'before');
-        const after = restoreSnapshots.find((snap) => snap.phase === 'after');
-        expect(before.comp).toBe(0);
-        expect(before.state).toBe(0);
-        expect(after.comp).toBe(standbyPrevVoltage);
-        expect(after.state).toBe(standbyPrevVoltage);
-        expect(v1SolveArgs[0].prevVoltage).toBe(standbyPrevVoltage);
-        expect(v1SolveArgs[0].statePrevVoltage).toBe(standbyPrevVoltage);
-        expect(circuit.simTime).toBeCloseTo(0.01, 12);
-        expect(backend.fallbackCount).toBe(1);
-        expect(backend.consecutiveFallbackSteps).toBe(1);
+        expect(frame).toBe(2);
+        expect(circuit._solver).toBeNull();
+        expect(backend.fallbackCount).toBe(0);
+        expect(backend.consecutiveFallbackSteps).toBe(0);
         expect(backend.mode).toBe('v2');
         expect(circuit.lastResults.backendUsed).toBe('v2');
-        expect(circuit.lastResults.currents.has('C1')).toBe(true);
-        expect(Number.isFinite(circuit.lastResults.currents.get('C1'))).toBe(true);
+        expect(circuit.lastResults.valid).toBe(false);
+        expect(circuit.lastResults.diagnostics).toEqual({ code: 'SIM_SINGULAR_MATRIX' });
+        expect(circuit.simTime).toBeCloseTo(0.0025, 12);
     });
 
-    it('resets consecutive fallback on the next clean v2 wall-clock step', () => {
+    it('resumes v2 on the next wall-clock step after an invalid substep', () => {
         const circuit = buildSeriesFixture();
         const backend = createInjectedSolverBackend();
         const innerSolveFrame = backend.solveFrame.bind(backend);
@@ -193,26 +142,30 @@ describe('solverBackend default-on v2', () => {
         circuit.solverBackend = backend;
         circuit.prepareSimulation();
         circuit.step();
-        expect(backend.fallbackCount).toBe(1);
-        expect(backend.consecutiveFallbackSteps).toBe(1);
-        expect(circuit.lastResults.backendUsed).toBe('v1');
-        expect(circuit.lastResults.currents.has('R1')).toBe(true);
-        expect(circuit.lastResults.currents.get('R1')).toBeCloseTo(0.3, 6);
+        expect(circuit._solver).toBeNull();
+        expect(backend.fallbackCount).toBe(0);
+        expect(backend.consecutiveFallbackSteps).toBe(0);
+        expect(circuit.lastResults.backendUsed).toBe('v2');
+        expect(circuit.lastResults.valid).toBe(false);
+        expect(circuit.simTime).toBe(0);
 
         wallClock = 1;
         circuit.step();
         circuit.haltSimulation();
+        expect(circuit._solver).toBeNull();
         expect(backend.consecutiveFallbackSteps).toBe(0);
         expect(backend.mode).toBe('v2');
         expect(circuit.lastResults.backendUsed).toBe('v2');
+        expect(circuit.lastResults.valid).toBe(true);
         expect(circuit.lastResults.currents.has('R1')).toBe(true);
         expect(circuit.lastResults.currents.get('R1')).toBeCloseTo(0.3, 6);
-        expect(circuit.simTime).toBeCloseTo(0.02, 12);
+        expect(circuit.simTime).toBeCloseTo(0.01, 12);
     });
 
     it('wraps the factory so ViewMap holds 3V/8Ω current and live seed stays stale', () => {
         const circuit = buildSeriesFixture();
         const backend = createInjectedSolverBackend();
+        const restoreSpy = vi.spyOn(backend, 'restoreStandby');
         circuit.solverBackend = wrapSolverBackend(backend);
         const dynSpy = vi.spyOn(circuit.solver, 'updateDynamicComponents');
 
@@ -236,17 +189,65 @@ describe('solverBackend default-on v2', () => {
         expect(circuit.nodes).toBe(circuitNodes);
         expect(backend.fallbackCount).toBe(0);
         expect(backend.consecutiveFallbackSteps).toBe(0);
+        expect(restoreSpy).not.toHaveBeenCalled();
     });
 
-    it('counts four V1 fallbacks in one wall-clock step as one consecutive step', () => {
+    it('keeps live fuse unblown while ViewMap reports the blown V2 state', () => {
+        const circuit = buildSeriesFixture();
+        const fuse = addComponent(circuit, 'Fuse', 'F1', {
+            ratedCurrent: 3,
+            coldResistance: 0.05,
+            blownResistance: 1e12,
+            blown: false,
+            i2tAccum: 0.1
+        });
+        const backend = {
+            mode: 'v2',
+            fallbackCount: 0,
+            consecutiveFallbackSteps: 0,
+            solveFrame: vi.fn(() => ({
+                valid: true,
+                voltages: [0, 2.4],
+                currents: new Map([
+                    ['R1', 0.3],
+                    ['F1', 0]
+                ]),
+                backendUsed: 'v2',
+                viewMap: new Map([
+                    ['R1', { currentValue: 0.3, voltageValue: 2.4, powerValue: 0.72 }],
+                    ['F1', { currentValue: 0, voltageValue: 0, powerValue: 0, blown: true, i2tAccum: 4 }]
+                ])
+            })),
+            restoreStandby: vi.fn(),
+            reset: vi.fn()
+        };
+        circuit.solverBackend = wrapSolverBackend(backend);
+        circuit.prepareSimulation();
+        fuse.blown = false;
+        fuse.i2tAccum = 0.1;
+        circuit.step();
+        circuit.haltSimulation();
+
+        expect(backend.restoreStandby).not.toHaveBeenCalled();
+        expect(circuit.lastResults.backendUsed).toBe('v2');
+        expect(circuit.lastResults.valid).toBe(true);
+        expect(fuse.blown).toBe(false);
+        expect(fuse.i2tAccum).toBe(0.1);
+        expect(circuit.lastResults.viewMap.get('F1').blown).toBe(true);
+        expect(circuit.getComponentProperties(fuse).blown).toBe(true);
+        expect(circuit.getComponentProperties(fuse).i2tAccum).toBe(4);
+        expect(circuit._solver).toBeNull();
+    });
+
+    it('calls solveFrame once when every v2 substep would be invalid', () => {
         const circuit = buildSeriesFixture();
         const backend = createInjectedSolverBackend();
-        backend.solveFrame = () => ({
+        backend.solveFrame = vi.fn(() => ({
             valid: false,
             voltages: [],
             currents: new Map(),
             backendUsed: 'v2'
-        });
+        }));
         circuit.solverBackend = backend;
         vi.spyOn(circuit.simulationLoopService, 'getSimulationSubstepCount').mockReturnValue(4);
 
@@ -254,17 +255,17 @@ describe('solverBackend default-on v2', () => {
         circuit.step();
         circuit.haltSimulation();
 
-        expect(backend.fallbackCount).toBe(4);
-        expect(backend.consecutiveFallbackSteps).toBe(1);
-        expect(circuit.lastResults.backendUsed).toBe('v1');
-        expect(circuit.lastResults.valid).toBe(true);
-        expect(circuit.lastResults.currents.has('R1')).toBe(true);
-        expect(circuit.lastResults.currents.get('R1')).toBeCloseTo(0.3, 6);
-        expect(circuit.simTime).toBeCloseTo(0.01, 12);
+        expect(backend.solveFrame).toHaveBeenCalledTimes(1);
+        expect(circuit._solver).toBeNull();
+        expect(backend.fallbackCount).toBe(0);
+        expect(backend.consecutiveFallbackSteps).toBe(0);
+        expect(circuit.lastResults.backendUsed).toBe('v2');
+        expect(circuit.lastResults.valid).toBe(false);
+        expect(circuit.simTime).toBe(0);
         expect(backend.mode).toBe('v2');
     });
 
-    it('recaptures V1-advanced capacitor history after consecutive wall-clock fallbacks', () => {
+    it('keeps capacitor V2 history across a failed wall-clock step', () => {
         const circuit = buildRcFixture();
         const backend = createInjectedSolverBackend();
         const innerSolveFrame = backend.solveFrame.bind(backend);
@@ -280,22 +281,11 @@ describe('solverBackend default-on v2', () => {
             }
             return innerSolveFrame(input);
         };
-        const originalSolve = circuit.solver.solve.bind(circuit.solver);
-        const v1Solves = [];
-        circuit.solver.solve = (dt, simTime) => {
-            const cap = circuit.getComponent('C1');
-            v1Solves.push({
-                dt,
-                simTime,
-                prevVoltage: cap.prevVoltage,
-                statePrevVoltage: circuit.simulationState.get('C1')?.prevVoltage
-            });
-            return originalSolve(dt, simTime);
-        };
         circuit.solverBackend = backend;
 
         circuit.prepareSimulation();
         circuit.step();
+        expect(circuit._solver).toBeNull();
         expect(circuit.lastResults.backendUsed).toBe('v2');
         expect(circuit.lastResults.nextState.get('C1')).toBeDefined();
         const voltageA = circuit.lastResults.nextState.get('C1').prevVoltage;
@@ -305,42 +295,24 @@ describe('solverBackend default-on v2', () => {
 
         failV2 = true;
         circuit.step();
-        expect(v1Solves).toHaveLength(1);
-        expect(v1Solves[0].prevVoltage).toBe(voltageA);
-        expect(v1Solves[0].statePrevVoltage).toBe(voltageA);
-        expect(circuit.lastResults.backendUsed).toBe('v1');
-        expect(circuit.simulationState.get('C1')).toBeDefined();
-        const voltageB = circuit.simulationState.get('C1').prevVoltage;
-        expect(Number.isFinite(voltageB)).toBe(true);
-        expect(voltageB).not.toBe(voltageA);
-        expect(Math.abs(voltageB - voltageA)).toBeGreaterThan(1e-6);
-        expect(backend.consecutiveFallbackSteps).toBe(1);
-
-        circuit.step();
-        expect(v1Solves).toHaveLength(2);
-        expect(v1Solves[1].prevVoltage).toBe(voltageB);
-        expect(v1Solves[1].statePrevVoltage).toBe(voltageB);
-        expect(v1Solves[1].prevVoltage).not.toBe(voltageA);
-        expect(circuit.lastResults.backendUsed).toBe('v1');
-        const voltageC = circuit.simulationState.get('C1').prevVoltage;
-        expect(Number.isFinite(voltageC)).toBe(true);
-        expect(voltageC).not.toBe(voltageB);
-        expect(Math.abs(voltageC - voltageB)).toBeGreaterThan(1e-6);
-        expect(backend.consecutiveFallbackSteps).toBe(2);
-        expect(backend.fallbackCount).toBe(2);
+        expect(circuit._solver).toBeNull();
+        expect(circuit.lastResults.backendUsed).toBe('v2');
+        expect(circuit.lastResults.valid).toBe(false);
+        expect(circuit.simTime).toBeCloseTo(0.01, 12);
 
         failV2 = false;
         circuit.step();
         circuit.haltSimulation();
+        expect(circuit._solver).toBeNull();
         expect(circuit.lastResults.backendUsed).toBe('v2');
+        expect(circuit.lastResults.valid).toBe(true);
         expect(circuit.lastResults.nextState.get('C1')).toBeDefined();
         const voltageD = circuit.lastResults.nextState.get('C1').prevVoltage;
         expect(Number.isFinite(voltageD)).toBe(true);
         expect(voltageD).not.toBe(voltageA);
-        expect(voltageD).not.toBe(voltageB);
-        expect(voltageD).toBeGreaterThan(voltageC - 1e-12);
+        expect(Math.abs(voltageD)).toBeGreaterThan(Math.abs(voltageA));
         expect(backend.consecutiveFallbackSteps).toBe(0);
-        expect(circuit.simTime).toBeCloseTo(0.04, 12);
+        expect(circuit.simTime).toBeCloseTo(0.02, 12);
     });
 
     it('keeps embed without solver= pinned to v1 while classroom factory default is v2', () => {

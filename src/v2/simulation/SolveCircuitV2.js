@@ -1,6 +1,8 @@
 /**
- * @internal experimental
- * Production classroom solver is Circuit + MNASolver. This island is tests-only.
+ * V2 MNA kernel. Classroom default tick reaches this through
+ * createInjectedSolverBackend → runSimulationStepV2. Exclusive CI keeps the
+ * identifier out of src/app|ui|core|embed; that is a dependency boundary,
+ * not a tests-only island.
  */
 import { ResultPostprocessorV2 } from './ResultPostprocessorV2.js';
 import { SimulationStateV2 } from './SimulationStateV2.js';

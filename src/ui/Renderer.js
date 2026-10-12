@@ -51,6 +51,14 @@ function safeSetAttribute(node, name, value) {
     safeInvokeMethod(node, 'setAttribute', name, value);
 }
 
+function structuralViewKey(record) {
+    return `${record?.blown ? 1 : 0}:${record?.energized ? 1 : 0}:${record?.conducting ? 1 : 0}`;
+}
+
+function viewIdOf(comp) {
+    return comp?.id === undefined || comp?.id === null ? '' : String(comp.id);
+}
+
 export class Renderer {
     constructor(svgCanvas, circuit) {
         this.svg = svgCanvas;
@@ -73,6 +81,7 @@ export class Renderer {
         this.componentElements = new Map();
         this.wireElements = new Map();
         this.valueDisplaySnapshot = new Map();
+        this.structuralViewSnapshot = new Map();
         this.viewMap = null;
         this.viewMapFallbackCount = 0;
     }
@@ -130,6 +139,10 @@ export class Renderer {
         this.componentLayer.innerHTML = '';
         this.componentElements.clear();
         this.valueDisplaySnapshot.clear();
+        if (!(this.structuralViewSnapshot instanceof Map)) {
+            this.structuralViewSnapshot = new Map();
+        }
+        this.structuralViewSnapshot.clear();
 
         const opaqueBoxes = this.getOpaqueBlackBoxes();
         const hiddenComponentIds = this.computeHiddenComponentIds(opaqueBoxes);
@@ -137,9 +150,11 @@ export class Renderer {
         // 渲染每个元器件
         for (const comp of this.circuit.getAllComponents()) {
             if (hiddenComponentIds.has(comp.id)) continue;
-            const g = SVGRenderer.createComponentGroup(comp);
+            const record = resolveComponentViewRecord(comp, this.viewMap);
+            const g = SVGRenderer.createComponentGroup(record);
             this.componentLayer.appendChild(g);
             this.componentElements.set(comp.id, g);
+            this.structuralViewSnapshot.set(comp.id, structuralViewKey(record));
         }
     }
 
@@ -176,14 +191,18 @@ export class Renderer {
      * 添加单个元器件
      */
     addComponent(comp) {
-        const g = SVGRenderer.createComponentGroup(comp);
+        const record = this.resolveValueDisplayRecord(comp);
+        const g = SVGRenderer.createComponentGroup(record);
         this.componentLayer.appendChild(g);
         this.componentElements.set(comp.id, g);
+        if (!(this.structuralViewSnapshot instanceof Map)) {
+            this.structuralViewSnapshot = new Map();
+        }
+        this.structuralViewSnapshot.set(comp.id, structuralViewKey(record));
         const display = comp.display || {};
         const showCurrent = display.current ?? this.defaultDisplay.current;
         const showVoltage = display.voltage ?? this.defaultDisplay.voltage;
         const showPower = display.power ?? this.defaultDisplay.power;
-        const record = this.resolveValueDisplayRecord(comp);
         SVGRenderer.updateValueDisplay(g, record, showCurrent, showVoltage, showPower);
         this.valueDisplaySnapshot.set(
             comp.id,
@@ -202,6 +221,7 @@ export class Renderer {
             this.componentElements.delete(id);
         }
         this.valueDisplaySnapshot.delete(id);
+        this.structuralViewSnapshot.delete(id);
     }
 
     /**
@@ -315,7 +335,9 @@ export class Renderer {
 
     resolveValueDisplayRecord(comp) {
         const record = resolveComponentViewRecord(comp, this.viewMap);
-        if (record === comp) {
+        const viewId = viewIdOf(comp);
+        const hasView = this.viewMap instanceof Map && viewId && this.viewMap.has(viewId);
+        if (!hasView) {
             this.viewMapFallbackCount = (Number(this.viewMapFallbackCount) || 0) + 1;
         }
         return record;
@@ -353,6 +375,9 @@ export class Renderer {
         if (!(this.valueDisplaySnapshot instanceof Map)) {
             this.valueDisplaySnapshot = new Map();
         }
+        if (!(this.structuralViewSnapshot instanceof Map)) {
+            this.structuralViewSnapshot = new Map();
+        }
         const staleIds = new Set(this.valueDisplaySnapshot.keys());
         for (const [id, g] of this.componentElements) {
             const comp = this.circuit.getComponent(id);
@@ -364,6 +389,14 @@ export class Renderer {
                 const showPower = display.power ?? this.defaultDisplay.power;
                 const record = this.resolveValueDisplayRecord(comp);
                 const snapshot = this.formatValueDisplaySnapshot(record, showCurrent, showVoltage, showPower);
+                const nextStructural = structuralViewKey(record);
+                const prevStructural = this.structuralViewSnapshot.get(id);
+                if (prevStructural !== undefined && prevStructural !== nextStructural) {
+                    this.structuralViewSnapshot.set(id, nextStructural);
+                    this.refreshComponent(comp);
+                    continue;
+                }
+                this.structuralViewSnapshot.set(id, nextStructural);
                 if (!force && this.valueDisplaySnapshot.get(id) === snapshot) {
                     continue;
                 }
@@ -373,6 +406,7 @@ export class Renderer {
         }
         for (const staleId of staleIds) {
             this.valueDisplaySnapshot.delete(staleId);
+            this.structuralViewSnapshot.delete(staleId);
         }
     }
 
@@ -531,7 +565,8 @@ export class Renderer {
             // 在替换前保存选中状态
             const wasSelected = safeHasClass(oldG, 'selected');
             
-            const newG = SVGRenderer.createComponentGroup(comp);
+            const record = resolveComponentViewRecord(comp, this.viewMap);
+            const newG = SVGRenderer.createComponentGroup(record);
             oldG.replaceWith(newG);
             this.componentElements.set(comp.id, newG);
             
@@ -543,12 +578,15 @@ export class Renderer {
             const showCurrent = display.current ?? this.defaultDisplay.current;
             const showVoltage = display.voltage ?? this.defaultDisplay.voltage;
             const showPower = display.power ?? this.defaultDisplay.power;
-            const record = this.resolveValueDisplayRecord(comp);
             SVGRenderer.updateValueDisplay(newG, record, showCurrent, showVoltage, showPower);
             this.valueDisplaySnapshot.set(
                 comp.id,
                 this.formatValueDisplaySnapshot(record, showCurrent, showVoltage, showPower)
             );
+            if (!(this.structuralViewSnapshot instanceof Map)) {
+                this.structuralViewSnapshot = new Map();
+            }
+            this.structuralViewSnapshot.set(comp.id, structuralViewKey(record));
         }
     }
 

@@ -146,6 +146,13 @@ export function updateValueDisplayRuntime({
         }
     }
 
+    if (comp.type === 'Motor') {
+        const speedLabel = g.querySelector?.('.motor-speed');
+        if (speedLabel && comp.speed !== undefined) {
+            speedLabel.textContent = `${(comp.speed * 60 / (2 * Math.PI)).toFixed(0)} rpm`;
+        }
+    }
+
     if (comp.type === 'Capacitor') {
         const plates = g.querySelectorAll?.('.capacitor-plate') || [];
         const isCharged = Math.abs(comp.currentValue || 0) < 1e-6;

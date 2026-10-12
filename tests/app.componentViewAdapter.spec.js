@@ -9,15 +9,11 @@ const ADAPTER_PATH = resolve(process.cwd(), 'src/app/simulation/ComponentViewAda
 describe('ComponentViewAdapter', () => {
     it('documents sunset conditions and forbids copying topology fields', () => {
         const source = readFileSync(ADAPTER_PATH, 'utf8');
-        expect(source).toContain('Renderer.setViewMap');
-        expect(source).toContain('buildValueDisplaySnapshot prefers ViewMap');
-        expect(source).toContain('MeasurementReadoutController');
-        expect(source).toContain('PropertyPanelController');
-        expect(source).toContain('ObservationSources');
-        expect(source).toContain('ObservationExportService');
-        expect(source).toContain('wrapSolverBackend restores standby on valid v2');
-        expect(source).toContain('It does not copy ViewMap onto');
-        expect(source).toContain('Never delete the adapter before Renderer reads ViewMap');
+        expect(source).toContain('runtimeOptions.solverBackend');
+        expect(source).toContain('resolveComponentViewRecord');
+        expect(source).toContain('wrap does not copy onto live');
+        expect(source).toContain('does not restore standby');
+        expect(source).toContain('Do not add circuit.lastViewMap');
         expect(source).not.toContain('applyViewMapToComponents');
         const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gmu, '');
         expect(code).not.toMatch(/comp\.nodes\s*=/);

@@ -273,6 +273,18 @@ function attachDynamicFields(view, type, stateEntry) {
         const i2tAccum = readStateField(stateEntry, 'i2tAccum');
         if (blown !== undefined) view.blown = blown;
         if (i2tAccum !== undefined) view.i2tAccum = i2tAccum;
+        return;
+    }
+    if (type === 'Capacitor' || type === 'ParallelPlateCapacitor') {
+        const prevCharge = readStateField(stateEntry, 'prevCharge');
+        const prevVoltage = readStateField(stateEntry, 'prevVoltage');
+        if (prevCharge !== undefined) view.prevCharge = prevCharge;
+        if (prevVoltage !== undefined) view.prevVoltage = prevVoltage;
+        return;
+    }
+    if (type === 'Inductor') {
+        const prevCurrent = readStateField(stateEntry, 'prevCurrent');
+        if (prevCurrent !== undefined) view.prevCurrent = prevCurrent;
     }
 }
 

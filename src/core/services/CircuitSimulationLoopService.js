@@ -190,8 +190,6 @@ export class CircuitSimulationLoopService {
         const shadowTick = !useV1 && mode === 'shadow'
             ? (Number(backend.shadowWallClockTick) || 0)
             : 0;
-        let stepHadFallback = false;
-
         for (let index = 0; index < substepCount; index++) {
             if (useV1) {
                 const substepResults = context.solver.solve(substepDt, context.simTime);
@@ -232,21 +230,16 @@ export class CircuitSimulationLoopService {
                     elapsedDt += substepDt;
                     continue;
                 }
-                backend.restoreStandby?.(context);
-                context.solver.debugMode = context.debugMode;
-                context.solver.setCircuit(Array.from(context.components.values()), context.nodes);
-                const committed = commitV1Substep(context, substepDt);
-                latestResults = committed.substepResults;
-                latestResults.backendUsed = 'v1';
-                backend.fallbackCount = (backend.fallbackCount || 0) + 1;
-                stepHadFallback = true;
-                elapsedDt += committed.elapsedDt;
-                adaptiveDecisionResults = noteAdaptive(committed.substepResults, adaptiveDecisionResults);
-                if (!committed.substepResults.valid) {
-                    break;
-                }
-                backend.commitStandbyFromCircuit?.(context);
-                continue;
+                latestResults = {
+                    valid: false,
+                    voltages: Array.isArray(result?.voltages) ? result.voltages : [],
+                    currents: result?.currents instanceof Map ? result.currents : new Map(),
+                    backendUsed: 'v2',
+                    diagnostics: result?.diagnostics,
+                    meta: result?.meta
+                };
+                adaptiveDecisionResults = noteAdaptive(latestResults, adaptiveDecisionResults);
+                break;
             }
 
             const sampleShadow = mode === 'shadow'
@@ -273,11 +266,7 @@ export class CircuitSimulationLoopService {
         }
 
         if (mode === 'v2') {
-            if (stepHadFallback) {
-                backend.consecutiveFallbackSteps = (backend.consecutiveFallbackSteps || 0) + 1;
-            } else {
-                backend.consecutiveFallbackSteps = 0;
-            }
+            backend.consecutiveFallbackSteps = 0;
         }
 
         if (adaptiveDecisionResults) {

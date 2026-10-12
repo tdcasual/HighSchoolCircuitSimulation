@@ -581,7 +581,7 @@ export const SVGRenderer = {
         if (comp.label) {
             this.addText(g, 0, 32, comp.label, 9, 'label');
         } else if (comp.speed !== undefined) {
-            this.addText(g, 0, 32, `${(comp.speed * 60 / (2 * Math.PI)).toFixed(0)} rpm`, 9, 'label');
+            this.addText(g, 0, 32, `${(comp.speed * 60 / (2 * Math.PI)).toFixed(0)} rpm`, 9, 'label motor-speed');
         }
     },
 

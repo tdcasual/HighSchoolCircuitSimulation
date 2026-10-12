@@ -22,6 +22,7 @@ import { CircuitTopologyValidationService } from '../services/CircuitTopologyVal
 import { CircuitFlowAnalysisService } from '../services/CircuitFlowAnalysisService.js';
 import { CircuitResultProjectionService } from '../services/CircuitResultProjectionService.js';
 import { getCircuitComponentProperties } from './CircuitComponentProperties.js';
+import { resolveComponentViewRecord } from '../../utils/componentViewRecord.js';
 import {
     getWireCurrentInfo as getWireCurrentInfoViaService,
     isWireInShortCircuit as isWireInShortCircuitViaService,
@@ -490,7 +491,9 @@ export class Circuit {
     }
 
     getComponentProperties(comp) {
-        return getCircuitComponentProperties(comp);
+        return getCircuitComponentProperties(
+            resolveComponentViewRecord(comp, this.lastResults?.viewMap)
+        );
     }
 
     fromJSON(json) {

@@ -268,10 +268,10 @@ export function evaluateSourceQuantity(circuit, sourceId, quantityId) {
             if (comp.type === 'Fuse') {
                 const cold = Number.isFinite(comp.coldResistance) ? comp.coldResistance : 0.05;
                 const blown = Number.isFinite(comp.blownResistance) ? comp.blownResistance : 1e12;
-                return comp.blown ? blown : cold;
+                return view.blown ? blown : cold;
             }
             if (comp.type === 'Diode') {
-                if (comp.conducting) return Number.isFinite(comp.onResistance) ? comp.onResistance : 1;
+                if (view.conducting) return Number.isFinite(comp.onResistance) ? comp.onResistance : 1;
                 return Number.isFinite(comp.offResistance) ? comp.offResistance : 1e9;
             }
             if (comp.type === 'Thermistor') {
@@ -283,10 +283,10 @@ export function evaluateSourceQuantity(circuit, sourceId, quantityId) {
             if (comp.type === 'Relay') {
                 const onR = Number.isFinite(comp.contactOnResistance) ? comp.contactOnResistance : 1e-3;
                 const offR = Number.isFinite(comp.contactOffResistance) ? comp.contactOffResistance : 1e12;
-                return comp.energized ? onR : offR;
+                return view.energized ? onR : offR;
             }
             if (comp.type === 'LED') {
-                if (comp.conducting) return Number.isFinite(comp.onResistance) ? comp.onResistance : 2;
+                if (view.conducting) return Number.isFinite(comp.onResistance) ? comp.onResistance : 2;
                 return Number.isFinite(comp.offResistance) ? comp.offResistance : 1e9;
             }
             if (Number.isFinite(comp.resistance)) return comp.resistance;
@@ -295,9 +295,9 @@ export function evaluateSourceQuantity(circuit, sourceId, quantityId) {
         case QuantityIds.Capacitance:
             return Number.isFinite(comp.capacitance) ? comp.capacitance : null;
         case QuantityIds.Charge:
-            if (Number.isFinite(comp.prevCharge)) return comp.prevCharge;
-            if (Number.isFinite(comp.capacitance) && Number.isFinite(comp.prevVoltage)) {
-                return comp.capacitance * comp.prevVoltage;
+            if (Number.isFinite(view.prevCharge)) return view.prevCharge;
+            if (Number.isFinite(comp.capacitance) && Number.isFinite(view.prevVoltage)) {
+                return comp.capacitance * view.prevVoltage;
             }
             return null;
         case QuantityIds.PlateDistance:
@@ -319,13 +319,13 @@ export function evaluateSourceQuantity(circuit, sourceId, quantityId) {
         case QuantityIds.DielectricConstant:
             return Number.isFinite(comp.dielectricConstant) ? comp.dielectricConstant : null;
         case QuantityIds.MotorSpeedRpm: {
-            const omega = Number.isFinite(comp.speed) ? comp.speed : 0;
+            const omega = Number.isFinite(view.speed) ? view.speed : 0;
             return omega * 60 / (2 * Math.PI);
         }
         case QuantityIds.MotorBackEmf:
-            return Number.isFinite(comp.backEmf) ? comp.backEmf : 0;
+            return Number.isFinite(view.backEmf) ? view.backEmf : 0;
         case QuantityIds.SwitchClosed:
-            if (comp.type === 'Relay') return comp.energized ? 1 : 0;
+            if (comp.type === 'Relay') return view.energized ? 1 : 0;
             return comp.closed ? 1 : 0;
         case QuantityIds.SwitchRoute:
             return comp.position === 'b' ? 1 : 0;

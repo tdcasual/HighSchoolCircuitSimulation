@@ -106,7 +106,7 @@ describe('solverBackend wiring contracts', () => {
         expect(loop).not.toContain('function nowMs');
         expect(loop).toContain("mode === 'v1'");
         expect(loop).toContain('solveFrame');
-        expect(loop).toContain('restoreStandby');
+        expect(loop).not.toContain('restoreStandby');
         expect(loop).toContain('commitV1Substep');
         expect(loop).toContain('SHADOW_SAMPLE_EVERY_N');
 
@@ -123,7 +123,7 @@ describe('solverBackend wiring contracts', () => {
         expect(readSource('src/embed/EmbedRuntimeOptions.js')).not.toContain('DEFAULT_SOLVER_BACKEND_MODE');
         expect(readSource('src/app/AppDocument.js')).not.toContain('lowerArchivedV2');
         expect(loop).toContain('consecutiveFallbackSteps');
-        expect(loop).toContain('commitStandbyFromCircuit');
+        expect(loop).not.toContain('commitStandbyFromCircuit');
         expect(loop).not.toContain('fellBackThisStep');
         expect(loop).not.toMatch(/backend\.mode\s*=\s*['"]v1['"]/);
         expect(readSource('src/app/RuntimeUiBridge.js')).not.toContain('fellBackThisStep');
@@ -137,7 +137,8 @@ describe('solverBackend wiring contracts', () => {
         expect(adapter).not.toContain('copyDynamicsToV1Standby');
         expect(adapter).not.toContain('applySolverBackendRuntimeOptions');
         expect(adapter).not.toContain('applyViewMapToComponents');
-        expect(adapter).toContain('backend.restoreStandby');
+        expect(adapter).not.toContain('backend.restoreStandby');
+        expect(adapter).toContain('does not restore standby');
 
         const serialization = readSource('src/app/AppSerialization.js');
         expect(serialization).not.toContain('normalizeSolverBackendMode');
@@ -249,7 +250,7 @@ describe('CircuitSimulationLoopService solverBackend dispatch', () => {
         expect(resistor.currentValue).toBe(9);
         expect(resistor.nodes).toBe(liveNodes);
         expect(circuit.nodes).toBe(circuitNodes);
-        expect(backend.restoreStandby).toHaveBeenCalledWith(circuit);
+        expect(backend.restoreStandby).not.toHaveBeenCalled();
     });
 
     it('does not construct V1 MNASolver on the v2 success path', () => {
@@ -322,51 +323,58 @@ describe('CircuitSimulationLoopService solverBackend dispatch', () => {
         expect(bare.lastResults.currents.get('R1')).toBeCloseTo(0.3, 6);
     });
 
-    it('restores standby then solves that substep with V1 when v2 fails', () => {
+    it('keeps V1 unconstructed and the substep invalid when v2 fails', () => {
         const circuit = buildSeriesFixture();
-        const callOrder = [];
         const backend = createMockBackend({
-            solveFrame: vi.fn(() => {
-                callOrder.push('solveFrame');
-                return {
-                    valid: false,
-                    voltages: [],
-                    currents: new Map(),
-                    backendUsed: 'v2'
-                };
-            }),
-            restoreStandby: vi.fn(() => {
-                callOrder.push('restoreStandby');
-            }),
-            commitStandbyFromCircuit: vi.fn(() => {
-                callOrder.push('commitStandbyFromCircuit');
-            })
+            solveFrame: vi.fn(() => ({
+                valid: false,
+                voltages: [],
+                currents: new Map(),
+                backendUsed: 'v2',
+                diagnostics: { code: 'SIM_SINGULAR_MATRIX' }
+            }))
         });
-        const originalSolve = circuit.solver.solve.bind(circuit.solver);
-        circuit.solver.solve = (...args) => {
-            callOrder.push('solver.solve');
-            return originalSolve(...args);
-        };
         circuit.solverBackend = backend;
 
         circuit.prepareSimulation();
+        expect(circuit._solver).toBeNull();
         circuit.step();
         circuit.haltSimulation();
 
         expect(backend.solveFrame).toHaveBeenCalledTimes(1);
-        expect(backend.restoreStandby).toHaveBeenCalledTimes(1);
-        expect(backend.restoreStandby).toHaveBeenCalledWith(circuit);
-        expect(backend.commitStandbyFromCircuit).toHaveBeenCalledTimes(1);
-        expect(backend.commitStandbyFromCircuit).toHaveBeenCalledWith(circuit);
-        expect(callOrder).toEqual(['solveFrame', 'restoreStandby', 'solver.solve', 'commitStandbyFromCircuit']);
-        expect(backend.fallbackCount).toBe(1);
-        expect(backend.consecutiveFallbackSteps).toBe(1);
+        expect(backend.restoreStandby).not.toHaveBeenCalled();
+        expect(backend.commitStandbyFromCircuit).not.toHaveBeenCalled();
+        expect(circuit._solver).toBeNull();
+        expect(backend.fallbackCount).toBe(0);
+        expect(backend.consecutiveFallbackSteps).toBe(0);
         expect(backend.mode).toBe('v2');
-        expect(circuit.lastResults.backendUsed).toBe('v1');
-        expect(circuit.lastResults.valid).toBe(true);
-        expect(circuit.lastResults.currents.has('R1')).toBe(true);
-        expect(circuit.lastResults.currents.get('R1')).toBeCloseTo(0.3, 6);
-        expect(circuit.simTime).toBeCloseTo(0.01, 12);
+        expect(circuit.lastResults.backendUsed).toBe('v2');
+        expect(circuit.lastResults.valid).toBe(false);
+        expect(circuit.lastResults.diagnostics).toEqual({ code: 'SIM_SINGULAR_MATRIX' });
+        expect(circuit.simTime).toBe(0);
+        expect(circuit.currentDt).toBeCloseTo(0.01, 12);
+    });
+
+    it('feeds an invalid v2 substep into adaptive dt when adaptive is enabled', () => {
+        const circuit = buildSeriesFixture();
+        circuit.enableAdaptiveTimeStep = true;
+        circuit.minAdaptiveDt = 0.001;
+        const backend = createMockBackend({
+            solveFrame: vi.fn(() => ({
+                valid: false,
+                voltages: [],
+                currents: new Map(),
+                backendUsed: 'v2'
+            }))
+        });
+        circuit.solverBackend = backend;
+        circuit.prepareSimulation();
+        circuit.step();
+        circuit.haltSimulation();
+        expect(circuit.lastResults.valid).toBe(false);
+        expect(circuit.lastResults.backendUsed).toBe('v2');
+        expect(circuit._solver).toBeNull();
+        expect(circuit.currentDt).toBeCloseTo(0.005, 9);
     });
 
     it('samples shadow on wall-clock ticks 0 and 5 at substep 0 only and does not run the adapter', () => {

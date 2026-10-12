@@ -88,9 +88,10 @@ describe('Renderer value snapshot updates', () => {
         );
         expect(renderer.viewMapFallbackCount).toBe(2);
         const missingIdParts = missingIdSnapshot.split('|');
-        expect(missingIdParts[4]).toBe(renderer.formatValueSnapshotNumber(0.5));
+        expect(missingIdParts[4]).toBe(renderer.formatValueSnapshotNumber(0));
+        expect(missingIdParts[4]).not.toBe(renderer.formatValueSnapshotNumber(0.5));
         expect(missingIdParts[4]).not.toBe(renderer.formatValueSnapshotNumber(9));
-        expect(missingIdParts[5]).toBe(renderer.formatValueSnapshotNumber(4));
+        expect(missingIdParts[5]).toBe(renderer.formatValueSnapshotNumber(0));
     });
 
     it('paints ViewMap current 0 instead of live 0.5 and still paints 0 after adapter copy', () => {

@@ -225,6 +225,8 @@ export function updatePropertyPanel(comp) {
         content.appendChild(chipRow);
     }
 
+    const view = this.renderer?.resolveValueDisplayRecord?.(comp) || comp;
+
     // 根据类型显示不同的属性
     switch (comp.type) {
         case 'Ground':
@@ -252,7 +254,7 @@ export function updatePropertyPanel(comp) {
             content.appendChild(createPropertyRow('导通压降', `${Number.isFinite(comp.forwardVoltage) ? comp.forwardVoltage : 0.7} V`));
             content.appendChild(createPropertyRow('导通电阻', `${Number.isFinite(comp.onResistance) ? comp.onResistance : 1} Ω`));
             content.appendChild(createPropertyRow('截止电阻', `${Number.isFinite(comp.offResistance) ? comp.offResistance : 1e9} Ω`));
-            content.appendChild(createPropertyRow('状态', comp.conducting ? '导通' : '截止'));
+            content.appendChild(createPropertyRow('状态', view.conducting ? '导通' : '截止'));
             break;
 
         case 'LED':
@@ -260,8 +262,8 @@ export function updatePropertyPanel(comp) {
             content.appendChild(createPropertyRow('导通电阻', `${Number.isFinite(comp.onResistance) ? comp.onResistance : 2} Ω`));
             content.appendChild(createPropertyRow('截止电阻', `${Number.isFinite(comp.offResistance) ? comp.offResistance : 1e9} Ω`));
             content.appendChild(createPropertyRow('额定电流', `${((Number.isFinite(comp.ratedCurrent) ? comp.ratedCurrent : 0.02) * 1000).toFixed(1)} mA`));
-            content.appendChild(createPropertyRow('亮度', `${((Number.isFinite(comp.brightness) ? comp.brightness : 0) * 100).toFixed(0)}%`));
-            content.appendChild(createPropertyRow('状态', comp.conducting ? '导通' : '截止'));
+            content.appendChild(createPropertyRow('亮度', `${((Number.isFinite(view.brightness) ? view.brightness : 0) * 100).toFixed(0)}%`));
+            content.appendChild(createPropertyRow('状态', view.conducting ? '导通' : '截止'));
             break;
 
         case 'Thermistor': {
@@ -288,7 +290,7 @@ export function updatePropertyPanel(comp) {
             content.appendChild(createPropertyRow('释放电流', `${((Number.isFinite(comp.dropOutCurrent) ? comp.dropOutCurrent : 0.01) * 1000).toFixed(1)} mA`));
             content.appendChild(createPropertyRow('触点导通电阻', `${Number.isFinite(comp.contactOnResistance) ? comp.contactOnResistance : 1e-3} Ω`));
             content.appendChild(createPropertyRow('触点断开电阻', `${Number.isFinite(comp.contactOffResistance) ? comp.contactOffResistance : 1e12} Ω`));
-            content.appendChild(createPropertyRow('状态', comp.energized ? '吸合' : '释放'));
+            content.appendChild(createPropertyRow('状态', view.energized ? '吸合' : '释放'));
             break;
 
         case 'Rheostat': {
@@ -421,7 +423,7 @@ export function updatePropertyPanel(comp) {
 
         case 'Motor':
             content.appendChild(createPropertyRow('电枢电阻', `${comp.resistance} Ω`));
-            content.appendChild(createPropertyRow('转速', `${((comp.speed || 0) * 60 / (2 * Math.PI)).toFixed(0)} rpm`));
+            content.appendChild(createPropertyRow('转速', `${((view.speed || 0) * 60 / (2 * Math.PI)).toFixed(0)} rpm`));
             break;
 
         case 'Switch':
@@ -435,10 +437,10 @@ export function updatePropertyPanel(comp) {
             break;
 
         case 'Fuse':
-            content.appendChild(createPropertyRow('状态', comp.blown ? '已熔断' : '正常'));
+            content.appendChild(createPropertyRow('状态', view.blown ? '已熔断' : '正常'));
             content.appendChild(createPropertyRow('额定电流', `${Number.isFinite(comp.ratedCurrent) ? comp.ratedCurrent : 3} A`));
             content.appendChild(createPropertyRow('I²t 阈值', `${Number.isFinite(comp.i2tThreshold) ? comp.i2tThreshold : 1} A²·s`));
-            content.appendChild(createPropertyRow('I²t 累计', `${Number.isFinite(comp.i2tAccum) ? comp.i2tAccum.toFixed(3) : '0.000'} A²·s`));
+            content.appendChild(createPropertyRow('I²t 累计', `${Number.isFinite(view.i2tAccum) ? view.i2tAccum.toFixed(3) : '0.000'} A²·s`));
             content.appendChild(createPropertyRow('正常电阻', `${Number.isFinite(comp.coldResistance) ? comp.coldResistance : 0.05} Ω`));
             content.appendChild(createPropertyRow('熔断电阻', `${Number.isFinite(comp.blownResistance) ? comp.blownResistance : 1e12} Ω`));
             break;
