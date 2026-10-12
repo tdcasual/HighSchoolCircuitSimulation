@@ -1,7 +1,6 @@
 import * as ViewportController from './ViewportController.js';
 
-export function installInteractionCoreInputViewportControlDelegates(InteractionManagerClass) {
-    Object.assign(InteractionManagerClass.prototype, {
+export const interactionCoreInputViewportControlMethods = {
         onWheel(e) {
             return ViewportController.onWheel.call(this, e);
         },
@@ -21,5 +20,4 @@ export function installInteractionCoreInputViewportControlDelegates(InteractionM
         getCircuitBounds() {
             return ViewportController.getCircuitBounds.call(this);
         }
-    });
-}
+    };

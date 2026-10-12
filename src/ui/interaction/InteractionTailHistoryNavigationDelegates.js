@@ -1,8 +1,7 @@
 import * as HistoryFacadeController from './HistoryFacadeController.js';
 import * as UIStateController from './UIStateController.js';
 
-export function installInteractionTailHistoryNavigationDelegates(InteractionManagerClass) {
-    Object.assign(InteractionManagerClass.prototype, {
+export const interactionTailHistoryNavigationMethods = {
         undo() {
             return HistoryFacadeController.undo.call(this);
         },
@@ -22,5 +21,4 @@ export function installInteractionTailHistoryNavigationDelegates(InteractionMana
         clearStatusAction() {
             return UIStateController.clearStatusAction.call(this);
         }
-    });
-}
+    };

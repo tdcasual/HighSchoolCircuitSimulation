@@ -1,7 +1,6 @@
 import * as InputResolver from './InputResolver.js';
 
-export function installInteractionCoreInputTargetResolverDelegates(InteractionManagerClass) {
-    Object.assign(InteractionManagerClass.prototype, {
+export const interactionCoreInputTargetResolverMethods = {
         resolveTerminalTarget(target) {
             return InputResolver.resolveTerminalTarget.call(this, target);
         },
@@ -13,5 +12,4 @@ export function installInteractionCoreInputTargetResolverDelegates(InteractionMa
         isWireEndpointTarget(target) {
             return InputResolver.isWireEndpointTarget.call(this, target);
         }
-    });
-}
+    };

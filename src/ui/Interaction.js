@@ -4,8 +4,7 @@
  */
 
 import { initializeInteractionState } from './interaction/InteractionStateInitializer.js';
-import { installInteractionCoreDelegates } from './interaction/InteractionCoreDelegates.js';
-import { installInteractionTailDelegates } from './interaction/InteractionTailDelegates.js';
+import { installInteractionMethodMaps } from './interaction/interactionMethodMaps.js';
 import { TouchActionController } from './interaction/TouchActionController.js';
 import { QuickActionBarController } from './interaction/QuickActionBarController.js';
 import { initializeInteractionModeStore } from '../app/interaction/InteractionOrchestrator.js';
@@ -25,5 +24,4 @@ export class InteractionManager {
     }
 }
 
-installInteractionCoreDelegates(InteractionManager);
-installInteractionTailDelegates(InteractionManager);
+installInteractionMethodMaps(InteractionManager);

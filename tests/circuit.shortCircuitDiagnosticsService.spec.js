@@ -12,6 +12,7 @@ function createBaseCircuitMock() {
         solver: {
             getSourceInstantVoltage: vi.fn(() => 12)
         },
+        getSourceInstantVoltageAtTime: vi.fn(() => 12),
         getTerminalWorldPositionCached: vi.fn(),
         ensureWireFlowCache: vi.fn(),
         _wireFlowCache: { map: new Map() },
@@ -104,5 +105,28 @@ describe('CircuitShortCircuitDiagnosticsService', () => {
             flowDirection: -1,
             voltageDiff: 0
         });
+    });
+
+    it('detects norton shorts via getSourceInstantVoltageAtTime without touching V1 solver', () => {
+        const circuit = createBaseCircuitMock();
+        circuit.components.set('V1', {
+            id: 'V1',
+            type: 'PowerSource',
+            nodes: [1, 0],
+            internalResistance: 2
+        });
+
+        refreshShortCircuitDiagnostics(circuit, {
+            valid: true,
+            voltages: [0, 0],
+            currents: new Map([['V1', 6]])
+        });
+
+        expect(circuit.getSourceInstantVoltageAtTime).toHaveBeenCalledWith(
+            circuit.components.get('V1'),
+            circuit.simTime
+        );
+        expect(circuit.solver.getSourceInstantVoltage).not.toHaveBeenCalled();
+        expect(circuit.shortedSourceIds.has('V1')).toBe(true);
     });
 });

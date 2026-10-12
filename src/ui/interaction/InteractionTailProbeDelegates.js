@@ -1,7 +1,6 @@
 import * as ProbeActions from './ProbeActions.js';
 
-export function installInteractionTailProbeDelegates(InteractionManagerClass) {
-    Object.assign(InteractionManagerClass.prototype, {
+export const interactionTailProbeMethods = {
         renameObservationProbe(probeId, nextLabel = null) {
             return ProbeActions.renameObservationProbe.call(this, probeId, nextLabel);
         },
@@ -17,5 +16,4 @@ export function installInteractionTailProbeDelegates(InteractionManagerClass) {
         addObservationProbeForWire(wireId, probeType, options = {}) {
             return ProbeActions.addObservationProbeForWire.call(this, wireId, probeType, options);
         }
-    });
-}
+    };

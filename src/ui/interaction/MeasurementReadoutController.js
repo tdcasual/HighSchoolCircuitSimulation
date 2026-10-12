@@ -80,23 +80,24 @@ export function createMeterSelfReadingControl(comp) {
  */
 export function updateSelectedComponentReadouts(comp) {
     if (!comp) return;
+    const view = this.renderer?.resolveValueDisplayRecord?.(comp) || comp;
 
     const currentEl = document.getElementById('measure-current');
     const voltageEl = document.getElementById('measure-voltage');
     const powerEl = document.getElementById('measure-power');
 
-    if (currentEl) currentEl.textContent = `${(comp.currentValue || 0).toFixed(4)} A`;
-    if (voltageEl) voltageEl.textContent = `${(comp.voltageValue || 0).toFixed(4)} V`;
-    if (powerEl) powerEl.textContent = `${(comp.powerValue || 0).toFixed(4)} W`;
+    if (currentEl) currentEl.textContent = `${(view.currentValue || 0).toFixed(4)} A`;
+    if (voltageEl) voltageEl.textContent = `${(view.voltageValue || 0).toFixed(4)} V`;
+    if (powerEl) powerEl.textContent = `${(view.powerValue || 0).toFixed(4)} W`;
 
     // 仪表读数行（如果存在）
     const ammeterReading = document.querySelector('.ammeter-reading');
     if (ammeterReading && comp.type === 'Ammeter') {
-        ammeterReading.textContent = `${(Math.abs(comp.currentValue) || 0).toFixed(3)} A`;
+        ammeterReading.textContent = `${(Math.abs(view.currentValue) || 0).toFixed(3)} A`;
     }
     const voltmeterReading = document.querySelector('.voltmeter-reading');
     if (voltmeterReading && comp.type === 'Voltmeter') {
-        voltmeterReading.textContent = `${(Math.abs(comp.voltageValue) || 0).toFixed(3)} V`;
+        voltmeterReading.textContent = `${(Math.abs(view.voltageValue) || 0).toFixed(3)} V`;
     }
 
     // 特殊组件的动态字段
@@ -181,7 +182,7 @@ export function updateParallelPlateCapacitorPanelValues(comp) {
     const areaCm2 = (comp.plateArea || 0) * 10000;
     const effAreaCm2 = areaCm2 * overlapFraction;
 
-    const voltage = Math.abs(comp.voltageValue || 0);
+    const voltage = Math.abs((this.renderer?.resolveValueDisplayRecord?.(comp) || comp).voltageValue || 0);
     const field = comp.plateDistance ? voltage / comp.plateDistance : 0; // V/m
     const charge = Math.abs(comp.prevCharge ?? (comp.capacitance || 0) * (comp.prevVoltage || 0));
 

@@ -1,7 +1,6 @@
 import * as WireInteractions from './WireInteractions.js';
 
-export function installInteractionCoreCircuitWiringFlowDelegates(InteractionManagerClass) {
-    Object.assign(InteractionManagerClass.prototype, {
+export const interactionCoreCircuitWiringFlowMethods = {
         startWiringFromPoint(point, e = null, armMouseUpGuard = false) {
             return WireInteractions.startWiringFromPoint.call(this, point, e, armMouseUpGuard);
         },
@@ -17,5 +16,4 @@ export function installInteractionCoreCircuitWiringFlowDelegates(InteractionMana
         cancelWiring() {
             return WireInteractions.cancelWiring.call(this);
         }
-    });
-}
+    };

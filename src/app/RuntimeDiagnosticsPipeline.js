@@ -63,7 +63,7 @@ export function resolveRuntimeDiagnosticsForUpdate({ results = null, circuit = n
             results: target || results,
             topologyVersion: freshness.topologyVersion,
             simulationVersion: freshness.simulationVersion,
-            solverShortCircuitDetected: !!runtimeSnapshot?.solverShortCircuitDetected || !!circuit?.solver?.shortCircuitDetected,
+            solverShortCircuitDetected: !!runtimeSnapshot?.solverShortCircuitDetected || !!circuit?._solver?.shortCircuitDetected,
             shortedSourceIds: runtimeSnapshot?.shortedSourceIds || circuit?.shortedSourceIds || null,
             shortedWireIds: runtimeSnapshot?.shortedWireIds || circuit?.shortedWireIds || null
         });

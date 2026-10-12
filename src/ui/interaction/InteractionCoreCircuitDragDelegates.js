@@ -1,7 +1,6 @@
 import * as DragBehaviors from './DragBehaviors.js';
 
-export function installInteractionCoreCircuitDragDelegates(InteractionManagerClass) {
-    Object.assign(InteractionManagerClass.prototype, {
+export const interactionCoreCircuitDragMethods = {
         startDragging(componentG, e) {
             return DragBehaviors.startDragging.call(this, componentG, e);
         },
@@ -21,5 +20,4 @@ export function installInteractionCoreCircuitDragDelegates(InteractionManagerCla
         startParallelPlateCapacitorDrag(componentId, e) {
             return DragBehaviors.startParallelPlateCapacitorDrag.call(this, componentId, e);
         }
-    });
-}
+    };

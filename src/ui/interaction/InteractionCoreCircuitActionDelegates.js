@@ -1,7 +1,6 @@
 import * as ComponentActions from './ComponentActions.js';
 
-export function installInteractionCoreCircuitActionDelegates(InteractionManagerClass) {
-    Object.assign(InteractionManagerClass.prototype, {
+export const interactionCoreCircuitActionMethods = {
         addComponent(type, x, y) {
             return ComponentActions.addComponent.call(this, type, x, y);
         },
@@ -21,5 +20,4 @@ export function installInteractionCoreCircuitActionDelegates(InteractionManagerC
         toggleSwitch(id) {
             return ComponentActions.toggleSwitch.call(this, id);
         }
-    });
-}
+    };

@@ -1,7 +1,6 @@
 import * as InteractionOrchestrator from '../../app/interaction/InteractionOrchestrator.js';
 
-export function installInteractionCoreInputMouseFlowDelegates(InteractionManagerClass) {
-    Object.assign(InteractionManagerClass.prototype, {
+export const interactionCoreInputMouseFlowMethods = {
         syncInteractionModeStore(options = {}) {
             return InteractionOrchestrator.syncInteractionModeStore(this, options);
         },
@@ -21,5 +20,4 @@ export function installInteractionCoreInputMouseFlowDelegates(InteractionManager
         onMouseLeave(e) {
             return InteractionOrchestrator.onMouseLeave.call(this, e);
         }
-    });
-}
+    };

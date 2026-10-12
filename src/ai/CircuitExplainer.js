@@ -2,6 +2,8 @@
  * CircuitExplainer.js - 电路状态提取和解释
  */
 
+import { resolveComponentViewRecord } from '../utils/componentViewRecord.js';
+
 export class CircuitExplainer {
     constructor(circuit) {
         this.circuit = circuit;
@@ -14,6 +16,8 @@ export class CircuitExplainer {
         const { concise = false, includeTopology = true, includeNodes = true } = options;
         const components = Array.from(this.circuit.components.values());
         const wires = Array.from(this.circuit.wires.values());
+        const viewMap = this.circuit?.lastResults?.viewMap;
+        const viewOf = (comp) => resolveComponentViewRecord(comp, viewMap);
         
         if (components.length === 0) {
             return '当前电路为空。';
@@ -36,8 +40,9 @@ export class CircuitExplainer {
             for (const comp of componentsByType.get('PowerSource')) {
                 const label = comp.label || comp.id;
                 state += `  ${label}: 电动势 ${comp.voltage}V, 内阻 ${comp.internalResistance}Ω\n`;
-                if (!concise && comp.voltageValue !== undefined) {
-                    state += `    → 端电压 ${comp.voltageValue.toFixed(3)}V, 电流 ${comp.currentValue.toFixed(3)}A, 功率 ${comp.powerValue.toFixed(3)}W\n`;
+                const view = viewOf(comp);
+                if (!concise && view.voltageValue !== undefined) {
+                    state += `    → 端电压 ${view.voltageValue.toFixed(3)}V, 电流 ${view.currentValue.toFixed(3)}A, 功率 ${view.powerValue.toFixed(3)}W\n`;
                 }
             }
             state += '\n';
@@ -49,8 +54,9 @@ export class CircuitExplainer {
             for (const comp of componentsByType.get('Resistor')) {
                 const label = comp.label || comp.id;
                 state += `  ${label}: 阻值 ${comp.resistance}Ω\n`;
-                if (!concise && comp.voltageValue !== undefined) {
-                    state += `    → 电压 ${comp.voltageValue.toFixed(3)}V, 电流 ${comp.currentValue.toFixed(3)}A, 功率 ${comp.powerValue.toFixed(3)}W\n`;
+                const view = viewOf(comp);
+                if (!concise && view.voltageValue !== undefined) {
+                    state += `    → 电压 ${view.voltageValue.toFixed(3)}V, 电流 ${view.currentValue.toFixed(3)}A, 功率 ${view.powerValue.toFixed(3)}W\n`;
                 }
             }
             state += '\n';
@@ -63,8 +69,9 @@ export class CircuitExplainer {
                 const label = comp.label || comp.id;
                 state += `  ${label}: 最大阻值 ${comp.maxResistance}Ω, 滑块位置 ${(comp.position * 100).toFixed(0)}%\n`;
                 state += `    → 接入电阻 ${(comp.activeResistance || 0).toFixed(1)}Ω (${comp.connectionMode || 'none'})\n`;
-                if (!concise && comp.voltageValue !== undefined) {
-                    state += `    → 电压 ${comp.voltageValue.toFixed(3)}V, 电流 ${comp.currentValue.toFixed(3)}A, 功率 ${comp.powerValue.toFixed(3)}W\n`;
+                const view = viewOf(comp);
+                if (!concise && view.voltageValue !== undefined) {
+                    state += `    → 电压 ${view.voltageValue.toFixed(3)}V, 电流 ${view.currentValue.toFixed(3)}A, 功率 ${view.powerValue.toFixed(3)}W\n`;
                 }
             }
             state += '\n';
@@ -76,9 +83,10 @@ export class CircuitExplainer {
             for (const comp of componentsByType.get('Bulb')) {
                 const label = comp.label || comp.id;
                 state += `  ${label}: 额定功率 ${comp.ratedPower}W, 电阻 ${comp.resistance}Ω\n`;
-                if (!concise && comp.voltageValue !== undefined) {
-                    const brightness = comp.brightness ? `${(comp.brightness * 100).toFixed(0)}%亮度` : '未发光';
-                    state += `    → 电压 ${comp.voltageValue.toFixed(3)}V, 电流 ${comp.currentValue.toFixed(3)}A, 实际功率 ${comp.powerValue.toFixed(3)}W (${brightness})\n`;
+                const view = viewOf(comp);
+                if (!concise && view.voltageValue !== undefined) {
+                    const brightness = view.brightness ? `${(view.brightness * 100).toFixed(0)}%亮度` : '未发光';
+                    state += `    → 电压 ${view.voltageValue.toFixed(3)}V, 电流 ${view.currentValue.toFixed(3)}A, 实际功率 ${view.powerValue.toFixed(3)}W (${brightness})\n`;
                 }
             }
             state += '\n';
@@ -90,8 +98,9 @@ export class CircuitExplainer {
             for (const comp of componentsByType.get('Ammeter')) {
                 const label = comp.label || comp.id;
                 state += `  ${label}: 量程 ${comp.range}A\n`;
-                if (!concise && comp.currentValue !== undefined) {
-                    state += `    → 读数 ${comp.currentValue.toFixed(3)}A\n`;
+                const view = viewOf(comp);
+                if (!concise && view.currentValue !== undefined) {
+                    state += `    → 读数 ${view.currentValue.toFixed(3)}A\n`;
                 }
             }
             state += '\n';
@@ -103,8 +112,9 @@ export class CircuitExplainer {
             for (const comp of componentsByType.get('Voltmeter')) {
                 const label = comp.label || comp.id;
                 state += `  ${label}: 量程 ${comp.range}V\n`;
-                if (!concise && comp.voltageValue !== undefined) {
-                    state += `    → 读数 ${comp.voltageValue.toFixed(3)}V\n`;
+                const view = viewOf(comp);
+                if (!concise && view.voltageValue !== undefined) {
+                    state += `    → 读数 ${view.voltageValue.toFixed(3)}V\n`;
                 }
             }
             state += '\n';

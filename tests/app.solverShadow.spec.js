@@ -174,7 +174,7 @@ describe('solver shadow harness (tests only)', () => {
     });
 
     it('dual-runs aligned extension cases at substep 0 with mismatch 0 and no adapter on the V2 leg', () => {
-        const adapterSpy = vi.spyOn(ComponentViewAdapter, 'applyViewMapToComponents');
+        expect(ComponentViewAdapter).not.toHaveProperty('applyViewMapToComponents');
 
         for (const entry of CANONICAL_SOLVER_CASES) {
             const runtime = buildRuntimeCircuit(getCanonicalSolverCase(entry.id));
@@ -204,7 +204,6 @@ describe('solver shadow harness (tests only)', () => {
             expect(circuit.simTime).toBe(simTimeBefore);
             expect(circuit.lastResults).toBe(lastResultsSentinel);
             expect(snapshotNodes(circuit)).toEqual(nodesBefore);
-            expect(adapterSpy).not.toHaveBeenCalled();
 
             const comparison = compareSolveSnapshots(v1Snapshot, v2Snapshot);
             if (v1Result.valid && v2.solveResult.valid) {
@@ -216,7 +215,7 @@ describe('solver shadow harness (tests only)', () => {
     });
 
     it('samples every 5 wall-clock ticks at substep 0 only and does not run the adapter on the V2 leg', () => {
-        const adapterSpy = vi.spyOn(ComponentViewAdapter, 'applyViewMapToComponents');
+        expect(ComponentViewAdapter).not.toHaveProperty('applyViewMapToComponents');
         const circuit = createTestCircuit();
         circuit.dt = 0.01;
         addComponent(circuit, 'ACVoltageSource', 'VAC', {
@@ -271,7 +270,6 @@ describe('solver shadow harness (tests only)', () => {
                     expect(circuit.simTime).toBe(startSimTime);
                     expect(circuit.lastResults).toBe(lastResultsSentinel);
                     expect(snapshotNodes(circuit)).toEqual(nodesBefore);
-                    expect(adapterSpy).not.toHaveBeenCalled();
 
                     const v1Snapshot = collectSolveSnapshot(
                         v1Result,
@@ -303,6 +301,5 @@ describe('solver shadow harness (tests only)', () => {
         expect(mismatchCount).toBe(0);
         expect(circuit.simTime).toBeCloseTo(ticks * circuit.dt, 12);
         expect(circuit.lastResults).toBe(lastResultsSentinel);
-        expect(adapterSpy).not.toHaveBeenCalled();
     });
 });

@@ -4,6 +4,7 @@
  */
 
 import { ComponentNames } from '../../components/Component.js';
+import { resolveComponentViewRecord } from '../../utils/componentViewRecord.js';
 import {
     computeNtcThermistorResistance,
     computeOverlapFractionFromOffsetPx,
@@ -233,14 +234,15 @@ export function evaluateSourceQuantity(circuit, sourceId, quantityId) {
 
     const comp = circuit?.components?.get(normalizedSourceId);
     if (!comp) return null;
+    const view = resolveComponentViewRecord(comp, circuit?.lastResults?.viewMap);
 
     switch (quantityId) {
         case QuantityIds.Current:
-            return Number.isFinite(comp.currentValue) ? comp.currentValue : 0;
+            return Number.isFinite(view.currentValue) ? view.currentValue : 0;
         case QuantityIds.Voltage:
-            return Number.isFinite(comp.voltageValue) ? comp.voltageValue : 0;
+            return Number.isFinite(view.voltageValue) ? view.voltageValue : 0;
         case QuantityIds.Power:
-            return Number.isFinite(comp.powerValue) ? comp.powerValue : 0;
+            return Number.isFinite(view.powerValue) ? view.powerValue : 0;
         case QuantityIds.Resistance: {
             if (comp.type === 'Rheostat') {
                 // 尽量使用电路已计算的 activeResistance，缺失时按位置估算
@@ -303,7 +305,7 @@ export function evaluateSourceQuantity(circuit, sourceId, quantityId) {
         case QuantityIds.ElectricField: {
             const d = Number.isFinite(comp.plateDistance) ? comp.plateDistance : null;
             if (!d || d <= 0) return null;
-            const u = Number.isFinite(comp.voltageValue) ? Math.abs(comp.voltageValue) : 0;
+            const u = Number.isFinite(view.voltageValue) ? Math.abs(view.voltageValue) : 0;
             return u / d;
         }
         case QuantityIds.EffectiveArea: {
@@ -328,7 +330,7 @@ export function evaluateSourceQuantity(circuit, sourceId, quantityId) {
         case QuantityIds.SwitchRoute:
             return comp.position === 'b' ? 1 : 0;
         case QuantityIds.BulbBrightness:
-            return Number.isFinite(comp.brightness) ? comp.brightness : 0;
+            return Number.isFinite(view.brightness) ? view.brightness : 0;
         case QuantityIds.SourceEmf:
             return Number.isFinite(comp.voltage) ? comp.voltage : null;
         case QuantityIds.SourceInternalResistance:

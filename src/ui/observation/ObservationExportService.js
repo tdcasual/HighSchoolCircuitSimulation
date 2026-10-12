@@ -1,4 +1,5 @@
 import { formatNumberCompact } from './ObservationMath.js';
+import { resolveComponentViewRecord } from '../../utils/componentViewRecord.js';
 import { DEFAULT_SAMPLE_INTERVAL_MS, normalizeSampleIntervalMs } from './ObservationState.js';
 
 function safeAppendToBody(node) {
@@ -109,11 +110,15 @@ export function buildObservationExportMetadata(panel, options = {}) {
     if (meterComponents.length <= 0) {
         lines.push('[表盘] 无自主读数');
     } else {
+        const viewMap = panel?.renderer?.viewMap instanceof Map
+            ? panel.renderer.viewMap
+            : panel?.circuit?.lastResults?.viewMap;
         for (const comp of meterComponents) {
+            const view = resolveComponentViewRecord(comp, viewMap);
             const unit = comp.type === 'Ammeter' ? 'A' : 'V';
             const reading = comp.type === 'Ammeter'
-                ? Math.abs(Number(comp.currentValue) || 0)
-                : Math.abs(Number(comp.voltageValue) || 0);
+                ? Math.abs(Number(view.currentValue) || 0)
+                : Math.abs(Number(view.voltageValue) || 0);
             const range = Number.isFinite(comp.range) && Number(comp.range) > 0
                 ? Number(comp.range)
                 : (comp.type === 'Ammeter' ? 3 : 15);

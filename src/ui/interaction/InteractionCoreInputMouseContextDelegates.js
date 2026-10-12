@@ -1,7 +1,6 @@
 import * as InteractionOrchestrator from '../../app/interaction/InteractionOrchestrator.js';
 
-export function installInteractionCoreInputMouseContextDelegates(InteractionManagerClass) {
-    Object.assign(InteractionManagerClass.prototype, {
+export const interactionCoreInputMouseContextMethods = {
         onContextMenu(e) {
             return InteractionOrchestrator.onContextMenu.call(this, e);
         },
@@ -9,5 +8,4 @@ export function installInteractionCoreInputMouseContextDelegates(InteractionMana
         onDoubleClick(e) {
             return InteractionOrchestrator.onDoubleClick.call(this, e);
         }
-    });
-}
+    };

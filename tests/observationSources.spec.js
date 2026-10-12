@@ -31,6 +31,45 @@ describe('ObservationSources', () => {
         expect(evaluateSourceQuantity(circuit, 'X', QuantityIds.Power)).toBeCloseTo(0.66, 12);
     });
 
+    it('prefers lastResults.viewMap I/U/P including true zero', () => {
+        const circuit = {
+            simTime: 0,
+            components: new Map([
+                ['X', { id: 'X', type: 'Resistor', currentValue: 9, voltageValue: 9, powerValue: 9, resistance: 10 }]
+            ]),
+            lastResults: {
+                viewMap: new Map([
+                    ['X', { currentValue: 0, voltageValue: 2.4, powerValue: 0 }]
+                ])
+            }
+        };
+        expect(evaluateSourceQuantity(circuit, 'X', QuantityIds.Current)).toBe(0);
+        expect(evaluateSourceQuantity(circuit, 'X', QuantityIds.Voltage)).toBeCloseTo(2.4, 12);
+        expect(evaluateSourceQuantity(circuit, 'X', QuantityIds.Power)).toBe(0);
+    });
+
+    it('prefers ViewMap voltage for electric field including true zero', () => {
+        const circuit = {
+            simTime: 0,
+            components: new Map([
+                ['C1', {
+                    id: 'C1',
+                    type: 'ParallelPlateCapacitor',
+                    plateDistance: 0.002,
+                    voltageValue: 9,
+                    currentValue: 9,
+                    powerValue: 9
+                }]
+            ]),
+            lastResults: {
+                viewMap: new Map([
+                    ['C1', { voltageValue: 0, currentValue: 0, powerValue: 0 }]
+                ])
+            }
+        };
+        expect(evaluateSourceQuantity(circuit, 'C1', QuantityIds.ElectricField)).toBe(0);
+    });
+
     it('returns capacitor extra quantities', () => {
         const circuit = {
             simTime: 0,

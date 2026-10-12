@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as WireInteractions from '../src/ui/interaction/WireInteractions.js';
-import { installInteractionCoreCircuitWireSearchDelegates } from '../src/ui/interaction/InteractionCoreCircuitWireSearchDelegates.js';
+import { assignInteractionMethods } from '../src/ui/interaction/assignInteractionMethods.js';
+import { interactionCoreCircuitWireSearchMethods } from '../src/ui/interaction/InteractionCoreCircuitWireSearchDelegates.js';
 
 class InteractionHarness {}
-installInteractionCoreCircuitWireSearchDelegates(InteractionHarness);
+assignInteractionMethods(InteractionHarness, interactionCoreCircuitWireSearchMethods);
 
 describe('InteractionCoreCircuitWireSearchDelegates', () => {
     afterEach(() => {

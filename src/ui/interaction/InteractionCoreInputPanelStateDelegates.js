@@ -1,8 +1,7 @@
 import * as PanelBindingsController from './PanelBindingsController.js';
 import * as UIStateController from './UIStateController.js';
 
-export function installInteractionCoreInputPanelStateDelegates(InteractionManagerClass) {
-    Object.assign(InteractionManagerClass.prototype, {
+export const interactionCoreInputPanelStateMethods = {
         bindButtonEvents() {
             return PanelBindingsController.bindButtonEvents.call(this);
         },
@@ -14,5 +13,4 @@ export function installInteractionCoreInputPanelStateDelegates(InteractionManage
         isObservationTabActive() {
             return UIStateController.isObservationTabActive.call(this);
         }
-    });
-}
+    };

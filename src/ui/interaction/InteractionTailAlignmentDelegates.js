@@ -1,7 +1,6 @@
 import * as AlignmentGuideController from './AlignmentGuideController.js';
 
-export function installInteractionTailAlignmentDelegates(InteractionManagerClass) {
-    Object.assign(InteractionManagerClass.prototype, {
+export const interactionTailAlignmentMethods = {
         detectAlignment(draggedId, x, y) {
             return AlignmentGuideController.detectAlignment.call(this, draggedId, x, y);
         },
@@ -13,5 +12,4 @@ export function installInteractionTailAlignmentDelegates(InteractionManagerClass
         hideAlignmentGuides() {
             return AlignmentGuideController.hideAlignmentGuides.call(this);
         }
-    });
-}
+    };

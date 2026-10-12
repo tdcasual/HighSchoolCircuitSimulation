@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { applyViewMapToComponents } from '../src/app/simulation/ComponentViewAdapter.js';
+import { applyViewMapToComponents } from './helpers/applyViewMapToComponents.js';
 import { addComponent, connectWire, createTestCircuit } from './helpers/circuitTestUtils.js';
 
 const ADAPTER_PATH = resolve(process.cwd(), 'src/app/simulation/ComponentViewAdapter.js');
@@ -15,9 +15,10 @@ describe('ComponentViewAdapter', () => {
         expect(source).toContain('PropertyPanelController');
         expect(source).toContain('ObservationSources');
         expect(source).toContain('ObservationExportService');
-        expect(source).toContain('two release cycles');
+        expect(source).toContain('wrapSolverBackend restores standby on valid v2');
+        expect(source).toContain('It does not copy ViewMap onto');
         expect(source).toContain('Never delete the adapter before Renderer reads ViewMap');
-        expect(source).toContain('禁止: comp.nodes = ...; wire.nodeIndex = ...; circuit.nodes = ...');
+        expect(source).not.toContain('applyViewMapToComponents');
         const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gmu, '');
         expect(code).not.toMatch(/comp\.nodes\s*=/);
         expect(code).not.toMatch(/wire\.nodeIndex\s*=/);

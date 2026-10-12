@@ -34,19 +34,22 @@ export const SimulationRefreshSkill = {
             const simTime = safeNumber(circuit.simTime, 0);
             const backend = circuit.solverBackend;
             const useBackend = !!backend && backend.mode !== 'v1' && typeof backend.solveFrame === 'function';
-            const solver = circuit.solver;
-            if (!useBackend && (!solver || typeof solver.solve !== 'function')) {
-                return {
-                    ok: false,
-                    refreshed: false,
-                    valid: false,
-                    reason: '求解器不可用'
-                };
+            let solver = null;
+            let results;
+            if (useBackend) {
+                results = backend.solveFrame({ circuit, dt, simTime });
+            } else {
+                solver = circuit.solver;
+                if (!solver || typeof solver.solve !== 'function') {
+                    return {
+                        ok: false,
+                        refreshed: false,
+                        valid: false,
+                        reason: '求解器不可用'
+                    };
+                }
+                results = solver.solve(dt, simTime);
             }
-
-            const results = useBackend
-                ? backend.solveFrame({ circuit, dt, simTime })
-                : solver.solve(dt, simTime);
             circuit.lastResults = results;
 
             if (results && typeof results === 'object' && !results.runtimeDiagnostics) {

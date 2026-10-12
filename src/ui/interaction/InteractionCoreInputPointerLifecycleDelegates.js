@@ -1,7 +1,6 @@
 import * as PointerSessionManager from './PointerSessionManager.js';
 
-export function installInteractionCoreInputPointerLifecycleDelegates(InteractionManagerClass) {
-    Object.assign(InteractionManagerClass.prototype, {
+export const interactionCoreInputPointerLifecycleMethods = {
         onPointerDown(e) {
             return PointerSessionManager.onPointerDown.call(this, e);
         },
@@ -37,5 +36,4 @@ export function installInteractionCoreInputPointerLifecycleDelegates(Interaction
         resumePointerSession(options) {
             return PointerSessionManager.resumePointerSession.call(this, options);
         }
-    });
-}
+    };

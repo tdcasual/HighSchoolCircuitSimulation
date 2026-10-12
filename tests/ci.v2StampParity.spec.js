@@ -9,6 +9,8 @@ const STAMP_PARITY_IMPORTS = [
     'src/v2/simulation/JunctionModelV2.js',
     'src/v2/simulation/DynamicUpdateV2.js',
     'src/utils/Physics.js',
+    'src/utils/JunctionModel.js',
+    'src/utils/registerDefaultStamps.js',
     'src/core/simulation/ComponentRegistry.js',
     'src/core/simulation/JunctionModel.js',
     'src/core/simulation/DynamicIntegrator.js',
@@ -59,10 +61,14 @@ describe('v2 stamp-parity guard', () => {
             scriptRelPath: 'scripts/ci/assert-v2-stamp-parity.mjs',
             sourceFiles: STAMP_PARITY_IMPORTS,
             mutateByFile: {
-                'src/v2/simulation/StampRegistryV2.js': (content) => content.replace(
-                    'context.stampResistor(nodes.i1, nodes.i2, comp.resistance);',
-                    'context.stampCurrentSource(nodes.i1, nodes.i2, comp.resistance);'
-                )
+                'src/v2/simulation/StampRegistryV2.js': (content) => `${content}
+DefaultStampRegistryV2.register('Resistor', {
+    stamp(comp, context, nodes) {
+        context.stampCurrentSource(nodes.i1, nodes.i2, comp.resistance);
+    },
+    current() { return 0; }
+});
+`
             }
         });
 

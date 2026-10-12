@@ -1,7 +1,6 @@
 import * as ToolPlacementController from './ToolPlacementController.js';
 
-export function installInteractionCoreInputPlacementDelegates(InteractionManagerClass) {
-    Object.assign(InteractionManagerClass.prototype, {
+export const interactionCoreInputPlacementMethods = {
         setPendingToolType(type, item = null, options = {}) {
             return ToolPlacementController.setPendingToolType.call(this, type, item, options);
         },
@@ -41,5 +40,4 @@ export function installInteractionCoreInputPlacementDelegates(InteractionManager
         placePendingToolAt(clientX, clientY) {
             return ToolPlacementController.placePendingToolAt.call(this, clientX, clientY);
         }
-    });
-}
+    };

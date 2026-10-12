@@ -1,4 +1,12 @@
-import { Matrix } from './Matrix.js';
+import {
+    applyGmin,
+    stampCurrentSource as stampCurrentSourceShared,
+    stampResistor as stampResistorShared,
+    stampSeriesVoltageSource as stampSeriesVoltageSourceShared,
+    stampVoltageSource as stampVoltageSourceShared,
+    zeroVector,
+    zeros
+} from '../../utils/linearAlgebra.js';
 
 const IDEAL_SOURCE_RESISTANCE_EPS = 1e-9;
 
@@ -178,18 +186,14 @@ export class SolverMatrixAssembler {
         stampComponent = null
     } = {}) {
         const size = Math.max(0, nodeCount - 1 + voltageSourceCount);
-        const A = Matrix.zeros(size, size);
-        const z = Matrix.zeroVector(size);
+        const A = zeros(size, size);
+        const z = zeroVector(size);
 
         for (const comp of components) {
             stampComponent?.(comp, A, z, nodeCount);
         }
 
-        if (gmin > 0) {
-            for (let i = 0; i < nodeCount - 1; i++) {
-                A[i][i] += gmin;
-            }
-        }
+        applyGmin(A, nodeCount, gmin);
 
         if (debugMode) {
             logger?.debug?.('MNA Matrix A:');
@@ -203,58 +207,18 @@ export class SolverMatrixAssembler {
     }
 
     stampResistor(A, i1, i2, resistance) {
-        let normalizedResistance = resistance;
-        if (normalizedResistance <= 0) normalizedResistance = 1e-9;
-        const conductance = 1 / normalizedResistance;
-
-        if (i1 >= 0) A[i1][i1] += conductance;
-        if (i2 >= 0) A[i2][i2] += conductance;
-        if (i1 >= 0 && i2 >= 0) {
-            A[i1][i2] -= conductance;
-            A[i2][i1] -= conductance;
-        }
+        stampResistorShared(A, i1, i2, resistance);
     }
 
     stampCurrentSource(z, iFrom, iTo, current) {
-        if (!Number.isFinite(current) || Math.abs(current) < 1e-18) return;
-        if (iFrom >= 0) z[iFrom] -= current;
-        if (iTo >= 0) z[iTo] += current;
+        stampCurrentSourceShared(z, iFrom, iTo, current);
     }
 
-    stampVoltageSource(A, z, i1, i2, voltage, vsIndex, nodeCount, logger = this.logger) {
-        if (!Number.isInteger(vsIndex) || vsIndex < 0) {
-            logger?.warn?.('Skip voltage source stamp due to invalid vsIndex');
-            return;
-        }
-        const equationRow = nodeCount - 1 + vsIndex;
-        if (equationRow < 0 || equationRow >= A.length || !A[equationRow]) {
-            logger?.warn?.('Skip voltage source stamp due to out-of-range equation row');
-            return;
-        }
-
-        if (i1 >= 0) A[equationRow][i1] = 1;
-        if (i2 >= 0) A[equationRow][i2] = -1;
-        if (i1 >= 0) A[i1][equationRow] = 1;
-        if (i2 >= 0) A[i2][equationRow] = -1;
-        z[equationRow] = voltage;
+    stampVoltageSource(A, z, i1, i2, voltage, vsIndex, nodeCount) {
+        stampVoltageSourceShared(A, z, i1, i2, voltage, vsIndex, nodeCount);
     }
 
-    stampSeriesVoltageSource(A, z, i1, i2, voltage, seriesR, vsIndex, nodeCount, logger = this.logger) {
-        if (!Number.isInteger(vsIndex) || vsIndex < 0) {
-            logger?.warn?.('Skip series voltage source stamp due to invalid vsIndex');
-            return;
-        }
-        const equationRow = nodeCount - 1 + vsIndex;
-        if (equationRow < 0 || equationRow >= A.length || !A[equationRow]) {
-            logger?.warn?.('Skip series voltage source stamp due to out-of-range equation row');
-            return;
-        }
-        const r = Math.max(Number(seriesR) || 0, 1e-12);
-        if (i1 >= 0) A[equationRow][i1] = 1;
-        if (i2 >= 0) A[equationRow][i2] = -1;
-        A[equationRow][equationRow] = -r;
-        if (i1 >= 0) A[i1][equationRow] = 1;
-        if (i2 >= 0) A[i2][equationRow] = -1;
-        z[equationRow] = voltage;
+    stampSeriesVoltageSource(A, z, i1, i2, voltage, seriesR, vsIndex, nodeCount) {
+        stampSeriesVoltageSourceShared(A, z, i1, i2, voltage, seriesR, vsIndex, nodeCount);
     }
 }

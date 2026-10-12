@@ -1,8 +1,7 @@
 import * as ViewportController from './ViewportController.js';
 import * as CoordinateTransforms from './CoordinateTransforms.js';
 
-export function installInteractionCoreInputCoordinateDelegates(InteractionManagerClass) {
-    Object.assign(InteractionManagerClass.prototype, {
+export const interactionCoreInputCoordinateMethods = {
         screenToCanvas(clientX, clientY) {
             return ViewportController.screenToCanvas.call(this, clientX, clientY);
         },
@@ -10,5 +9,4 @@ export function installInteractionCoreInputCoordinateDelegates(InteractionManage
         canvasToComponentLocal(comp, canvasPoint) {
             return CoordinateTransforms.canvasToComponentLocal(comp, canvasPoint);
         }
-    });
-}
+    };

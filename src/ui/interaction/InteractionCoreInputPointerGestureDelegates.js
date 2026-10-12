@@ -1,7 +1,6 @@
 import * as PointerSessionManager from './PointerSessionManager.js';
 
-export function installInteractionCoreInputPointerGestureDelegates(InteractionManagerClass) {
-    Object.assign(InteractionManagerClass.prototype, {
+export const interactionCoreInputPointerGestureMethods = {
         shouldStartPinchGesture() {
             return PointerSessionManager.shouldStartPinchGesture.call(this);
         },
@@ -25,5 +24,4 @@ export function installInteractionCoreInputPointerGestureDelegates(InteractionMa
         endPinchGestureIfNeeded() {
             return PointerSessionManager.endPinchGestureIfNeeded.call(this);
         }
-    });
-}
+    };

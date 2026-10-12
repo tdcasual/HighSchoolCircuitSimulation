@@ -210,7 +210,7 @@ describe('solverBackend default-on v2', () => {
         expect(circuit.simTime).toBeCloseTo(0.02, 12);
     });
 
-    it('wraps the factory so ViewMap writes live 3V/8Ω current not the seed', () => {
+    it('wraps the factory so ViewMap holds 3V/8Ω current and live seed stays stale', () => {
         const circuit = buildSeriesFixture();
         const backend = createInjectedSolverBackend();
         circuit.solverBackend = wrapSolverBackend(backend);
@@ -230,9 +230,7 @@ describe('solverBackend default-on v2', () => {
         expect(circuit.lastResults.currents.get('R1')).toBeCloseTo(0.3, 6);
         expect(circuit.lastResults.viewMap.has('R1')).toBe(true);
         expect(circuit.lastResults.viewMap.get('R1').currentValue).toBeCloseTo(0.3, 6);
-        expect(resistor.currentValue).toBeCloseTo(0.3, 6);
-        expect(resistor.currentValue).not.toBe(9);
-        expect(resistor.currentValue).not.toBe(0);
+        expect(resistor.currentValue).toBe(9);
         expect(dynSpy).not.toHaveBeenCalled();
         expect(resistor.nodes).toBe(liveNodes);
         expect(circuit.nodes).toBe(circuitNodes);

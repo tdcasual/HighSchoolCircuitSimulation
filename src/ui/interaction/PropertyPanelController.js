@@ -443,25 +443,29 @@ export function updatePropertyPanel(comp) {
             content.appendChild(createPropertyRow('熔断电阻', `${Number.isFinite(comp.blownResistance) ? comp.blownResistance : 1e12} Ω`));
             break;
 
-        case 'Ammeter':
+        case 'Ammeter': {
+            const meterView = this.renderer?.resolveValueDisplayRecord?.(comp) || comp;
             content.appendChild(createPropertyRow('内阻', comp.resistance > 0 ? `${comp.resistance} Ω` : '理想（0Ω）'));
             content.appendChild(createPropertyRow('量程', `${comp.range} A`));
             content.appendChild(this.createMeterSelfReadingControl(comp));
-            content.appendChild(createPropertyRow('读数', `${(Math.abs(comp.currentValue) || 0).toFixed(3)} A`, {
+            content.appendChild(createPropertyRow('读数', `${(Math.abs(meterView.currentValue) || 0).toFixed(3)} A`, {
                 rowClass: 'reading',
                 valueClass: 'ammeter-reading'
             }));
             break;
+        }
 
-        case 'Voltmeter':
+        case 'Voltmeter': {
+            const meterView = this.renderer?.resolveValueDisplayRecord?.(comp) || comp;
             content.appendChild(createPropertyRow('内阻', comp.resistance === Infinity ? '理想（∞）' : `${comp.resistance} Ω`));
             content.appendChild(createPropertyRow('量程', `${comp.range} V`));
             content.appendChild(this.createMeterSelfReadingControl(comp));
-            content.appendChild(createPropertyRow('读数', `${(Math.abs(comp.voltageValue) || 0).toFixed(3)} V`, {
+            content.appendChild(createPropertyRow('读数', `${(Math.abs(meterView.voltageValue) || 0).toFixed(3)} V`, {
                 rowClass: 'reading',
                 valueClass: 'voltmeter-reading'
             }));
             break;
+        }
 
         case 'BlackBox': {
             const w = Math.max(80, comp.boxWidth || 180);
@@ -532,15 +536,16 @@ export function updatePropertyPanel(comp) {
 
     // 实时测量（不再每帧重建面板，改为更新这些读数节点）
     content.appendChild(createElement('h3', { textContent: '实时测量' }));
-    content.appendChild(createPropertyRow('电流', `${(comp.currentValue || 0).toFixed(4)} A`, {
+    const measureView = this.renderer?.resolveValueDisplayRecord?.(comp) || comp;
+    content.appendChild(createPropertyRow('电流', `${(measureView.currentValue || 0).toFixed(4)} A`, {
         valueId: 'measure-current',
         rowClass: 'measure-item measure-item-current'
     }));
-    content.appendChild(createPropertyRow('电压', `${(comp.voltageValue || 0).toFixed(4)} V`, {
+    content.appendChild(createPropertyRow('电压', `${(measureView.voltageValue || 0).toFixed(4)} V`, {
         valueId: 'measure-voltage',
         rowClass: 'measure-item measure-item-voltage'
     }));
-    content.appendChild(createPropertyRow('功率', `${(comp.powerValue || 0).toFixed(4)} W`, {
+    content.appendChild(createPropertyRow('功率', `${(measureView.powerValue || 0).toFixed(4)} W`, {
         valueId: 'measure-power',
         rowClass: 'measure-item measure-item-power'
     }));

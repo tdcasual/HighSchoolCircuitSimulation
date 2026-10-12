@@ -1,7 +1,6 @@
 import * as WireInteractions from './WireInteractions.js';
 
-export function installInteractionCoreCircuitWireCompactionDelegates(InteractionManagerClass) {
-    Object.assign(InteractionManagerClass.prototype, {
+export const interactionCoreCircuitWireCompactionMethods = {
         resolveCompactedWireId(wireId, replacementByRemovedId = {}) {
             return WireInteractions.resolveCompactedWireId.call(this, wireId, replacementByRemovedId);
         },
@@ -9,5 +8,4 @@ export function installInteractionCoreCircuitWireCompactionDelegates(Interaction
         compactWiresAndRefresh(options = {}) {
             return WireInteractions.compactWiresAndRefresh.call(this, options);
         }
-    });
-}
+    };

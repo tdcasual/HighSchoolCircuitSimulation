@@ -1,7 +1,6 @@
 import * as MeasurementReadoutController from './MeasurementReadoutController.js';
 
-export function installInteractionCorePanelReadoutComponentDelegates(InteractionManagerClass) {
-    Object.assign(InteractionManagerClass.prototype, {
+export const interactionCorePanelReadoutComponentMethods = {
         updateSelectedComponentReadouts(comp) {
             return MeasurementReadoutController.updateSelectedComponentReadouts.call(this, comp);
         },
@@ -9,5 +8,4 @@ export function installInteractionCorePanelReadoutComponentDelegates(Interaction
         updateRheostatPanelValues(comp) {
             return MeasurementReadoutController.updateRheostatPanelValues.call(this, comp);
         }
-    });
-}
+    };

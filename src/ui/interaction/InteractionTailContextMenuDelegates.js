@@ -1,8 +1,7 @@
 import * as ContextMenuController from './ContextMenuController.js';
 import * as ComponentActions from './ComponentActions.js';
 
-export function installInteractionTailContextMenuDelegates(InteractionManagerClass) {
-    Object.assign(InteractionManagerClass.prototype, {
+export const interactionTailContextMenuMethods = {
         showContextMenu(e, componentId) {
             return ContextMenuController.showContextMenu.call(this, e, componentId);
         },
@@ -22,5 +21,4 @@ export function installInteractionTailContextMenuDelegates(InteractionManagerCla
         duplicateComponent(id) {
             return ComponentActions.duplicateComponent.call(this, id);
         }
-    });
-}
+    };

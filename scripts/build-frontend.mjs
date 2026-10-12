@@ -110,6 +110,7 @@ async function bundleFrontendSource() {
         platform: 'browser',
         target: ['es2020'],
         minify: true,
+        charset: 'utf8',
         treeShaking: true,
         chunkNames: 'chunks/[name]-[hash]',
         entryNames: '[name]',

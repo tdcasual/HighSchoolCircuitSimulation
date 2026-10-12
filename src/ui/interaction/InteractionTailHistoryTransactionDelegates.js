@@ -1,7 +1,6 @@
 import * as HistoryFacadeController from './HistoryFacadeController.js';
 
-export function installInteractionTailHistoryTransactionDelegates(InteractionManagerClass) {
-    Object.assign(InteractionManagerClass.prototype, {
+export const interactionTailHistoryTransactionMethods = {
         pushHistoryEntry(entry) {
             HistoryFacadeController.pushHistoryEntry.call(this, entry);
         },
@@ -17,5 +16,4 @@ export function installInteractionTailHistoryTransactionDelegates(InteractionMan
         commitHistoryTransaction() {
             return HistoryFacadeController.commitHistoryTransaction.call(this);
         }
-    });
-}
+    };

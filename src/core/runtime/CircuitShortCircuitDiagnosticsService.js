@@ -42,7 +42,7 @@ export function refreshShortCircuitDiagnostics(circuit, results = null) {
         if (hasValidResults && !topologicalShort) {
             const internalResistance = Number(comp.internalResistance);
             if (Number.isFinite(internalResistance) && internalResistance >= IDEAL_SOURCE_RESISTANCE_EPS) {
-                const sourceVoltage = circuit.solver.getSourceInstantVoltage(comp);
+                const sourceVoltage = circuit.getSourceInstantVoltageAtTime(comp, circuit.simTime);
                 const sourceVoltageAbs = Math.abs(sourceVoltage);
                 const shortCurrent = sourceVoltageAbs / internalResistance;
                 const terminalVoltage = Math.abs((results.voltages[n0] || 0) - (results.voltages[n1] || 0));

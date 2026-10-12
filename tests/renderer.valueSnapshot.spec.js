@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Renderer } from '../src/ui/Renderer.js';
 import { SVGRenderer } from '../src/components/Component.js';
-import { applyViewMapToComponents } from '../src/app/simulation/ComponentViewAdapter.js';
+import { applyViewMapToComponents } from './helpers/applyViewMapToComponents.js';
 
 function createRendererContext(component, element = {}) {
     const renderer = Object.create(Renderer.prototype);

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as MeasurementReadoutController from '../src/ui/interaction/MeasurementReadoutController.js';
 import { SVGRenderer } from '../src/components/Component.js';
+import { Renderer } from '../src/ui/Renderer.js';
 
 function createFakeElement(tagName = 'div') {
     const listeners = new Map();
@@ -208,6 +209,45 @@ describe('MeasurementReadoutController.updateSelectedComponentReadouts', () => {
         expect(ammeterEl.textContent).toBe('0.123 A');
         expect(ctx.updateRheostatPanelValues).not.toHaveBeenCalled();
         expect(ctx.updateParallelPlateCapacitorPanelValues).not.toHaveBeenCalled();
+    });
+
+    it('prefers Renderer ViewMap values including true zero', () => {
+        const currentEl = { textContent: '' };
+        const voltageEl = { textContent: '' };
+        const powerEl = { textContent: '' };
+        vi.stubGlobal('document', {
+            getElementById: vi.fn((id) => ({
+                'measure-current': currentEl,
+                'measure-voltage': voltageEl,
+                'measure-power': powerEl
+            }[id] || null)),
+            querySelector: vi.fn(() => null)
+        });
+
+        const renderer = Object.create(Renderer.prototype);
+        renderer.viewMap = new Map([
+            ['A1', { currentValue: 0, voltageValue: 1.25, powerValue: 0 }]
+        ]);
+        renderer.viewMapFallbackCount = 0;
+        const ctx = {
+            renderer,
+            updateRheostatPanelValues: vi.fn(),
+            updateParallelPlateCapacitorPanelValues: vi.fn()
+        };
+        const comp = {
+            id: 'A1',
+            type: 'Resistor',
+            currentValue: 9,
+            voltageValue: 9,
+            powerValue: 9
+        };
+
+        MeasurementReadoutController.updateSelectedComponentReadouts.call(ctx, comp);
+
+        expect(currentEl.textContent).toBe('0.0000 A');
+        expect(voltageEl.textContent).toBe('1.2500 V');
+        expect(powerEl.textContent).toBe('0.0000 W');
+        expect(renderer.viewMapFallbackCount).toBe(0);
     });
 });
 

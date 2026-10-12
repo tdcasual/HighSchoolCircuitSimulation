@@ -1,8 +1,7 @@
 import * as SelectionPanelController from './SelectionPanelController.js';
 import * as SnapController from './SnapController.js';
 
-export function installInteractionCorePanelSelectionDelegates(InteractionManagerClass) {
-    Object.assign(InteractionManagerClass.prototype, {
+export const interactionCorePanelSelectionMethods = {
         selectComponent(id) {
             return SelectionPanelController.selectComponent.call(this, id);
         },
@@ -18,5 +17,4 @@ export function installInteractionCorePanelSelectionDelegates(InteractionManager
         clearSelection() {
             return SelectionPanelController.clearSelection.call(this);
         }
-    });
-}
+    };

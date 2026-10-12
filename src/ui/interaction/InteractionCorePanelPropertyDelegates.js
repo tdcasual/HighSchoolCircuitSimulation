@@ -1,9 +1,7 @@
 import * as PropertyPanelController from './PropertyPanelController.js';
 
-export function installInteractionCorePanelPropertyDelegates(InteractionManagerClass) {
-    Object.assign(InteractionManagerClass.prototype, {
+export const interactionCorePanelPropertyMethods = {
         updatePropertyPanel(comp) {
             return PropertyPanelController.updatePropertyPanel.call(this, comp);
         }
-    });
-}
+    };

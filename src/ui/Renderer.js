@@ -6,6 +6,9 @@
 import { SVGRenderer } from '../components/Component.js';
 import { getTerminalWorldPosition } from '../utils/TerminalGeometry.js';
 import { normalizeCanvasPoint } from '../utils/CanvasCoords.js';
+import { resolveComponentViewRecord } from '../utils/componentViewRecord.js';
+
+export { resolveComponentViewRecord };
 
 function safeHasClass(node, className) {
     if (!node || !node.classList || typeof node.classList.contains !== 'function') return false;
@@ -311,23 +314,11 @@ export class Renderer {
     }
 
     resolveValueDisplayRecord(comp) {
-        const viewId = comp?.id === undefined || comp?.id === null ? '' : String(comp.id);
-        const view = this.viewMap instanceof Map && viewId
-            ? this.viewMap.get(viewId)
-            : undefined;
-        if (view == null || typeof view !== 'object') {
+        const record = resolveComponentViewRecord(comp, this.viewMap);
+        if (record === comp) {
             this.viewMapFallbackCount = (Number(this.viewMapFallbackCount) || 0) + 1;
-            return comp;
         }
-        return {
-            ...comp,
-            currentValue: view.currentValue,
-            voltageValue: view.voltageValue,
-            powerValue: view.powerValue,
-            voltageSegLeft: view.voltageSegLeft,
-            voltageSegRight: view.voltageSegRight,
-            brightness: view.brightness != null ? view.brightness : comp.brightness
-        };
+        return record;
     }
 
     formatValueDisplaySnapshot(record, showCurrent, showVoltage, showPower) {

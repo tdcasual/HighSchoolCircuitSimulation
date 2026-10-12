@@ -136,6 +136,7 @@ describe('solverBackend wiring contracts', () => {
         const adapter = readSource('src/app/simulation/ComponentViewAdapter.js');
         expect(adapter).not.toContain('copyDynamicsToV1Standby');
         expect(adapter).not.toContain('applySolverBackendRuntimeOptions');
+        expect(adapter).not.toContain('applyViewMapToComponents');
         expect(adapter).toContain('backend.restoreStandby');
 
         const serialization = readSource('src/app/AppSerialization.js');
@@ -209,7 +210,7 @@ describe('CircuitSimulationLoopService solverBackend dispatch', () => {
         expect(backend.reset).toHaveBeenCalled();
     });
 
-    it('skips V1 display projection on v2 success after wrap writes ViewMap zeros', () => {
+    it('skips V1 display projection on v2 success and leaves live seed stale', () => {
         const circuit = buildSeriesFixture();
         const resistor = circuit.getComponent('R1');
         const liveNodes = resistor.nodes;
@@ -244,10 +245,24 @@ describe('CircuitSimulationLoopService solverBackend dispatch', () => {
         expect(projectionSpy).not.toHaveBeenCalled();
         expect(circuit.lastResults.backendUsed).toBe('v2');
         expect(circuit.lastResults.currents.get('R1')).toBe(0.37);
-        expect(resistor.currentValue).toBe(0);
+        expect(circuit.lastResults.viewMap.get('R1').currentValue).toBe(0);
+        expect(resistor.currentValue).toBe(9);
         expect(resistor.nodes).toBe(liveNodes);
         expect(circuit.nodes).toBe(circuitNodes);
         expect(backend.restoreStandby).toHaveBeenCalledWith(circuit);
+    });
+
+    it('does not construct V1 MNASolver on the v2 success path', () => {
+        const circuit = buildSeriesFixture();
+        expect(circuit._solver).toBeNull();
+        circuit.solverBackend = wrapSolverBackend(createInjectedSolverBackend());
+        circuit.prepareSimulation();
+        expect(circuit._solver).toBeNull();
+        circuit.step();
+        expect(circuit._solver).toBeNull();
+        expect(circuit.lastResults.backendUsed).toBe('v2');
+        expect(circuit.lastResults.valid).toBe(true);
+        circuit.haltSimulation();
     });
 
     it('hands the live v2 ViewMap to Renderer.setViewMap through RuntimeUiBridge', () => {
@@ -450,10 +465,12 @@ describe('CircuitSimulationLoopService solverBackend dispatch', () => {
 });
 
 describe('wrapSolverBackend', () => {
-    it('applies ViewMap zeros on v2 success and skips the adapter in shadow mode', () => {
+    it('leaves live seed stale on v2 success and skips the adapter in shadow mode', () => {
         const circuit = buildSeriesFixture();
         const resistor = circuit.getComponent('R1');
         resistor.currentValue = 9;
+        resistor.voltageValue = 1;
+        resistor.powerValue = 2;
         resistor.nodes = [7, 8];
         const liveNodes = resistor.nodes;
 
@@ -479,9 +496,9 @@ describe('wrapSolverBackend', () => {
         };
         const wrapped = wrapSolverBackend(v2Backend);
         wrapped.solveFrame({ circuit, dt: 0.01, simTime: 0 });
-        expect(resistor.currentValue).toBe(0);
-        expect(resistor.voltageValue).toBe(2.4);
-        expect(resistor.powerValue).toBe(0);
+        expect(resistor.currentValue).toBe(9);
+        expect(resistor.voltageValue).toBe(1);
+        expect(resistor.powerValue).toBe(2);
         expect(resistor.nodes).toBe(liveNodes);
         expect(resistor.nodes).toEqual([7, 8]);
 

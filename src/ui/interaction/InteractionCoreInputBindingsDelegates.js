@@ -1,7 +1,6 @@
 import * as EventBindingsController from './EventBindingsController.js';
 
-export function installInteractionCoreInputBindingsDelegates(InteractionManagerClass) {
-    Object.assign(InteractionManagerClass.prototype, {
+export const interactionCoreInputBindingsMethods = {
         bindEvents() {
             return EventBindingsController.bindEvents.call(this);
         },
@@ -17,5 +16,4 @@ export function installInteractionCoreInputBindingsDelegates(InteractionManagerC
         bindKeyboardEvents() {
             return EventBindingsController.bindKeyboardEvents.call(this);
         }
-    });
-}
+    };

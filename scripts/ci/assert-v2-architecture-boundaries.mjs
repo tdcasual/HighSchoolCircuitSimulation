@@ -21,13 +21,18 @@ const allowedOutsideV2Imports = Object.freeze({
     ]),
     'src/v2/simulation/NodeBuilderV2.js': Object.freeze([
         '../../utils/CanvasCoords.js',
-        '../../utils/TerminalGeometry.js'
+        '../../utils/TerminalGeometry.js',
+        '../../utils/buildElectricalNodes.js'
     ]),
     'src/v2/simulation/StampRegistryV2.js': Object.freeze([
-        '../../utils/Physics.js'
+        '../../utils/registerDefaultStamps.js'
+    ]),
+    'src/v2/simulation/JunctionModelV2.js': Object.freeze([
+        '../../utils/JunctionModel.js'
     ]),
     'src/v2/simulation/LinearAlgebraV2.js': Object.freeze([
-        '../../utils/Physics.js'
+        '../../utils/linearAlgebra.js',
+        '../../utils/buildSystemMatrixCacheKey.js'
     ])
 });
 

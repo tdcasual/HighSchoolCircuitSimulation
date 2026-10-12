@@ -1,7 +1,6 @@
 import * as MeasurementReadoutController from './MeasurementReadoutController.js';
 
-export function installInteractionCorePanelReadoutCapacitorDelegates(InteractionManagerClass) {
-    Object.assign(InteractionManagerClass.prototype, {
+export const interactionCorePanelReadoutCapacitorMethods = {
         recomputeParallelPlateCapacitance(comp, options = {}) {
             return MeasurementReadoutController.recomputeParallelPlateCapacitance.call(this, comp, options);
         },
@@ -9,5 +8,4 @@ export function installInteractionCorePanelReadoutCapacitorDelegates(Interaction
         updateParallelPlateCapacitorPanelValues(comp) {
             return MeasurementReadoutController.updateParallelPlateCapacitorPanelValues.call(this, comp);
         }
-    });
-}
+    };

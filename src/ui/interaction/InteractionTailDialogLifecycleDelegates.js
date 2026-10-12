@@ -2,8 +2,7 @@ import * as PropertyDialogActions from './PropertyDialogActions.js';
 import * as PropertyDialogController from './PropertyDialogController.js';
 import * as UIStateController from './UIStateController.js';
 
-export function installInteractionTailDialogLifecycleDelegates(InteractionManagerClass) {
-    Object.assign(InteractionManagerClass.prototype, {
+export const interactionTailDialogLifecycleMethods = {
         showPropertyDialog(id) {
             return PropertyDialogController.showPropertyDialog.call(this, id);
         },
@@ -15,5 +14,4 @@ export function installInteractionTailDialogLifecycleDelegates(InteractionManage
         applyDialogChanges() {
             return PropertyDialogActions.applyDialogChanges.call(this);
         }
-    });
-}
+    };

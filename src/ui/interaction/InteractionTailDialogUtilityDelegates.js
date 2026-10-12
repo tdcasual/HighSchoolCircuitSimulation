@@ -1,7 +1,6 @@
 import * as UIStateController from './UIStateController.js';
 
-export function installInteractionTailDialogUtilityDelegates(InteractionManagerClass) {
-    Object.assign(InteractionManagerClass.prototype, {
+export const interactionTailDialogUtilityMethods = {
         safeParseFloat(value, defaultValue, minValue = null, maxValue = null) {
             return UIStateController.safeParseFloat.call(this, value, defaultValue, minValue, maxValue);
         },
@@ -9,5 +8,4 @@ export function installInteractionTailDialogUtilityDelegates(InteractionManagerC
         getBlackBoxContainedComponentIds(boxComp, options = {}) {
             return UIStateController.getBlackBoxContainedComponentIds.call(this, boxComp, options);
         }
-    });
-}
+    };

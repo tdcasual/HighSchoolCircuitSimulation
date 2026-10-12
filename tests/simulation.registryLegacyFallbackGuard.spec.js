@@ -25,7 +25,7 @@ describe('registry legacy fallback guard wiring', () => {
         const content = readFileSync(scriptPath, 'utf8');
 
         expect(content).toContain('buildSystemMatrixCacheKey(options = {})');
-        expect(content).toContain('src/core/simulation/SolverMatrixCacheKeyBuilder.js');
+        expect(content).toContain('src/utils/buildSystemMatrixCacheKey.js');
         expect(content).toContain('must not invoke stamping APIs');
         expect(content).toContain('must not mutate component state while building cache key');
     });
@@ -47,7 +47,7 @@ describe('registry legacy fallback guard wiring', () => {
             sourceFiles: [
                 'src/core/simulation/MNASolver.js',
                 'src/core/simulation/ResultPostprocessor.js',
-                'src/core/simulation/SolverMatrixCacheKeyBuilder.js'
+                'src/utils/buildSystemMatrixCacheKey.js'
             ],
             mutateByFile: {
                 'src/core/simulation/MNASolver.js': (source) => source.replace(
@@ -73,7 +73,7 @@ describe('registry legacy fallback guard wiring', () => {
             sourceFiles: [
                 'src/core/simulation/MNASolver.js',
                 'src/core/simulation/ResultPostprocessor.js',
-                'src/core/simulation/SolverMatrixCacheKeyBuilder.js'
+                'src/utils/buildSystemMatrixCacheKey.js'
             ],
             mutateByFile: {
                 'src/core/simulation/MNASolver.js': (source) => source.replace('registry.get(comp.type)', 'registry.get(comp.kind)')
@@ -90,10 +90,10 @@ describe('registry legacy fallback guard wiring', () => {
             sourceFiles: [
                 'src/core/simulation/MNASolver.js',
                 'src/core/simulation/ResultPostprocessor.js',
-                'src/core/simulation/SolverMatrixCacheKeyBuilder.js'
+                'src/utils/buildSystemMatrixCacheKey.js'
             ],
             mutateByFile: {
-                'src/core/simulation/SolverMatrixCacheKeyBuilder.js': (source) => source.replace(
+                'src/utils/buildSystemMatrixCacheKey.js': (source) => source.replace(
                     "return keyParts.join('|');",
                     "this.gmin = 1e-12;\n    return keyParts.join('|');"
                 )

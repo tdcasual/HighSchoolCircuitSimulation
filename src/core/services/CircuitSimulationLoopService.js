@@ -1,3 +1,10 @@
+import { SimulationState } from '../simulation/SimulationState.js';
+
+function shouldPrepareV1Solver(context) {
+    const mode = context?.solverBackend?.mode;
+    return !mode || mode === 'v1' || mode === 'shadow';
+}
+
 function getAdaptiveSeverity(results = {}) {
     const meta = results?.meta || {};
     const valid = results?.valid !== false;
@@ -163,8 +170,16 @@ export class CircuitSimulationLoopService {
     }
 
     runStep(context) {
-        context.ensureSolverPrepared();
-        context.solver.debugMode = context.debugMode;
+        const backend = context.solverBackend;
+        const mode = backend?.mode;
+        const useV1 = !backend || mode === 'v1';
+        if (useV1 || mode === 'shadow') {
+            context.ensureSolverPrepared();
+            context.solver.debugMode = context.debugMode;
+        } else {
+            context.solverCircuitDirty = false;
+            context.solverPreparedTopologyVersion = context.topologyVersion;
+        }
 
         const stepDt = this.resolveSimulationStepDt(context);
         const substepCount = this.getSimulationSubstepCount(context, stepDt);
@@ -172,9 +187,6 @@ export class CircuitSimulationLoopService {
         let latestResults = null;
         let adaptiveDecisionResults = null;
         let elapsedDt = 0;
-        const backend = context.solverBackend;
-        const mode = backend?.mode;
-        const useV1 = !backend || mode === 'v1';
         const shadowTick = !useV1 && mode === 'shadow'
             ? (Number(backend.shadowWallClockTick) || 0)
             : 0;
@@ -221,6 +233,7 @@ export class CircuitSimulationLoopService {
                     continue;
                 }
                 backend.restoreStandby?.(context);
+                context.solver.debugMode = context.debugMode;
                 context.solver.setCircuit(Array.from(context.components.values()), context.nodes);
                 const committed = commitV1Substep(context, substepDt);
                 latestResults = committed.substepResults;
@@ -282,5 +295,228 @@ export class CircuitSimulationLoopService {
             substepDt,
             elapsedDt
         };
+    }
+
+    ensureSolverPrepared(context) {
+        const needsPrepare = context.solverCircuitDirty
+            || context.solverPreparedTopologyVersion !== context.topologyVersion;
+        if (!needsPrepare) return false;
+
+        const components = Array.from(context.components.values());
+        const builtNetlist = context.netlistBuilder?.build?.({
+            components,
+            nodes: context.nodes
+        });
+
+        context.netlist = builtNetlist && Array.isArray(builtNetlist.components)
+            ? builtNetlist
+            : null;
+        context.solver.setCircuit(components, context.nodes);
+        if (typeof context.solver.setSimulationState === 'function') {
+            context.solver.setSimulationState(context.simulationState);
+        }
+        context.solverPreparedTopologyVersion = context.topologyVersion;
+        context.solverCircuitDirty = false;
+        return true;
+    }
+
+    getMaxConnectedAcFrequencyHz(context) {
+        let maxFrequency = 0;
+        for (const [id, comp] of context.components) {
+            if (!comp || comp.type !== 'ACVoltageSource') continue;
+            const frequency = Number(comp.frequency);
+            if (!Number.isFinite(frequency) || frequency <= 0) continue;
+            if (!context.isComponentConnected(id)) continue;
+            if (frequency > maxFrequency) maxFrequency = frequency;
+        }
+        return maxFrequency;
+    }
+
+    getAdaptiveDtBounds(context) {
+        const baseDt = Number.isFinite(context.dt) && context.dt > 0 ? context.dt : 0.01;
+        const requestedMin = Number.isFinite(context.minAdaptiveDt) && context.minAdaptiveDt > 0
+            ? context.minAdaptiveDt
+            : baseDt * 0.1;
+        const requestedMax = Number.isFinite(context.maxAdaptiveDt) && context.maxAdaptiveDt > 0
+            ? context.maxAdaptiveDt
+            : baseDt;
+        const minDt = Math.min(requestedMin, requestedMax);
+        const maxDt = Math.max(requestedMin, requestedMax);
+        return { minDt, maxDt, baseDt };
+    }
+
+    resetAdaptiveTimeStepState(context) {
+        const { minDt, maxDt, baseDt } = context.getAdaptiveDtBounds();
+        context.currentDt = Math.max(minDt, Math.min(maxDt, baseDt));
+        context._adaptiveEaseStreak = 0;
+    }
+
+    updateAdaptiveTimeStep(context, results) {
+        if (!context.enableAdaptiveTimeStep) return;
+
+        const { minDt, maxDt } = context.getAdaptiveDtBounds();
+        const shrinkFactorRaw = Number(context.adaptiveDtShrinkFactor);
+        const growFactorRaw = Number(context.adaptiveDtGrowFactor);
+        const shrinkFactor = Number.isFinite(shrinkFactorRaw) && shrinkFactorRaw > 0
+            ? shrinkFactorRaw
+            : 0.5;
+        const growFactor = Number.isFinite(growFactorRaw) && growFactorRaw > 1
+            ? growFactorRaw
+            : 1.5;
+        const easeIterationThreshold = Math.max(
+            1,
+            Math.floor(Number.isFinite(context.adaptiveEaseIterationThreshold) ? context.adaptiveEaseIterationThreshold : 2)
+        );
+        const easeStreakToGrow = Math.max(
+            1,
+            Math.floor(Number.isFinite(context.adaptiveEaseStreakToGrow) ? context.adaptiveEaseStreakToGrow : 3)
+        );
+
+        const meta = results?.meta || {};
+        const converged = !!(results?.valid && meta.converged !== false);
+        const iterations = Number.isFinite(meta.iterations) ? meta.iterations : 0;
+        const maxIterations = Number.isFinite(meta.maxIterations) ? meta.maxIterations : 0;
+        const nearIterationLimit = maxIterations > 0 && iterations >= Math.max(3, maxIterations - 1);
+        const hardSolve = !converged || nearIterationLimit;
+
+        if (hardSolve) {
+            context.currentDt = Math.max(minDt, context.currentDt * shrinkFactor);
+            context._adaptiveEaseStreak = 0;
+            return;
+        }
+
+        const easySolve = iterations > 0 && iterations <= easeIterationThreshold;
+        if (easySolve) {
+            context._adaptiveEaseStreak += 1;
+            if (context._adaptiveEaseStreak >= easeStreakToGrow) {
+                context.currentDt = Math.min(maxDt, context.currentDt * growFactor);
+                context._adaptiveEaseStreak = 0;
+            }
+        } else {
+            context._adaptiveEaseStreak = 0;
+        }
+
+        context.currentDt = Math.max(minDt, Math.min(maxDt, context.currentDt));
+    }
+
+    prepareSimulation(context) {
+        if (context.isRunning) return;
+
+        context.isRunning = true;
+        context.simTime = 0;
+        context.resetAdaptiveTimeStepState();
+        context.resetSimulationState();
+
+        for (const [_id, comp] of context.components) {
+            if (comp.type === 'Capacitor' || comp.type === 'ParallelPlateCapacitor') {
+                comp.prevVoltage = 0;
+                comp.prevCharge = 0;
+                comp.prevCurrent = 0;
+                comp._dynamicHistoryReady = false;
+            }
+            if (comp.type === 'Inductor') {
+                const initialCurrent = Number.isFinite(comp.initialCurrent) ? comp.initialCurrent : 0;
+                comp.prevCurrent = initialCurrent;
+                comp.prevVoltage = 0;
+                comp._dynamicHistoryReady = false;
+            }
+            if (comp.type === 'Motor') {
+                comp.speed = 0;
+                comp.backEmf = 0;
+            }
+            if (comp.type === 'Fuse' && !comp.blown) {
+                comp.i2tAccum = 0;
+            }
+            if (comp.type === 'Diode' || comp.type === 'LED') {
+                comp.conducting = false;
+                if (comp.type === 'LED') {
+                    comp.brightness = 0;
+                }
+            }
+            if (comp.type === 'Relay') {
+                comp.energized = false;
+            }
+        }
+
+        if (shouldPrepareV1Solver(context)) {
+            context.solver.debugMode = context.debugMode;
+            context.ensureSolverPrepared();
+        } else {
+            context.solverCircuitDirty = false;
+            context.solverPreparedTopologyVersion = context.topologyVersion;
+        }
+    }
+
+    resetSimulationState(context) {
+        context.simulationState = new SimulationState();
+        context.simulationState.resetForComponents(Array.from(context.components.values()));
+        const solver = context._solver;
+        if (solver && typeof solver.setSimulationState === 'function') {
+            solver.setSimulationState(context.simulationState);
+        }
+        context.solverBackend?.reset?.();
+    }
+
+    syncSimulationStateToComponents(context) {
+        for (const comp of context.components.values()) {
+            const entry = context.simulationState.get(comp.id);
+            if (!entry) continue;
+            if (comp.type === 'Diode' || comp.type === 'LED') {
+                comp.conducting = !!entry.conducting;
+            }
+            if (comp.type === 'Relay') {
+                comp.energized = !!entry.energized;
+            }
+            if (comp.type === 'Motor') {
+                if (Number.isFinite(entry.backEmf)) {
+                    comp.backEmf = entry.backEmf;
+                }
+                if (Number.isFinite(entry.speed)) {
+                    comp.speed = entry.speed;
+                }
+            }
+            if (comp.type === 'Capacitor' || comp.type === 'ParallelPlateCapacitor' || comp.type === 'Inductor') {
+                if (Number.isFinite(entry.prevCurrent)) comp.prevCurrent = entry.prevCurrent;
+                if (Number.isFinite(entry.prevVoltage)) comp.prevVoltage = entry.prevVoltage;
+                if (Number.isFinite(entry.prevCharge)) comp.prevCharge = entry.prevCharge;
+                if (typeof entry._dynamicHistoryReady === 'boolean') {
+                    comp._dynamicHistoryReady = entry._dynamicHistoryReady;
+                }
+            }
+        }
+    }
+
+    haltSimulation(context) {
+        context.isRunning = false;
+    }
+
+    resetRuntimeCaches(context) {
+        context.haltSimulation();
+        context.nodes = [];
+        context.netlist = null;
+        context.lastResults = null;
+        context.simTime = 0;
+        context.currentDt = context.dt;
+        context._adaptiveEaseStreak = 0;
+        context.terminalConnectionMap = new Map();
+        context._wireFlowCache = { version: null, map: new Map() };
+        context.shortedPowerNodes = new Set();
+        context.shortedSourceIds = new Set();
+        context.shortedWireIds = new Set();
+        context.shortCircuitCacheVersion = null;
+        context.topologyBatchDepth = 0;
+        context.topologyRebuildPending = false;
+        context.topologyVersion = 0;
+        context.topologyReplacementByRemovedId = {};
+        context.simulationStepId = 0;
+        context.solverPreparedTopologyVersion = -1;
+        context.solverCircuitDirty = true;
+        context.componentTerminalTopologyKeys = new Map();
+        context.terminalWorldPosCache = new Map();
+        context.simulationState = new SimulationState();
+        const solver = context._solver;
+        if (solver && typeof solver.setSimulationState === 'function') {
+            solver.setSimulationState(context.simulationState);
+        }
     }
 }

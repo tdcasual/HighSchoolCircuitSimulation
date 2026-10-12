@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { installInteractionCoreInputPlacementDelegates } from '../src/ui/interaction/InteractionCoreInputPlacementDelegates.js';
+import { assignInteractionMethods } from '../src/ui/interaction/assignInteractionMethods.js';
+import { interactionCoreInputPlacementMethods } from '../src/ui/interaction/InteractionCoreInputPlacementDelegates.js';
 
 afterEach(() => {
     vi.restoreAllMocks();
@@ -64,14 +65,14 @@ function createContext(overrides = {}) {
 describe('Interaction mode matrix diagnostics', () => {
     it('installs getInteractionModeSnapshot delegate on interaction manager', () => {
         class FakeInteractionManager {}
-        installInteractionCoreInputPlacementDelegates(FakeInteractionManager);
+        assignInteractionMethods(FakeInteractionManager, interactionCoreInputPlacementMethods);
 
         expect(typeof FakeInteractionManager.prototype.getInteractionModeSnapshot).toBe('function');
     });
 
     it('keeps endpoint-edit authoritative even when wire restore config is retained', () => {
         class FakeInteractionManager {}
-        installInteractionCoreInputPlacementDelegates(FakeInteractionManager);
+        assignInteractionMethods(FakeInteractionManager, interactionCoreInputPlacementMethods);
         vi.stubGlobal('document', {
             body: {
                 classList: {
@@ -117,7 +118,7 @@ describe('Interaction mode matrix diagnostics', () => {
 
     it('captures phone/classroom/embed runtime matrix in wire mode snapshot', () => {
         class FakeInteractionManager {}
-        installInteractionCoreInputPlacementDelegates(FakeInteractionManager);
+        assignInteractionMethods(FakeInteractionManager, interactionCoreInputPlacementMethods);
         vi.stubGlobal('document', {
             body: {
                 classList: {
@@ -154,7 +155,7 @@ describe('Interaction mode matrix diagnostics', () => {
 
     it('prefers interaction mode-store context when runtime flags lag behind', () => {
         class FakeInteractionManager {}
-        installInteractionCoreInputPlacementDelegates(FakeInteractionManager);
+        assignInteractionMethods(FakeInteractionManager, interactionCoreInputPlacementMethods);
         vi.stubGlobal('document', {
             body: {
                 classList: {

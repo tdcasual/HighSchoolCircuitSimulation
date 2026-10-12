@@ -1,9 +1,7 @@
 import * as MeasurementReadoutController from './MeasurementReadoutController.js';
 
-export function installInteractionCorePanelReadoutMeterDelegates(InteractionManagerClass) {
-    Object.assign(InteractionManagerClass.prototype, {
+export const interactionCorePanelReadoutMeterMethods = {
         createMeterSelfReadingControl(comp) {
             return MeasurementReadoutController.createMeterSelfReadingControl.call(this, comp);
         }
-    });
-}
+    };

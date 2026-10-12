@@ -1,7 +1,6 @@
 import * as HistoryFacadeController from './HistoryFacadeController.js';
 
-export function installInteractionTailHistorySnapshotDelegates(InteractionManagerClass) {
-    Object.assign(InteractionManagerClass.prototype, {
+export const interactionTailHistorySnapshotMethods = {
         captureHistoryState() {
             return HistoryFacadeController.captureHistoryState.call(this);
         },
@@ -21,5 +20,4 @@ export function installInteractionTailHistorySnapshotDelegates(InteractionManage
         applyHistoryState(state, selection) {
             return HistoryFacadeController.applyHistoryState.call(this, state, selection);
         }
-    });
-}
+    };
