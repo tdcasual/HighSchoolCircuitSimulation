@@ -167,7 +167,8 @@ export function updateJunctionLinearizationState({
 export function updateRelayEnergizedStates({
     components = [],
     currents = null,
-    state = null
+    state = null,
+    flippedIds = null
 } = {}) {
     let changed = false;
     for (const comp of components) {
@@ -183,7 +184,10 @@ export function updateRelayEnergizedStates({
         const nextEnergized = currentEnergized
             ? coilCurrentAbs >= dropOut
             : coilCurrentAbs >= pullIn;
-        if (nextEnergized !== currentEnergized) changed = true;
+        if (nextEnergized === currentEnergized) continue;
+        if (flippedIds && flippedIds.has(comp.id)) continue;
+        if (flippedIds) flippedIds.add(comp.id);
+        changed = true;
         entry.energized = nextEnergized;
     }
     return changed;

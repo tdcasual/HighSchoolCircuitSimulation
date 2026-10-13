@@ -389,6 +389,7 @@ export function solveCircuitV2(netlistDTO, simulationState = new SimulationState
     let lastJunctionDelta = 0;
     let converged = !hasStateful;
     let iterationsUsed = 0;
+    const relayFlippedIds = hasRelay ? new Set() : null;
 
     for (let iter = 0; iter < maxIterations; iter += 1) {
         iterationsUsed = iter + 1;
@@ -482,7 +483,8 @@ export function solveCircuitV2(netlistDTO, simulationState = new SimulationState
             relayChanged = !!updateRelayEnergizedStates({
                 components,
                 currents: solvedCurrents,
-                state: nextState
+                state: nextState,
+                flippedIds: relayFlippedIds
             });
             if (relayChanged) {
                 factorizationCache = { key: null, factorization: null, matrixSize: -1 };

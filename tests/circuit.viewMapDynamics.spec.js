@@ -463,4 +463,25 @@ describe('classroom ViewMap dynamics', () => {
         circuit.stopSimulation();
         expect(circuit.toJSON().components.find((entry) => entry.id === relay.id).properties.energized).toBe(true);
     });
+
+    it('starts a default battery, 50 ohm, and a relay whose contacts shunt its coil', () => {
+        const circuit = createTestCircuit();
+        const source = addComponent(circuit, 'PowerSource', 'V1', { voltage: 6, internalResistance: 0.5 });
+        const resistor = addComponent(circuit, 'Resistor', 'R1', { resistance: 50 });
+        const relay = addComponent(circuit, 'Relay', 'K1', {});
+        connectWire(circuit, 'W1', source, 0, resistor, 0);
+        connectWire(circuit, 'W2', resistor, 1, relay, 0);
+        connectWire(circuit, 'W3', relay, 1, source, 1);
+        connectWire(circuit, 'W4', relay, 2, relay, 0);
+        connectWire(circuit, 'W5', relay, 3, relay, 1);
+
+        expect(new RuntimeActionRouter({ circuit }).startSimulation()).toBe(true);
+        circuit.step();
+        expect(circuit.lastResults.valid).toBe(true);
+        expect(circuit.lastResults.backendUsed).toBe('v2');
+        expect(circuit.lastResults.meta?.converged).toBe(true);
+        circuit.step();
+        expect(circuit.lastResults.valid).toBe(true);
+        expect(circuit.lastResults.backendUsed).toBe('v2');
+    });
 });
