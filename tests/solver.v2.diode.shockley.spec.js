@@ -431,6 +431,48 @@ describe('SolveCircuitV2 Shockley junction', () => {
         expect(restored.lastResults.meta?.converged).toBe(true);
     });
 
+    it('starts an 1800 Hz min-Ron LED bridge after history undo restores capacitor-first order', () => {
+        const circuit = createTestCircuit();
+        const source = addComponent(circuit, 'ACVoltageSource', 'S', { frequency: 1800 });
+        const l1 = addComponent(circuit, 'LED', 'L1', { onResistance: 1e-9 });
+        const l2 = addComponent(circuit, 'LED', 'L2', { onResistance: 1e-9 });
+        const l3 = addComponent(circuit, 'LED', 'L3', { onResistance: 1e-9 });
+        const l4 = addComponent(circuit, 'LED', 'L4', { onResistance: 1e-9 });
+        const cap = addComponent(circuit, 'Capacitor', 'C', {});
+        connectWire(circuit, 'W1', source, 0, l1, 0);
+        connectWire(circuit, 'W2', l1, 1, cap, 0);
+        connectWire(circuit, 'W3', source, 1, l2, 0);
+        connectWire(circuit, 'W4', l2, 1, cap, 0);
+        connectWire(circuit, 'W5', cap, 1, l3, 0);
+        connectWire(circuit, 'W6', l3, 1, source, 0);
+        connectWire(circuit, 'W7', cap, 1, l4, 0);
+        connectWire(circuit, 'W8', l4, 1, source, 1);
+
+        const history = new HistoryManager({ circuit, updateStatus() {}, logger: { error() {} } });
+        history.runWithHistory('add dummy', () => {
+            addComponent(circuit, 'Resistor', 'Rdummy', { resistance: 1e12 });
+        });
+        history.undo();
+        expect(circuit.components.has('Rdummy')).toBe(false);
+        expect([...circuit.components.keys()]).toEqual(['C', 'L1', 'L2', 'L3', 'L4', 'S']);
+
+        expect(new RuntimeActionRouter({ circuit }).startSimulation()).toBe(true);
+        for (let i = 0; i < 10; i += 1) {
+            circuit.step();
+            expect(circuit.lastResults.valid).toBe(true);
+            expect(circuit.lastResults.backendUsed).toBe('v2');
+            expect(circuit.lastResults.meta?.converged).toBe(true);
+        }
+
+        const restored = createTestCircuit();
+        restored.fromJSON(circuit.toJSON());
+        expect(new RuntimeActionRouter({ circuit: restored }).startSimulation()).toBe(true);
+        restored.step();
+        expect(restored.lastResults.valid).toBe(true);
+        expect(restored.lastResults.backendUsed).toBe('v2');
+        expect(restored.lastResults.meta?.converged).toBe(true);
+    });
+
     it('settles a steep idealityFactor diode with series R in a few Newton iterations', () => {
         const result = solveCircuitV2({
             meta: { version: 2 },

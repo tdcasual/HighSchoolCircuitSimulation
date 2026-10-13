@@ -348,7 +348,17 @@ function emptyResult(nodeCount, nextState, diagnostics, extra = {}) {
 export function solveCircuitV2(netlistDTO, simulationState = new SimulationStateV2(), options = {}) {
     const dto = clonePlainValue(netlistDTO || {});
     const inputComponents = Array.isArray(dto.components) ? dto.components : [];
-    const components = inputComponents.map((component, index) => normalizeComponent(component, index));
+    // Stamp order followed JSON/Map order. A 1800 Hz min-Ron LED bridge
+    // + C crawls to not_converged when the capacitor stamps before the LEDs.
+    const rankedInputs = [...inputComponents].sort((a, b) => {
+        const rank = (type) => {
+            if (type === 'PowerSource' || type === 'ACVoltageSource') return 0;
+            if (type === 'Diode' || type === 'LED') return 1;
+            return 2;
+        };
+        return rank(a?.type) - rank(b?.type);
+    });
+    const components = rankedInputs.map((component, index) => normalizeComponent(component, index));
     const nextState = cloneState(simulationState);
 
     const dt = Math.max(1e-6, toFiniteNumber(options?.dt, 0.001));
