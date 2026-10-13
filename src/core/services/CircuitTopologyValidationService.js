@@ -28,7 +28,12 @@ export class CircuitTopologyValidationService {
     }
 
     isIdealVoltageSource(comp) {
-        if (!comp || (comp.type !== 'PowerSource' && comp.type !== 'ACVoltageSource')) return false;
+        if (!comp) return false;
+        if (comp.type === 'Ammeter') {
+            const resistance = Number(comp.resistance);
+            return !(Number.isFinite(resistance) && resistance > 0);
+        }
+        if (comp.type !== 'PowerSource' && comp.type !== 'ACVoltageSource') return false;
         const internalResistance = Number(comp.internalResistance);
         return !Number.isFinite(internalResistance) || internalResistance < IDEAL_SOURCE_RESISTANCE_EPS;
     }
@@ -104,7 +109,7 @@ export class CircuitTopologyValidationService {
 
             return {
                 code: 'TOPO_CONFLICTING_IDEAL_SOURCES',
-                message: `检测到并联理想电压源冲突：${existing.id} 与 ${comp.id} 接在同一节点对上。理想电压源不能并联。`,
+                message: `检测到并联理想电压源冲突：${existing.id} 与 ${comp.id} 接在同一节点对上。理想电压源（含理想电流表）不能并联。`,
                 details: {
                     sourceIds: [existing.id, comp.id],
                     nodePair: existing.nodes,

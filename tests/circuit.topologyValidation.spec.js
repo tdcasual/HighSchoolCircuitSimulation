@@ -70,6 +70,74 @@ describe('Simulation topology validation', () => {
         expect(circuit.lastResults.backendUsed).toBe('v2');
     });
 
+    it('blocks an ideal ammeter in parallel with an ideal voltage source', () => {
+        const circuit = createTestCircuit();
+        const source = addComponent(circuit, 'PowerSource', 'V1', { voltage: 6, internalResistance: 0 });
+        const ammeter = addComponent(circuit, 'Ammeter', 'A1', { resistance: 0 });
+        const load = addComponent(circuit, 'Resistor', 'R1', { resistance: 100 });
+
+        connectWire(circuit, 'W1', source, 0, ammeter, 0);
+        connectWire(circuit, 'W2', ammeter, 1, source, 1);
+        connectWire(circuit, 'W3', source, 0, load, 0);
+        connectWire(circuit, 'W4', load, 1, source, 1);
+
+        const report = circuit.validateSimulationTopology(0);
+        expect(report.ok).toBe(false);
+        expect(report.error?.code).toBe('TOPO_CONFLICTING_IDEAL_SOURCES');
+        expect(new RuntimeActionRouter({ circuit }).startSimulation()).toBe(false);
+    });
+
+    it('blocks two ideal ammeters sharing a node pair', () => {
+        const circuit = createTestCircuit();
+        const source = addComponent(circuit, 'PowerSource', 'V1', { voltage: 6, internalResistance: 0.5 });
+        const a1 = addComponent(circuit, 'Ammeter', 'A1', { resistance: 0 });
+        const a2 = addComponent(circuit, 'Ammeter', 'A2', { resistance: 0 });
+        const load = addComponent(circuit, 'Resistor', 'R1', { resistance: 100 });
+
+        connectWire(circuit, 'W1', source, 0, load, 0);
+        connectWire(circuit, 'W2', load, 1, source, 1);
+        connectWire(circuit, 'W3', load, 0, a1, 0);
+        connectWire(circuit, 'W4', a1, 1, load, 1);
+        connectWire(circuit, 'W5', load, 0, a2, 0);
+        connectWire(circuit, 'W6', a2, 1, load, 1);
+
+        const report = circuit.validateSimulationTopology(0);
+        expect(report.ok).toBe(false);
+        expect(report.error?.code).toBe('TOPO_CONFLICTING_IDEAL_SOURCES');
+        expect(new RuntimeActionRouter({ circuit }).startSimulation()).toBe(false);
+    });
+
+    it('still starts a series ideal ammeter and a parallel ammeter across a finite-resistance source', () => {
+        const series = createTestCircuit();
+        const seriesSource = addComponent(series, 'PowerSource', 'V1', { voltage: 6, internalResistance: 0 });
+        const seriesAmmeter = addComponent(series, 'Ammeter', 'A1', { resistance: 0 });
+        const seriesLoad = addComponent(series, 'Resistor', 'R1', { resistance: 100 });
+        connectWire(series, 'W1', seriesSource, 0, seriesAmmeter, 0);
+        connectWire(series, 'W2', seriesAmmeter, 1, seriesLoad, 0);
+        connectWire(series, 'W3', seriesLoad, 1, seriesSource, 1);
+
+        expect(series.validateSimulationTopology(0).ok).toBe(true);
+        expect(new RuntimeActionRouter({ circuit: series }).startSimulation()).toBe(true);
+        series.step();
+        expect(series.lastResults.valid).toBe(true);
+        expect(series.lastResults.backendUsed).toBe('v2');
+
+        const parallel = createTestCircuit();
+        const parallelSource = addComponent(parallel, 'PowerSource', 'V1', { voltage: 6, internalResistance: 0.5 });
+        const parallelAmmeter = addComponent(parallel, 'Ammeter', 'A1', { resistance: 0 });
+        const parallelLoad = addComponent(parallel, 'Resistor', 'R1', { resistance: 100 });
+        connectWire(parallel, 'W1', parallelSource, 0, parallelAmmeter, 0);
+        connectWire(parallel, 'W2', parallelAmmeter, 1, parallelSource, 1);
+        connectWire(parallel, 'W3', parallelSource, 0, parallelLoad, 0);
+        connectWire(parallel, 'W4', parallelLoad, 1, parallelSource, 1);
+
+        expect(parallel.validateSimulationTopology(0).ok).toBe(true);
+        expect(new RuntimeActionRouter({ circuit: parallel }).startSimulation()).toBe(true);
+        parallel.step();
+        expect(parallel.lastResults.valid).toBe(true);
+        expect(parallel.lastResults.backendUsed).toBe('v2');
+    });
+
     it('allows start when two capacitors share a relay coil that already damps', () => {
         const circuit = createTestCircuit();
         const source = addComponent(circuit, 'PowerSource', 'V1', {
