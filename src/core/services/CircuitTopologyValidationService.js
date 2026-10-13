@@ -83,8 +83,15 @@ export class CircuitTopologyValidationService {
     }
 
     detectConflictingIdealSources(circuit, simTime = circuit?.simTime) {
-        const pairToSource = new Map();
         const isValidNode = (nodeIdx) => Number.isInteger(nodeIdx) && nodeIdx >= 0;
+        const parent = new Map();
+        const find = (node) => {
+            if (!parent.has(node)) parent.set(node, node);
+            let cursor = node;
+            while (parent.get(cursor) !== cursor) cursor = parent.get(cursor);
+            return cursor;
+        };
+        const edges = [];
 
         for (const comp of circuit?.components?.values?.() || []) {
             if (!this.isIdealVoltageSource(comp)) continue;
@@ -92,30 +99,26 @@ export class CircuitTopologyValidationService {
             const nNeg = comp.nodes?.[1];
             if (!isValidNode(nPos) || !isValidNode(nNeg) || nPos === nNeg) continue;
 
-            const a = Math.min(nPos, nNeg);
-            const b = Math.max(nPos, nNeg);
             const sourceVoltage = this.getSourceInstantVoltageAtTime(circuit, comp, simTime);
-            const canonicalVoltage = nPos === a ? sourceVoltage : -sourceVoltage;
-            const pairKey = `${a}|${b}`;
-            const existing = pairToSource.get(pairKey);
-            if (!existing) {
-                pairToSource.set(pairKey, {
-                    id: comp.id,
-                    voltage: canonicalVoltage,
-                    nodes: [a, b]
-                });
-                continue;
+            const rootPos = find(nPos);
+            const rootNeg = find(nNeg);
+            if (rootPos === rootNeg) {
+                const involved = edges.filter((edge) => find(edge.nPos) === rootPos);
+                const sourceIds = [...involved.map((edge) => edge.id), comp.id];
+                const voltages = [...involved.map((edge) => edge.voltage), sourceVoltage];
+                return {
+                    code: 'TOPO_CONFLICTING_IDEAL_SOURCES',
+                    message: `检测到理想电压源冲突：${sourceIds.join('、')} 构成了仅含理想电压源（含理想电流表）的回路，仿真无法求解。`,
+                    details: {
+                        sourceIds,
+                        nodePair: [Math.min(nPos, nNeg), Math.max(nPos, nNeg)],
+                        voltages
+                    }
+                };
             }
 
-            return {
-                code: 'TOPO_CONFLICTING_IDEAL_SOURCES',
-                message: `检测到并联理想电压源冲突：${existing.id} 与 ${comp.id} 接在同一节点对上。理想电压源（含理想电流表）不能并联。`,
-                details: {
-                    sourceIds: [existing.id, comp.id],
-                    nodePair: existing.nodes,
-                    voltages: [existing.voltage, canonicalVoltage]
-                }
-            };
+            parent.set(rootPos, rootNeg);
+            edges.push({ id: comp.id, nPos, nNeg, voltage: sourceVoltage });
         }
 
         return null;
