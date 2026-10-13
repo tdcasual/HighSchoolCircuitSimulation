@@ -245,6 +245,46 @@ describe('Simulation topology validation', () => {
         expect(circuit.lastResults.backendUsed).toBe('v2');
     });
 
+    it('allows start when two capacitors share a blown fuse that still stamps a small blownResistance', () => {
+        const circuit = createTestCircuit();
+        addDummyPower(circuit);
+        const fuse = addComponent(circuit, 'Fuse', 'F1', {
+            blown: true,
+            blownResistance: 10,
+            coldResistance: 0.05,
+            ratedCurrent: 1,
+            i2tThreshold: 1
+        });
+        addParallelCapacitors(circuit, fuse, 0, 1);
+
+        expect(circuit.componentProvidesResistiveDamping(fuse)).toBe(true);
+        const report = circuit.validateSimulationTopology(0);
+        expect(report.ok).toBe(true);
+        expect(new RuntimeActionRouter({ circuit }).startSimulation()).toBe(true);
+        circuit.step();
+        expect(circuit.lastResults.valid).toBe(true);
+        expect(circuit.lastResults.backendUsed).toBe('v2');
+    });
+
+    it('still flags a capacitor loop across a blown fuse with default open blownResistance', () => {
+        const circuit = createTestCircuit();
+        addDummyPower(circuit);
+        const fuse = addComponent(circuit, 'Fuse', 'F1', {
+            blown: true,
+            blownResistance: 1e12,
+            coldResistance: 0.05,
+            ratedCurrent: 1,
+            i2tThreshold: 1
+        });
+        addParallelCapacitors(circuit, fuse, 0, 1);
+
+        expect(circuit.componentProvidesResistiveDamping(fuse)).toBe(false);
+        const report = circuit.validateSimulationTopology(0);
+        expect(report.ok).toBe(false);
+        expect(report.error?.code).toBe('TOPO_CAPACITOR_LOOP_NO_RESISTANCE');
+        expect(new RuntimeActionRouter({ circuit }).startSimulation()).toBe(false);
+    });
+
     it('still flags a capacitor loop across an ideal voltmeter', () => {
         const circuit = createTestCircuit();
         addDummyPower(circuit);

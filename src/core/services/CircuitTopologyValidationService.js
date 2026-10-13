@@ -8,6 +8,19 @@ function resistanceProvidesDamping(resistance) {
     return Number.isFinite(resistance) && resistance > 0 && resistance < DAMPING_RESISTANCE_MAX;
 }
 
+function fuseIsBlown(comp, view, circuit) {
+    return circuit?.isRunning
+        ? !!view?.blown
+        : !!(comp.blown || circuit?.solverBackend?.getState?.(comp)?.blown);
+}
+
+function fuseStampResistance(comp, view, circuit) {
+    if (fuseIsBlown(comp, view, circuit)) {
+        return Math.max(1, Number(view?.blownResistance) || 1e12);
+    }
+    return Math.max(1e-9, Number(view?.coldResistance) || 0.05);
+}
+
 export class CircuitTopologyValidationService {
     getSourceInstantVoltageAtTime(circuit, comp, simTime = circuit?.simTime) {
         return resolveCircuitSourceVoltageAtTime(comp, simTime);
@@ -38,12 +51,8 @@ export class CircuitTopologyValidationService {
                 return !!view.closed;
             case 'SPDTSwitch':
                 return true;
-            case 'Fuse': {
-                const blown = circuit?.isRunning
-                    ? !!view?.blown
-                    : !!(comp.blown || circuit?.solverBackend?.getState?.(comp)?.blown);
-                return !blown;
-            }
+            case 'Fuse':
+                return resistanceProvidesDamping(fuseStampResistance(comp, view, circuit));
             case 'Ammeter': {
                 const resistance = Number(view.resistance);
                 if (!Number.isFinite(resistance) || resistance <= 0) return true;
@@ -141,10 +150,7 @@ export class CircuitTopologyValidationService {
             }
             if (comp.type === 'Fuse') {
                 const view = resolveComponentViewRecord(comp, viewMap);
-                const blown = circuit?.isRunning
-                    ? !!view?.blown
-                    : !!(comp.blown || circuit?.solverBackend?.getState?.(comp)?.blown);
-                if (!blown) {
+                if (resistanceProvidesDamping(fuseStampResistance(comp, view, circuit))) {
                     markPair(comp.nodes[0], comp.nodes[1], 'damping', comp);
                 }
                 continue;
