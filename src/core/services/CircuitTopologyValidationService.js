@@ -1,6 +1,12 @@
 import { resolveCircuitSourceVoltageAtTime } from './CircuitSourceVoltageResolver.js';
+import { resolveComponentViewRecord } from '../../utils/componentViewRecord.js';
 
 const IDEAL_SOURCE_RESISTANCE_EPS = 1e-9;
+const DAMPING_RESISTANCE_MAX = 1e11;
+
+function resistanceProvidesDamping(resistance) {
+    return Number.isFinite(resistance) && resistance > 0 && resistance < DAMPING_RESISTANCE_MAX;
+}
 
 export class CircuitTopologyValidationService {
     getSourceInstantVoltageAtTime(circuit, comp, simTime = circuit?.simTime) {
@@ -13,9 +19,10 @@ export class CircuitTopologyValidationService {
         return !Number.isFinite(internalResistance) || internalResistance < IDEAL_SOURCE_RESISTANCE_EPS;
     }
 
-    componentProvidesResistiveDamping(comp) {
-        if (!comp) return false;
-        switch (comp.type) {
+    componentProvidesResistiveDamping(comp, viewMap, circuit) {
+        const view = resolveComponentViewRecord(comp, viewMap);
+        if (!view) return false;
+        switch (view.type) {
             case 'Resistor':
             case 'Bulb':
             case 'Thermistor':
@@ -23,36 +30,35 @@ export class CircuitTopologyValidationService {
             case 'Diode':
             case 'LED':
             case 'Motor':
+            case 'Inductor':
                 return true;
             case 'Rheostat':
-                return comp.connectionMode !== 'none' && comp.connectionMode !== 'slider-only';
+                return view.connectionMode !== 'none' && view.connectionMode !== 'slider-only';
             case 'Switch':
-                return !!comp.closed;
+                return !!view.closed;
             case 'SPDTSwitch':
                 return true;
-            case 'Fuse':
-                return !comp.blown;
+            case 'Fuse': {
+                const blown = circuit?.isRunning
+                    ? !!view?.blown
+                    : !!(comp.blown || circuit?.solverBackend?.getState?.(comp)?.blown);
+                return !blown;
+            }
             case 'Ammeter': {
-                const resistance = Number(comp.resistance);
-                return Number.isFinite(resistance) && resistance > 0 && resistance < 1e11;
+                const resistance = Number(view.resistance);
+                if (!Number.isFinite(resistance) || resistance <= 0) return true;
+                return resistanceProvidesDamping(resistance);
             }
-            case 'Voltmeter': {
-                const resistance = Number(comp.resistance);
-                return Number.isFinite(resistance) && resistance > 0 && resistance < 1e11;
-            }
+            case 'Voltmeter':
+                return resistanceProvidesDamping(Number(view.resistance));
             case 'PowerSource':
             case 'ACVoltageSource': {
-                const internalResistance = Number(comp.internalResistance);
-                return Number.isFinite(internalResistance)
-                    && internalResistance >= IDEAL_SOURCE_RESISTANCE_EPS
-                    && internalResistance < 1e11;
+                const internalResistance = Number(view.internalResistance);
+                return internalResistance >= IDEAL_SOURCE_RESISTANCE_EPS
+                    && resistanceProvidesDamping(internalResistance);
             }
-            case 'Relay': {
-                const onResistance = Number(comp.contactOnResistance);
-                const offResistance = Number(comp.contactOffResistance);
-                const resistance = comp.energized ? onResistance : offResistance;
-                return Number.isFinite(resistance) && resistance > 0 && resistance < 1e11;
-            }
+            case 'Relay':
+                return resistanceProvidesDamping(Number(view.coilResistance));
             default:
                 return false;
         }
@@ -104,16 +110,13 @@ export class CircuitTopologyValidationService {
         const pairInfo = new Map();
         const isValidNode = (nodeIdx) => Number.isInteger(nodeIdx) && nodeIdx >= 0;
         const isCapacitor = (comp) => comp?.type === 'Capacitor' || comp?.type === 'ParallelPlateCapacitor';
+        const viewMap = circuit?.lastResults?.viewMap;
 
-        for (const comp of circuit?.components?.values?.() || []) {
-            if (!comp || !Array.isArray(comp.nodes) || comp.nodes.length < 2) continue;
-            const n1 = comp.nodes[0];
-            const n2 = comp.nodes[1];
-            if (!isValidNode(n1) || !isValidNode(n2) || n1 === n2) continue;
+        const markPair = (n1, n2, kind, comp) => {
+            if (!isValidNode(n1) || !isValidNode(n2) || n1 === n2) return;
             const a = Math.min(n1, n2);
             const b = Math.max(n1, n2);
             const pairKey = `${a}|${b}`;
-
             let info = pairInfo.get(pairKey);
             if (!info) {
                 info = {
@@ -123,11 +126,103 @@ export class CircuitTopologyValidationService {
                 };
                 pairInfo.set(pairKey, info);
             }
-
-            if (isCapacitor(comp)) {
+            if (kind === 'capacitor') {
                 info.capacitorIds.push(comp.id);
-            } else if (this.componentProvidesResistiveDamping(comp)) {
+            } else {
                 info.hasDamping = true;
+            }
+        };
+
+        for (const comp of circuit?.components?.values?.() || []) {
+            if (!comp || !Array.isArray(comp.nodes) || comp.nodes.length < 2) continue;
+            if (isCapacitor(comp)) {
+                markPair(comp.nodes[0], comp.nodes[1], 'capacitor', comp);
+                continue;
+            }
+            if (comp.type === 'Fuse') {
+                const view = resolveComponentViewRecord(comp, viewMap);
+                const blown = circuit?.isRunning
+                    ? !!view?.blown
+                    : !!(comp.blown || circuit?.solverBackend?.getState?.(comp)?.blown);
+                if (!blown) {
+                    markPair(comp.nodes[0], comp.nodes[1], 'damping', comp);
+                }
+                continue;
+            }
+            if (comp.type === 'Relay') {
+                const view = resolveComponentViewRecord(comp, viewMap);
+                if (resistanceProvidesDamping(Number(view?.coilResistance))) {
+                    markPair(comp.nodes[0], comp.nodes[1], 'damping', comp);
+                }
+                const contactEnergized = !!circuit?.isRunning && !!view?.energized;
+                const contactResistance = contactEnergized
+                    ? Number(view.contactOnResistance)
+                    : Number(view.contactOffResistance);
+                if (resistanceProvidesDamping(contactResistance)) {
+                    markPair(comp.nodes[2], comp.nodes[3], 'damping', comp);
+                }
+                continue;
+            }
+            if (comp.type === 'SPDTSwitch') {
+                const view = resolveComponentViewRecord(comp, viewMap);
+                const onR = Math.max(1e-9, Number(view?.onResistance) || 1e-9);
+                const offR = Math.max(onR, Number(view?.offResistance) || 1e12);
+                const routeToB = view?.position === 'b';
+                const aR = routeToB ? offR : onR;
+                const bR = routeToB ? onR : offR;
+                if (resistanceProvidesDamping(aR)) {
+                    markPair(comp.nodes[0], comp.nodes[1], 'damping', comp);
+                }
+                if (resistanceProvidesDamping(bR)) {
+                    markPair(comp.nodes[0], comp.nodes[2], 'damping', comp);
+                }
+                continue;
+            }
+            if (comp.type === 'Rheostat') {
+                const view = resolveComponentViewRecord(comp, viewMap);
+                const minRaw = Number(view?.minResistance);
+                const maxRaw = Number(view?.maxResistance);
+                const minR = Number.isFinite(minRaw) ? minRaw : 0;
+                const maxR = Number.isFinite(maxRaw) ? maxRaw : 100;
+                const positionRaw = Number(view?.position);
+                const position = Number.isFinite(positionRaw) ? Math.min(Math.max(positionRaw, 0), 1) : 0.5;
+                const range = Math.max(0, maxR - minR);
+                const r1 = Math.max(1e-9, minR + range * position);
+                const r2 = Math.max(1e-9, maxR - range * position);
+                switch (view?.connectionMode) {
+                    case 'left-slider':
+                        if (resistanceProvidesDamping(r1)) {
+                            markPair(comp.nodes[0], comp.nodes[2], 'damping', comp);
+                        }
+                        break;
+                    case 'right-slider':
+                        if (resistanceProvidesDamping(r2)) {
+                            markPair(comp.nodes[1], comp.nodes[2], 'damping', comp);
+                        }
+                        break;
+                    case 'left-right':
+                        if (resistanceProvidesDamping(Math.max(1e-9, maxR))) {
+                            markPair(comp.nodes[0], comp.nodes[1], 'damping', comp);
+                        }
+                        break;
+                    case 'all':
+                        if (resistanceProvidesDamping(r1)) {
+                            markPair(comp.nodes[0], comp.nodes[2], 'damping', comp);
+                        }
+                        if (resistanceProvidesDamping(r2)) {
+                            markPair(comp.nodes[1], comp.nodes[2], 'damping', comp);
+                        }
+                        if (resistanceProvidesDamping(r1 + r2)) {
+                            markPair(comp.nodes[0], comp.nodes[1], 'damping', comp);
+                        }
+                        break;
+                    default:
+                        break;
+                }
+                continue;
+            }
+            if (this.componentProvidesResistiveDamping(comp, viewMap, circuit)) {
+                markPair(comp.nodes[0], comp.nodes[1], 'damping', comp);
             }
         }
 

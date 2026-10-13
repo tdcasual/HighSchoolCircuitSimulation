@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as PropertyDialogController from '../src/ui/interaction/PropertyDialogController.js';
+import * as ComponentPropertySchema from '../src/ui/interaction/ComponentPropertySchema.js';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -225,6 +226,63 @@ describe('PropertyDialogController.showPropertyDialog', () => {
         expect(() => switchOpen.trigger('click')).not.toThrow();
         expect(() => switchClose.trigger('click')).not.toThrow();
     });
+
+    it('fills fuse dialog fields from ViewMap overlay rather than live blown', () => {
+        const fuse = {
+            id: 'F1',
+            type: 'Fuse',
+            blown: false,
+            ratedCurrent: 3,
+            i2tThreshold: 1,
+            coldResistance: 0.05,
+            blownResistance: 1e12
+        };
+        const viewMap = new Map([['F1', { blown: true }]]);
+        const spy = vi.spyOn(ComponentPropertySchema, 'getComponentPropertyDialogFields');
+        const titleNode = { textContent: '' };
+        const contentNode = { innerHTML: '', appendChild: vi.fn() };
+        const dialogNode = { classList: { remove: vi.fn() } };
+        const createElement = vi.fn(() => ({
+            className: '',
+            id: '',
+            textContent: '',
+            style: {},
+            setAttribute: vi.fn(),
+            appendChild: vi.fn(),
+            addEventListener: vi.fn(),
+            classList: {
+                add: vi.fn(),
+                remove: vi.fn(),
+                contains: vi.fn(() => false),
+                toggle: vi.fn()
+            }
+        }));
+
+        vi.stubGlobal('document', {
+            getElementById: vi.fn((id) => {
+                if (id === 'dialog-overlay') return dialogNode;
+                if (id === 'dialog-title') return titleNode;
+                if (id === 'dialog-content') return contentNode;
+                return null;
+            }),
+            createElement,
+            createTextNode: vi.fn((text) => ({ textContent: text }))
+        });
+
+        const ctx = {
+            circuit: {
+                getComponent: vi.fn(() => fuse),
+                lastResults: { viewMap }
+            }
+        };
+
+        PropertyDialogController.showPropertyDialog.call(ctx, 'F1');
+
+        expect(spy).toHaveBeenCalled();
+        expect(spy.mock.calls[0][0].blown).toBe(true);
+        expect(spy.mock.calls[0][0]).not.toBe(fuse);
+        expect(ctx.editingComponent).toBe(fuse);
+    });
 });
 
 
@@ -233,5 +291,6 @@ describe('PropertyDialogController shared property contract', () => {
         const source = readFileSync(resolve(process.cwd(), 'src/ui/interaction/PropertyDialogController.js'), 'utf8');
         expect(source).toContain('ComponentPropertySchema');
         expect(source).toContain('getComponentPropertyDialogFields');
+        expect(source).toContain('resolveComponentViewRecord');
     });
 });

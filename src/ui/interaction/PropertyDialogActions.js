@@ -40,6 +40,7 @@ export function applyDialogChanges() {
             }
 
             this.circuit.markSolverCircuitDirty();
+            this.circuit.clearFuseSolverState?.(comp);
 
             if (comp.type === 'BlackBox') {
                 this.renderer.render();

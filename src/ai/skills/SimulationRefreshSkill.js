@@ -23,6 +23,16 @@ export const SimulationRefreshSkill = {
         }
 
         try {
+            if (circuit.lastResults && circuit.solverCircuitDirty !== true) {
+                const valid = !!circuit.lastResults.valid;
+                return {
+                    ok: valid,
+                    refreshed: true,
+                    valid,
+                    reason: valid ? 'ok' : '求解失败'
+                };
+            }
+
             if (typeof circuit.rebuildNodes === 'function') {
                 circuit.rebuildNodes();
             }
@@ -41,7 +51,12 @@ export const SimulationRefreshSkill = {
                     reason: '求解器不可用'
                 };
             }
-            const results = backend.solveFrame({ circuit, dt, simTime });
+            const results = backend.solveFrame({
+                circuit,
+                dt,
+                simTime,
+                commitState: false
+            });
             circuit.lastResults = results;
 
             if (results && typeof results === 'object' && !results.runtimeDiagnostics) {

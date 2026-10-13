@@ -25,6 +25,9 @@ describe('SimulationRefreshSkill', () => {
         expect(result.ok).toBe(true);
         expect(result.valid).toBe(true);
         expect(solveFrame).toHaveBeenCalledTimes(1);
+        expect(solveFrame).toHaveBeenCalledWith(expect.objectContaining({
+            commitState: false
+        }));
         expect(circuit.simTime).toBe(1);
     });
 
@@ -38,6 +41,71 @@ describe('SimulationRefreshSkill', () => {
 
         expect(result.ok).toBe(false);
         expect(result.reason).toContain('求解器不可用');
+    });
+
+    it('reuses lastResults when a classroom frame already exists', () => {
+        const solveFrame = vi.fn();
+        const rebuildNodes = vi.fn();
+        const circuit = {
+            isRunning: true,
+            lastResults: { valid: true, voltages: [0, 1], currents: new Map() },
+            solverBackend: { solveFrame },
+            rebuildNodes,
+            ensureSolverPrepared: vi.fn()
+        };
+
+        const result = SimulationRefreshSkill.run({ circuit });
+
+        expect(result.ok).toBe(true);
+        expect(result.refreshed).toBe(true);
+        expect(solveFrame).not.toHaveBeenCalled();
+        expect(rebuildNodes).not.toHaveBeenCalled();
+        expect(circuit.lastResults.voltages).toEqual([0, 1]);
+    });
+
+    it('reuses lastResults after the classroom tick is stopped', () => {
+        const solveFrame = vi.fn();
+        const circuit = {
+            isRunning: false,
+            lastResults: { valid: true, voltages: [0, 0.45], currents: new Map() },
+            solverBackend: { solveFrame },
+            rebuildNodes: vi.fn(),
+            ensureSolverPrepared: vi.fn()
+        };
+
+        const result = SimulationRefreshSkill.run({ circuit });
+
+        expect(result.ok).toBe(true);
+        expect(solveFrame).not.toHaveBeenCalled();
+        expect(circuit.rebuildNodes).not.toHaveBeenCalled();
+        expect(circuit.lastResults.voltages).toEqual([0, 0.45]);
+    });
+
+    it('does not reuse lastResults after a dirty edit', () => {
+        const solveFrame = vi.fn().mockReturnValue({
+            valid: true,
+            voltages: [0, 0.006],
+            currents: new Map([['R1', 0.006]])
+        });
+        const circuit = {
+            isRunning: false,
+            solverCircuitDirty: true,
+            lastResults: { valid: true, voltages: [0, 2.857], currents: new Map([['R1', 0.286]]) },
+            solverBackend: { solveFrame },
+            rebuildNodes: vi.fn(),
+            ensureSolverPrepared: vi.fn(),
+            dt: 0.01,
+            simTime: 0.01
+        };
+
+        const result = SimulationRefreshSkill.run({ circuit });
+
+        expect(result.ok).toBe(true);
+        expect(solveFrame).toHaveBeenCalledWith(expect.objectContaining({
+            commitState: false
+        }));
+        expect(circuit.lastResults.currents.get('R1')).toBe(0.006);
+        expect(circuit.simTime).toBe(0.01);
     });
 
     it('uses solveFrame for a non-v1 backend without setting isRunning', () => {

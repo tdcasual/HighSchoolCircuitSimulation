@@ -1,6 +1,7 @@
 import { presentLocalFeedback } from './UIStateController.js';
 import { ComponentNames } from '../../components/Component.js';
 import { getComponentPropertyDialogFields } from './ComponentPropertySchema.js';
+import { resolveComponentViewRecord } from '../../utils/componentViewRecord.js';
 import {
     createElement,
     createFormGroup,
@@ -92,7 +93,9 @@ export function showPropertyDialog(id) {
     title.textContent = `编辑 ${ComponentNames[comp.type]}`;
 
     clearElement(content);
-    const sharedDialogFields = getComponentPropertyDialogFields(comp);
+    const sharedDialogFields = getComponentPropertyDialogFields(
+        resolveComponentViewRecord(comp, this.circuit.lastResults?.viewMap)
+    );
     const renderSharedDialogFields = () => renderDialogFields(content, sharedDialogFields);
 
     switch (comp.type) {

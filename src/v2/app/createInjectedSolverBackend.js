@@ -46,7 +46,7 @@ export function createInjectedSolverBackend(options = {}) {
         return cachedSnapshot;
     }
 
-    backend.solveFrame = function solveFrame({ circuit, dt, simTime } = {}) {
+    backend.solveFrame = function solveFrame({ circuit, dt, simTime, commitState } = {}) {
         if (!circuit) return emptySolveResult();
         const stepDt = Number.isFinite(dt) && dt > 0
             ? dt
@@ -65,7 +65,7 @@ export function createInjectedSolverBackend(options = {}) {
             });
             const solveResult = step?.solveResult;
             const valid = !!solveResult?.valid;
-            if (valid) {
+            if (valid && commitState !== false) {
                 simulationState = step.nextState || simulationState;
             }
             return {
@@ -90,6 +90,18 @@ export function createInjectedSolverBackend(options = {}) {
         cachedStepId = null;
         backend.fallbackCount = 0;
         backend.consecutiveFallbackSteps = 0;
+    };
+
+    backend.patchState = function patchState(componentOrId, patch) {
+        return simulationState.applyPatch(componentOrId, patch);
+    };
+
+    backend.getState = function getState(componentOrId) {
+        const id = componentOrId && typeof componentOrId === 'object'
+            ? componentOrId.id
+            : componentOrId;
+        if (id === undefined || id === null || id === '') return undefined;
+        return simulationState.get(id);
     };
 
     return backend;

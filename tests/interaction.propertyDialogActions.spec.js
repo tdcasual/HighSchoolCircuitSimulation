@@ -59,6 +59,104 @@ describe('PropertyDialogActions.applyDialogChanges', () => {
         expect(ctx.updateStatus).toHaveBeenCalledWith('属性已更新');
     });
 
+    it('clears V2 fuse solver state when the blown checkbox is unchecked', () => {
+        vi.stubGlobal('document', {
+            getElementById: vi.fn((id) => {
+                if (id === 'edit-fuse-blown') return { checked: false, value: 'false' };
+                return { value: '' };
+            })
+        });
+
+        const fuse = {
+            id: 'F1',
+            type: 'Fuse',
+            blown: true,
+            i2tAccum: 4,
+            ratedCurrent: 3,
+            i2tThreshold: 1,
+            coldResistance: 0.05,
+            blownResistance: 1e12
+        };
+        const clearFuseSolverState = vi.fn();
+        const ctx = {
+            editingComponent: fuse,
+            safeParseFloat: vi.fn((v, fallback) => {
+                const parsed = Number(v);
+                return Number.isFinite(parsed) ? parsed : fallback;
+            }),
+            runWithHistory: vi.fn((_, action) => action()),
+            circuit: {
+                markSolverCircuitDirty: vi.fn(),
+                clearFuseSolverState
+            },
+            renderer: {
+                refreshComponent: vi.fn(),
+                setSelected: vi.fn(),
+                updateConnectedWires: vi.fn(),
+                render: vi.fn()
+            },
+            updatePropertyPanel: vi.fn(),
+            hideDialog: vi.fn(),
+            updateStatus: vi.fn()
+        };
+
+        PropertyDialogActions.applyDialogChanges.call(ctx);
+
+        expect(fuse.blown).toBe(false);
+        expect(fuse.i2tAccum).toBe(0);
+        expect(clearFuseSolverState).toHaveBeenCalledWith(fuse);
+    });
+
+    it('writes live blown true when the overlay checkbox stays checked', () => {
+        vi.stubGlobal('document', {
+            getElementById: vi.fn((id) => {
+                if (id === 'edit-fuse-blown') return { checked: true, value: 'true' };
+                if (id === 'edit-rated-current') return { value: '10' };
+                if (id === 'edit-i2t-threshold') return { value: '100' };
+                if (id === 'edit-cold-resistance') return { value: '0.05' };
+                if (id === 'edit-blown-resistance') return { value: '1e12' };
+                return { value: '' };
+            })
+        });
+
+        const fuse = {
+            id: 'F1',
+            type: 'Fuse',
+            blown: false,
+            i2tAccum: 0,
+            ratedCurrent: 0.01,
+            i2tThreshold: 1e-9,
+            coldResistance: 0.05,
+            blownResistance: 1e12
+        };
+        const ctx = {
+            editingComponent: fuse,
+            safeParseFloat: vi.fn((v, fallback) => {
+                const parsed = Number(v);
+                return Number.isFinite(parsed) ? parsed : fallback;
+            }),
+            runWithHistory: vi.fn((_, action) => action()),
+            circuit: {
+                markSolverCircuitDirty: vi.fn(),
+                clearFuseSolverState: vi.fn()
+            },
+            renderer: {
+                refreshComponent: vi.fn(),
+                setSelected: vi.fn(),
+                updateConnectedWires: vi.fn(),
+                render: vi.fn()
+            },
+            updatePropertyPanel: vi.fn(),
+            hideDialog: vi.fn(),
+            updateStatus: vi.fn()
+        };
+
+        PropertyDialogActions.applyDialogChanges.call(ctx);
+
+        expect(fuse.blown).toBe(true);
+        expect(ctx.circuit.clearFuseSolverState).toHaveBeenCalledWith(fuse);
+    });
+
     it('reports status when apply fails', () => {
         vi.stubGlobal('document', { getElementById: vi.fn(() => ({ value: '' })) });
         vi.spyOn(console, 'error').mockImplementation(() => {});

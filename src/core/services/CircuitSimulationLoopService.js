@@ -208,6 +208,13 @@ export class CircuitSimulationLoopService {
     prepareSimulation(context) {
         if (context.isRunning) return;
 
+        const persistFuseBlown = new Set();
+        for (const [_id, comp] of context.components) {
+            if (comp.type !== 'Fuse') continue;
+            const committed = context.solverBackend?.getState?.(comp);
+            if (comp.blown || committed?.blown) persistFuseBlown.add(comp.id);
+        }
+
         context.isRunning = true;
         context.simTime = 0;
         context.resetAdaptiveTimeStepState();
@@ -230,8 +237,14 @@ export class CircuitSimulationLoopService {
                 comp.speed = 0;
                 comp.backEmf = 0;
             }
-            if (comp.type === 'Fuse' && !comp.blown) {
-                comp.i2tAccum = 0;
+            if (comp.type === 'Fuse') {
+                if (persistFuseBlown.has(comp.id)) {
+                    comp.blown = true;
+                    context.solverBackend?.patchState?.(comp, { blown: true });
+                }
+                if (!comp.blown) {
+                    comp.i2tAccum = 0;
+                }
             }
             if (comp.type === 'Diode' || comp.type === 'LED') {
                 comp.conducting = false;

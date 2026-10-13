@@ -1,6 +1,7 @@
 import { Matrix } from '../simulation/Matrix.js';
 import { getTerminalWorldPosition } from '../../utils/TerminalGeometry.js';
 import { pointKey } from '../../utils/CanvasCoords.js';
+import { resolveComponentViewRecord } from '../../utils/componentViewRecord.js';
 
 export class CircuitFlowAnalysisService {
     getTerminalCurrentFlow(circuit, comp, terminalIndex, results) {
@@ -21,7 +22,7 @@ export class CircuitFlowAnalysisService {
             return flows[terminalIndex] || 0;
         }
         if (comp.type === 'Relay') {
-            const flows = this.getRelayTerminalFlows(comp, results.voltages);
+            const flows = this.getRelayTerminalFlows(comp, results.voltages, results.viewMap);
             return flows[terminalIndex] || 0;
         }
 
@@ -120,29 +121,30 @@ export class CircuitFlowAnalysisService {
         return flows;
     }
 
-    getRelayTerminalFlows(comp, voltages) {
+    getRelayTerminalFlows(comp, voltages, viewMap) {
+        const view = resolveComponentViewRecord(comp, viewMap);
         const flows = [0, 0, 0, 0];
         const getVoltage = (nodeIdx) => {
             if (nodeIdx === undefined || nodeIdx < 0) return 0;
             return voltages[nodeIdx] || 0;
         };
 
-        const n0 = comp.nodes?.[0];
-        const n1 = comp.nodes?.[1];
-        const n2 = comp.nodes?.[2];
-        const n3 = comp.nodes?.[3];
+        const n0 = view.nodes?.[0];
+        const n1 = view.nodes?.[1];
+        const n2 = view.nodes?.[2];
+        const n3 = view.nodes?.[3];
 
         if (n0 != null && n0 >= 0 && n1 != null && n1 >= 0) {
-            const coilR = Math.max(1e-9, Number(comp.coilResistance) || 200);
+            const coilR = Math.max(1e-9, Number(view.coilResistance) || 200);
             const iCoil = (getVoltage(n0) - getVoltage(n1)) / coilR;
             flows[0] = -iCoil;
             flows[1] = iCoil;
         }
 
         if (n2 != null && n2 >= 0 && n3 != null && n3 >= 0) {
-            const contactR = comp.energized
-                ? Math.max(1e-9, Number(comp.contactOnResistance) || 1e-3)
-                : Math.max(1, Number(comp.contactOffResistance) || 1e12);
+            const contactR = view.energized
+                ? Math.max(1e-9, Number(view.contactOnResistance) || 1e-3)
+                : Math.max(1, Number(view.contactOffResistance) || 1e12);
             const iContact = (getVoltage(n2) - getVoltage(n3)) / contactR;
             flows[2] = -iContact;
             flows[3] = iContact;

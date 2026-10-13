@@ -255,7 +255,22 @@ export class Circuit {
     }
 
     componentProvidesResistiveDamping(comp) {
-        return this.topologyValidationService.componentProvidesResistiveDamping(comp);
+        return this.topologyValidationService.componentProvidesResistiveDamping(
+            comp,
+            this.lastResults?.viewMap,
+            this
+        );
+    }
+
+    clearFuseSolverState(comp) {
+        if (!comp || comp.type !== 'Fuse' || comp.blown) return;
+        this.solverBackend?.patchState?.(comp, { blown: false, i2tAccum: 0 });
+        const viewMap = this.lastResults?.viewMap;
+        if (!(viewMap instanceof Map)) return;
+        const view = viewMap.get(String(comp.id));
+        if (!view || typeof view !== 'object') return;
+        view.blown = false;
+        view.i2tAccum = 0;
     }
 
     detectConflictingIdealSources(simTime = this.simTime) {
@@ -383,7 +398,11 @@ export class Circuit {
     }
 
     getRelayTerminalFlows(comp, voltages) {
-        return this.flowAnalysisService.getRelayTerminalFlows(comp, voltages);
+        return this.flowAnalysisService.getRelayTerminalFlows(
+            comp,
+            voltages,
+            this.lastResults?.viewMap
+        );
     }
 
     ensureWireFlowCache(results) {
@@ -462,7 +481,23 @@ export class Circuit {
     }
 
     toJSON() {
-        return CircuitSerializer.serialize(this);
+        return CircuitSerializer.serialize(this, {
+            getComponentProperties: (comp) => {
+                const properties = this.getComponentProperties(comp);
+                if (!properties || typeof properties !== 'object') return properties;
+                const committed = this.solverBackend?.getState?.(comp);
+                if (comp?.type === 'Fuse') {
+                    properties.blown = !!(comp.blown || committed?.blown);
+                    properties.i2tAccum = Number.isFinite(committed?.i2tAccum)
+                        ? committed.i2tAccum
+                        : (Number.isFinite(comp.i2tAccum) ? comp.i2tAccum : 0);
+                }
+                if (comp?.type === 'Relay') {
+                    properties.energized = !!(comp.energized || committed?.energized);
+                }
+                return properties;
+            }
+        });
     }
 
     getComponentProperties(comp) {
