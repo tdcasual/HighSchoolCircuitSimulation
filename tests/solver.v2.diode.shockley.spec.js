@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { RuntimeActionRouter } from '../src/app/RuntimeActionRouter.js';
+import { applyComponentPropertyDialogChanges } from '../src/ui/interaction/ComponentPropertySchema.js';
+import { safeParseFloat } from '../src/ui/interaction/UIStateController.js';
 import { limitJunctionStep, resolveJunctionParameters, solveJunctionCurrent } from '../src/v2/simulation/JunctionModelV2.js';
 import { solveCircuitV2 } from '../src/v2/simulation/SolveCircuitV2.js';
 import { SimulationStateV2 } from '../src/v2/simulation/SimulationStateV2.js';
@@ -73,11 +75,17 @@ describe('SolveCircuitV2 Shockley junction', () => {
     });
 
     it('limitJunctionStep clamps a huge predicted step instead of jumping to vNew', () => {
-        const params = resolveJunctionParameters({ type: 'Diode' });
+        const params = resolveJunctionParameters({ type: 'Diode', onResistance: 0 });
         const limited = limitJunctionStep(10, 0, params);
         expect(Number.isFinite(limited)).toBe(true);
         expect(limited).toBeLessThan(1);
         expect(limited).toBeGreaterThan(0);
+    });
+
+    it('tracks the solved branch voltage when series R bounds conductance', () => {
+        const params = resolveJunctionParameters({ type: 'Diode' });
+        expect(params.seriesResistance).toBeGreaterThan(0);
+        expect(limitJunctionStep(10, 0, params)).toBe(10);
     });
 
     it('starts a default battery wired straight to a default LED', () => {
@@ -135,6 +143,46 @@ describe('SolveCircuitV2 Shockley junction', () => {
         expect(current).toBeLessThan(0.06);
     });
 
+    it('starts a dialog-saved 12 V battery wired straight to a default diode', () => {
+        const circuit = createTestCircuit();
+        const source = addComponent(circuit, 'PowerSource', 'V1', { voltage: 6, internalResistance: 0.5 });
+        applyComponentPropertyDialogChanges({
+            component: source,
+            readFieldValue: (id) => (id === 'edit-voltage' ? '12' : id === 'edit-internal-resistance' ? '0.5' : ''),
+            safeParseFloat
+        });
+        const diode = addComponent(circuit, 'Diode', 'D1', {});
+        connectWire(circuit, 'W1', source, 0, diode, 0);
+        connectWire(circuit, 'W2', diode, 1, source, 1);
+
+        expect(new RuntimeActionRouter({ circuit }).startSimulation()).toBe(true);
+        circuit.step();
+        expect(circuit.lastResults.valid).toBe(true);
+        expect(circuit.lastResults.backendUsed).toBe('v2');
+        expect(circuit.lastResults.meta?.converged).toBe(true);
+        expect(Math.abs(circuit.lastResults.viewMap.get('D1')?.currentValue || 0)).toBeGreaterThan(5);
+    });
+
+    it('starts a dialog-saved 12 V battery wired straight to a default LED', () => {
+        const circuit = createTestCircuit();
+        const source = addComponent(circuit, 'PowerSource', 'V1', { voltage: 6, internalResistance: 0.5 });
+        applyComponentPropertyDialogChanges({
+            component: source,
+            readFieldValue: (id) => (id === 'edit-voltage' ? '12' : id === 'edit-internal-resistance' ? '0.5' : ''),
+            safeParseFloat
+        });
+        const led = addComponent(circuit, 'LED', 'D1', {});
+        connectWire(circuit, 'W1', source, 0, led, 0);
+        connectWire(circuit, 'W2', led, 1, source, 1);
+
+        expect(new RuntimeActionRouter({ circuit }).startSimulation()).toBe(true);
+        circuit.step();
+        expect(circuit.lastResults.valid).toBe(true);
+        expect(circuit.lastResults.backendUsed).toBe('v2');
+        expect(circuit.lastResults.meta?.converged).toBe(true);
+        expect(Math.abs(circuit.lastResults.viewMap.get('D1')?.currentValue || 0)).toBeGreaterThan(2);
+    });
+
     it('starts a default battery, 100 ohm, and an LED at dialog-minimum on-resistance', () => {
         const circuit = createTestCircuit();
         const source = addComponent(circuit, 'PowerSource', 'V1', { voltage: 6, internalResistance: 0.5 });
@@ -154,7 +202,7 @@ describe('SolveCircuitV2 Shockley junction', () => {
         expect(current).toBeLessThan(0.05);
     });
 
-    it('returns not_converged when Newton hits 40 iterations without settling', () => {
+    it('settles a steep idealityFactor diode with series R in a few Newton iterations', () => {
         const result = solveCircuitV2({
             meta: { version: 2 },
             nodes: [{ id: '0' }, { id: '1' }, { id: '2' }],
@@ -180,9 +228,9 @@ describe('SolveCircuitV2 Shockley junction', () => {
             ]
         }, new SimulationStateV2(), { dt: 0.01 });
 
-        expect(result.valid).toBe(false);
-        expect(result.diagnostics.code).toBe('not_converged');
-        expect(result.voltages.length).toBeGreaterThan(1);
-        expect(result.currents.has('D1')).toBe(true);
+        expect(result.valid).toBe(true);
+        expect(result.meta?.converged).toBe(true);
+        expect(result.meta?.iterations).toBeLessThan(10);
+        expect(result.currents.get('D1')).toBeCloseTo(12 / 101, 3);
     });
 });

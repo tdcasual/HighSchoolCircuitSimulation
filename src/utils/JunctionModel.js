@@ -94,6 +94,12 @@ export function limitJunctionStep(vNew, vOld, params) {
     if (!Number.isFinite(vNew)) return 0;
     if (!Number.isFinite(vOld)) return vNew;
 
+    // Shockley plus series R has conductance <= 1/Rs, so the companion can
+    // track the solved branch voltage. Log limiting is only needed for Rs=0.
+    if (params?.seriesResistance > 0) {
+        return vNew;
+    }
+
     const vScale = Math.max(1e-6, params?.vScale || THERMAL_VOLTAGE_300K);
     const vcrit = Number.isFinite(params?.vcrit) ? params.vcrit : 0.6145;
     let limited = vNew;
