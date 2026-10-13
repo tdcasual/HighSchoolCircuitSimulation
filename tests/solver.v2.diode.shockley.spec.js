@@ -237,6 +237,36 @@ describe('SolveCircuitV2 Shockley junction', () => {
         expect(current).toBeLessThan(1e-6);
     });
 
+    it('starts a blown fuse in series with a dialog-min LED after save/load', () => {
+        const circuit = createTestCircuit();
+        const source = addComponent(circuit, 'PowerSource', 'V1', { voltage: 12, internalResistance: 0.5 });
+        const fuse = addComponent(circuit, 'Fuse', 'F1', {
+            blown: true,
+            blownResistance: 1e12,
+            coldResistance: 0.05,
+            ratedCurrent: 3,
+            i2tThreshold: 1
+        });
+        const led = addComponent(circuit, 'LED', 'D1', { onResistance: 1e-9 });
+        connectWire(circuit, 'W1', source, 0, fuse, 0);
+        connectWire(circuit, 'W2', fuse, 1, led, 0);
+        connectWire(circuit, 'W3', led, 1, source, 1);
+
+        expect(new RuntimeActionRouter({ circuit }).startSimulation()).toBe(true);
+        circuit.step();
+        expect(circuit.lastResults.valid).toBe(true);
+        expect(circuit.lastResults.backendUsed).toBe('v2');
+        expect(circuit.lastResults.meta?.converged).toBe(true);
+
+        const restored = createTestCircuit();
+        restored.fromJSON(circuit.toJSON());
+        expect(new RuntimeActionRouter({ circuit: restored }).startSimulation()).toBe(true);
+        restored.step();
+        expect(restored.lastResults.valid).toBe(true);
+        expect(restored.lastResults.backendUsed).toBe('v2');
+        expect(restored.lastResults.meta?.converged).toBe(true);
+    });
+
     it('starts a default AC bridge rectifier with a default capacitor', () => {
         const circuit = createTestCircuit();
         const source = addComponent(circuit, 'ACVoltageSource', 'S', {});
