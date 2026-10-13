@@ -129,19 +129,24 @@ export class CircuitTopologyValidationService {
         const isValidNode = (nodeIdx) => Number.isInteger(nodeIdx) && nodeIdx >= 0;
         const isCapacitor = (comp) => comp?.type === 'Capacitor' || comp?.type === 'ParallelPlateCapacitor';
         const viewMap = circuit?.lastResults?.viewMap;
-        const parent = new Map();
-        const find = (node) => {
-            if (!parent.has(node)) parent.set(node, node);
-            let cursor = node;
-            while (parent.get(cursor) !== cursor) cursor = parent.get(cursor);
-            parent.set(node, cursor);
-            return cursor;
+        const makeFinder = () => {
+            const parent = new Map();
+            const find = (node) => {
+                if (!parent.has(node)) parent.set(node, node);
+                let cursor = node;
+                while (parent.get(cursor) !== cursor) cursor = parent.get(cursor);
+                parent.set(node, cursor);
+                return cursor;
+            };
+            const union = (n1, n2) => {
+                const root1 = find(n1);
+                const root2 = find(n2);
+                if (root1 !== root2) parent.set(root1, root2);
+            };
+            return { find, union };
         };
-        const union = (n1, n2) => {
-            const root1 = find(n1);
-            const root2 = find(n2);
-            if (root1 !== root2) parent.set(root1, root2);
-        };
+        const resistive = makeFinder();
+        const ideal = makeFinder();
 
         const markPair = (n1, n2, kind, comp) => {
             if (!isValidNode(n1) || !isValidNode(n2) || n1 === n2) return;
@@ -161,7 +166,7 @@ export class CircuitTopologyValidationService {
                 info.capacitorIds.push(comp.id);
             } else {
                 info.hasDamping = true;
-                union(n1, n2);
+                resistive.union(n1, n2);
             }
         };
 
@@ -255,19 +260,31 @@ export class CircuitTopologyValidationService {
             }
         }
 
+        for (const comp of circuit?.components?.values?.() || []) {
+            if (!this.isIdealVoltageSource(comp)) continue;
+            const n1 = comp.nodes?.[0];
+            const n2 = comp.nodes?.[1];
+            if (!isValidNode(n1) || !isValidNode(n2) || n1 === n2) continue;
+            ideal.union(n1, n2);
+            resistive.union(n1, n2);
+        }
+
+        const capacitorLoopError = (info) => ({
+            code: 'TOPO_CAPACITOR_LOOP_NO_RESISTANCE',
+            message: `检测到纯电容并联回路（${info.capacitorIds.join(', ')}），缺少阻尼电阻，仿真可能不稳定。`,
+            details: {
+                capacitorIds: info.capacitorIds,
+                nodePair: info.nodePair
+            }
+        });
         for (const info of pairInfo.values()) {
             if (info.capacitorIds.length < 2 || info.hasDamping) continue;
             const [a, b] = info.nodePair;
-            // Series R (or source r) on another pair still damps this parallel C.
-            if (find(a) === find(b)) continue;
-            return {
-                code: 'TOPO_CAPACITOR_LOOP_NO_RESISTANCE',
-                message: `检测到纯电容并联回路（${info.capacitorIds.join(', ')}），缺少阻尼电阻，仿真可能不稳定。`,
-                details: {
-                    capacitorIds: info.capacitorIds,
-                    nodePair: info.nodePair
-                }
-            };
+            // Across an ideal source with no on-pair R: still a pure C loop.
+            if (ideal.find(a) === ideal.find(b)) return capacitorLoopError(info);
+            // Series R plus an ideal source still damps this parallel C.
+            if (resistive.find(a) === resistive.find(b)) continue;
+            return capacitorLoopError(info);
         }
 
         return null;

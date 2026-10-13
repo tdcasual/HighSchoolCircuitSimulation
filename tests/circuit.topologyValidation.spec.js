@@ -462,6 +462,48 @@ describe('Simulation topology validation', () => {
         expect(Math.abs(circuit.lastResults.viewMap.get('R1')?.currentValue || 0)).toBeGreaterThan(0);
     });
 
+    it('allows start when series resistance damps parallel capacitors on a saved ideal source', () => {
+        const circuit = createTestCircuit();
+        const source = addComponent(circuit, 'PowerSource', 'S', {
+            voltage: 6,
+            internalResistance: 0
+        });
+        const resistor = addComponent(circuit, 'Resistor', 'R1', { resistance: 100 });
+        const c1 = addComponent(circuit, 'Capacitor', 'C1', {});
+        const c2 = addComponent(circuit, 'Capacitor', 'C2', {});
+        connectWire(circuit, 'W1', source, 0, resistor, 0);
+        connectWire(circuit, 'W2', resistor, 1, c1, 0);
+        connectWire(circuit, 'W3', resistor, 1, c2, 0);
+        connectWire(circuit, 'W4', c1, 1, source, 1);
+        connectWire(circuit, 'W5', c2, 1, source, 1);
+
+        const report = circuit.validateSimulationTopology(0);
+        expect(report.ok).toBe(true);
+        expect(new RuntimeActionRouter({ circuit }).startSimulation()).toBe(true);
+        circuit.step();
+        expect(circuit.lastResults.valid).toBe(true);
+        expect(circuit.lastResults.backendUsed).toBe('v2');
+    });
+
+    it('still flags parallel capacitors directly across a saved ideal source', () => {
+        const circuit = createTestCircuit();
+        const source = addComponent(circuit, 'PowerSource', 'S', {
+            voltage: 6,
+            internalResistance: 0
+        });
+        const c1 = addComponent(circuit, 'Capacitor', 'C1', {});
+        const c2 = addComponent(circuit, 'Capacitor', 'C2', {});
+        connectWire(circuit, 'W1', source, 0, c1, 0);
+        connectWire(circuit, 'W2', source, 0, c2, 0);
+        connectWire(circuit, 'W3', c1, 1, source, 1);
+        connectWire(circuit, 'W4', c2, 1, source, 1);
+
+        const report = circuit.validateSimulationTopology(0);
+        expect(report.ok).toBe(false);
+        expect(report.error?.code).toBe('TOPO_CAPACITOR_LOOP_NO_RESISTANCE');
+        expect(new RuntimeActionRouter({ circuit }).startSimulation()).toBe(false);
+    });
+
     it('still flags a capacitor loop across a 1e12 ohm resistor', () => {
         const circuit = createTestCircuit();
         addDummyPower(circuit);

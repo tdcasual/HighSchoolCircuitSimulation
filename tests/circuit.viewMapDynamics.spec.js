@@ -300,7 +300,7 @@ describe('classroom ViewMap dynamics', () => {
         restored.stopSimulation();
     });
 
-    it('blocks Start of a capacitor loop after a committed classroom fuse melt', () => {
+    it('still starts after a committed fuse melt when the load damps parallel capacitors', () => {
         const { circuit, fuse } = buildFuseCircuit();
         const c1 = addComponent(circuit, 'Capacitor', 'C1', { capacitance: 1e-3 });
         const c2 = addComponent(circuit, 'Capacitor', 'C2', { capacitance: 2e-3 });
@@ -315,15 +315,18 @@ describe('classroom ViewMap dynamics', () => {
         expect(circuit.solverBackend.getState(fuse)?.blown).toBe(true);
         circuit.stopSimulation();
 
-        expect(circuit.validateSimulationTopology(0).ok).toBe(false);
-        expect(circuit.validateSimulationTopology(0).error?.code).toBe('TOPO_CAPACITOR_LOOP_NO_RESISTANCE');
+        expect(circuit.validateSimulationTopology(0).ok).toBe(true);
         expect(circuit.getComponentProperties(fuse).blown).toBe(true);
         const saved = circuit.toJSON().components.find((entry) => entry.id === fuse.id).properties;
         expect(saved.blown).toBe(true);
         expect(saved.i2tAccum).toBeGreaterThan(0);
         expect(circuit.componentProvidesResistiveDamping(fuse)).toBe(false);
         const router = new RuntimeActionRouter({ circuit });
-        expect(router.startSimulation()).toBe(false);
+        expect(router.startSimulation()).toBe(true);
+        circuit.step();
+        expect(circuit.lastResults.valid).toBe(true);
+        expect(circuit.lastResults.backendUsed).toBe('v2');
+        circuit.stopSimulation();
     });
 
     it('clears V2 fuse state when the dialog unblows the fuse', () => {
