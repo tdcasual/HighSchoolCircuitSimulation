@@ -79,7 +79,6 @@ export class CircuitTopologyValidationService {
 
     detectConflictingIdealSources(circuit, simTime = circuit?.simTime) {
         const pairToSource = new Map();
-        const voltageTolerance = 1e-6;
         const isValidNode = (nodeIdx) => Number.isInteger(nodeIdx) && nodeIdx >= 0;
 
         for (const comp of circuit?.components?.values?.() || []) {
@@ -103,17 +102,15 @@ export class CircuitTopologyValidationService {
                 continue;
             }
 
-            if (Math.abs(existing.voltage - canonicalVoltage) > voltageTolerance) {
-                return {
-                    code: 'TOPO_CONFLICTING_IDEAL_SOURCES',
-                    message: `检测到并联理想电压源冲突：${existing.id} 与 ${comp.id} 对同一节点对施加了不同电压。`,
-                    details: {
-                        sourceIds: [existing.id, comp.id],
-                        nodePair: existing.nodes,
-                        voltages: [existing.voltage, canonicalVoltage]
-                    }
-                };
-            }
+            return {
+                code: 'TOPO_CONFLICTING_IDEAL_SOURCES',
+                message: `检测到并联理想电压源冲突：${existing.id} 与 ${comp.id} 接在同一节点对上。理想电压源不能并联。`,
+                details: {
+                    sourceIds: [existing.id, comp.id],
+                    nodePair: existing.nodes,
+                    voltages: [existing.voltage, canonicalVoltage]
+                }
+            };
         }
 
         return null;

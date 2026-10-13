@@ -34,6 +34,42 @@ describe('Simulation topology validation', () => {
         expect(report.error?.message || '').toContain('理想电压源');
     });
 
+    it('blocks parallel ideal sources even when the voltages match', () => {
+        const circuit = createTestCircuit();
+        const v1 = addComponent(circuit, 'PowerSource', 'V1', { voltage: 6, internalResistance: 0 });
+        const v2 = addComponent(circuit, 'PowerSource', 'V2', { voltage: 6, internalResistance: 0 });
+        const load = addComponent(circuit, 'Resistor', 'R1', { resistance: 100 });
+
+        connectWire(circuit, 'W1', v1, 0, v2, 0);
+        connectWire(circuit, 'W2', v1, 1, v2, 1);
+        connectWire(circuit, 'W3', v1, 0, load, 0);
+        connectWire(circuit, 'W4', load, 1, v1, 1);
+
+        const report = circuit.validateSimulationTopology(0);
+        expect(report.ok).toBe(false);
+        expect(report.error?.code).toBe('TOPO_CONFLICTING_IDEAL_SOURCES');
+        expect(new RuntimeActionRouter({ circuit }).startSimulation()).toBe(false);
+    });
+
+    it('still starts two parallel sources that stamp finite internal resistance', () => {
+        const circuit = createTestCircuit();
+        const v1 = addComponent(circuit, 'PowerSource', 'V1', { voltage: 6, internalResistance: 0.5 });
+        const v2 = addComponent(circuit, 'PowerSource', 'V2', { voltage: 6, internalResistance: 0.5 });
+        const load = addComponent(circuit, 'Resistor', 'R1', { resistance: 100 });
+
+        connectWire(circuit, 'W1', v1, 0, v2, 0);
+        connectWire(circuit, 'W2', v1, 1, v2, 1);
+        connectWire(circuit, 'W3', v1, 0, load, 0);
+        connectWire(circuit, 'W4', load, 1, v1, 1);
+
+        const report = circuit.validateSimulationTopology(0);
+        expect(report.ok).toBe(true);
+        expect(new RuntimeActionRouter({ circuit }).startSimulation()).toBe(true);
+        circuit.step();
+        expect(circuit.lastResults.valid).toBe(true);
+        expect(circuit.lastResults.backendUsed).toBe('v2');
+    });
+
     it('allows start when two capacitors share a relay coil that already damps', () => {
         const circuit = createTestCircuit();
         const source = addComponent(circuit, 'PowerSource', 'V1', {
