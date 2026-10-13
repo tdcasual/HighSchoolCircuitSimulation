@@ -111,32 +111,42 @@ export function limitJunctionStep(vNew, vOld, params) {
     return Number.isFinite(limited) ? limited : vOld;
 }
 
-export function solveJunctionCurrent(totalVoltage, params, initialCurrent = 0) {
+export function solveJunctionCurrent(totalVoltage, params, _initialCurrent = 0) {
     const { seriesResistance } = params;
-    if (!(seriesResistance > 0)) {
-        return evaluateShockleyCurrent(totalVoltage, params);
-    }
-
-    let current = Number.isFinite(initialCurrent) ? initialCurrent : 0;
     const voltage = Number.isFinite(totalVoltage) ? totalVoltage : 0;
-
-    for (let iter = 0; iter < 8; iter++) {
-        const vDiode = voltage - current * seriesResistance;
-        const iDiode = evaluateShockleyCurrent(vDiode, params);
-        const gDiode = evaluateShockleyConductance(vDiode, params);
-        const f = current - iDiode;
-        if (Math.abs(f) < 1e-14) break;
-        const df = 1 + seriesResistance * gDiode;
-        if (!(Math.abs(df) > 1e-18)) break;
-        const next = current - f / df;
-        if (!Number.isFinite(next)) break;
-        if (Math.abs(next - current) < 1e-14) {
-            current = next;
-            break;
-        }
-        current = next;
+    if (!(seriesResistance > 0)) {
+        return evaluateShockleyCurrent(voltage, params);
     }
 
+    // Shockley(V_d) with V_d = V - I Rs is monotone in I. I is between 0 and V/Rs,
+    // and also between 0 and the Rs=0 Shockley current, whichever bound is tighter.
+    const shockleyAtV = evaluateShockleyCurrent(voltage, params);
+    const ohmic = voltage / seriesResistance;
+    let lo;
+    let hi;
+    if (voltage >= 0) {
+        lo = 0;
+        hi = Math.min(ohmic, shockleyAtV);
+        if (!(hi > lo)) return 0;
+    } else {
+        hi = 0;
+        lo = Math.max(ohmic, shockleyAtV);
+        if (!(lo < hi)) return Number.isFinite(shockleyAtV) ? shockleyAtV : 0;
+    }
+
+    const relTol = 1e-12;
+    for (let iter = 0; iter < 80; iter++) {
+        const mid = 0.5 * (lo + hi);
+        if (mid === lo || mid === hi || (hi - lo) <= relTol * Math.abs(mid)) {
+            return Number.isFinite(mid) ? mid : 0;
+        }
+        const vDiode = voltage - mid * seriesResistance;
+        const iDiode = evaluateShockleyCurrent(vDiode, params);
+        if (mid > iDiode) hi = mid;
+        else lo = mid;
+    }
+
+    const current = 0.5 * (lo + hi);
     return Number.isFinite(current) ? current : 0;
 }
 
