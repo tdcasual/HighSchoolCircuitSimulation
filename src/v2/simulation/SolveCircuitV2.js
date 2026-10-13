@@ -388,10 +388,11 @@ export function solveCircuitV2(netlistDTO, simulationState = new SimulationState
     );
     // Four dialog-min LEDs settle inside 40; five need ~42. A blown fuse
     // plus min-Ron LED crawls ~vScale per Newton from a cold Vj and needs
-    // ~55. Capacitor commutation 2-cycles spend extra iterations on
-    // midpoint averaging.
+    // ~55. Four-diode AC commutation at 500/1000 Hz crawls mixed delta
+    // and needs ~150; 32*n (128) exhausts first. Mix-floor 2-cycles at
+    // some higher frequencies still need a later damping change.
     const maxIterations = hasStateful
-        ? Math.max(80, 32 * Math.max(junctionCount, hasRelay ? 1 : 0))
+        ? Math.max(80, 64 * Math.max(junctionCount, hasRelay ? 1 : 0))
         : 1;
     const junctionTolerance = 1e-6;
 
