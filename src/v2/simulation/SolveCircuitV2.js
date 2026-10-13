@@ -294,7 +294,8 @@ function stampComponent(comp, A, z, nodeCount, contextExtras) {
         dt: contextExtras.dt,
         simTime: contextExtras.simTime,
         resolveDynamicIntegrationMethod: contextExtras.resolveDynamicIntegrationMethod,
-        state: contextExtras.state
+        state: contextExtras.state,
+        extraJunctionGmin: contextExtras.extraJunctionGmin
     }, {
         n1,
         n2,
@@ -373,7 +374,8 @@ export function solveCircuitV2(netlistDTO, simulationState = new SimulationState
             comp,
             hasConnectedSwitch,
             nextState.get(comp.id)
-        )
+        ),
+        extraJunctionGmin: 0
     };
 
     const hasJunction = components.some((comp) => comp?.type === 'Diode' || comp?.type === 'LED');
@@ -389,12 +391,13 @@ export function solveCircuitV2(netlistDTO, simulationState = new SimulationState
     // Four dialog-min LEDs settle inside 40; five need ~42. A blown fuse
     // plus min-Ron LED crawls ~vScale per Newton from a cold Vj and needs
     // ~55. Four-diode AC commutation at 500/1000 Hz crawls mixed delta
-    // and needs ~150; 32*n (128) exhausts first. Mix-floor 2-cycles at
-    // some higher frequencies still need a later damping change.
+    // and needs ~150; 32*n (128) exhausts first. Mix-floor 2-cycles get a
+    // temporary junction shunt, then the shunt is removed before accept.
     const maxIterations = hasStateful
         ? Math.max(80, 64 * Math.max(junctionCount, hasRelay ? 1 : 0))
         : 1;
     const junctionTolerance = 1e-6;
+    const stallJunctionGmin = 1e-3;
 
     let factorizationCache = { key: null, factorization: null, matrixSize: -1 };
     let solvedVoltages = Array.from({ length: Math.max(nodeCount, 1) }, () => 0);
@@ -403,12 +406,14 @@ export function solveCircuitV2(netlistDTO, simulationState = new SimulationState
     let lastJunctionDelta = 0;
     let previousJunctionDelta = Infinity;
     let junctionMix = 1;
+    let extraJunctionGmin = 0;
     let converged = !hasStateful;
     let iterationsUsed = 0;
     const relayFlippedIds = hasRelay ? new Set() : null;
 
     for (let iter = 0; iter < maxIterations; iter += 1) {
         iterationsUsed = iter + 1;
+        contextExtras.extraJunctionGmin = extraJunctionGmin;
         const { A, z, size } = assemble(components, nodeCount, voltageSourceCount, contextExtras);
         const cacheKey = buildSystemMatrixCacheKey({
             nodeCount,
@@ -504,16 +509,22 @@ export function solveCircuitV2(netlistDTO, simulationState = new SimulationState
                 && lastJunctionDelta > junctionTolerance
                 && lastJunctionDelta >= previousJunctionDelta;
             if (stalled) {
-                for (const comp of components) {
-                    if (comp?.type !== 'Diode' && comp?.type !== 'LED') continue;
-                    const entry = nextState.get(comp.id);
-                    const previous = previousJunctionVoltages.get(comp.id);
-                    if (!entry || !Number.isFinite(previous) || !Number.isFinite(entry.junctionVoltage)) {
-                        continue;
+                if (junctionMix <= 1e-4 || extraJunctionGmin > 0) {
+                    extraJunctionGmin = Math.max(extraJunctionGmin, stallJunctionGmin);
+                    junctionMix = 1;
+                    factorizationCache = { key: null, factorization: null, matrixSize: -1 };
+                } else {
+                    for (const comp of components) {
+                        if (comp?.type !== 'Diode' && comp?.type !== 'LED') continue;
+                        const entry = nextState.get(comp.id);
+                        const previous = previousJunctionVoltages.get(comp.id);
+                        if (!entry || !Number.isFinite(previous) || !Number.isFinite(entry.junctionVoltage)) {
+                            continue;
+                        }
+                        entry.junctionVoltage = 0.5 * (entry.junctionVoltage + previous);
                     }
-                    entry.junctionVoltage = 0.5 * (entry.junctionVoltage + previous);
+                    junctionMix = Math.max(1e-4, junctionMix * 0.5);
                 }
-                junctionMix = Math.max(1e-4, junctionMix * 0.5);
             }
             previousJunctionDelta = lastJunctionDelta;
             if (junctionUpdate.changed) {
@@ -533,7 +544,11 @@ export function solveCircuitV2(netlistDTO, simulationState = new SimulationState
         }
 
         const junctionConverged = !hasJunction || lastJunctionDelta <= junctionTolerance;
-        if (junctionConverged && !relayChanged) {
+        if (junctionConverged && extraJunctionGmin > 0 && !relayChanged) {
+            extraJunctionGmin = 0;
+            junctionMix = 1;
+            factorizationCache = { key: null, factorization: null, matrixSize: -1 };
+        } else if (junctionConverged && !relayChanged) {
             converged = true;
             break;
         }

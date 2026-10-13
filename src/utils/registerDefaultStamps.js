@@ -211,6 +211,8 @@ function createStampTable() {
 
     const stampJunctionViaLinearization = (comp, context, nodes) => {
         const params = resolveJunctionParameters(comp);
+        const extraGmin = Number(context?.extraJunctionGmin);
+        if (extraGmin > 0) params.gmin += extraGmin;
         const entry = resolveStateEntry(context, comp);
         const linearizationVoltage = Number.isFinite(entry?.junctionVoltage)
             ? entry.junctionVoltage
