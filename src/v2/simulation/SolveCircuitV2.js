@@ -379,7 +379,18 @@ export function solveCircuitV2(netlistDTO, simulationState = new SimulationState
     const hasJunction = components.some((comp) => comp?.type === 'Diode' || comp?.type === 'LED');
     const hasRelay = components.some((comp) => comp?.type === 'Relay');
     const hasStateful = hasJunction || hasRelay;
-    const maxIterations = hasStateful ? 40 : 1;
+    const hasCapacitorCompanion = components.some((comp) =>
+        comp?.type === 'Capacitor' || comp?.type === 'ParallelPlateCapacitor'
+    );
+    const junctionCount = components.reduce(
+        (count, comp) => count + ((comp?.type === 'Diode' || comp?.type === 'LED') ? 1 : 0),
+        0
+    );
+    // Four dialog-min LEDs settle inside 40; five need ~42. Capacitor
+    // commutation 2-cycles spend extra iterations on midpoint averaging.
+    const maxIterations = hasStateful
+        ? Math.max(40, 32 * Math.max(junctionCount, hasRelay ? 1 : 0))
+        : 1;
     const junctionTolerance = 1e-6;
 
     let factorizationCache = { key: null, factorization: null, matrixSize: -1 };
@@ -387,6 +398,8 @@ export function solveCircuitV2(netlistDTO, simulationState = new SimulationState
     let solvedCurrents = new Map();
     let solvedValid = false;
     let lastJunctionDelta = 0;
+    let previousJunctionDelta = Infinity;
+    let junctionMix = 1;
     let converged = !hasStateful;
     let iterationsUsed = 0;
     const relayFlippedIds = hasRelay ? new Set() : null;
@@ -466,15 +479,40 @@ export function solveCircuitV2(netlistDTO, simulationState = new SimulationState
 
         let relayChanged = false;
         if (hasJunction) {
+            const previousJunctionVoltages = new Map();
+            for (const comp of components) {
+                if (comp?.type !== 'Diode' && comp?.type !== 'LED') continue;
+                const voltage = nextState.get(comp.id)?.junctionVoltage;
+                previousJunctionVoltages.set(comp.id, Number.isFinite(voltage) ? voltage : 0);
+            }
             const junctionUpdate = updateJunctionLinearizationState({
                 components,
                 voltages: solvedVoltages,
                 currents: solvedCurrents,
-                state: nextState
+                state: nextState,
+                mix: junctionMix
             });
             lastJunctionDelta = Number.isFinite(junctionUpdate.maxVoltageDelta)
                 ? junctionUpdate.maxVoltageDelta
                 : 0;
+            // Capacitor companion + full Newton 2-cycles at commutation.
+            // Land on the midpoint of the pair, then damp the next jump.
+            const stalled = hasCapacitorCompanion
+                && lastJunctionDelta > junctionTolerance
+                && lastJunctionDelta >= previousJunctionDelta;
+            if (stalled) {
+                for (const comp of components) {
+                    if (comp?.type !== 'Diode' && comp?.type !== 'LED') continue;
+                    const entry = nextState.get(comp.id);
+                    const previous = previousJunctionVoltages.get(comp.id);
+                    if (!entry || !Number.isFinite(previous) || !Number.isFinite(entry.junctionVoltage)) {
+                        continue;
+                    }
+                    entry.junctionVoltage = 0.5 * (entry.junctionVoltage + previous);
+                }
+                junctionMix = Math.max(1e-4, junctionMix * 0.5);
+            }
+            previousJunctionDelta = lastJunctionDelta;
             if (junctionUpdate.changed) {
                 factorizationCache = { key: null, factorization: null, matrixSize: -1 };
             }

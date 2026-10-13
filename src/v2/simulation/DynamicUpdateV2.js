@@ -124,10 +124,12 @@ export function updateJunctionLinearizationState({
     components = [],
     voltages = [],
     currents = null,
-    state = null
+    state = null,
+    mix = 1
 } = {}) {
     let changed = false;
     let maxVoltageDelta = 0;
+    const appliedMix = Number.isFinite(mix) && mix > 0 && mix < 1 ? mix : 1;
 
     for (const comp of components) {
         if (!comp || (comp.type !== 'Diode' && comp.type !== 'LED') || !state) continue;
@@ -142,7 +144,10 @@ export function updateJunctionLinearizationState({
             : (Number.isFinite(comp.junctionVoltage) ? comp.junctionVoltage : 0);
 
         const params = resolveJunctionParameters(comp);
-        const nextLinearization = limitJunctionStep(vAk, previousLinearization, params);
+        const predicted = limitJunctionStep(vAk, previousLinearization, params);
+        const nextLinearization = appliedMix === 1
+            ? predicted
+            : previousLinearization + appliedMix * (predicted - previousLinearization);
         const junctionCurrent = Number(currents?.get(comp.id)) || 0;
         const displayCurrentThreshold = Math.max(1e-4, params.referenceCurrent * 0.02);
         const nextConducting = junctionCurrent >= displayCurrentThreshold

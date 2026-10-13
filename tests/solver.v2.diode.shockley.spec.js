@@ -202,6 +202,68 @@ describe('SolveCircuitV2 Shockley junction', () => {
         expect(current).toBeLessThan(0.05);
     });
 
+    it('starts five series LEDs at dialog-minimum on-resistance', () => {
+        const circuit = createTestCircuit();
+        const source = addComponent(circuit, 'PowerSource', 'V1', { voltage: 6, internalResistance: 0.5 });
+        const leds = [];
+        for (let i = 0; i < 5; i += 1) {
+            const led = addComponent(circuit, 'LED', `D${i}`, {});
+            applyComponentPropertyDialogChanges({
+                component: led,
+                readFieldValue: (id) => {
+                    if (id === 'edit-on-resistance') return '1e-9';
+                    if (id === 'edit-forward-voltage') return '2';
+                    if (id === 'edit-off-resistance') return '1e9';
+                    if (id === 'edit-rated-current') return '20';
+                    return '';
+                },
+                safeParseFloat
+            });
+            leds.push(led);
+        }
+        connectWire(circuit, 'W0', source, 0, leds[0], 0);
+        for (let i = 1; i < 5; i += 1) {
+            connectWire(circuit, `W${i}`, leds[i - 1], 1, leds[i], 0);
+        }
+        connectWire(circuit, 'W5', leds[4], 1, source, 1);
+
+        expect(new RuntimeActionRouter({ circuit }).startSimulation()).toBe(true);
+        circuit.step();
+        expect(circuit.lastResults.valid).toBe(true);
+        expect(circuit.lastResults.backendUsed).toBe('v2');
+        expect(circuit.lastResults.meta?.converged).toBe(true);
+        const current = Math.abs(circuit.lastResults.viewMap.get('D0')?.currentValue || 0);
+        expect(current).toBeGreaterThan(1e-9);
+        expect(current).toBeLessThan(1e-6);
+    });
+
+    it('starts a default AC bridge rectifier with a default capacitor', () => {
+        const circuit = createTestCircuit();
+        const source = addComponent(circuit, 'ACVoltageSource', 'S', {});
+        const d1 = addComponent(circuit, 'Diode', 'D1', {});
+        const d2 = addComponent(circuit, 'Diode', 'D2', {});
+        const d3 = addComponent(circuit, 'Diode', 'D3', {});
+        const d4 = addComponent(circuit, 'Diode', 'D4', {});
+        const cap = addComponent(circuit, 'Capacitor', 'X', {});
+        connectWire(circuit, 'W1', source, 0, d1, 0);
+        connectWire(circuit, 'W2', d1, 1, cap, 0);
+        connectWire(circuit, 'W3', source, 1, d2, 0);
+        connectWire(circuit, 'W4', d2, 1, cap, 0);
+        connectWire(circuit, 'W5', cap, 1, d3, 0);
+        connectWire(circuit, 'W6', d3, 1, source, 0);
+        connectWire(circuit, 'W7', cap, 1, d4, 0);
+        connectWire(circuit, 'W8', d4, 1, source, 1);
+
+        expect(new RuntimeActionRouter({ circuit }).startSimulation()).toBe(true);
+        for (let i = 0; i < 20; i += 1) {
+            circuit.step();
+            expect(circuit.lastResults.valid).toBe(true);
+            expect(circuit.lastResults.backendUsed).toBe('v2');
+            expect(circuit.lastResults.meta?.converged).toBe(true);
+        }
+        expect(Math.abs(circuit.lastResults.viewMap.get('X')?.voltageValue || 0)).toBeGreaterThan(10);
+    });
+
     it('settles a steep idealityFactor diode with series R in a few Newton iterations', () => {
         const result = solveCircuitV2({
             meta: { version: 2 },
