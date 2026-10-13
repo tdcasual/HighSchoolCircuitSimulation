@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { RuntimeActionRouter } from '../src/app/RuntimeActionRouter.js';
+import { HistoryManager } from '../src/ui/interaction/HistoryManager.js';
 import { applyComponentPropertyDialogChanges } from '../src/ui/interaction/ComponentPropertySchema.js';
 import { safeParseFloat } from '../src/ui/interaction/UIStateController.js';
 import { limitJunctionStep, resolveJunctionParameters, solveJunctionCurrent } from '../src/v2/simulation/JunctionModelV2.js';
@@ -370,6 +371,48 @@ describe('SolveCircuitV2 Shockley junction', () => {
         connectWire(circuit, 'W1', source, 0, diode, 0);
         connectWire(circuit, 'W2', diode, 1, cap, 0);
         connectWire(circuit, 'W3', cap, 1, source, 1);
+
+        expect(new RuntimeActionRouter({ circuit }).startSimulation()).toBe(true);
+        for (let i = 0; i < 10; i += 1) {
+            circuit.step();
+            expect(circuit.lastResults.valid).toBe(true);
+            expect(circuit.lastResults.backendUsed).toBe('v2');
+            expect(circuit.lastResults.meta?.converged).toBe(true);
+        }
+
+        const restored = createTestCircuit();
+        restored.fromJSON(circuit.toJSON());
+        expect(new RuntimeActionRouter({ circuit: restored }).startSimulation()).toBe(true);
+        restored.step();
+        expect(restored.lastResults.valid).toBe(true);
+        expect(restored.lastResults.backendUsed).toBe('v2');
+        expect(restored.lastResults.meta?.converged).toBe(true);
+    });
+
+    it('starts a 500 Hz AC bridge after history undo restores capacitor-first order', () => {
+        const circuit = createTestCircuit();
+        const source = addComponent(circuit, 'ACVoltageSource', 'S', { frequency: 500 });
+        const d1 = addComponent(circuit, 'Diode', 'D1', {});
+        const d2 = addComponent(circuit, 'Diode', 'D2', {});
+        const d3 = addComponent(circuit, 'Diode', 'D3', {});
+        const d4 = addComponent(circuit, 'Diode', 'D4', {});
+        const cap = addComponent(circuit, 'Capacitor', 'C', {});
+        connectWire(circuit, 'W1', source, 0, d1, 0);
+        connectWire(circuit, 'W2', d1, 1, cap, 0);
+        connectWire(circuit, 'W3', source, 1, d2, 0);
+        connectWire(circuit, 'W4', d2, 1, cap, 0);
+        connectWire(circuit, 'W5', cap, 1, d3, 0);
+        connectWire(circuit, 'W6', d3, 1, source, 0);
+        connectWire(circuit, 'W7', cap, 1, d4, 0);
+        connectWire(circuit, 'W8', d4, 1, source, 1);
+
+        const history = new HistoryManager({ circuit, updateStatus() {}, logger: { error() {} } });
+        history.runWithHistory('add dummy', () => {
+            addComponent(circuit, 'Resistor', 'Rdummy', { resistance: 1e12 });
+        });
+        history.undo();
+        expect(circuit.components.has('Rdummy')).toBe(false);
+        expect([...circuit.components.keys()]).toEqual(['C', 'D1', 'D2', 'D3', 'D4', 'S']);
 
         expect(new RuntimeActionRouter({ circuit }).startSimulation()).toBe(true);
         for (let i = 0; i < 10; i += 1) {

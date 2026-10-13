@@ -21,7 +21,16 @@ export function buildElectricalNodes({
     normalizePoint,
     writeWireNodeIndex = false
 } = {}) {
-    const componentMap = toMap(components);
+    // Node indices follow this iteration order. A 500 Hz 4-diode + C
+    // rectifier crawls to not_converged when the voltage source is last.
+    const listed = components instanceof Map
+        ? Array.from(components.values())
+        : (Array.isArray(components) ? components : []);
+    const ranked = listed.slice().sort((a, b) => {
+        const rank = (type) => (type === 'PowerSource' || type === 'ACVoltageSource' ? 0 : 1);
+        return rank(a?.type) - rank(b?.type);
+    });
+    const componentMap = toMap(ranked);
     const wireMap = toMap(wires);
     const countOf = typeof getTerminalCount === 'function' ? getTerminalCount : () => 2;
     const resolvePos = typeof resolveTerminalPosition === 'function'
