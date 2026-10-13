@@ -1,5 +1,6 @@
 import { resolveCircuitSourceVoltageAtTime } from './CircuitSourceVoltageResolver.js';
 import { resolveComponentViewRecord } from '../../utils/componentViewRecord.js';
+import { computeNtcThermistorResistance, computePhotoresistorResistance } from '../../utils/Physics.js';
 
 const IDEAL_SOURCE_RESISTANCE_EPS = 1e-9;
 const DAMPING_RESISTANCE_MAX = 1e11;
@@ -38,8 +39,11 @@ export class CircuitTopologyValidationService {
         switch (view.type) {
             case 'Resistor':
             case 'Bulb':
+                return resistanceProvidesDamping(Number(view.resistance));
             case 'Thermistor':
+                return resistanceProvidesDamping(computeNtcThermistorResistance(view));
             case 'Photoresistor':
+                return resistanceProvidesDamping(computePhotoresistorResistance(view));
             case 'Diode':
             case 'LED':
             case 'Motor':

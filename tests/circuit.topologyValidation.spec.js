@@ -285,6 +285,68 @@ describe('Simulation topology validation', () => {
         expect(new RuntimeActionRouter({ circuit }).startSimulation()).toBe(false);
     });
 
+    it('allows start when two capacitors share a 100 ohm resistor', () => {
+        const circuit = createTestCircuit();
+        addDummyPower(circuit);
+        const resistor = addComponent(circuit, 'Resistor', 'R1', { resistance: 100 });
+        addParallelCapacitors(circuit, resistor, 0, 1);
+
+        expect(circuit.componentProvidesResistiveDamping(resistor)).toBe(true);
+        const report = circuit.validateSimulationTopology(0);
+        expect(report.ok).toBe(true);
+        expect(new RuntimeActionRouter({ circuit }).startSimulation()).toBe(true);
+        circuit.step();
+        expect(circuit.lastResults.valid).toBe(true);
+        expect(circuit.lastResults.backendUsed).toBe('v2');
+    });
+
+    it('still flags a capacitor loop across a 1e12 ohm resistor', () => {
+        const circuit = createTestCircuit();
+        addDummyPower(circuit);
+        const resistor = addComponent(circuit, 'Resistor', 'R1', { resistance: 1e12 });
+        addParallelCapacitors(circuit, resistor, 0, 1);
+
+        expect(circuit.componentProvidesResistiveDamping(resistor)).toBe(false);
+        const report = circuit.validateSimulationTopology(0);
+        expect(report.ok).toBe(false);
+        expect(report.error?.code).toBe('TOPO_CAPACITOR_LOOP_NO_RESISTANCE');
+        expect(new RuntimeActionRouter({ circuit }).startSimulation()).toBe(false);
+    });
+
+    it('still flags a capacitor loop across a classroom-max dark photoresistor', () => {
+        const circuit = createTestCircuit();
+        addDummyPower(circuit);
+        const ldr = addComponent(circuit, 'Photoresistor', 'LDR1', {
+            resistanceDark: 1e15,
+            resistanceLight: 500,
+            lightLevel: 0
+        });
+        addParallelCapacitors(circuit, ldr, 0, 1);
+
+        expect(circuit.componentProvidesResistiveDamping(ldr)).toBe(false);
+        const report = circuit.validateSimulationTopology(0);
+        expect(report.ok).toBe(false);
+        expect(report.error?.code).toBe('TOPO_CAPACITOR_LOOP_NO_RESISTANCE');
+        expect(new RuntimeActionRouter({ circuit }).startSimulation()).toBe(false);
+    });
+
+    it('still flags a capacitor loop across a classroom-max cold thermistor', () => {
+        const circuit = createTestCircuit();
+        addDummyPower(circuit);
+        const thermistor = addComponent(circuit, 'Thermistor', 'TH1', {
+            resistanceAt25: 1e15,
+            beta: 3950,
+            temperatureC: -100
+        });
+        addParallelCapacitors(circuit, thermistor, 0, 1);
+
+        expect(circuit.componentProvidesResistiveDamping(thermistor)).toBe(false);
+        const report = circuit.validateSimulationTopology(0);
+        expect(report.ok).toBe(false);
+        expect(report.error?.code).toBe('TOPO_CAPACITOR_LOOP_NO_RESISTANCE');
+        expect(new RuntimeActionRouter({ circuit }).startSimulation()).toBe(false);
+    });
+
     it('still flags a capacitor loop across an ideal voltmeter', () => {
         const circuit = createTestCircuit();
         addDummyPower(circuit);
