@@ -362,6 +362,32 @@ describe('SolveCircuitV2 Shockley junction', () => {
         expect(restored.lastResults.meta?.converged).toBe(true);
     });
 
+    it('starts a 2000 Hz AC half-wave rectifier with a default parallel-plate capacitor after save/load', () => {
+        const circuit = createTestCircuit();
+        const source = addComponent(circuit, 'ACVoltageSource', 'S', { frequency: 2000 });
+        const diode = addComponent(circuit, 'Diode', 'D1', {});
+        const cap = addComponent(circuit, 'ParallelPlateCapacitor', 'C1', {});
+        connectWire(circuit, 'W1', source, 0, diode, 0);
+        connectWire(circuit, 'W2', diode, 1, cap, 0);
+        connectWire(circuit, 'W3', cap, 1, source, 1);
+
+        expect(new RuntimeActionRouter({ circuit }).startSimulation()).toBe(true);
+        for (let i = 0; i < 10; i += 1) {
+            circuit.step();
+            expect(circuit.lastResults.valid).toBe(true);
+            expect(circuit.lastResults.backendUsed).toBe('v2');
+            expect(circuit.lastResults.meta?.converged).toBe(true);
+        }
+
+        const restored = createTestCircuit();
+        restored.fromJSON(circuit.toJSON());
+        expect(new RuntimeActionRouter({ circuit: restored }).startSimulation()).toBe(true);
+        restored.step();
+        expect(restored.lastResults.valid).toBe(true);
+        expect(restored.lastResults.backendUsed).toBe('v2');
+        expect(restored.lastResults.meta?.converged).toBe(true);
+    });
+
     it('settles a steep idealityFactor diode with series R in a few Newton iterations', () => {
         const result = solveCircuitV2({
             meta: { version: 2 },
