@@ -404,12 +404,13 @@ export function solveCircuitV2(netlistDTO, simulationState = new SimulationState
     // and needs ~150; 32*n (128) exhausts first. Mix-floor 2-cycles get a
     // temporary junction shunt, then the shunt is removed before accept.
     // One-diode + capacitor half-wave crawls after mix damping (~366 NR at
-    // 2000 Hz); 64*n is 64 and the floor 80 exhausts first.
+    // 2000 Hz); 64*n is 64 and the floor 80 exhausts first. Two parallel
+    // 14/22 V RMS AC sources on a min-Ron mixed bridge crawl ~404.
     const maxIterations = hasStateful
         ? Math.max(
             80,
             64 * Math.max(junctionCount, hasRelay ? 1 : 0),
-            (hasCapacitorCompanion && hasJunction) ? 400 : 0
+            (hasCapacitorCompanion && hasJunction) ? 500 : 0
         )
         : 1;
     const junctionTolerance = 1e-6;

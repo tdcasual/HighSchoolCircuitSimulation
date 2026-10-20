@@ -1276,4 +1276,33 @@ describe('SolveCircuitV2 Shockley junction', () => {
             expect(circuit.lastResults.meta?.converged).toBe(true);
         }
     });
+
+    it('starts an 1800 Hz min-Ron mixed bridge with a second 22 V RMS AC source', () => {
+        const circuit = createTestCircuit();
+        const source = addComponent(circuit, 'ACVoltageSource', 'S1', { frequency: 1800, rmsVoltage: 22 });
+        const source2 = addComponent(circuit, 'ACVoltageSource', 'S2', { frequency: 1800, rmsVoltage: 22 });
+        const d1 = addComponent(circuit, 'Diode', 'D1', { onResistance: 1e-9 });
+        const d2 = addComponent(circuit, 'Diode', 'D2', { onResistance: 1e-9 });
+        const l3 = addComponent(circuit, 'LED', 'L3', { onResistance: 1e-9 });
+        const l4 = addComponent(circuit, 'LED', 'L4', { onResistance: 1e-9 });
+        const cap = addComponent(circuit, 'Capacitor', 'C', {});
+        connectWire(circuit, 'W1', source, 0, d1, 0);
+        connectWire(circuit, 'W2', d1, 1, cap, 0);
+        connectWire(circuit, 'W3', source, 1, d2, 0);
+        connectWire(circuit, 'W4', d2, 1, cap, 0);
+        connectWire(circuit, 'W5', cap, 1, l3, 0);
+        connectWire(circuit, 'W6', l3, 1, source, 0);
+        connectWire(circuit, 'W7', cap, 1, l4, 0);
+        connectWire(circuit, 'W8', l4, 1, source, 1);
+        connectWire(circuit, 'W9', source2, 0, source, 0);
+        connectWire(circuit, 'W10', source2, 1, source, 1);
+
+        expect(new RuntimeActionRouter({ circuit }).startSimulation()).toBe(true);
+        for (let i = 0; i < 20; i += 1) {
+            circuit.step();
+            expect(circuit.lastResults.valid).toBe(true);
+            expect(circuit.lastResults.backendUsed).toBe('v2');
+            expect(circuit.lastResults.meta?.converged).toBe(true);
+        }
+    });
 });
