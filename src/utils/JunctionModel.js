@@ -94,9 +94,19 @@ export function limitJunctionStep(vNew, vOld, params) {
     if (!Number.isFinite(vNew)) return 0;
     if (!Number.isFinite(vOld)) return vNew;
 
-    // Shockley plus series R has conductance <= 1/Rs, so the companion can
-    // track the solved branch voltage. Log limiting is only needed for Rs=0.
-    if (params?.seriesResistance > 0) {
+    // Shockley plus series R has conductance <= 1/Rs, so a DC companion can
+    // track the solved branch voltage (12V diode settles in 4 Newtons).
+    // Capacitor NR can still emit a junk jump far above the source amplitude
+    // (≈60V, or a 30V reverse that lands inside 2*|E| on a 12V RMS bridge).
+    // Cap those; leave |v| and |ΔV| within the island source scale alone.
+    const maxAbs = Number(params?.maxAbsJunctionVoltage);
+    const absDv = Math.abs(vNew - vOld);
+    const overScale = Number.isFinite(maxAbs) && maxAbs > 0
+        && (Math.abs(vNew) > maxAbs || absDv > maxAbs);
+    const capHuge = params?.capHugeJunctionSteps === true
+        && overScale
+        && absDv > 15;
+    if (params?.seriesResistance > 0 && !capHuge) {
         return vNew;
     }
 

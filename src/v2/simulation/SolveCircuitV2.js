@@ -414,7 +414,6 @@ export function solveCircuitV2(netlistDTO, simulationState = new SimulationState
         : 1;
     const junctionTolerance = 1e-6;
     const stallJunctionGmin = 1e-3;
-
     let factorizationCache = { key: null, factorization: null, matrixSize: -1 };
     let solvedVoltages = Array.from({ length: Math.max(nodeCount, 1) }, () => 0);
     let solvedCurrents = new Map();
@@ -514,7 +513,8 @@ export function solveCircuitV2(netlistDTO, simulationState = new SimulationState
                 voltages: solvedVoltages,
                 currents: solvedCurrents,
                 state: nextState,
-                mix: junctionMix
+                mix: junctionMix,
+                capHugeJunctionSteps: hasCapacitorCompanion
             });
             lastJunctionDelta = Number.isFinite(junctionUpdate.maxVoltageDelta)
                 ? junctionUpdate.maxVoltageDelta
