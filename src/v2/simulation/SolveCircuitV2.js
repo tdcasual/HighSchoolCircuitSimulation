@@ -430,10 +430,11 @@ export function solveCircuitV2(netlistDTO, simulationState = new SimulationState
     // with a 1e-3 shunt; 1e-2 lands. Undo of a 300 V meter loop still
     // leftover~0.012 at 1e-2; 2e-2 lands under the 3e-3 leftover accept.
     // Three-LED LLDL@1800 leftover-fails at 2e-2 (δ≈0.046); 2.2e-2 lands.
-    // 2-LED nets stay 2e-2 (global 2.2e-2 makes series-L fail earlier).
+    // Three-LED DLLL@1800 leftover-fails at 2.2e-2 (δ≈0.014); 3.3e-2 lands.
+    // 2-LED nets stay 2e-2 (global 3.3e-2 makes series-L fail earlier).
     // No-C junctions keep 1e-3 (P32).
     const stallJunctionGmin = hasCapacitorCompanion
-        ? (ledCount >= 3 ? 2.2e-2 : 2e-2)
+        ? (ledCount >= 3 ? 3.3e-2 : 2e-2)
         : 1e-3;
     let factorizationCache = { key: null, factorization: null, matrixSize: -1 };
     let solvedVoltages = Array.from({ length: Math.max(nodeCount, 1) }, () => 0);
