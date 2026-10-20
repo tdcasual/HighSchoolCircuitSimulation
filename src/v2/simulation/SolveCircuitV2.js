@@ -398,6 +398,10 @@ export function solveCircuitV2(netlistDTO, simulationState = new SimulationState
         (count, comp) => count + ((comp?.type === 'Diode' || comp?.type === 'LED') ? 1 : 0),
         0
     );
+    const acSourceCount = components.reduce(
+        (count, comp) => count + (comp?.type === 'ACVoltageSource' ? 1 : 0),
+        0
+    );
     // Four dialog-min LEDs settle inside 40; five need ~42. A blown fuse
     // plus min-Ron LED crawls ~vScale per Newton from a cold Vj and needs
     // ~55. Four-diode AC commutation at 500/1000 Hz crawls mixed delta
@@ -405,12 +409,16 @@ export function solveCircuitV2(netlistDTO, simulationState = new SimulationState
     // temporary junction shunt, then the shunt is removed before accept.
     // One-diode + capacitor half-wave crawls after mix damping (~366 NR at
     // 2000 Hz); 64*n is 64 and the floor 80 exhausts first. Two parallel
-    // 14/22 V RMS AC sources on a min-Ron mixed bridge crawl ~404.
+    // 14/22 V RMS AC sources on a min-Ron mixed bridge crawl ~404. A second
+    // 13 V RMS source leftover-fails at 500; 520 lands. 1-AC nets stay 500
+    // (global 600 reopens the 300 V meter-loop undo).
     const maxIterations = hasStateful
         ? Math.max(
             80,
             64 * Math.max(junctionCount, hasRelay ? 1 : 0),
-            (hasCapacitorCompanion && hasJunction) ? 500 : 0
+            (hasCapacitorCompanion && hasJunction)
+                ? (acSourceCount >= 2 ? 520 : 500)
+                : 0
         )
         : 1;
     const junctionTolerance = 1e-6;
