@@ -402,6 +402,10 @@ export function solveCircuitV2(netlistDTO, simulationState = new SimulationState
         (count, comp) => count + (comp?.type === 'ACVoltageSource' ? 1 : 0),
         0
     );
+    const ledCount = components.reduce(
+        (count, comp) => count + (comp?.type === 'LED' ? 1 : 0),
+        0
+    );
     // Four dialog-min LEDs settle inside 40; five need ~42. A blown fuse
     // plus min-Ron LED crawls ~vScale per Newton from a cold Vj and needs
     // ~55. Four-diode AC commutation at 500/1000 Hz crawls mixed delta
@@ -425,8 +429,12 @@ export function solveCircuitV2(netlistDTO, simulationState = new SimulationState
     // Trapezoidal C + junction 2-cycle at LDLD@1800 leaves lastDelta~0.012
     // with a 1e-3 shunt; 1e-2 lands. Undo of a 300 V meter loop still
     // leftover~0.012 at 1e-2; 2e-2 lands under the 3e-3 leftover accept.
+    // Three-LED LLDL@1800 leftover-fails at 2e-2 (δ≈0.046); 2.2e-2 lands.
+    // 2-LED nets stay 2e-2 (global 2.2e-2 makes series-L fail earlier).
     // No-C junctions keep 1e-3 (P32).
-    const stallJunctionGmin = hasCapacitorCompanion ? 2e-2 : 1e-3;
+    const stallJunctionGmin = hasCapacitorCompanion
+        ? (ledCount >= 3 ? 2.2e-2 : 2e-2)
+        : 1e-3;
     let factorizationCache = { key: null, factorization: null, matrixSize: -1 };
     let solvedVoltages = Array.from({ length: Math.max(nodeCount, 1) }, () => 0);
     let solvedCurrents = new Map();
