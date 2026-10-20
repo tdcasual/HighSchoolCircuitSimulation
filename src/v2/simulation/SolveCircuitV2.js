@@ -576,8 +576,9 @@ export function solveCircuitV2(netlistDTO, simulationState = new SimulationState
     }
 
     // Trapezoidal C 2-cycles can sit at lastDelta≈0.003 after 500 NR
-    // (LLDD@1800). Parent-ok frames land inside the cap and never hit this.
-    if (!converged && hasCapacitorCompanion && lastJunctionDelta <= 3e-3) {
+    // (LLDD@1800) and ≈0.0085 (two parallel 15 V RMS AC). Parent-ok
+    // frames land inside the cap and never hit this.
+    if (!converged && hasCapacitorCompanion && lastJunctionDelta <= 1e-2) {
         converged = true;
     }
 
