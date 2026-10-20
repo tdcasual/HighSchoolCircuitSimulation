@@ -890,7 +890,7 @@ describe('SolveCircuitV2 Shockley junction', () => {
         expect(circuit.lastResults.meta?.converged).toBe(true);
     });
 
-    it.each([151, 160])('starts the mixed bridge after undo of a voltmeter-linked %sV loop', (voltage) => {
+    it.each([151, 160, 300])('starts the mixed bridge after undo of a voltmeter-linked %sV loop', (voltage) => {
         const circuit = createTestCircuit();
         const source = addComponent(circuit, 'ACVoltageSource', 'S', { frequency: 500 });
         const d1 = addComponent(circuit, 'Diode', 'D1', { onResistance: 1e-9 });

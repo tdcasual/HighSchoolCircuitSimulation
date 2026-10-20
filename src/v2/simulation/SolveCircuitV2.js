@@ -415,8 +415,10 @@ export function solveCircuitV2(netlistDTO, simulationState = new SimulationState
         : 1;
     const junctionTolerance = 1e-6;
     // Trapezoidal C + junction 2-cycle at LDLD@1800 leaves lastDelta~0.012
-    // with a 1e-3 shunt; 1e-2 lands. No-C junctions keep 1e-3 (P32).
-    const stallJunctionGmin = hasCapacitorCompanion ? 1e-2 : 1e-3;
+    // with a 1e-3 shunt; 1e-2 lands. Undo of a 300 V meter loop still
+    // leftover~0.012 at 1e-2; 2e-2 lands under the 3e-3 leftover accept.
+    // No-C junctions keep 1e-3 (P32).
+    const stallJunctionGmin = hasCapacitorCompanion ? 2e-2 : 1e-3;
     let factorizationCache = { key: null, factorization: null, matrixSize: -1 };
     let solvedVoltages = Array.from({ length: Math.max(nodeCount, 1) }, () => 0);
     let solvedCurrents = new Map();
